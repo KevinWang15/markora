@@ -1,0 +1,78 @@
+{
+  "name": "markora",
+  "version": "0.0.1",
+  "description": "A Typora-style Markdown editor built with ProseMirror and CodeMirror.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Kevin Wang",
+  "homepage": "https://github.com/KevinWang15/markora#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KevinWang15/markora.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/KevinWang15/markora/issues"
+  },
+  "keywords": [
+    "markdown",
+    "editor",
+    "wysiwyg",
+    "typora",
+    "prosemirror",
+    "codemirror"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": [
+    "dist",
+    "dist/styles.css",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "build": "tsc -p tsconfig.json && node ./scripts/copyStyles.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "pnpm run build && pnpm run typecheck",
+    "pack": "npm pack",
+    "publish:public": "npm publish --access public"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.8.1",
+    "@codemirror/lang-cpp": "^6.0.3",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.11",
+    "@codemirror/lang-java": "^6.0.2",
+    "@codemirror/lang-javascript": "^6.2.4",
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lang-markdown": "^6.3.4",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/lang-rust": "^6.0.2",
+    "@codemirror/lang-xml": "^6.1.0",
+    "@codemirror/language": "^6.11.3",
+    "@codemirror/legacy-modes": "^6.5.0",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.38.2",
+    "prosemirror-commands": "^1.7.1",
+    "prosemirror-gapcursor": "^1.4.0",
+    "prosemirror-history": "^1.4.1",
+    "prosemirror-inputrules": "^1.5.1",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-markdown": "^1.13.2",
+    "prosemirror-model": "^1.25.4",
+    "prosemirror-schema-list": "^1.5.1",
+    "prosemirror-state": "^1.4.3",
+    "prosemirror-view": "^1.41.0"
+  }
+}

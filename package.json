@@ -1,0 +1,26 @@
+{
+  "name": "markora",
+  "private": true,
+  "packageManager": "pnpm@10.6.5",
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "jsdom": "^28.1.0",
+    "typescript": "^5.7.3",
+    "vitest": "^4.0.18"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter markora --filter demo dev",
+    "dev:demo": "pnpm --filter demo dev",
+    "dev:core": "pnpm --filter markora dev",
+    "build": "pnpm --filter core build && pnpm --filter demo build",
+    "build:core": "pnpm --filter markora build",
+    "build:demo": "pnpm --filter demo build",
+    "check": "pnpm --filter core build && pnpm --filter core typecheck && pnpm --filter demo typecheck",
+    "pack:core": "node ./scripts/release-core.mjs pack",
+    "release:check": "node ./scripts/release-core.mjs check",
+    "publish:core": "node ./scripts/release-core.mjs publish",
+    "test": "vitest run"
+  }
+}
