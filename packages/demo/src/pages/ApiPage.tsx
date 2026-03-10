@@ -1,13 +1,15 @@
 const apiRows = [
-  ["createEditor({ element, markdown, onChange, onTransaction, onChangeMode })", "Creates the editor view and returns the host API."],
+  ["createEditor({ element, markdown, onChange, onTransaction, onChangeMode, ui })", "Creates the editor view and returns the host API."],
   ["editor.getMarkdown()", "Returns the current Markdown string."],
-  ["editor.setMarkdown(markdown, { emitChange })", "Replaces the document, optionally re-emitting `onChange`."],
+  ["editor.commands.setMarkdown(markdown, { emitChange })", "Replaces the document through the structured headless API."],
   ["editor.flushChange()", "Flushes any pending animation-frame batched markdown emission."],
-  ["editor.getToolbarState()", "Returns active/enabled state for toolbar buttons."],
-  ["editor.toggleBold() / toggleItalic() / toggleCode() / toggleStrike()", "Applies inline formatting commands."],
-  ["editor.setLink() / editLink() / removeLink()", "Creates, edits, or removes links."],
-  ["editor.insertImage() / editImage() / removeImage()", "Creates, edits, or removes images."],
-  ["editor.undo() / redo()", "Runs history commands."],
+  ["editor.state.can.* / editor.state.isActive.*", "Lets hosts derive toolbar and feature state without built-in UI."],
+  ["editor.getToolbarState()", "Returns a compatibility snapshot for toolbar buttons."],
+  [`editor.commands.toggleMark("strong" | "em" | "code" | "strike")`, "Applies inline formatting commands."],
+  ["editor.commands.setLink() / removeLink()", "Creates or removes links without UI assumptions."],
+  ["editor.commands.insertImage() / removeImage()", "Creates or removes images without UI assumptions."],
+  ["editor.ui?.editLink() / editor.ui?.editImage()", "Optional namespaced UI entry points when overlays are attached."],
+  ["editor.commands.undo() / editor.commands.redo()", "Runs history commands."],
   ["editor.destroy()", "Destroys the editor view and listeners."],
 ] as const;
 
@@ -18,8 +20,8 @@ export function ApiPage() {
         <span className="card-kicker">API overview</span>
         <h2>Small surface area, enough control for real apps.</h2>
         <p>
-          The library keeps its host API intentionally tight: markdown in, markdown out, toolbar state, media actions,
-          and a handful of command helpers for integration work.
+          The library keeps its host API intentionally tight: markdown in, markdown out, structured commands/state, and
+          optional compatibility helpers for existing integrations.
         </p>
       </section>
 
@@ -40,7 +42,7 @@ export function ApiPage() {
         <article className="doc-card">
           <span className="card-kicker">Behavior notes</span>
           <ul className="check-list compact">
-            <li>`setMarkdown()` is silent by default.</li>
+            <li>`editor.commands.setMarkdown()` is silent by default.</li>
             <li>`onChangeMode: "animationFrame"` helps smooth larger documents.</li>
             <li>`onTransaction` lets hosts observe view updates without forcing markdown serialization every time.</li>
           </ul>
@@ -50,7 +52,7 @@ export function ApiPage() {
           <ul className="check-list compact">
             <li>Inline marks: bold, italic, code, strike, links</li>
             <li>Blocks: headings, quotes, lists, task lists, images, code fences, tables</li>
-            <li>Editing polish: overlays, safer URLs, block cursor helpers, and table navigation</li>
+            <li>Editing polish: optional default UI, safer URLs, block cursor helpers, and table navigation</li>
           </ul>
         </article>
       </section>

@@ -1,15 +1,18 @@
 export const quickStartCode = `import { createEditor } from "markora";
+import { createDefaultUi } from "markora-ui";
 import "markora/styles.css";
+import "markora-ui/styles.css";
 
 const editor = createEditor({
   element: document.querySelector("#editor")!,
   markdown: "# Hello Markdown",
+  ui: createDefaultUi(),
   onChange(markdown) {
     console.log(markdown);
   },
 });`;
 
-export const installCommand = "npm install markora";
+export const installCommand = "npm install markora markora-ui";
 
 export const initialMarkdown = [
   "# Markora",

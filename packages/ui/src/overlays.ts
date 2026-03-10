@@ -1,6 +1,28 @@
-import type { EditorView } from "prosemirror-view";
-import type { ActiveImageInfo } from "./overlayTypes";
-import type { TableAlignment } from "./tableNavigation";
+import type { MarkdownEditor } from "markora";
+
+type EditorView = MarkdownEditor["view"];
+type BrowserWindow = Window & typeof globalThis;
+type TableAlignment = "left" | "center" | "right";
+type PortalRoot = HTMLElement | ShadowRoot;
+type ActiveImageInfoLike = {
+  node: {
+    attrs: {
+      src?: unknown;
+      alt?: unknown;
+      title?: unknown;
+    };
+  };
+};
+
+type OverlayEnvironment = {
+  doc: Document;
+  portalRoot: PortalRoot;
+  win: BrowserWindow;
+};
+
+function getViewportWidth(doc: Document, win: Window) {
+  return doc.documentElement.clientWidth || win.innerWidth;
+}
 
 export type LinkEditorOverlay = {
   open: (view: EditorView, marker: HTMLElement, href: string) => void;
@@ -9,7 +31,7 @@ export type LinkEditorOverlay = {
 };
 
 export type ImageEditorOverlay = {
-  open: (view: EditorView, marker: HTMLElement, imageInfo: ActiveImageInfo) => void;
+  open: (view: EditorView, marker: HTMLElement, imageInfo: ActiveImageInfoLike) => void;
   close: (refocusEditor: boolean) => void;
   destroy: () => void;
 };
@@ -19,33 +41,34 @@ export type TableToolbarOverlay = {
   destroy: () => void;
 };
 
-export function createLinkEditorOverlay(options: {
+export function createLinkEditorOverlay(options: OverlayEnvironment & {
   updateLinkHref: (view: EditorView, href: string) => void;
   removeActiveLink: (view: EditorView) => void;
 }): LinkEditorOverlay {
-  const { updateLinkHref, removeActiveLink } = options;
-  const dom = document.createElement("div");
+  const { doc, portalRoot, removeActiveLink, updateLinkHref, win } = options;
+  const NodeCtor = win.Node;
+  const dom = doc.createElement("div");
   dom.className = "mdw-link-editor";
   dom.hidden = true;
   dom.style.display = "none";
   dom.setAttribute("role", "dialog");
   dom.setAttribute("aria-label", "Edit link");
 
-  const input = document.createElement("input");
+  const input = doc.createElement("input");
   input.className = "mdw-link-editor-input";
   input.type = "text";
   input.placeholder = "https://example.com";
   input.setAttribute("aria-label", "Link URL");
 
-  const saveButton = document.createElement("button");
+  const saveButton = doc.createElement("button");
   saveButton.type = "button";
   saveButton.textContent = "Save";
 
-  const unlinkButton = document.createElement("button");
+  const unlinkButton = doc.createElement("button");
   unlinkButton.type = "button";
   unlinkButton.textContent = "Unlink";
 
-  const cancelButton = document.createElement("button");
+  const cancelButton = doc.createElement("button");
   cancelButton.type = "button";
   cancelButton.textContent = "Cancel";
 
@@ -58,10 +81,10 @@ export function createLinkEditorOverlay(options: {
     }
 
     const markerRect = activeMarker.getBoundingClientRect();
-    const top = markerRect.bottom + window.scrollY + 8;
+    const top = markerRect.bottom + win.scrollY + 8;
     const left = Math.min(
-      markerRect.left + window.scrollX,
-      window.scrollX + document.documentElement.clientWidth - dom.offsetWidth - 12,
+      markerRect.left + win.scrollX,
+      win.scrollX + getViewportWidth(doc, win) - dom.offsetWidth - 12,
     );
 
     dom.style.top = `${Math.max(12, top)}px`;
@@ -82,12 +105,13 @@ export function createLinkEditorOverlay(options: {
 
   const handleDocumentMouseDown = (event: MouseEvent) => {
     const target = event.target;
+    const targetNode = target instanceof NodeCtor ? target : null;
 
-    if (!(target instanceof Node)) {
+    if (!targetNode) {
       return;
     }
 
-    if (dom.hidden || dom.style.display === "none" || dom.contains(target) || activeMarker?.contains(target)) {
+    if (dom.hidden || dom.style.display === "none" || dom.contains(targetNode) || activeMarker?.contains(targetNode)) {
       return;
     }
 
@@ -100,11 +124,11 @@ export function createLinkEditorOverlay(options: {
     }
   };
 
-  const actions = document.createElement("div");
+  const actions = doc.createElement("div");
   actions.className = "mdw-link-editor-actions";
   actions.append(saveButton, unlinkButton, cancelButton);
   dom.append(input, actions);
-  document.body.append(dom);
+  portalRoot.append(dom);
 
   saveButton.addEventListener("click", () => {
     if (!activeView) return;
@@ -127,9 +151,9 @@ export function createLinkEditorOverlay(options: {
       close(true);
     }
   });
-  document.addEventListener("mousedown", handleDocumentMouseDown, true);
-  window.addEventListener("resize", handleWindowChange);
-  window.addEventListener("scroll", handleWindowChange, true);
+  doc.addEventListener("mousedown", handleDocumentMouseDown, true);
+  win.addEventListener("resize", handleWindowChange);
+  win.addEventListener("scroll", handleWindowChange, true);
 
   return {
     open(view, marker, href) {
@@ -144,47 +168,48 @@ export function createLinkEditorOverlay(options: {
     },
     close,
     destroy() {
-      document.removeEventListener("mousedown", handleDocumentMouseDown, true);
-      window.removeEventListener("resize", handleWindowChange);
-      window.removeEventListener("scroll", handleWindowChange, true);
+      doc.removeEventListener("mousedown", handleDocumentMouseDown, true);
+      win.removeEventListener("resize", handleWindowChange);
+      win.removeEventListener("scroll", handleWindowChange, true);
       dom.remove();
     },
   };
 }
 
-export function createImageEditorOverlay(options: {
+export function createImageEditorOverlay(options: OverlayEnvironment & {
   updateActiveImage: (view: EditorView, attrs: { src: string; alt: string | null; title: string | null }) => void;
   removeActiveImage: (view: EditorView) => void;
 }): ImageEditorOverlay {
-  const { updateActiveImage, removeActiveImage } = options;
-  const dom = document.createElement("div");
+  const { doc, portalRoot, removeActiveImage, updateActiveImage, win } = options;
+  const NodeCtor = win.Node;
+  const dom = doc.createElement("div");
   dom.className = "mdw-image-editor";
   dom.hidden = true;
   dom.style.display = "none";
   dom.setAttribute("role", "dialog");
   dom.setAttribute("aria-label", "Edit image");
 
-  const srcInput = document.createElement("input");
+  const srcInput = doc.createElement("input");
   srcInput.className = "mdw-image-editor-input";
   srcInput.type = "text";
   srcInput.placeholder = "Image URL";
   srcInput.setAttribute("aria-label", "Image URL");
 
-  const altInput = document.createElement("input");
+  const altInput = doc.createElement("input");
   altInput.className = "mdw-image-editor-input";
   altInput.type = "text";
   altInput.placeholder = "Alt text";
   altInput.setAttribute("aria-label", "Alt text");
 
-  const saveButton = document.createElement("button");
+  const saveButton = doc.createElement("button");
   saveButton.type = "button";
   saveButton.textContent = "Save";
 
-  const removeButton = document.createElement("button");
+  const removeButton = doc.createElement("button");
   removeButton.type = "button";
   removeButton.textContent = "Remove";
 
-  const cancelButton = document.createElement("button");
+  const cancelButton = doc.createElement("button");
   cancelButton.type = "button";
   cancelButton.textContent = "Cancel";
 
@@ -195,10 +220,10 @@ export function createImageEditorOverlay(options: {
   const reposition = () => {
     if (!activeMarker) return;
     const markerRect = activeMarker.getBoundingClientRect();
-    const top = markerRect.bottom + window.scrollY + 8;
+    const top = markerRect.bottom + win.scrollY + 8;
     const left = Math.min(
-      markerRect.left + window.scrollX,
-      window.scrollX + document.documentElement.clientWidth - dom.offsetWidth - 12,
+      markerRect.left + win.scrollX,
+      win.scrollX + getViewportWidth(doc, win) - dom.offsetWidth - 12,
     );
     dom.style.top = `${Math.max(12, top)}px`;
     dom.style.left = `${Math.max(12, left)}px`;
@@ -216,8 +241,9 @@ export function createImageEditorOverlay(options: {
 
   const handleDocumentMouseDown = (event: MouseEvent) => {
     const target = event.target;
-    if (!(target instanceof Node)) return;
-    if (dom.hidden || dom.style.display === "none" || dom.contains(target) || activeMarker?.contains(target)) return;
+    const targetNode = target instanceof NodeCtor ? target : null;
+    if (!targetNode) return;
+    if (dom.hidden || dom.style.display === "none" || dom.contains(targetNode) || activeMarker?.contains(targetNode)) return;
     close(false);
   };
 
@@ -225,11 +251,11 @@ export function createImageEditorOverlay(options: {
     if (!dom.hidden) reposition();
   };
 
-  const actions = document.createElement("div");
+  const actions = doc.createElement("div");
   actions.className = "mdw-image-editor-actions";
   actions.append(saveButton, removeButton, cancelButton);
   dom.append(srcInput, altInput, actions);
-  document.body.append(dom);
+  portalRoot.append(dom);
 
   saveButton.addEventListener("click", () => {
     if (!activeView) return;
@@ -252,9 +278,9 @@ export function createImageEditorOverlay(options: {
       close(true);
     }
   });
-  document.addEventListener("mousedown", handleDocumentMouseDown, true);
-  window.addEventListener("resize", handleWindowChange);
-  window.addEventListener("scroll", handleWindowChange, true);
+  doc.addEventListener("mousedown", handleDocumentMouseDown, true);
+  win.addEventListener("resize", handleWindowChange);
+  win.addEventListener("scroll", handleWindowChange, true);
 
   return {
     open(view, marker, imageInfo) {
@@ -271,15 +297,15 @@ export function createImageEditorOverlay(options: {
     },
     close,
     destroy() {
-      document.removeEventListener("mousedown", handleDocumentMouseDown, true);
-      window.removeEventListener("resize", handleWindowChange);
-      window.removeEventListener("scroll", handleWindowChange, true);
+      doc.removeEventListener("mousedown", handleDocumentMouseDown, true);
+      win.removeEventListener("resize", handleWindowChange);
+      win.removeEventListener("scroll", handleWindowChange, true);
       dom.remove();
     },
   };
 }
 
-export function createTableToolbarOverlay(options: {
+export function createTableToolbarOverlay(options: OverlayEnvironment & {
   appendTableColumn: (view: EditorView) => void;
   appendTableRow: (view: EditorView) => void;
   removeTableColumn: (view: EditorView) => void;
@@ -289,8 +315,21 @@ export function createTableToolbarOverlay(options: {
   getTableContext: (state: EditorView["state"]) => { tablePos: number; cell: { attrs: Record<string, unknown> } } | null;
   normalizeTableAlignment: (value: unknown) => TableAlignment | null;
 }): TableToolbarOverlay {
-  const { appendTableColumn, appendTableRow, removeTableColumn, removeTableRow, setTableColumnAlignment, removeActiveTable, getTableContext, normalizeTableAlignment } = options;
-  const dom = document.createElement("div");
+  const {
+    appendTableColumn,
+    appendTableRow,
+    doc,
+    getTableContext,
+    normalizeTableAlignment,
+    portalRoot,
+    removeActiveTable,
+    removeTableColumn,
+    removeTableRow,
+    setTableColumnAlignment,
+    win,
+  } = options;
+  const HTMLElementCtor = win.HTMLElement;
+  const dom = doc.createElement("div");
   dom.className = "mdw-table-toolbar";
   dom.hidden = true;
   dom.style.display = "none";
@@ -301,7 +340,7 @@ export function createTableToolbarOverlay(options: {
   let activeMarker: HTMLElement | null = null;
 
   const createIcon = (paths: string[], viewBox = "0 0 24 24") => {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", viewBox);
     svg.setAttribute("fill", "none");
     svg.setAttribute("stroke", "currentColor");
@@ -312,7 +351,7 @@ export function createTableToolbarOverlay(options: {
     svg.classList.add("mdw-table-toolbar-icon");
 
     for (const d of paths) {
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      const path = doc.createElementNS("http://www.w3.org/2000/svg", "path");
       path.setAttribute("d", d);
       svg.append(path);
     }
@@ -321,7 +360,7 @@ export function createTableToolbarOverlay(options: {
   };
 
   const createButton = (title: string, icon: SVGElement) => {
-    const button = document.createElement("button");
+    const button = doc.createElement("button");
     button.type = "button";
     button.className = "mdw-table-toolbar-button";
     button.title = title;
@@ -401,11 +440,11 @@ export function createTableToolbarOverlay(options: {
   const reposition = () => {
     if (!activeMarker) return;
     const rect = activeMarker.getBoundingClientRect();
-    const topAbove = rect.top + window.scrollY - dom.offsetHeight - 8;
-    const topBelow = rect.bottom + window.scrollY + 8;
+    const topAbove = rect.top + win.scrollY - dom.offsetHeight - 8;
+    const topBelow = rect.bottom + win.scrollY + 8;
     const left = Math.min(
-      rect.left + window.scrollX,
-      window.scrollX + document.documentElement.clientWidth - dom.offsetWidth - 12,
+      rect.left + win.scrollX,
+      win.scrollX + getViewportWidth(doc, win) - dom.offsetWidth - 12,
     );
     dom.style.top = `${Math.max(12, topAbove > 12 ? topAbove : topBelow)}px`;
     dom.style.left = `${Math.max(12, left)}px`;
@@ -422,11 +461,11 @@ export function createTableToolbarOverlay(options: {
     if (!dom.hidden) reposition();
   };
 
-  const alignGroup = document.createElement("div");
+  const alignGroup = doc.createElement("div");
   alignGroup.className = "mdw-table-toolbar-group";
   alignGroup.append(alignLeftButton, alignCenterButton, alignRightButton);
   dom.append(addColumnButton, removeColumnButton, addRowButton, removeRowButton, alignGroup, removeButton);
-  document.body.append(dom);
+  portalRoot.append(dom);
 
   dom.addEventListener("mousedown", (event) => event.preventDefault());
   addColumnButton.addEventListener("click", () => { const view = activeView; if (!view) return; appendTableColumn(view); view.focus(); });
@@ -437,8 +476,8 @@ export function createTableToolbarOverlay(options: {
   alignCenterButton.addEventListener("click", () => { const view = activeView; if (!view) return; setTableColumnAlignment(view, "center"); view.focus(); });
   alignRightButton.addEventListener("click", () => { const view = activeView; if (!view) return; setTableColumnAlignment(view, "right"); view.focus(); });
   removeButton.addEventListener("click", () => { const view = activeView; if (!view) return; removeActiveTable(view); view.focus(); });
-  window.addEventListener("resize", handleWindowChange);
-  window.addEventListener("scroll", handleWindowChange, true);
+  win.addEventListener("resize", handleWindowChange);
+  win.addEventListener("scroll", handleWindowChange, true);
 
   return {
     update(view) {
@@ -448,7 +487,7 @@ export function createTableToolbarOverlay(options: {
         return;
       }
       const marker = view.nodeDOM(info.tablePos);
-      if (!(marker instanceof HTMLElement)) {
+      if (!(marker instanceof HTMLElementCtor)) {
         close();
         return;
       }
@@ -460,8 +499,8 @@ export function createTableToolbarOverlay(options: {
       reposition();
     },
     destroy() {
-      window.removeEventListener("resize", handleWindowChange);
-      window.removeEventListener("scroll", handleWindowChange, true);
+      win.removeEventListener("resize", handleWindowChange);
+      win.removeEventListener("scroll", handleWindowChange, true);
       dom.remove();
     },
   };

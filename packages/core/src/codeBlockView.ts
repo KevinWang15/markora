@@ -1,23 +1,17 @@
 import { Compartment, EditorSelection, EditorState as CodeMirrorState, type Extension } from "@codemirror/state";
 import { EditorView as CodeMirrorView, keymap as codeMirrorKeymap, drawSelection, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
-import { indentOnInput, syntaxHighlighting, defaultHighlightStyle, StreamLanguage } from "@codemirror/language";
-import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
-import { css as cssLanguage } from "@codemirror/lang-css";
-import { html } from "@codemirror/lang-html";
-import { markdown as markdownLanguage } from "@codemirror/lang-markdown";
-import { python } from "@codemirror/lang-python";
-import { cpp } from "@codemirror/lang-cpp";
-import { java } from "@codemirror/lang-java";
-import { rust } from "@codemirror/lang-rust";
-import { xml } from "@codemirror/lang-xml";
-import { shell } from "@codemirror/legacy-modes/mode/shell";
+import { indentOnInput, syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import { Fragment, type Node as ProseMirrorNode, type Schema } from "prosemirror-model";
 import { redo, undo } from "prosemirror-history";
 import { Selection, TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import { ManagedBlockCursor } from "./managedBlockCursor";
+import {
+  createCodeBlockLanguageResolver,
+  normalizeCodeBlockLanguage,
+  type CodeBlockLanguageRegistry,
+} from "./codeBlockLanguages";
 
 type CodeBlockViewInstance = {
   dom: HTMLElement;
@@ -38,46 +32,103 @@ type CodeBlockViewConstructor = new (
 
 type CreateCodeBlockViewClassOptions = {
   schema: Schema;
+  languageRegistry?: CodeBlockLanguageRegistry;
   moveBeforeManagedBlock: (view: EditorView, blockPos: number) => boolean;
   setManagedBlockBoundarySelection: (view: EditorView, blockPos: number, side: "before" | "after") => boolean;
 };
 
-export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOptions): CodeBlockViewConstructor {
-  const { schema, moveBeforeManagedBlock, setManagedBlockBoundarySelection } = options;
+type BrowserWindow = Window & typeof globalThis;
 
-  function debugCodeBlockCursor(..._args: unknown[]) {
+const DEBUG_CODE_BLOCK_CURSOR = false;
+
+export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOptions): CodeBlockViewConstructor {
+  const { schema, languageRegistry, moveBeforeManagedBlock, setManagedBlockBoundarySelection } = options;
+  const languageResolver = createCodeBlockLanguageResolver(languageRegistry);
+
+  function getOwnerWindow(view: EditorView): BrowserWindow {
+    const ownerWindow = view.dom.ownerDocument.defaultView as BrowserWindow | null;
+
+    if (!ownerWindow) {
+      throw new Error("Markora code block view requires a window-backed document.");
+    }
+
+    return ownerWindow;
   }
 
-  function logCodeBlockCursor(view: EditorView, codeBlockDom: HTMLElement, cm: CodeMirrorView, phase: string, extra: Record<string, unknown> = {}) {
-    const selection = view.state.selection;
-    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const cmCursorLayer = cm.dom.querySelector(".cm-cursorLayer");
-    const cmCursor = cm.dom.querySelector(".cm-cursor");
+  function requestFrame(ownerWindow: BrowserWindow, callback: FrameRequestCallback) {
+    return typeof ownerWindow.requestAnimationFrame === "function"
+      ? ownerWindow.requestAnimationFrame(callback)
+      : ownerWindow.setTimeout(() => callback(Date.now()), 16);
+  }
 
-    debugCodeBlockCursor("[code-block-debug]", JSON.stringify({
-      phase,
-      selectionType: selection.constructor.name,
-      from: selection.from,
-      to: selection.to,
-      outerHasManagedClass: view.dom.classList.contains("mdw-has-managed-block-cursor"),
-      codeBlockClasses: Array.from(codeBlockDom.classList),
-      cmFocused: cm.hasFocus,
-      activeElement: activeElement ? {
-        tag: activeElement.tagName,
-        className: activeElement.className,
-        contentEditable: activeElement.getAttribute("contenteditable"),
-      } : null,
-      cmCursorLayer: cmCursorLayer instanceof HTMLElement ? {
-        className: cmCursorLayer.className,
-        style: cmCursorLayer.getAttribute("style"),
-        childCount: cmCursorLayer.childElementCount,
-      } : null,
-      cmCursor: cmCursor instanceof HTMLElement ? {
-        className: cmCursor.className,
-        style: cmCursor.getAttribute("style"),
-      } : null,
-      ...extra,
-    }));
+  function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
+    return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";
+  }
+
+  function asHTMLElement(value: Element | null, ownerWindow: BrowserWindow) {
+    return value instanceof ownerWindow.HTMLElement ? value : null;
+  }
+
+  function getActiveElement(ownerDocument: Document, ownerWindow: BrowserWindow) {
+    return asHTMLElement(ownerDocument.activeElement, ownerWindow);
+  }
+
+  function describeElement(element: HTMLElement | null) {
+    return element ? {
+      tag: element.tagName,
+      className: element.className,
+      contentEditable: element.getAttribute("contenteditable"),
+    } : null;
+  }
+
+  function debugCodeBlockCursor(factory: () => unknown) {
+    if (!DEBUG_CODE_BLOCK_CURSOR) {
+      return;
+    }
+
+    console.debug("[code-block-debug]", factory());
+  }
+
+  function logCodeBlockCursor(
+    view: EditorView,
+    codeBlockDom: HTMLElement,
+    cm: CodeMirrorView,
+    phase: string,
+    extraFactory?: () => Record<string, unknown>,
+  ) {
+    if (!DEBUG_CODE_BLOCK_CURSOR) {
+      return;
+    }
+
+    debugCodeBlockCursor(() => {
+      const ownerDocument = view.dom.ownerDocument;
+      const ownerWindow = getOwnerWindow(view);
+      const selection = view.state.selection;
+      const activeElement = getActiveElement(ownerDocument, ownerWindow);
+      const cmCursorLayer = asHTMLElement(cm.dom.querySelector(".cm-cursorLayer"), ownerWindow);
+      const cmCursor = asHTMLElement(cm.dom.querySelector(".cm-cursor"), ownerWindow);
+
+      return {
+        phase,
+        selectionType: selection.constructor.name,
+        from: selection.from,
+        to: selection.to,
+        outerHasManagedClass: view.dom.classList.contains("mdw-has-managed-block-cursor"),
+        codeBlockClasses: Array.from(codeBlockDom.classList),
+        cmFocused: cm.hasFocus,
+        activeElement: describeElement(activeElement),
+        cmCursorLayer: cmCursorLayer ? {
+          className: cmCursorLayer.className,
+          style: cmCursorLayer.getAttribute("style"),
+          childCount: cmCursorLayer.childElementCount,
+        } : null,
+        cmCursor: cmCursor ? {
+          className: cmCursor.className,
+          style: cmCursor.getAttribute("style"),
+        } : null,
+        ...(extraFactory ? extraFactory() : {}),
+      };
+    });
   }
 
   class CodeBlockView {
@@ -86,6 +137,9 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     private cm: CodeMirrorView;
     private updating = false;
     private suppressForwarding = false;
+    private destroyed = false;
+    private activeLanguage = "";
+    private languageLoadVersion = 0;
     private languageCompartment = new Compartment();
 
     constructor(
@@ -93,17 +147,20 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       private outerView: EditorView,
       private getPos: () => number,
     ) {
-      this.dom = document.createElement("div");
+      const ownerDocument = this.ownerDocument;
+
+      this.dom = ownerDocument.createElement("div");
       this.dom.className = "mdw-code-block";
 
-      this.languageBadge = document.createElement("div");
+      this.languageBadge = ownerDocument.createElement("div");
       this.languageBadge.className = "mdw-code-block-language";
 
-      const editorHost = document.createElement("div");
+      const editorHost = ownerDocument.createElement("div");
       editorHost.className = "mdw-code-block-editor";
       this.dom.append(this.languageBadge, editorHost);
 
       this.cm = new CodeMirrorView({
+        root: this.getEditorRoot(),
         state: CodeMirrorState.create({
           doc: node.textContent,
           extensions: this.getExtensions(),
@@ -122,9 +179,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       this.node = node;
       const language = this.getLanguageLabel();
       this.languageBadge.textContent = language || "plain text";
-      this.cm.dispatch({
-        effects: this.languageCompartment.reconfigure(this.getLanguageExtension(language)),
-      });
+      this.syncLanguageSupport(language);
 
       if (!this.updating && this.cm.state.doc.toString() !== node.textContent) {
         this.cm.dispatch({
@@ -166,7 +221,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       }
 
       if (selection instanceof ManagedBlockCursor) {
-        logCodeBlockCursor(this.outerView, this.dom, this.cm, "update", { selectionInside, selectionOverlaps, suppressForwarding: this.suppressForwarding });
+        logCodeBlockCursor(this.outerView, this.dom, this.cm, "update", () => ({ selectionInside, selectionOverlaps, suppressForwarding: this.suppressForwarding }));
       }
 
       return true;
@@ -190,7 +245,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
     stopEvent(event: Event) {
       const target = event.target;
-      return target instanceof Node && this.cm.dom.contains(target);
+      return target instanceof this.ownerWindow.Node && this.cm.dom.contains(target);
     }
 
     ignoreMutation() {
@@ -198,7 +253,17 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     }
 
     destroy() {
+      this.destroyed = true;
+      this.languageLoadVersion += 1;
       this.cm.destroy();
+    }
+
+    private get ownerDocument() {
+      return this.outerView.dom.ownerDocument;
+    }
+
+    private get ownerWindow() {
+      return getOwnerWindow(this.outerView);
     }
 
     private isOuterSelectionInsideCodeBlock(selection = this.outerView.state.selection) {
@@ -217,20 +282,17 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     }
 
     private scheduleOuterFocusAfterExit() {
-      requestAnimationFrame(() => {
-        const activeElement = document.activeElement;
+      const ownerDocument = this.ownerDocument;
+      const ownerWindow = this.ownerWindow;
 
-        logCodeBlockCursor(this.outerView, this.dom, this.cm, "scheduleOuterFocusAfterExit:before", {
-          activeElement: activeElement instanceof HTMLElement
-            ? {
-                tag: activeElement.tagName,
-                className: activeElement.className,
-                contentEditable: activeElement.getAttribute("contenteditable"),
-              }
-            : null,
-        });
+      requestFrame(ownerWindow, () => {
+        const activeElement = getActiveElement(ownerDocument, ownerWindow);
 
-        if (activeElement instanceof HTMLElement && this.cm.dom.contains(activeElement)) {
+        logCodeBlockCursor(this.outerView, this.dom, this.cm, "scheduleOuterFocusAfterExit:before", () => ({
+          activeElement: describeElement(activeElement),
+        }));
+
+        if (activeElement && this.cm.dom.contains(activeElement)) {
           activeElement.blur();
         }
 
@@ -244,15 +306,9 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
           this.outerView.focus();
         }
 
-        logCodeBlockCursor(this.outerView, this.dom, this.cm, "scheduleOuterFocusAfterExit:after", {
-          activeElement: document.activeElement instanceof HTMLElement
-            ? {
-                tag: document.activeElement.tagName,
-                className: document.activeElement.className,
-                contentEditable: document.activeElement.getAttribute("contenteditable"),
-              }
-            : null,
-        });
+        logCodeBlockCursor(this.outerView, this.dom, this.cm, "scheduleOuterFocusAfterExit:after", () => ({
+          activeElement: describeElement(getActiveElement(ownerDocument, ownerWindow)),
+        }));
       });
     }
 
@@ -262,50 +318,62 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       }
     }
 
+    private getEditorRoot(): Document | ShadowRoot {
+      const rootNode = this.outerView.dom.getRootNode();
+      const ShadowRootCtor = this.ownerWindow.ShadowRoot;
+      return ShadowRootCtor && rootNode instanceof ShadowRootCtor ? rootNode : this.ownerDocument;
+    }
+
     private getLanguageLabel() {
       const params = this.node.attrs.params;
       return typeof params === "string" ? params.trim() : "";
     }
 
-    private getLanguageExtension(language: string): Extension {
-      const normalized = language.toLowerCase();
-      switch (normalized) {
-        case "javascript":
-        case "js":
-          return javascript();
-        case "typescript":
-        case "ts":
-          return javascript({ typescript: true });
-        case "json":
-          return json();
-        case "css":
-          return cssLanguage();
-        case "html":
-          return html();
-        case "xml":
-          return xml();
-        case "markdown":
-        case "md":
-          return markdownLanguage();
-        case "python":
-        case "py":
-          return python();
-        case "c":
-        case "cpp":
-        case "c++":
-          return cpp();
-        case "java":
-          return java();
-        case "rust":
-        case "rs":
-          return rust();
-        case "bash":
-        case "sh":
-        case "shell":
-          return StreamLanguage.define(shell);
-        default:
-          return [];
+    private syncLanguageSupport(language: string) {
+      const normalized = normalizeCodeBlockLanguage(language);
+
+      if (normalized === this.activeLanguage) {
+        return;
       }
+
+      this.activeLanguage = normalized;
+      const nextSupport = languageResolver.resolve(normalized);
+      const loadVersion = ++this.languageLoadVersion;
+
+      if (!nextSupport) {
+        this.cm.dispatch({
+          effects: this.languageCompartment.reconfigure([]),
+        });
+        return;
+      }
+
+      if (isPromiseLike(nextSupport)) {
+        this.cm.dispatch({
+          effects: this.languageCompartment.reconfigure([]),
+        });
+        void nextSupport.then((extension) => {
+          if (this.destroyed || loadVersion !== this.languageLoadVersion || normalized !== this.activeLanguage) {
+            return;
+          }
+
+          this.cm.dispatch({
+            effects: this.languageCompartment.reconfigure(extension),
+          });
+        }).catch(() => {
+          if (this.destroyed || loadVersion !== this.languageLoadVersion || normalized !== this.activeLanguage) {
+            return;
+          }
+
+          this.cm.dispatch({
+            effects: this.languageCompartment.reconfigure([]),
+          });
+        });
+        return;
+      }
+
+      this.cm.dispatch({
+        effects: this.languageCompartment.reconfigure(nextSupport),
+      });
     }
 
     private maybeEscapeHorizontal(unit: -1 | 1) {
@@ -411,7 +479,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       this.outerView.dispatch(tr.scrollIntoView());
       this.updating = false;
 
-      requestAnimationFrame(() => {
+      requestFrame(this.ownerWindow, () => {
         this.outerView.focus();
       });
 
@@ -434,7 +502,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         this.maybeResumeForwarding();
       }
 
-      logCodeBlockCursor(this.outerView, this.dom, this.cm, "exitCodeBlock", { unit, handled, suppressForwarding: this.suppressForwarding });
+      logCodeBlockCursor(this.outerView, this.dom, this.cm, "exitCodeBlock", () => ({ unit, handled, suppressForwarding: this.suppressForwarding }));
 
       return handled;
     }
@@ -535,7 +603,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         return false;
       }
 
-      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      const event = new this.ownerWindow.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
       let handled = false;
 
       this.outerView.someProp("handleKeyDown", (handler) => {
@@ -557,7 +625,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         drawSelection(),
         indentOnInput(),
         syntaxHighlighting(defaultHighlightStyle),
-        this.languageCompartment.of(this.getLanguageExtension(language)),
+        this.languageCompartment.of([]),
         codeMirrorKeymap.of([
           {
             key: "Enter",

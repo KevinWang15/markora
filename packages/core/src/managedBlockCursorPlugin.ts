@@ -2,61 +2,100 @@ import { Plugin } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import { ManagedBlockCursor, type ManagedBlockBoundary, type BoundarySide } from "./managedBlockCursor";
 
-function debugManagedBlockCursor(..._args: unknown[]) {
+type BrowserWindow = Window & typeof globalThis;
+
+const DEBUG_MANAGED_BLOCK_CURSOR = false;
+
+function debugManagedBlockCursor(factory: () => unknown) {
+  if (!DEBUG_MANAGED_BLOCK_CURSOR) {
+    return;
+  }
+
+  console.debug("[managed-block-debug]", factory());
 }
 
-function logManagedBlockCursor(view: EditorView, phase: string) {
-  const selection = view.state.selection;
-  const cmCursorLayer = view.dom.querySelector(".cm-cursorLayer");
-  const cmCursor = view.dom.querySelector(".cm-cursor");
-  const managedNode = view.dom.querySelector(".mdw-managed-block-cursor");
-  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+function getOwnerWindow(view: EditorView): BrowserWindow {
+  const ownerWindow = view.dom.ownerDocument.defaultView as BrowserWindow | null;
 
-  debugManagedBlockCursor("[managed-block-debug]", JSON.stringify({
-    phase,
-    selectionType: selection.constructor.name,
-    from: selection.from,
-    to: selection.to,
-    isManagedBlockCursor: selection instanceof ManagedBlockCursor,
-    editorClasses: Array.from(view.dom.classList),
-    activeElement: activeElement ? {
-      tag: activeElement.tagName,
-      className: activeElement.className,
-      contentEditable: activeElement.getAttribute("contenteditable"),
-    } : null,
-    cmCursorLayer: cmCursorLayer instanceof HTMLElement ? {
-      className: cmCursorLayer.className,
-      childCount: cmCursorLayer.childElementCount,
-    } : null,
-    cmCursor: cmCursor instanceof HTMLElement ? {
-      className: cmCursor.className,
-      style: cmCursor.getAttribute("style"),
-    } : null,
-    managedNode: managedNode instanceof HTMLElement ? {
-      tag: managedNode.tagName,
-      className: managedNode.className,
-    } : null,
-  }));
+  if (!ownerWindow) {
+    throw new Error("Markora managed block cursors require a window-backed document.");
+  }
+
+  return ownerWindow;
+}
+
+function asHTMLElement(value: Element | null, ownerWindow: BrowserWindow) {
+  return value instanceof ownerWindow.HTMLElement ? value : null;
+}
+
+function getActiveElement(view: EditorView) {
+  return asHTMLElement(view.dom.ownerDocument.activeElement, getOwnerWindow(view));
+}
+
+function describeActiveElement(view: EditorView, activeElement = getActiveElement(view)) {
+  return activeElement
+    ? {
+        tag: activeElement.tagName,
+        className: activeElement.className,
+        contentEditable: activeElement.getAttribute("contenteditable"),
+        inEditor: view.dom.contains(activeElement),
+        inCodeMirror: !!activeElement.closest(".cm-editor"),
+      }
+    : null;
+}
+
+function queryViewHTMLElement(view: EditorView, selector: string) {
+  return asHTMLElement(view.dom.querySelector(selector), getOwnerWindow(view));
+}
+
+function logManagedBlockCursor(view: EditorView, phase: string, extraFactory?: () => Record<string, unknown>) {
+  if (!DEBUG_MANAGED_BLOCK_CURSOR) {
+    return;
+  }
+
+  debugManagedBlockCursor(() => {
+    const selection = view.state.selection;
+    const cmCursorLayer = queryViewHTMLElement(view, ".cm-cursorLayer");
+    const cmCursor = queryViewHTMLElement(view, ".cm-cursor");
+    const managedNode = queryViewHTMLElement(view, ".mdw-managed-block-cursor");
+
+    return {
+      phase,
+      selectionType: selection.constructor.name,
+      from: selection.from,
+      to: selection.to,
+      isManagedBlockCursor: selection instanceof ManagedBlockCursor,
+      editorClasses: Array.from(view.dom.classList),
+      activeElement: describeActiveElement(view),
+      cmCursorLayer: cmCursorLayer ? {
+        className: cmCursorLayer.className,
+        childCount: cmCursorLayer.childElementCount,
+      } : null,
+      cmCursor: cmCursor ? {
+        className: cmCursor.className,
+        style: cmCursor.getAttribute("style"),
+      } : null,
+      managedNode: managedNode ? {
+        tag: managedNode.tagName,
+        className: managedNode.className,
+      } : null,
+      ...(extraFactory ? extraFactory() : {}),
+    };
+  });
 }
 
 function focusOuterViewForManagedCursor(view: EditorView) {
-  const activeElement = document.activeElement;
+  const activeElement = getActiveElement(view);
 
-  debugManagedBlockCursor("[managed-block-debug]", JSON.stringify({
+  debugManagedBlockCursor(() => ({
     phase: "focus-sync:start",
     selectionType: view.state.selection.constructor.name,
     from: view.state.selection.from,
     to: view.state.selection.to,
-    activeElement: activeElement instanceof HTMLElement ? {
-      tag: activeElement.tagName,
-      className: activeElement.className,
-      contentEditable: activeElement.getAttribute("contenteditable"),
-      inEditor: view.dom.contains(activeElement),
-      inCodeMirror: !!activeElement.closest(".cm-editor"),
-    } : null,
+    activeElement: describeActiveElement(view, activeElement),
   }));
 
-  if (!(activeElement instanceof HTMLElement) || !view.dom.contains(activeElement)) {
+  if (!activeElement || !view.dom.contains(activeElement)) {
     return;
   }
 
@@ -65,42 +104,32 @@ function focusOuterViewForManagedCursor(view: EditorView) {
   }
 
   queueMicrotask(() => {
-    debugManagedBlockCursor("[managed-block-debug]", JSON.stringify({
+    debugManagedBlockCursor(() => ({
       phase: "focus-sync:microtask:before",
       selectionType: view.state.selection.constructor.name,
       from: view.state.selection.from,
       to: view.state.selection.to,
-      activeElement: document.activeElement instanceof HTMLElement ? {
-        tag: document.activeElement.tagName,
-        className: document.activeElement.className,
-        contentEditable: document.activeElement.getAttribute("contenteditable"),
-        inEditor: view.dom.contains(document.activeElement),
-        inCodeMirror: !!document.activeElement.closest(".cm-editor"),
-      } : null,
+      activeElement: describeActiveElement(view),
     }));
 
     if (!(view.state.selection instanceof ManagedBlockCursor)) {
       return;
     }
 
-    if (document.activeElement instanceof HTMLElement && view.dom.contains(document.activeElement) && document.activeElement.closest(".cm-editor")) {
-      document.activeElement.blur();
+    const nextActiveElement = getActiveElement(view);
+
+    if (nextActiveElement && view.dom.contains(nextActiveElement) && nextActiveElement.closest(".cm-editor")) {
+      nextActiveElement.blur();
     }
 
     view.dom.focus();
 
-    debugManagedBlockCursor("[managed-block-debug]", JSON.stringify({
+    debugManagedBlockCursor(() => ({
       phase: "focus-sync:microtask:after",
       selectionType: view.state.selection.constructor.name,
       from: view.state.selection.from,
       to: view.state.selection.to,
-      activeElement: document.activeElement instanceof HTMLElement ? {
-        tag: document.activeElement.tagName,
-        className: document.activeElement.className,
-        contentEditable: document.activeElement.getAttribute("contenteditable"),
-        inEditor: view.dom.contains(document.activeElement),
-        inCodeMirror: !!document.activeElement.closest(".cm-editor"),
-      } : null,
+      activeElement: describeActiveElement(view),
     }));
   });
 }
@@ -173,36 +202,24 @@ export function createManagedBlockBoundaryPlugin(options: CreateManagedBlockBoun
     }
 
     if (event.key === "Enter") {
-      debugManagedBlockCursor("[managed-block-debug]", JSON.stringify({
+      debugManagedBlockCursor(() => ({
         phase: "handleKeyDown:enter",
         selectionType: view.state.selection.constructor.name,
         from: view.state.selection.from,
         to: view.state.selection.to,
         boundarySide: boundary.side,
-        activeElement: document.activeElement instanceof HTMLElement ? {
-          tag: document.activeElement.tagName,
-          className: document.activeElement.className,
-          contentEditable: document.activeElement.getAttribute("contenteditable"),
-          inEditor: view.dom.contains(document.activeElement),
-          inCodeMirror: !!document.activeElement.closest(".cm-editor"),
-        } : null,
+        activeElement: describeActiveElement(view),
       }));
 
       const handled = options.insertParagraphAtManagedBlockBoundary(view, boundary);
 
-      debugManagedBlockCursor("[managed-block-debug]", JSON.stringify({
+      debugManagedBlockCursor(() => ({
         phase: "handleKeyDown:enter:after",
         handled,
         selectionType: view.state.selection.constructor.name,
         from: view.state.selection.from,
         to: view.state.selection.to,
-        activeElement: document.activeElement instanceof HTMLElement ? {
-          tag: document.activeElement.tagName,
-          className: document.activeElement.className,
-          contentEditable: document.activeElement.getAttribute("contenteditable"),
-          inEditor: view.dom.contains(document.activeElement),
-          inCodeMirror: !!document.activeElement.closest(".cm-editor"),
-        } : null,
+        activeElement: describeActiveElement(view),
       }));
 
       if (handled) {
@@ -249,19 +266,13 @@ export function createManagedBlockBoundaryPlugin(options: CreateManagedBlockBoun
         ]);
       },
       handleKeyDown(view, event) {
-        debugManagedBlockCursor("[managed-block-debug]", JSON.stringify({
+        debugManagedBlockCursor(() => ({
           phase: "handleKeyDown:start",
           key: event.key,
           selectionType: view.state.selection.constructor.name,
           from: view.state.selection.from,
           to: view.state.selection.to,
-          activeElement: document.activeElement instanceof HTMLElement ? {
-            tag: document.activeElement.tagName,
-            className: document.activeElement.className,
-            contentEditable: document.activeElement.getAttribute("contenteditable"),
-            inEditor: view.dom.contains(document.activeElement),
-            inCodeMirror: !!document.activeElement.closest(".cm-editor"),
-          } : null,
+          activeElement: describeActiveElement(view),
         }));
 
         return handleManagedBlockKeyDown(view, event);

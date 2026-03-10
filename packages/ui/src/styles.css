@@ -1,0 +1,119 @@
+.mdw-link-editor {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 280px;
+  padding: 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+}
+
+.mdw-link-editor-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.mdw-link-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mdw-link-editor-actions button {
+  padding: 6px 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+
+.mdw-image-editor {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 320px;
+  padding: 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+}
+
+.mdw-image-editor-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.mdw-image-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mdw-image-editor-actions button {
+  padding: 6px 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+
+.mdw-table-toolbar {
+  position: absolute;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #24292f;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+}
+
+.mdw-table-toolbar-group {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.mdw-table-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.mdw-table-toolbar-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.mdw-table-toolbar-button.is-active {
+  background: #e7f1ff;
+  border-color: #8cb4ff;
+  color: #0550ae;
+}

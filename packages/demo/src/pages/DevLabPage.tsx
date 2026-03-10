@@ -1,4 +1,5 @@
 import { createEditor, type MarkdownEditor } from "markora";
+import { createDefaultUi } from "markora-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { devLabExamples } from "../lib/content";
 
@@ -36,6 +37,7 @@ export function DevLabPage() {
       element: editorElement,
       markdown: activeExampleRef.current.markdown,
       onChangeMode: "animationFrame",
+      ui: createDefaultUi(),
       onChange(markdown) {
         setMarkdownSource(markdown);
       },
@@ -53,7 +55,7 @@ export function DevLabPage() {
 
       activeExampleRef.current = nextExample;
       setActiveSlug(nextExample.slug);
-      editor.setMarkdown(nextExample.markdown);
+      editor.commands.setMarkdown(nextExample.markdown);
       editor.flushChange();
       setMarkdownSource(editor.getMarkdown());
     };
@@ -91,7 +93,7 @@ export function DevLabPage() {
       return;
     }
 
-    editorRef.current.setMarkdown(example.markdown);
+    editorRef.current.commands.setMarkdown(example.markdown);
     editorRef.current.flushChange();
     setMarkdownSource(editorRef.current.getMarkdown());
     setIsPresetsOpen(false);
@@ -102,7 +104,7 @@ export function DevLabPage() {
       return;
     }
 
-    editorRef.current.setMarkdown(markdownSource);
+    editorRef.current.commands.setMarkdown(markdownSource);
     editorRef.current.flushChange();
     setMarkdownSource(editorRef.current.getMarkdown());
     setIsSourceOpen(false);

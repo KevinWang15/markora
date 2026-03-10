@@ -1,9 +1,40 @@
 import type { Schema } from "prosemirror-model";
 import { NodeSelection, TextSelection, type EditorState } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
-import type { ActiveImageInfo } from "./overlayTypes";
-import type { ImageEditorOverlay, LinkEditorOverlay } from "./overlays";
+import type { ActiveImageInfo, ImageEditorOverlay, LinkEditorOverlay } from "./uiTypes";
 import { DEFAULT_IMAGE_PROTOCOLS, DEFAULT_LINK_PROTOCOLS, getSafeOpenUrl, sanitizeStoredUrl } from "./urlUtils";
+
+type BrowserWindow = Window & typeof globalThis;
+
+type TargetContext = {
+  HTMLAnchorElementCtor: typeof HTMLAnchorElement;
+  HTMLElementCtor: typeof HTMLElement;
+  HTMLImageElementCtor: typeof HTMLImageElement;
+  target: HTMLElement;
+  win: BrowserWindow;
+};
+
+function getTargetContext(target: EventTarget | null): TargetContext | null {
+  if (!target || typeof target !== "object") {
+    return null;
+  }
+
+  const node = target as Node;
+  const win = node.ownerDocument?.defaultView as BrowserWindow | null;
+  const HTMLElementCtor = win?.HTMLElement;
+
+  if (!win || !HTMLElementCtor || !(target instanceof HTMLElementCtor)) {
+    return null;
+  }
+
+  return {
+    HTMLAnchorElementCtor: win.HTMLAnchorElement,
+    HTMLElementCtor,
+    HTMLImageElementCtor: win.HTMLImageElement,
+    target,
+    win,
+  };
+}
 
 export function createMediaActionHelpers(options: {
   schema: Schema;
@@ -166,16 +197,17 @@ export function createMediaActionHelpers(options: {
   }
 
   function maybeEditActiveImage(view: EditorView, event: MouseEvent, imageEditor: ImageEditorOverlay) {
-    const target = event.target;
+    const context = getTargetContext(event.target);
 
-    if (!(target instanceof HTMLElement) || event.metaKey || event.ctrlKey) {
+    if (!context || event.metaKey || event.ctrlKey) {
       return false;
     }
 
+    const { HTMLElementCtor, target } = context;
     const sourceRow = target.closest(".mdw-image-source");
     const imageWrapper = target.closest(".mdw-image");
 
-    if (!(sourceRow instanceof HTMLElement) && !(imageWrapper instanceof HTMLElement && event.detail >= 2)) {
+    if (!(sourceRow instanceof HTMLElementCtor) && !(imageWrapper instanceof HTMLElementCtor && event.detail >= 2)) {
       return false;
     }
 
@@ -185,23 +217,30 @@ export function createMediaActionHelpers(options: {
       return false;
     }
 
+    const marker = sourceRow instanceof HTMLElementCtor ? sourceRow : imageWrapper;
+
+    if (!(marker instanceof HTMLElementCtor)) {
+      return false;
+    }
+
     event.preventDefault();
-    imageEditor.open(view, (sourceRow instanceof HTMLElement ? sourceRow : imageWrapper) as HTMLElement, imageInfo);
+    imageEditor.open(view, marker, imageInfo);
     return true;
   }
 
   function maybeOpenImage(event: MouseEvent) {
-    const target = event.target;
+    const context = getTargetContext(event.target);
 
-    if (!(target instanceof HTMLElement)) {
+    if (!context) {
       return false;
     }
 
+    const { HTMLElementCtor, HTMLImageElementCtor, target, win } = context;
     const wrapper = target.closest(".mdw-image");
     const image = target.closest("img");
     const src =
-      (wrapper instanceof HTMLElement ? wrapper.dataset.src : null) ||
-      (image instanceof HTMLImageElement ? image.getAttribute("src") : null);
+      (wrapper instanceof HTMLElementCtor ? wrapper.dataset.src : null) ||
+      (image instanceof HTMLImageElementCtor ? image.getAttribute("src") : null);
 
     if (!(event.metaKey || event.ctrlKey) || !src) {
       return false;
@@ -214,20 +253,21 @@ export function createMediaActionHelpers(options: {
     }
 
     event.preventDefault();
-    window.open(safeSrc, "_blank", "noopener,noreferrer");
+    win.open(safeSrc, "_blank", "noopener,noreferrer");
     return true;
   }
 
   function maybeOpenLink(view: EditorView, event: MouseEvent) {
-    const target = event.target;
+    const context = getTargetContext(event.target);
 
-    if (!(target instanceof HTMLElement)) {
+    if (!context) {
       return false;
     }
 
+    const { HTMLAnchorElementCtor, target, win } = context;
     const anchor = target.closest("a");
 
-    if (!(anchor instanceof HTMLAnchorElement)) {
+    if (!(anchor instanceof HTMLAnchorElementCtor)) {
       return false;
     }
 
@@ -250,21 +290,22 @@ export function createMediaActionHelpers(options: {
     }
 
     event.preventDefault();
-    window.open(safeHref, "_blank", "noopener,noreferrer");
+    win.open(safeHref, "_blank", "noopener,noreferrer");
     view.focus();
     return true;
   }
 
   function maybeEditActiveLink(view: EditorView, event: MouseEvent, linkEditor: LinkEditorOverlay) {
-    const target = event.target;
+    const context = getTargetContext(event.target);
 
-    if (!(target instanceof HTMLElement)) {
+    if (!context) {
       return false;
     }
 
+    const { HTMLElementCtor, target } = context;
     const marker = target.closest(".mdw-marker-link-end");
 
-    if (!(marker instanceof HTMLElement)) {
+    if (!(marker instanceof HTMLElementCtor)) {
       return false;
     }
 

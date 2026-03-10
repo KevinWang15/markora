@@ -2,9 +2,12 @@ const examples = [
   {
     title: "Product docs editor",
     summary: "Use the editor for knowledge bases, release notes, and internal documentation where markdown fidelity matters.",
-    snippet: `const editor = createEditor({
+    snippet: `import { createDefaultUi } from "markora-ui";
+
+const editor = createEditor({
   element,
   markdown: initialDoc,
+  ui: createDefaultUi(),
   onChange(saveDraft),
   onChangeMode: "animationFrame",
 });`,
@@ -12,16 +15,17 @@ const examples = [
   {
     title: "AI draft review surface",
     summary: "Let an LLM generate markdown drafts, then hand them to users in a clean visual editor before publishing.",
-    snippet: `editor.setMarkdown(aiDraft, { emitChange: true });
+    snippet: `editor.commands.setMarkdown(aiDraft, { emitChange: true });
 editor.flushChange();`,
   },
   {
     title: "Toolbar-driven CMS field",
     summary: "Bind the toolbar state into your app shell and expose only the controls your product wants to support.",
-    snippet: `const state = editor.getToolbarState();
-if (state.link.enabled) {
-  editor.setLink("https://example.com");
-}`,
+    snippet: `if (editor.state.can.setLink()) {
+  editor.commands.setLink("https://example.com");
+}
+
+const isLinkActive = editor.state.isActive.mark("link");`,
   },
   {
     title: "Source-of-truth markdown storage",
@@ -35,7 +39,7 @@ if (state.link.enabled) {
 const recipes = [
   {
     heading: "Sync with external state",
-    body: "Use `setMarkdown()` when upstream content changes, and call `flushChange()` if you need immediate serialized output after the update.",
+    body: "Use `editor.commands.setMarkdown()` when upstream content changes, and call `flushChange()` if you need immediate serialized output after the update.",
   },
   {
     heading: "Observe editor behavior",
