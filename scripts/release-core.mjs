@@ -39,6 +39,8 @@ if (!["check", "pack", "publish"].includes(mode)) {
 
 run("pnpm", ["run", "build"]);
 run("pnpm", ["run", "typecheck"]);
+run("pnpm", ["run", "typecheck:api"]);
+run("pnpm", ["run", "smoke:node-esm"]);
 
 if (mode === "check") {
   run("npm", ["pack", "--dry-run"]);

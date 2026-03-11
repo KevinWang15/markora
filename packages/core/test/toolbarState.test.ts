@@ -126,7 +126,7 @@ describe('toolbar state', () => {
     const toolbarState = editor.getToolbarState();
     expect(toolbarState.link.active).toBe(true);
     expect(toolbarState.link.enabled).toBe(true);
-    expect(editor.removeLink()).toBe(true);
+    expect(editor.commands.removeLink()).toBe(true);
     expect(editor.getMarkdown()).toBe('docs');
   });
 
@@ -142,7 +142,7 @@ describe('toolbar state', () => {
     const toolbarState = editor.getToolbarState();
     expect(toolbarState.image.active).toBe(true);
     expect(toolbarState.image.enabled).toBe(true);
-    expect(editor.removeImage()).toBe(true);
+    expect(editor.commands.removeImage()).toBe(true);
     expect(editor.getMarkdown()).toBe('');
   });
 
@@ -157,7 +157,7 @@ describe('toolbar state', () => {
     const toolbarState = editor.getToolbarState();
     expect(toolbarState.link.active).toBe(false);
     expect(toolbarState.link.enabled).toBe(true);
-    expect(editor.setLink('https://example.com')).toBe(true);
+    expect(editor.commands.setLink('https://example.com')).toBe(true);
     expect(editor.getMarkdown()).toBe('[hello](https://example.com/) world');
   });
 
@@ -170,7 +170,7 @@ describe('toolbar state', () => {
     const toolbarState = editor.getToolbarState();
     expect(toolbarState.image.active).toBe(false);
     expect(toolbarState.image.enabled).toBe(true);
-    expect(editor.insertImage({ src: 'https://example.com/image.png', alt: 'alt text' })).toBe(true);
+    expect(editor.commands.insertImage({ src: 'https://example.com/image.png', alt: 'alt text' })).toBe(true);
 
     const image = findNodeByName(editor, 'image');
     expect(editor.view.state.selection).toBeInstanceOf(NodeSelection);
@@ -205,7 +205,7 @@ describe('toolbar state', () => {
 
     expect(editor.getToolbarState().bold.enabled).toBe(true);
 
-    editor.setMarkdown(['```js', 'const answer = 42;', '```'].join('\n'));
+    editor.commands.setMarkdown(['```js', 'const answer = 42;', '```'].join('\n'));
 
     const toolbarState = editor.getToolbarState();
     expect(toolbarState.bold.enabled).toBe(false);

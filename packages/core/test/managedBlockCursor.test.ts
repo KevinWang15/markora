@@ -1,23 +1,54 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { EditorState, Selection, TextSelection } from 'prosemirror-state';
 import { createEditor } from '../src/createEditor';
 import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from '../src/managedBlockCursor';
 import { createTableNavigation } from '../src/tableNavigation';
 
-if (typeof Range !== 'undefined') {
-  if (!Range.prototype.getClientRects) {
-    Range.prototype.getClientRects = (() => [] as unknown as DOMRectList);
+const foreignWindows: Array<Window & typeof globalThis> = [];
+
+function installDomStubs(targetWindow: Window & typeof globalThis = window) {
+  const RangeCtor = targetWindow.Range;
+
+  if (RangeCtor && !RangeCtor.prototype.getClientRects) {
+    RangeCtor.prototype.getClientRects = (() => [] as unknown as DOMRectList);
   }
 
-  if (!Range.prototype.getBoundingClientRect) {
-    Range.prototype.getBoundingClientRect = (() => new DOMRect()) as () => DOMRect;
+  if (RangeCtor && !RangeCtor.prototype.getBoundingClientRect) {
+    RangeCtor.prototype.getBoundingClientRect = (() => new targetWindow.DOMRect()) as () => DOMRect;
+  }
+
+  const ElementCtor = targetWindow.Element;
+
+  if (ElementCtor && !ElementCtor.prototype.animate) {
+    ElementCtor.prototype.animate = (() => ({ cancel() {}, finished: Promise.resolve() })) as typeof Element.prototype.animate;
+  }
+
+  if (typeof targetWindow.requestAnimationFrame !== 'function') {
+    targetWindow.requestAnimationFrame = ((callback: FrameRequestCallback) =>
+      targetWindow.setTimeout(() => callback(Date.now()), 16)) as typeof requestAnimationFrame;
+  }
+
+  if (typeof targetWindow.cancelAnimationFrame !== 'function') {
+    targetWindow.cancelAnimationFrame = ((frameId: number) => {
+      targetWindow.clearTimeout(frameId);
+    }) as typeof cancelAnimationFrame;
   }
 }
 
-function createHost() {
-  const element = document.createElement('div');
-  document.body.append(element);
+installDomStubs();
+
+function createHost(ownerDocument: Document = document) {
+  const element = ownerDocument.createElement('div');
+  ownerDocument.body.append(element);
   return element;
+}
+
+function createForeignWindow() {
+  const targetWindow = new JSDOM('<!doctype html><html><body></body></html>').window as unknown as Window & typeof globalThis;
+  foreignWindows.push(targetWindow);
+  installDomStubs(targetWindow);
+  return targetWindow;
 }
 
 function findNodeByName(doc: Parameters<typeof createEditor>[0] extends never ? never : any, name: string) {
@@ -210,6 +241,7 @@ function createTestTableNavigation(editor: ReturnType<typeof createEditor>) {
 
 afterEach(() => {
   document.body.innerHTML = '';
+  foreignWindows.splice(0).forEach((targetWindow) => targetWindow.close());
 });
 
 describe('ManagedBlockCursor', () => {
@@ -352,6 +384,36 @@ describe('ManagedBlockCursor', () => {
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
   });
 
+  it('does not query debug-only cursor selectors when debug logging is disabled', () => {
+    const selectors: string[] = [];
+    const originalQuerySelector = Element.prototype.querySelector;
+    let editor: ReturnType<typeof createEditor> | null = null;
+
+    Element.prototype.querySelector = function patchedQuerySelector(this: Element, selector: string) {
+      selectors.push(selector);
+      return originalQuerySelector.call(this, selector);
+    };
+
+    try {
+      editor = createEditor({
+        element: createHost(),
+        markdown: ['```js', 'const a = 1;', '```'].join('\n'),
+      });
+
+      const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+      setSelection(editor, ManagedBlockCursor.create(editor.view.state.doc, codeBlock.pos, 'after', (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node))!);
+
+      expect(selectors.filter((selector) => (
+        selector === '.cm-cursorLayer'
+        || selector === '.cm-cursor'
+        || selector === '.mdw-managed-block-cursor'
+      ))).toEqual([]);
+    } finally {
+      Element.prototype.querySelector = originalQuerySelector;
+      editor?.destroy();
+    }
+  });
+
   it('inserts typed text below the table on after-edge cursor', () => {
     const editor = createEditor({
       element: createHost(),
@@ -409,6 +471,33 @@ describe('ManagedBlockCursor', () => {
     expect(editor.view.state.doc.child(0).type.name).toBe('code_block');
     expect(editor.view.state.doc.child(1).type.name).toBe('paragraph');
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+  });
+
+  it('moves focus out of CodeMirror for managed cursors in a foreign window', async () => {
+    const foreignWindow = createForeignWindow();
+    const editor = createEditor({
+      element: createHost(foreignWindow.document),
+      markdown: ['```js', 'const a = 1;', '```'].join('\n'),
+    });
+
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const cmContent = focusCodeMirrorContent(editor);
+
+    expect(
+      foreignWindow.document.activeElement &&
+      (foreignWindow.document.activeElement === cmContent || cmContent.contains(foreignWindow.document.activeElement))
+    ).toBe(true);
+
+    setSelection(editor, ManagedBlockCursor.create(editor.view.state.doc, codeBlock.pos, 'after', (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node))!);
+
+    await Promise.resolve();
+
+    const activeElement = foreignWindow.document.activeElement as HTMLElement | null;
+
+    expect(activeElement).not.toBeNull();
+    expect(activeElement).not.toBe(cmContent);
+    expect(activeElement?.closest('.cm-editor')).toBeNull();
+    editor.destroy();
   });
 
   it('removes the active table row from the toolbar', () => {

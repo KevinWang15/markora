@@ -16,24 +16,28 @@ Write Markdown at the speed of thought.
 - Inline marks for bold, italic, code, strike, and links
 - Table alignment preservation and typed pipe-table conversion
 - Embedded CodeMirror code blocks with language-aware editing
+- Lazy-loaded built-in code block languages with host-extensible loaders
 - Managed block navigation around tables and code blocks
 - Safer URL sanitization for links and images
 
 ## Install
 
 ```bash
-npm install markora
+npm install markora markora-ui
 ```
 
 ## Quick start
 
 ```ts
 import { createEditor } from "markora";
+import { createDefaultUi } from "markora-ui";
 import "markora/styles.css";
+import "markora-ui/styles.css";
 
 const editor = createEditor({
   element: document.querySelector("#editor")!,
   markdown: "# Hello Markora",
+  ui: createDefaultUi(),
   onChange(markdown) {
     console.log(markdown);
   },
@@ -53,7 +57,8 @@ Useful scripts:
 - `pnpm dev:core` — watch the package build only
 - `pnpm dev:demo` — run the demo site only
 - `pnpm build` — build the package and demo
-- `pnpm check` — build core and run typechecks
+- `pnpm check` — build packages, run typechecks, verify public API types, smoke-test Node ESM imports, and execute the test suite
+- `pnpm pack:smoke` — pack `markora` and `markora-ui`, install them into a tiny Vite app, and verify the build
 - `pnpm test` — run the Vitest suite
 
 ## Publishing
@@ -68,7 +73,7 @@ npm publish --tag test
 
 Notes:
 
-- `pnpm release:check` builds the package, runs typechecks, and previews the tarball
+- `pnpm release:check` dry-runs the core tarball and runs a packed-consumer smoke test for `markora` + `markora-ui`
 - publish prereleases with `--tag test` so they do not become `latest`
 - when you are ready for a stable release, publish without the test tag
 
@@ -94,7 +99,10 @@ npm publish --tag test.2026030901
 ## API notes
 
 - `createEditor({ onChangeMode: "animationFrame" })` batches Markdown serialization once per frame
-- `editor.setMarkdown(markdown)` is silent by default
-- `editor.setMarkdown(markdown, { emitChange: true })` re-emits `onChange` after a programmatic update
+- `createEditor()` is headless by default; pass `ui: createDefaultUi()` from `markora-ui` for the built-in overlays
+- `codeBlockLanguages` lets hosts add or override lazy CodeMirror language loaders
+- relative link and image URLs stay relative when stored or re-serialized
+- `editor.commands.setMarkdown(markdown)` is the structured headless update path
+- `editor.commands.setMarkdown(markdown, { emitChange: true })` re-emits `onChange` after a programmatic update
 - `onTransaction` lets hosts observe editor transactions without forcing serialization on every change
 - `editor.flushChange()` forces any pending batched `onChange` emission to run immediately

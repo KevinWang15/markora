@@ -1,5 +1,5 @@
 {
-  "name": "markora",
+  "name": "markora-workspace",
   "private": true,
   "packageManager": "pnpm@10.6.5",
   "devDependencies": {
@@ -11,16 +11,19 @@
     "vitest": "^4.0.18"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter markora --filter demo dev",
+    "dev": "pnpm --parallel --filter markora --filter markora-ui --filter demo dev",
     "dev:demo": "pnpm --filter demo dev",
     "dev:core": "pnpm --filter markora dev",
-    "build": "pnpm --filter core build && pnpm --filter demo build",
+    "dev:ui": "pnpm --filter markora-ui dev",
+    "build": "pnpm --filter markora build && pnpm --filter markora-ui build && pnpm --filter demo build",
     "build:core": "pnpm --filter markora build",
+    "build:ui": "pnpm --filter markora-ui build",
     "build:demo": "pnpm --filter demo build",
-    "check": "pnpm --filter core build && pnpm --filter core typecheck && pnpm --filter demo typecheck",
+    "check": "pnpm --filter markora build && pnpm --filter markora typecheck && pnpm --filter markora typecheck:api && pnpm --filter markora smoke:node-esm && pnpm --filter markora-ui build && pnpm --filter markora-ui typecheck && pnpm --filter markora-ui smoke:node-esm && pnpm --filter demo typecheck && pnpm test",
     "pack:core": "node ./scripts/release-core.mjs pack",
-    "release:check": "node ./scripts/release-core.mjs check",
+    "release:check": "node ./scripts/release-core.mjs check && pnpm run pack:smoke",
     "publish:core": "node ./scripts/release-core.mjs publish",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pack:smoke": "node ./scripts/pack-smoke.mjs"
   }
 }

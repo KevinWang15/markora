@@ -42,11 +42,13 @@
   },
   "scripts": {
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
-    "build": "tsc -p tsconfig.json && node ./scripts/copyStyles.mjs",
+    "build": "node ./scripts/cleanDist.mjs && tsc -p tsconfig.json && node ./scripts/copyStyles.mjs && node ../../scripts/fix-node-esm-specifiers.mjs dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "prepublishOnly": "pnpm run build && pnpm run typecheck",
     "pack": "npm pack",
-    "publish:public": "npm publish --access public"
+    "publish:public": "npm publish --access public",
+    "prepack": "pnpm run build && pnpm run typecheck && pnpm run typecheck:api && pnpm run smoke:node-esm",
+    "typecheck:api": "tsc -p tsconfig.api.json --noEmit",
+    "smoke:node-esm": "node --input-type=module -e \"const mod = await import('./dist/index.js'); if (typeof mod.createEditor !== 'function') throw new Error('createEditor export missing');\""
   },
   "dependencies": {
     "@codemirror/commands": "^6.8.1",
@@ -74,5 +76,8 @@
     "prosemirror-schema-list": "^1.5.1",
     "prosemirror-state": "^1.4.3",
     "prosemirror-view": "^1.41.0"
-  }
+  },
+  "sideEffects": [
+    "./dist/styles.css"
+  ]
 }

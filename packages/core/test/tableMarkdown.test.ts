@@ -106,7 +106,7 @@ describe('table markdown fidelity', () => {
 
     expect(pressKey(editor, 'Enter')).toBe(true);
     expect(editor.getMarkdown()).toBe([
-      '| *Alpha* | [Beta](https://example.com) |',
+      '| *Alpha* | [Beta](https://example.com/) |',
       '| --- | --- |',
       '|  |  |',
     ].join('\n'));
