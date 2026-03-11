@@ -1,4 +1,5 @@
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { CodeBlock } from "./components/CodeBlock";
 import { EditorPlayground } from "./components/EditorPlayground";
 import { docsNavigation, installCommand, quickStartCode } from "./lib/content";
 import { ApiPage } from "./pages/ApiPage";
@@ -48,10 +49,8 @@ export function App() {
             </div>
           </div>
           <div className="hero-code">
-            <span className="card-kicker">Install</span>
-            <pre><code>{installCommand}</code></pre>
-            <span className="card-kicker">Quick start</span>
-            <pre><code>{quickStartCode}</code></pre>
+            <CodeBlock code={installCommand} language="bash" title="Install" showLineNumbers={false} />
+            <CodeBlock code={quickStartCode} language="ts" title="Quick start" />
           </div>
         </div>
       ) : null}

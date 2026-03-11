@@ -179,8 +179,12 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, m
   border-color: var(--border);
 }
 
-.hero-code pre,
-.doc-panel pre,
+.hero-code {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 #output,
 #source {
   margin: 12px 0 0;
@@ -192,6 +196,134 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, m
   color: #e2e8f0;
   line-height: 1.6;
 }
+
+.code-block {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(96, 165, 250, 0.18), transparent 32%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(2, 6, 23, 0.98) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.doc-panel .code-block + .code-block,
+.doc-card .code-block + .code-block {
+  margin-top: 16px;
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.56);
+}
+
+.code-block-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.code-block-title {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.code-block-language {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.16);
+  color: #bfdbfe;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.code-block-copy {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.38);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.code-block-copy:hover {
+  border-color: rgba(96, 165, 250, 0.46);
+  background: rgba(30, 41, 59, 0.92);
+  color: #eff6ff;
+}
+
+.code-block-copy:focus-visible {
+  outline: none;
+  border-color: rgba(96, 165, 250, 0.56);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.code-block-pre {
+  margin: 0;
+  padding: 14px 0;
+  overflow: auto;
+}
+
+.code-block-code {
+  display: block;
+  min-width: max-content;
+  color: #e2e8f0;
+  line-height: 1.65;
+}
+
+.code-block-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  padding: 0 16px;
+}
+
+.code-block:not(.has-line-numbers) .code-block-line {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.code-block-line-number {
+  min-width: 2ch;
+  color: #64748b;
+  text-align: right;
+  user-select: none;
+}
+
+.code-block-line-content {
+  white-space: pre;
+}
+
+.code-block .tok-comment { color: #64748b; font-style: italic; }
+.code-block .tok-string { color: #86efac; }
+.code-block .tok-number,
+.code-block .tok-bool { color: #fbbf24; }
+.code-block .tok-keyword { color: #c084fc; }
+.code-block .tok-function,
+.code-block .tok-typeName { color: #7dd3fc; }
+.code-block .tok-propertyName,
+.code-block .tok-variableName { color: #bfdbfe; }
+.code-block .tok-punctuation,
+.code-block .tok-operator { color: #94a3b8; }
+.code-block .tok-command { color: #60a5fa; font-weight: 700; }
+.code-block .tok-package { color: #f9a8d4; }
+.code-block .tok-flag { color: #67e8f9; }
 
 .docs-layout {
   display: grid;
@@ -260,7 +392,7 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, m
   gap: 18px;
 }
 
-.example-card pre {
+.example-card .code-block {
   margin-top: 14px;
 }
 

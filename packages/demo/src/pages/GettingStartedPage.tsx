@@ -1,3 +1,4 @@
+import { CodeBlock } from "../components/CodeBlock";
 import { installCommand, quickStartCode } from "../lib/content";
 
 export function GettingStartedPage() {
@@ -10,8 +11,8 @@ export function GettingStartedPage() {
           `markora` is framework-agnostic. You provide a host element, optional initial markdown,
           and callbacks for change or transaction observation.
         </p>
-        <pre><code>{installCommand}</code></pre>
-        <pre><code>{quickStartCode}</code></pre>
+        <CodeBlock code={installCommand} language="bash" title="Install" showLineNumbers={false} />
+        <CodeBlock code={quickStartCode} language="ts" title="Quick start" />
       </section>
 
       <section className="feature-strip docs-three-up">

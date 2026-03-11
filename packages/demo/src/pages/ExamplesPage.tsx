@@ -1,3 +1,5 @@
+import { CodeBlock } from "../components/CodeBlock";
+
 const examples = [
   {
     title: "Product docs editor",
@@ -69,7 +71,7 @@ export function ExamplesPage() {
             <span className="card-kicker">Use case</span>
             <h3>{example.title}</h3>
             <p>{example.summary}</p>
-            <pre><code>{example.snippet}</code></pre>
+            <CodeBlock code={example.snippet} language="ts" />
           </article>
         ))}
       </section>
