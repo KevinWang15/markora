@@ -40,8 +40,8 @@ export function App() {
             <span className="eyebrow">Documentation</span>
             <h1>Build Markdown workflows your users actually enjoy.</h1>
             <p>
-              Markora gives you a Typora-like editing experience with strong support for tables,
-              code blocks, links, images, and markdown round-tripping.
+              Markora pairs a headless Markdown editor with optional built-in overlays, lazy-loaded
+              code-block languages, and faithful markdown round-tripping for product-grade editing flows.
             </p>
             <div className="hero-actions">
               <NavLink to="/demo" className="button button-primary">Open live demo</NavLink>
@@ -67,7 +67,7 @@ export function App() {
           </div>
           <div className="sidebar-section sidebar-callout">
             <span className="card-kicker">Why it stands out</span>
-            <p>Faithful Markdown storage, polished block navigation, and a small host API that fits product codebases.</p>
+            <p>Headless core, optional <code>markora-ui</code> overlays, extensible code-block languages, and an internal <code>/__dev</code> lab for regression work.</p>
           </div>
         </aside>}
 

@@ -2,29 +2,30 @@
 
 Write Markdown at the speed of thought.
 
-`markora` is a Typora-style Markdown editor library built with ProseMirror and CodeMirror. This repository contains the publishable editor package plus a docs/demo app for developing and testing the editor in the browser.
+`markora` is a Typora-style Markdown editor library built with ProseMirror and CodeMirror. This repository contains the headless editor core, the optional default UI package, and the docs/demo app used for development and verification.
 
-## What’s in this repo
+## Packages
 
 - `packages/core` — the npm package published as `markora`
-- `packages/demo` — the Vite demo and documentation site
+- `packages/ui` — the npm package published as `markora-ui`
+- `packages/demo` — the Vite docs site, live playground, and internal regression surface
 
 ## Highlights
 
 - Typora-like editing with Markdown as the source of truth
-- Headings, blockquotes, lists, task lists, code fences, images, and tables
+- Round-trip Markdown import/export for headings, quotes, lists, task lists, images, code fences, and tables
 - Inline marks for bold, italic, code, strike, and links
-- Table alignment preservation and typed pipe-table conversion
-- Embedded CodeMirror code blocks with language-aware editing
-- Lazy-loaded built-in code block languages with host-extensible loaders
-- Managed block navigation around tables and code blocks
-- Safer URL sanitization for links and images
+- Embedded CodeMirror code blocks with lazy-loaded built-in grammars
+- Headless command/state APIs plus optional overlays from `markora-ui`
+- Safer URL sanitization and managed navigation around tables and code blocks
 
 ## Install
 
 ```bash
 npm install markora markora-ui
 ```
+
+`markora-ui` is optional. Install it when you want the built-in link, image, and table overlays.
 
 ## Quick start
 
@@ -34,15 +35,35 @@ import { createDefaultUi } from "markora-ui";
 import "markora/styles.css";
 import "markora-ui/styles.css";
 
+const hostElement = document.querySelector("#editor");
+
+if (!hostElement) {
+  throw new Error("Editor host not found.");
+}
+
 const editor = createEditor({
-  element: document.querySelector("#editor")!,
+  element: hostElement,
   markdown: "# Hello Markora",
   ui: createDefaultUi(),
-  onChange(markdown) {
-    console.log(markdown);
+  onChangeMode: "animationFrame",
+  onChange(nextMarkdown) {
+    console.log(nextMarkdown);
   },
 });
+
+editor.view.focus();
+
+// Later, when the host screen unmounts:
+editor.destroy();
 ```
+
+## Architecture notes
+
+- `markora` is headless by default: it owns parsing, serialization, commands, state, and embedded code-block editing
+- `markora-ui` adds the repo's default link editor, image editor, and table toolbar overlays
+- `codeBlockLanguages` lets hosts add or override lazy CodeMirror language loaders
+- `editor.commands.setMarkdown(markdown, { emitChange: true })` is the programmatic update path when you want `onChange` to re-fire
+- `editor.flushChange()` forces any pending animation-frame batched Markdown emission to run immediately
 
 ## Development
 
@@ -53,56 +74,45 @@ pnpm dev
 
 Useful scripts:
 
-- `pnpm dev` — run the core watcher and the demo site together
-- `pnpm dev:core` — watch the package build only
-- `pnpm dev:demo` — run the demo site only
-- `pnpm build` — build the package and demo
-- `pnpm check` — build packages, run typechecks, verify public API types, smoke-test Node ESM imports, and execute the test suite
+- `pnpm dev` — run the core watcher and docs/demo site together
+- `pnpm dev:core` — watch the `markora` package only
+- `pnpm dev:ui` — watch the `markora-ui` package only
+- `pnpm dev:demo` — run the docs/demo site only
+- `pnpm build` — build `markora`, `markora-ui`, and the demo app
+- `pnpm check` — build packages, run typechecks, verify API types, smoke-test Node ESM imports, and execute the test suite
 - `pnpm pack:smoke` — pack `markora` and `markora-ui`, install them into a tiny Vite app, and verify the build
-- `pnpm test` — run the Vitest suite
+- `pnpm release:check` — dry-run the `markora` tarball and then run the packed-consumer smoke test
+- open `/__dev` in the demo app for fixture-driven regression checks while developing the editor itself
 
 ## Publishing
 
-The npm package is defined in `packages/core`.
+This repo ships two publishable packages: `markora` and `markora-ui`.
 
 ```bash
+# Validate the core tarball and the packed consumer flow.
 pnpm release:check
+
+# Publish a prerelease of markora.
 cd packages/core
-npm publish --tag test
+npm publish --tag test.2026031101
+
+# Publish a matching prerelease of markora-ui.
+cd ../ui
+npm publish --tag test.2026031101
 ```
 
 Notes:
 
-- `pnpm release:check` dry-runs the core tarball and runs a packed-consumer smoke test for `markora` + `markora-ui`
-- publish prereleases with `--tag test` so they do not become `latest`
-- when you are ready for a stable release, publish without the test tag
-
-### Publish checklist
-
-```bash
-# from the repo root
-pnpm release:check
-
-# make sure you are logged in to npm
-npm whoami
-
-# publish a prerelease from the package directory
-cd packages/core
-npm publish --tag test.2026030901
-```
-
-- `packages/core/package.json` controls the published package name and version
-- publish prereleases with a dated tag like `test.2026030901`
-- install that prerelease with `npm install markora@test.2026030901`
-- publish the stable release without a prerelease tag when ready
+- `pnpm release:check` dry-runs the `markora` tarball and smoke-tests a consumer app using both packed packages
+- `packages/core/package.json` and `packages/ui/package.json` should stay version-aligned when you release them together
+- publish prereleases with a dated tag such as `test.2026031101`
+- publish stable releases without the prerelease tag when you are ready for `latest`
 
 ## API notes
 
 - `createEditor({ onChangeMode: "animationFrame" })` batches Markdown serialization once per frame
 - `createEditor()` is headless by default; pass `ui: createDefaultUi()` from `markora-ui` for the built-in overlays
-- `codeBlockLanguages` lets hosts add or override lazy CodeMirror language loaders
-- relative link and image URLs stay relative when stored or re-serialized
-- `editor.commands.setMarkdown(markdown)` is the structured headless update path
-- `editor.commands.setMarkdown(markdown, { emitChange: true })` re-emits `onChange` after a programmatic update
-- `onTransaction` lets hosts observe editor transactions without forcing serialization on every change
-- `editor.flushChange()` forces any pending batched `onChange` emission to run immediately
+- `createDefaultUi({ portalRoot })` helps when the editor lives inside a Shadow DOM host
+- built-in code block languages cover JavaScript, TypeScript, JSON, CSS, HTML, XML, Markdown, Python, C/C++, Java, Rust, and shell
+- `editor.state.can.*` and `editor.state.isActive.*` expose host-friendly capability and activity checks
+- `editor.getToolbarState()` remains available for toolbar integrations that prefer a compatibility snapshot

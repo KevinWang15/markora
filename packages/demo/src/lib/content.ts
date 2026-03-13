@@ -3,12 +3,19 @@ import { createDefaultUi } from "markora-ui";
 import "markora/styles.css";
 import "markora-ui/styles.css";
 
+const hostElement = document.querySelector("#editor");
+
+if (!hostElement) {
+  throw new Error("Editor host not found.");
+}
+
 const editor = createEditor({
-  element: document.querySelector("#editor")!,
-  markdown: "# Hello Markdown",
+  element: hostElement,
+  markdown: "# Hello Markora",
   ui: createDefaultUi(),
-  onChange(markdown) {
-    console.log(markdown);
+  onChangeMode: "animationFrame",
+  onChange(nextMarkdown) {
+    console.log(nextMarkdown);
   },
 });`;
 
