@@ -80,15 +80,19 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
       return;
     }
 
-    const markerRect = activeMarker.getBoundingClientRect();
-    const top = markerRect.bottom + win.scrollY + 8;
-    const left = Math.min(
-      markerRect.left + win.scrollX,
-      win.scrollX + getViewportWidth(doc, win) - dom.offsetWidth - 12,
-    );
+    try {
+      const markerRect = activeMarker.getBoundingClientRect();
+      const top = markerRect.bottom + win.scrollY + 8;
+      const left = Math.min(
+        markerRect.left + win.scrollX,
+        win.scrollX + getViewportWidth(doc, win) - dom.offsetWidth - 12,
+      );
 
-    dom.style.top = `${Math.max(12, top)}px`;
-    dom.style.left = `${Math.max(12, left)}px`;
+      dom.style.top = `${Math.max(12, top)}px`;
+      dom.style.left = `${Math.max(12, left)}px`;
+    } catch {
+      // Marker may have been detached from the DOM.
+    }
   };
 
   const close = (refocusEditor: boolean) => {
@@ -219,14 +223,18 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
 
   const reposition = () => {
     if (!activeMarker) return;
-    const markerRect = activeMarker.getBoundingClientRect();
-    const top = markerRect.bottom + win.scrollY + 8;
-    const left = Math.min(
-      markerRect.left + win.scrollX,
-      win.scrollX + getViewportWidth(doc, win) - dom.offsetWidth - 12,
-    );
-    dom.style.top = `${Math.max(12, top)}px`;
-    dom.style.left = `${Math.max(12, left)}px`;
+    try {
+      const markerRect = activeMarker.getBoundingClientRect();
+      const top = markerRect.bottom + win.scrollY + 8;
+      const left = Math.min(
+        markerRect.left + win.scrollX,
+        win.scrollX + getViewportWidth(doc, win) - dom.offsetWidth - 12,
+      );
+      dom.style.top = `${Math.max(12, top)}px`;
+      dom.style.left = `${Math.max(12, left)}px`;
+    } catch {
+      // Marker may have been detached from the DOM.
+    }
   };
 
   const close = (refocusEditor: boolean) => {
@@ -439,15 +447,19 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
 
   const reposition = () => {
     if (!activeMarker) return;
-    const rect = activeMarker.getBoundingClientRect();
-    const topAbove = rect.top + win.scrollY - dom.offsetHeight - 8;
-    const topBelow = rect.bottom + win.scrollY + 8;
-    const left = Math.min(
-      rect.left + win.scrollX,
-      win.scrollX + getViewportWidth(doc, win) - dom.offsetWidth - 12,
-    );
-    dom.style.top = `${Math.max(12, topAbove > 12 ? topAbove : topBelow)}px`;
-    dom.style.left = `${Math.max(12, left)}px`;
+    try {
+      const rect = activeMarker.getBoundingClientRect();
+      const topAbove = rect.top + win.scrollY - dom.offsetHeight - 8;
+      const topBelow = rect.bottom + win.scrollY + 8;
+      const left = Math.min(
+        rect.left + win.scrollX,
+        win.scrollX + getViewportWidth(doc, win) - dom.offsetWidth - 12,
+      );
+      dom.style.top = `${Math.max(12, topAbove > 12 ? topAbove : topBelow)}px`;
+      dom.style.left = `${Math.max(12, left)}px`;
+    } catch {
+      // Marker may have been detached from the DOM.
+    }
   };
 
   const close = () => {
@@ -456,6 +468,8 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     dom.hidden = true;
     dom.style.display = "none";
   };
+
+  const handleMouseDown = (event: MouseEvent) => event.preventDefault();
 
   const handleWindowChange = () => {
     if (!dom.hidden) reposition();
@@ -467,7 +481,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   dom.append(addColumnButton, removeColumnButton, addRowButton, removeRowButton, alignGroup, removeButton);
   portalRoot.append(dom);
 
-  dom.addEventListener("mousedown", (event) => event.preventDefault());
+  dom.addEventListener("mousedown", handleMouseDown);
   addColumnButton.addEventListener("click", () => { const view = activeView; if (!view) return; appendTableColumn(view); view.focus(); });
   removeColumnButton.addEventListener("click", () => { const view = activeView; if (!view) return; removeTableColumn(view); view.focus(); });
   addRowButton.addEventListener("click", () => { const view = activeView; if (!view) return; appendTableRow(view); view.focus(); });
@@ -499,6 +513,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       reposition();
     },
     destroy() {
+      dom.removeEventListener("mousedown", handleMouseDown);
       win.removeEventListener("resize", handleWindowChange);
       win.removeEventListener("scroll", handleWindowChange, true);
       dom.remove();

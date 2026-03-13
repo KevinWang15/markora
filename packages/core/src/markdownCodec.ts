@@ -1,4 +1,3 @@
-import { Fragment as PMFragment } from "prosemirror-model";
 import { Fragment, Schema, Slice, type Mark, type Node as ProseMirrorNode } from "prosemirror-model";
 import {
   MarkdownParser,
@@ -242,9 +241,7 @@ function serializeTableCell(node: ProseMirrorNode) {
     return "";
   }
 
-  return markdownSerializer
-    .serialize(cellDoc)
-    .trim()
+  return serialized
     .replace(/\n{3,}/g, "<br><br>")
     .replace(/\n\n/g, "<br><br>")
     .replace(/\n/g, "<br>")
@@ -330,7 +327,7 @@ export const markdownSerializer = new MarkdownSerializer(
   },
 );
 
-function stripTaskPrefixFromInline(fragment: PMFragment, count: number) {
+function stripTaskPrefixFromInline(fragment: Fragment, count: number) {
   let remaining = count;
   const children: ProseMirrorNode[] = [];
 
@@ -356,7 +353,7 @@ function stripTaskPrefixFromInline(fragment: PMFragment, count: number) {
     children.push(child);
   });
 
-  return PMFragment.fromArray(children);
+  return Fragment.fromArray(children);
 }
 
 function normalizeTaskListNode(node: ProseMirrorNode, parentTypeName?: string): ProseMirrorNode {

@@ -41,6 +41,8 @@ type BrowserWindow = Window & typeof globalThis;
 
 const DEBUG_CODE_BLOCK_CURSOR = false;
 
+// Returns a new class per call so each instance captures its own schema and
+// language registry via the closure — intentional, not a leak.
 export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOptions): CodeBlockViewConstructor {
   const { schema, languageRegistry, moveBeforeManagedBlock, setManagedBlockBoundarySelection } = options;
   const languageResolver = createCodeBlockLanguageResolver(languageRegistry);
