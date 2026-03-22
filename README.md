@@ -1,5 +1,7 @@
 # markora
 
+![](./banner.png)
+
 Write Markdown at the speed of thought.
 
 `markora` is a Typora-style Markdown editor library built with ProseMirror and CodeMirror. This repository contains the headless editor core, the optional default UI package, and the docs/demo app used for development and verification.
