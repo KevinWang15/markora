@@ -134,7 +134,7 @@ test("@required link, image, and task controls serialize exact Markdown", async 
   await imageDialog.getByRole("button", { name: "Save" }).click();
 
   const taskItem = editor.locator('li[data-task="true"]');
-  await taskItem.click({ position: { x: -12, y: 10 } });
+  await taskItem.locator('[data-mdw-task-control="true"]').click();
   await expectMarkdown(labPage, id, [
     "[Docs](/new)",
     "",
@@ -142,7 +142,7 @@ test("@required link, image, and task controls serialize exact Markdown", async 
     "",
     "* [x] Todo",
   ].join("\n"));
-  await expect(taskItem).toHaveAttribute("aria-checked", "true");
+  await expect(taskItem.locator('[data-mdw-task-control="true"]')).toHaveAttribute("aria-checked", "true");
 });
 
 test("@required imported table editing and toolbar alignment retain content", async ({ labPage }) => {

@@ -18,6 +18,7 @@
 
 .mdw-link-editor-input {
   width: 100%;
+  min-height: 44px;
   padding: 8px 10px;
   border: 1px solid #d0d7de;
   border-radius: 8px;
@@ -31,6 +32,12 @@
   box-shadow: 0 0 0 3px rgba(207, 34, 46, 0.12);
 }
 
+.mdw-editor-error {
+  color: #cf222e;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
 .mdw-link-editor-actions {
   display: flex;
   flex-wrap: wrap;
@@ -38,6 +45,7 @@
 }
 
 .mdw-link-editor-actions button {
+  min-height: 44px;
   padding: 6px 10px;
   border: 1px solid #d0d7de;
   border-radius: 8px;
@@ -66,6 +74,7 @@
 
 .mdw-image-editor-input {
   width: 100%;
+  min-height: 44px;
   padding: 8px 10px;
   border: 1px solid #d0d7de;
   border-radius: 8px;
@@ -80,6 +89,7 @@
 }
 
 .mdw-image-editor-actions button {
+  min-height: 44px;
   padding: 6px 10px;
   border: 1px solid #d0d7de;
   border-radius: 8px;
@@ -138,4 +148,27 @@
   background: #e7f1ff;
   border-color: #8cb4ff;
   color: #0550ae;
+}
+
+@media (pointer: coarse) {
+  .mdw-table-toolbar {
+    width: max-content;
+  }
+
+  .mdw-link-editor-input,
+  .mdw-image-editor-input,
+  .mdw-link-editor-actions button,
+  .mdw-image-editor-actions button {
+    min-height: 44px;
+  }
+
+  .mdw-link-editor-actions button,
+  .mdw-image-editor-actions button {
+    min-width: 44px;
+  }
+
+  .mdw-table-toolbar-button {
+    width: 44px;
+    height: 44px;
+  }
 }

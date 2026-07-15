@@ -20,8 +20,6 @@ import {
 import type { TableAlignment } from "./tableNavigation";
 import { DEFAULT_IMAGE_PROTOCOLS, DEFAULT_LINK_PROTOCOLS, sanitizeStoredUrl } from "./urlUtils";
 
-type BrowserWindow = Window & typeof globalThis;
-
 type MarkdownSerializerStateWithInternals = MarkdownSerializerState & {
   closed: { type: ProseMirrorNode["type"] } | null;
   flushClose: (size: number) => void;
@@ -31,6 +29,16 @@ type MarkdownSerializerStateWithInternals = MarkdownSerializerState & {
 const listItemSpec = baseSchema.spec.nodes.get("list_item");
 const codeBlockSpec = baseSchema.spec.nodes.get("code_block");
 const headingSpec = baseSchema.spec.nodes.get("heading");
+let nextTaskControlId = 0;
+
+function createTaskControlIds() {
+  nextTaskControlId += 1;
+  return {
+    content: `mdw-task-content-${nextTaskControlId}`,
+    state: `mdw-task-state-${nextTaskControlId}`,
+  };
+}
+
 const nonSelectableCodeBlockSpec = codeBlockSpec
   ? {
       ...codeBlockSpec,
@@ -46,6 +54,11 @@ const taskListItemSpec = listItemSpec
         checked: { default: null },
       },
       parseDOM: [
+        {
+          tag: '[data-mdw-task-control="true"]',
+          ignore: true,
+          priority: 100,
+        },
         {
           tag: "li",
           getAttrs(dom: Node | string) {
@@ -68,16 +81,42 @@ const taskListItemSpec = listItemSpec
         const checked = node.attrs.checked;
 
         if (typeof checked === "boolean") {
+          const ids = createTaskControlIds();
+
           return [
             "li",
             {
               "data-task": "true",
               "data-checked": checked ? "true" : "false",
-              role: "checkbox",
-              "aria-checked": checked ? "true" : "false",
-              "aria-label": checked ? "Completed task" : "Incomplete task",
             },
-            0,
+            [
+              "span",
+              {
+                "aria-checked": checked ? "true" : "false",
+                "aria-labelledby": `${ids.state} ${ids.content}`,
+                "class": "mdw-task-checkbox",
+                "contenteditable": "false",
+                "data-mdw-task-control": "true",
+                "role": "checkbox",
+                "tabindex": "0",
+              },
+              [
+                "span",
+                {
+                  "class": "mdw-task-checkbox-state",
+                  "id": ids.state,
+                },
+                checked ? "Completed task:" : "Incomplete task:",
+              ],
+            ],
+            [
+              "div",
+              {
+                "class": "mdw-task-content",
+                "id": ids.content,
+              },
+              0,
+            ],
           ] as const;
         }
 
@@ -87,12 +126,13 @@ const taskListItemSpec = listItemSpec
   : undefined;
 
 function isHTMLElementNode(dom: Node | string): dom is HTMLElement {
-  if (typeof dom === "string") {
-    return false;
-  }
-
-  const ownerWindow = dom.ownerDocument?.defaultView as BrowserWindow | null;
-  return !!ownerWindow && dom instanceof ownerWindow.HTMLElement;
+  // ProseMirror parses external clipboard HTML in a detached HTML document,
+  // whose defaultView is null. Tag-specific parse rules still receive real
+  // HTML elements there, so use their stable DOM shape rather than a realm
+  // constructor that is unavailable for that document.
+  return typeof dom !== "string"
+    && dom.nodeType === 1
+    && typeof (dom as HTMLElement).getAttribute === "function";
 }
 
 function getOpaqueDOMAttrs(dom: Node | string, fallback: OpaqueMarkdownKind) {
@@ -210,6 +250,10 @@ function getTableCellDOMAttrs(node: ProseMirrorNode) {
   };
 }
 
+function normalizeTableHeaderScope(value: unknown): "col" | "row" | null {
+  return value === "col" || value === "row" ? value : null;
+}
+
 function getTableCellParseDOMAttrs(dom: Node | string) {
   if (!isHTMLElementNode(dom)) {
     return { align: null };
@@ -223,9 +267,20 @@ function getTableCellParseDOMAttrs(dom: Node | string) {
   };
 }
 
+function getTableHeaderParseDOMAttrs(dom: Node | string) {
+  return {
+    ...getTableCellParseDOMAttrs(dom),
+    scope: isHTMLElementNode(dom) ? normalizeTableHeaderScope(dom.getAttribute("scope")) : null,
+  };
+}
+
 function getTableCellTokenAttrs(token: { attrGet?: (name: string) => string | null }) {
   const align = readTableAlignmentFromString(token.attrGet?.("align") ?? token.attrGet?.("style") ?? undefined);
   return { align };
+}
+
+function getTableHeaderTokenAttrs(token: { attrGet?: (name: string) => string | null }) {
+  return { ...getTableCellTokenAttrs(token), scope: "col" };
 }
 
 function createTableDividerCell(align: TableAlignment | null) {
@@ -272,12 +327,14 @@ const tableNodeSpecs = {
   table_header: {
     attrs: {
       align: { default: null },
+      scope: { default: null },
     },
     content: "block+",
     isolating: true,
-    parseDOM: [{ tag: "th", getAttrs: getTableCellParseDOMAttrs }],
+    parseDOM: [{ tag: "th", getAttrs: getTableHeaderParseDOMAttrs }],
     toDOM(node: ProseMirrorNode) {
-      return ["th", getTableCellDOMAttrs(node), 0] as const;
+      const scope = normalizeTableHeaderScope(node.attrs.scope);
+      return ["th", { ...getTableCellDOMAttrs(node), ...(scope ? { scope } : {}) }, 0] as const;
     },
   },
 };
@@ -350,7 +407,7 @@ const defaultMarkdownTokens = {
   thead: { ignore: true },
   tbody: { ignore: true },
   tr: { block: "table_row" },
-  th: { block: "table_header", getAttrs: getTableCellTokenAttrs },
+  th: { block: "table_header", getAttrs: getTableHeaderTokenAttrs },
   td: { block: "table_cell", getAttrs: getTableCellTokenAttrs },
   s: { mark: "strike" },
   html_block: { node: "raw_block", getAttrs: (token: Token) => getOpaqueTokenAttrs(token, "html-block") },

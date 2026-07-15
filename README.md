@@ -79,6 +79,8 @@ editor.destroy();
 
 See the [embedded editor production plan](./docs/embedded-editor-production-plan.md) for the ordered path from the current editor kernel to a production-grade embedded editing component.
 
+Hosts preparing a release should also review the [embedded input and accessibility contract](./docs/input-accessibility-certification.md) and run the [assistive-technology checklist](./docs/assistive-technology-checklist.md) on their supported platform matrix.
+
 ## Development
 
 ```bash

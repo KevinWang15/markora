@@ -3,6 +3,23 @@ import type { EditorState } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 
 export function createTaskListHelpers(schema: Schema) {
+  const taskControlSelector = '[data-mdw-task-control="true"]';
+
+  function getOwnedTaskControl(view: EditorView, event: Event) {
+    const target = event.target;
+    const ownerWindow = view.dom.ownerDocument.defaultView;
+
+    if (!ownerWindow || !(target instanceof ownerWindow.HTMLElement)) {
+      return null;
+    }
+
+    const control = target.closest(taskControlSelector);
+
+    return control instanceof ownerWindow.HTMLElement && view.dom.contains(control)
+      ? control
+      : null;
+  }
+
   function getTaskListItemAtResolvedPos(state: EditorState, resolvedPos: number) {
     const $pos = state.doc.resolve(resolvedPos);
 
@@ -35,48 +52,170 @@ export function createTaskListHelpers(schema: Schema) {
     return true;
   }
 
-  function maybeToggleTaskListItem(view: EditorView, pos: number, event: MouseEvent) {
-    const target = event.target;
+  function focusTaskControl(
+    view: EditorView,
+    listItemPos: number,
+    shouldFocus?: (listItem: ProseMirrorNode) => boolean,
+  ) {
+    queueMicrotask(() => {
+      if (view.isDestroyed) {
+        return;
+      }
+
+      const currentListItem = view.state.doc.nodeAt(listItemPos);
+
+      if (!currentListItem || (shouldFocus && !shouldFocus(currentListItem))) {
+        return;
+      }
+
+      let listItemDom: Node | null = null;
+
+      try {
+        listItemDom = view.nodeDOM(listItemPos);
+      } catch {
+        return;
+      }
+
+      const ownerWindow = view.dom.ownerDocument.defaultView;
+
+      if (!(ownerWindow && listItemDom instanceof ownerWindow.HTMLElement)) {
+        return;
+      }
+
+      const control = listItemDom.querySelector(taskControlSelector);
+
+      if (control instanceof ownerWindow.HTMLElement) {
+        control.focus();
+      }
+    });
+  }
+
+  function getTaskListItemForControl(view: EditorView, control: HTMLElement, fallbackPos: number) {
     const ownerWindow = view.dom.ownerDocument.defaultView;
+    const listItemElement = control.closest('li[data-task="true"]');
 
-    if (
-      !ownerWindow
-      || !(target instanceof ownerWindow.HTMLElement)
-      || event.button !== 0
-      || event.metaKey
-      || event.ctrlKey
-    ) {
-      return false;
+    if (!(ownerWindow && listItemElement instanceof ownerWindow.HTMLElement)) {
+      return null;
     }
 
-    const listItemElement = target.closest('li[data-task="true"]');
-
-    if (!(listItemElement instanceof ownerWindow.HTMLElement)) {
-      return false;
-    }
-
-    const paragraph = listItemElement.querySelector(":scope > p");
-    const contentLeft = paragraph instanceof ownerWindow.HTMLElement ? paragraph.getBoundingClientRect().left : listItemElement.getBoundingClientRect().left;
-    const checkboxZoneLeft = contentLeft - 32;
-    const checkboxZoneRight = contentLeft + 8;
-
-    if (event.clientX < checkboxZoneLeft || event.clientX > checkboxZoneRight) {
-      return false;
-    }
-
-    let resolvedPos = pos;
+    let resolvedPos = fallbackPos;
 
     try {
       resolvedPos = view.posAtDOM(listItemElement, 0);
     } catch {
-      resolvedPos = pos;
+      resolvedPos = fallbackPos;
     }
 
-    event.preventDefault();
-    const handled = toggleTaskListItemAtResolvedPos(view, resolvedPos);
+    const listItem = getTaskListItemAtResolvedPos(view.state, resolvedPos);
+    return listItem ? { ...listItem, resolvedPos } : null;
+  }
+
+  function shouldUseNativeTaskControlTab(view: EditorView, event: KeyboardEvent) {
+    return event.key === "Tab"
+      && !event.altKey
+      && !event.ctrlKey
+      && !event.metaKey
+      && !!getOwnedTaskControl(view, event);
+  }
+
+  function scheduleTaskControlFocusAfterHistoryShortcut(view: EditorView, event: KeyboardEvent) {
+    const key = event.key.toLowerCase();
+    const isHistoryShortcut = !event.altKey
+      && (event.ctrlKey || event.metaKey)
+      && (key === "z" || (key === "y" && !event.shiftKey));
+
+    if (!isHistoryShortcut) {
+      return false;
+    }
+
+    const control = getOwnedTaskControl(view, event);
+
+    if (!control) {
+      return false;
+    }
+
+    const listItem = getTaskListItemForControl(view, control, view.state.selection.from);
+
+    if (!listItem) {
+      return false;
+    }
+
+    // History commands run synchronously later in the same keydown dispatch.
+    // Refocus in a microtask so nodeDOM resolves the control rendered by the
+    // resulting state, without taking ownership of the shortcut itself.
+    const previousChecked = listItem.node.attrs.checked;
+    const previousContent = listItem.node.content;
+    const previousType = listItem.node.type;
+    focusTaskControl(view, listItem.pos, (currentListItem) => (
+      currentListItem.type === previousType
+      && currentListItem.content.eq(previousContent)
+      && typeof currentListItem.attrs.checked === "boolean"
+      && currentListItem.attrs.checked !== previousChecked
+    ));
+    return true;
+  }
+
+  function maybeToggleTaskListItem(view: EditorView, pos: number, event: MouseEvent | KeyboardEvent) {
+    const ownerWindow = view.dom.ownerDocument.defaultView;
+    const control = getOwnedTaskControl(view, event);
+
+    if (!ownerWindow || !control) {
+      return false;
+    }
+
+    let shouldRefocusControl = false;
+
+    if (event instanceof ownerWindow.KeyboardEvent) {
+      const isActivationKey = event.key === "Enter" || event.key === " " || event.key === "Spacebar";
+
+      if (!isActivationKey || event.altKey || event.ctrlKey || event.metaKey) {
+        return false;
+      }
+
+      event.preventDefault();
+
+      if (event.repeat) {
+        return true;
+      }
+
+      shouldRefocusControl = true;
+    } else if (event instanceof ownerWindow.MouseEvent) {
+      if (event.type === "click") {
+        if (event.detail !== 0) {
+          event.preventDefault();
+          return true;
+        }
+
+        event.preventDefault();
+        shouldRefocusControl = true;
+      } else if (
+        event.type !== "mousedown"
+        || event.button !== 0
+        || event.metaKey
+        || event.ctrlKey
+      ) {
+        return false;
+      } else {
+        event.preventDefault();
+      }
+    } else {
+      return false;
+    }
+
+    const listItem = getTaskListItemForControl(view, control, pos);
+
+    if (!listItem) {
+      return false;
+    }
+
+    const handled = toggleTaskListItemAtResolvedPos(view, listItem.resolvedPos);
 
     if (handled) {
-      view.focus();
+      if (shouldRefocusControl) {
+        focusTaskControl(view, listItem.pos);
+      } else {
+        view.focus();
+      }
     }
 
     return handled;
@@ -86,5 +225,7 @@ export function createTaskListHelpers(schema: Schema) {
     getTaskListItemAtResolvedPos,
     toggleTaskListItemAtResolvedPos,
     maybeToggleTaskListItem,
+    scheduleTaskControlFocusAfterHistoryShortcut,
+    shouldUseNativeTaskControlTab,
   };
 }

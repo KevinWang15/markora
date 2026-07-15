@@ -442,6 +442,45 @@ describe('ManagedBlockCursor', () => {
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
   });
 
+  it.each(['before', 'after'] as const)(
+    'materializes an editable paragraph on compositionstart at the %s-edge cursor',
+    async (side) => {
+      const editor = createEditor({
+        element: createHost(),
+        markdown: ['| A | B |', '| --- | --- |', '| a | b |'].join('\n'),
+      });
+      const table = findNodeByName(editor.view.state.doc, 'table');
+      setSelection(editor, ManagedBlockCursor.create(
+        editor.view.state.doc,
+        table.pos,
+        side,
+        (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node),
+      )!);
+
+      const event = new CompositionEvent('compositionstart', {
+        bubbles: true,
+        cancelable: true,
+        data: '你',
+      });
+      editor.view.dom.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+      expect(editor.view.state.selection.empty).toBe(true);
+      expect(editor.view.state.selection.$from.parent.type.name).toBe('paragraph');
+      expect(editor.view.state.selection.$from.parent.textContent).toBe('');
+      expect(editor.view.state.doc.child(side === 'before' ? 0 : 1).type.name).toBe('paragraph');
+      expect(editor.view.state.doc.child(side === 'before' ? 1 : 0).type.name).toBe('table');
+
+      editor.view.dom.dispatchEvent(new CompositionEvent('compositionend', {
+        bubbles: true,
+        data: '你',
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      editor.destroy();
+    },
+  );
+
   it('does not query debug-only cursor selectors when debug logging is disabled', () => {
     const selectors: string[] = [];
     const originalQuerySelector = Element.prototype.querySelector;
@@ -485,6 +524,39 @@ describe('ManagedBlockCursor', () => {
     expect(editor.view.state.doc.child(0).type.name).toBe('table');
     expect(editor.view.state.doc.child(1).type.name).toBe('paragraph');
     expect(editor.view.state.doc.child(1).textContent).toBe('x');
+  });
+
+  it('uses the owner window for managed-mutation focus and ignores a destroyed view', () => {
+    const foreignWindow = createForeignWindow();
+    let scheduledFrame: FrameRequestCallback | null = null;
+    foreignWindow.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      scheduledFrame = callback;
+      return 1;
+    }) as typeof requestAnimationFrame;
+    const editor = createEditor({
+      element: createHost(foreignWindow.document),
+      markdown: ['| A | B |', '| --- | --- |', '| a | b |'].join('\n'),
+    });
+    const table = findNodeByName(editor.view.state.doc, 'table');
+    setSelection(editor, ManagedBlockCursor.create(
+      editor.view.state.doc,
+      table.pos,
+      'after',
+      (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node),
+    )!);
+    scheduledFrame = null;
+
+    expect(textInput(editor, 'x')).toBe(true);
+    expect(scheduledFrame).not.toBeNull();
+
+    let focusCalls = 0;
+    editor.view.focus = () => {
+      focusCalls += 1;
+    };
+    editor.destroy();
+    (scheduledFrame as FrameRequestCallback)(0);
+
+    expect(focusCalls).toBe(0);
   });
 
   it('deletes the table on Backspace from after-edge cursor', () => {

@@ -88,8 +88,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-003 | DONE | M | Build the conformance, golden-document, and property-test harness |
 | EE-004 | DONE | L | Preserve unsupported Markdown through opaque source nodes |
 | EE-005 | DONE | M | Check in a Chromium, Firefox, and WebKit browser regression suite |
-| EE-006 | NEXT | M | Cover IME, clipboard, drop, touch, RTL, and accessibility behavior |
-| EE-007 | QUEUED | M | Add production embed configuration and lifecycle APIs |
+| EE-006 | DONE | M | Cover IME, clipboard, drop, touch, RTL, and accessibility behavior |
+| EE-007 | NEXT | M | Add production embed configuration and lifecycle APIs |
 | EE-008 | QUEUED | M | Separate reconciled external updates from hard document resets |
 | EE-009 | QUEUED | S | Approve a versioned editor and Markdown extension RFC |
 | EE-010 | QUEUED | L | Implement the extension kernel and migrate built-ins onto it |
@@ -272,7 +272,7 @@ Turn the manual Chrome DevTools Protocol audit into a repeatable release gate.
 
 ### EE-006 — Certify complex input and accessibility paths
 
-Status: `NEXT`
+Status: `DONE` (2026-07-15)
 
 #### Goal
 
@@ -287,9 +287,18 @@ Cover interaction classes that jsdom and ordinary Latin keyboard tests miss.
 - Add axe checks plus a documented VoiceOver and NVDA keyboard checklist.
 - Establish expected behavior for every task, overlay, table control, and managed block boundary.
 
+#### Completion notes
+
+- Composition-tagged transactions no longer atomize provisional image syntax, and composition at a managed-block boundary synchronously creates an editable paragraph in the editor's owner document. Retained browser cases exercise Chinese, Japanese, and Korean composition in ProseMirror and CodeMirror, including provisional image syntax, a managed table boundary, and a real Chromium CDP IME sequence.
+- Cross-engine cases cover dead-key events, combining text, astral emoji and surrogate-safe deletion, mixed Hebrew/Arabic/Latin selection, rich and plain paste, Markdown-looking text, rich/plain drops, undo, and sanitized imported URLs. File-bearing paste, dragover, and drop are conservatively rejected in ProseMirror and CodeMirror, including mixed transfers and protected-mode `Files` MIME detection; explicit host upload policy remains assigned to `EE-012`, and deliberate Markdown clipboard MIME behavior remains assigned to `EE-017`.
+- Task list items retain list semantics while exposing separate named 44-pixel ARIA checkboxes. Pointer, touch, Space, Enter, native Tab order, and keyboard undo/redo are single-action and focus-safe. Link/image dialogs now preserve native button activation, ignore composition keys, restore focus on Escape, and associate URL validation alerts with their inputs. The table toolbar implements one-stop roving focus, pressed alignment state, predictable focus after mutation, stable coarse-pointer viewport layout, and correct row/column header scope during rich paste and editing; the contract records GFM's inability to serialize HTML-only row-header scope.
+- Responsive checks cover coarse pointers, a virtual-keyboard-sized visual viewport, local and transformed portals, and Chromium 200% page scaling. Axe reports no automatic violations in the complete production-built fixture. The host naming/portal obligations, behavior contract, limitations, and repeatable VoiceOver/NVDA/real-IME checklist are documented in `docs/input-accessibility-certification.md` and `docs/assistive-technology-checklist.md`.
+- Automated evidence deliberately does not claim real operating-system IME, mobile-keyboard, or assistive-technology certification. Those runs remain release-checklist work; richer managed-boundary announcements, mixed-bidi physical-arrow behavior, and localization/theming remain assigned to `EE-016` and `EE-020`.
+- Final verification: `pnpm check` passes all 448 unit/conformance tests; `pnpm test:browser` passes 89 production-preview cases with four expected Chromium-only skips across the Firefox/WebKit projects (93 total); its production web server runs `pnpm build`; `pnpm pack:smoke` and `git diff --check` pass.
+
 ### EE-007 — Add production embed configuration and lifecycle APIs
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -555,6 +564,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## First iteration
 
-`EE-001` through `EE-005` were completed on 2026-07-15, satisfying Gate A's content-safety requirements and establishing the first Gate B release assurance.
+`EE-001` through `EE-006` were completed on 2026-07-15, satisfying Gate A's content-safety requirements and establishing the browser, complex-input, and accessibility foundation for Gate B.
 
-The next iteration is `EE-006 — Certify complex input and accessibility paths`.
+The next iteration is `EE-007 — Add production embed configuration and lifecycle APIs`.

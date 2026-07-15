@@ -80,22 +80,37 @@ export function createManagedBlockBoundaryHelpers(options: CreateManagedBlockBou
     return true;
   }
 
-  function insertParagraphAtManagedBlockBoundary(view: EditorView, boundary: ManagedBlockBoundary, text = "") {
+  function insertParagraphAtManagedBlockBoundary(
+    view: EditorView,
+    boundary: ManagedBlockBoundary,
+    text = "",
+    scheduleFocus = true,
+  ) {
     const insertPos = boundary.side === "before" ? boundary.blockPos : boundary.blockPos + boundary.node.nodeSize;
     const paragraph = schema.nodes.paragraph.create(null, text ? schema.text(text) : null);
     const tr = view.state.tr.insert(insertPos, paragraph);
     tr.setSelection(TextSelection.create(tr.doc, insertPos + 1 + text.length));
     view.dispatch(tr.scrollIntoView());
 
-    requestAnimationFrame(() => {
-      view.focus();
-    });
+    if (scheduleFocus) {
+      focusViewAfterManagedBlockMutation(view);
+    }
 
     return true;
   }
 
   function focusViewAfterManagedBlockMutation(view: EditorView) {
-    requestAnimationFrame(() => {
+    const ownerWindow = view.dom.ownerDocument.defaultView;
+
+    if (!ownerWindow) {
+      return;
+    }
+
+    const requestFrame = typeof ownerWindow.requestAnimationFrame === "function"
+      ? ownerWindow.requestAnimationFrame.bind(ownerWindow)
+      : ((callback: FrameRequestCallback) => ownerWindow.setTimeout(() => callback(Date.now()), 16));
+
+    requestFrame(() => {
       if (view.isDestroyed) {
         return;
       }

@@ -11,6 +11,7 @@ import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
 import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
 import { createCodeBlockViewClass } from "./codeBlockView";
 import { createChangeEmitter } from "./changeEmitter";
+import { createFileTransferGuardPlugin } from "./fileTransferGuard";
 import { createImportedContentSanitizerPlugin, createTableCellContentFromMarkdown, markdownSerializer, normalizeTableAlignment, parseMarkdown, schema } from "./markdownCodec";
 import { createImageViewClass } from "./imageView";
 import { convertFenceToCodeBlock, createTypingShortcuts, getImageToolbarState, getLinkToolbarState, getMarkInfo, getToolbarMarkState, insertHardBreak, type EditorCommand } from "./editorCommands";
@@ -121,7 +122,11 @@ type ActiveListItemInfo = {
 
 type BrowserWindow = Window & typeof globalThis;
 
-const { maybeToggleTaskListItem } = createTaskListHelpers(schema);
+const {
+  maybeToggleTaskListItem,
+  scheduleTaskControlFocusAfterHistoryShortcut,
+  shouldUseNativeTaskControlTab,
+} = createTaskListHelpers(schema);
 const {
   canSetLink,
   setLink,
@@ -536,6 +541,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const { imageEditor, linkEditor, tableToolbar } = uiControllers;
 
   const plugins = [
+    createFileTransferGuardPlugin(),
     createImportedContentSanitizerPlugin(),
     createTypingShortcuts({ schema, getAncestorInfo }),
     createHeadingEditingPlugin({ schema, convertPipeTable, updateHeadingLevel }),
@@ -565,6 +571,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       maybeExtendSelectionAcrossCodeBlock,
       escapeBoundaryMark,
       maybeToggleTaskListItem,
+      scheduleTaskControlFocusAfterHistoryShortcut,
+      shouldUseNativeTaskControlTab,
       maybeOpenImage,
       maybeOpenLink,
       maybeEditActiveImage,

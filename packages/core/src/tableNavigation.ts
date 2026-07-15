@@ -55,8 +55,29 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
     return true;
   }
 
-  function createParagraphCell(cellType: NodeType, align: TableAlignment | null) {
-    return cellType.create({ align }, schema.nodes.paragraph.create());
+  function createParagraphCell(
+    cellType: NodeType,
+    align: TableAlignment | null,
+    headerScope: "col" | "row" | null = null,
+  ) {
+    const attrs = cellType === schema.nodes.table_header
+      ? { align, scope: headerScope ?? "col" }
+      : { align };
+    return cellType.create(attrs, schema.nodes.paragraph.create());
+  }
+
+  function isColumnHeaderRow(row: ProseMirrorNode) {
+    if (row.childCount === 0) {
+      return false;
+    }
+
+    let isHeaderRow = true;
+    row.forEach((cell) => {
+      if (cell.type !== schema.nodes.table_header || cell.attrs.scope === "row") {
+        isHeaderRow = false;
+      }
+    });
+    return isHeaderRow;
   }
 
   function createEmptyTableRow(columnCount: number, alignments?: (TableAlignment | null)[]) {
@@ -103,7 +124,7 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
         cells.push(cell);
 
         if (cellIndex === info.cellIndex) {
-          const cellType = row.firstChild?.type === schema.nodes.table_header ? schema.nodes.table_header : schema.nodes.table_cell;
+          const cellType = isColumnHeaderRow(row) ? schema.nodes.table_header : schema.nodes.table_cell;
           const align = normalizeTableAlignment(cell.attrs.align);
           cells.push(createParagraphCell(cellType, align));
         }
@@ -195,7 +216,7 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
       });
 
       if (cells.length === 0) {
-        const cellType = row.firstChild?.type === schema.nodes.table_header
+        const cellType = isColumnHeaderRow(row)
           ? schema.nodes.table_header
           : schema.nodes.table_cell;
         cells.push(createParagraphCell(cellType, fallbackAlignment));

@@ -256,6 +256,7 @@ describe('editor runtime', () => {
 
     expect(codeBlock).not.toBeNull();
     expect(languageBadge?.textContent).toBe('ts');
+    expect(codeBlock?.querySelector('.cm-content')?.getAttribute('aria-label')).toBe('Code block editor');
     expect(codeBlock?.ownerDocument).toBe(foreignWindow.document);
     expect(document.querySelector('.mdw-code-block')).toBeNull();
     editor.destroy();

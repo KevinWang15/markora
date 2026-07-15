@@ -1,4 +1,5 @@
 type BrowserLabTestSpec = {
+  direction?: "auto" | "ltr" | "rtl";
   id: string;
   markdown?: string;
   placement?: "bottom-right" | "normal";
@@ -26,6 +27,14 @@ interface Window {
     ): boolean;
     destroy(id: string): boolean;
     destroyAll(): void;
+    dispatchTransfer(id: string, spec: {
+      event: "dragover" | "drop" | "paste";
+      files?: Array<{ contents: string; name: string; type: string }>;
+      html?: string;
+      markdown?: string;
+      plain?: string;
+      target?: "code-mirror" | "prosemirror";
+    }): { defaultPrevented: boolean; fileCount: number; types: string[] };
     dispatchViewportEvent(type: "resize" | "scroll"): void;
     getMarkdown(id: string): string;
     listenerSnapshot(id?: string): { total: number; byTargetAndType: Record<string, number> };

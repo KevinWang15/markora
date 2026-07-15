@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { createDefaultUi } from '../src/index';
 
@@ -343,6 +343,85 @@ describe('createDefaultUi', () => {
     destroyControllers(controllers);
   });
 
+  it('preserves native media button actions and ignores composition keys', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('span');
+    document.body.append(hostElement, marker);
+    const imageUpdates: string[] = [];
+    let imageRemovals = 0;
+    let linkUpdates = 0;
+    const focus = vi.fn();
+    const controllers = createControllers(hostElement, undefined, {
+      removeActiveImage() {
+        imageRemovals += 1;
+      },
+      updateActiveImage(_view, attrs) {
+        imageUpdates.push(attrs.alt ?? '');
+        return true;
+      },
+      updateLinkHref() {
+        linkUpdates += 1;
+        return true;
+      },
+    });
+    const view = { ...createView(), focus };
+
+    controllers.imageEditor.open(view, marker, { node: { attrs: { alt: 'Original', src: '/image.png' } } });
+    const imageEditor = document.querySelector<HTMLElement>('.mdw-image-editor')!;
+    const altInput = imageEditor.querySelector<HTMLInputElement>('[aria-label="Alt text"]')!;
+    const srcInput = imageEditor.querySelector<HTMLInputElement>('[aria-label="Image URL"]')!;
+    const cancelButton = Array.from(imageEditor.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Cancel')!;
+    altInput.value = 'Must not save';
+    cancelButton.focus();
+    cancelButton.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter' }));
+    cancelButton.click();
+
+    expect(imageUpdates).toEqual([]);
+    expect(imageEditor.hidden).toBe(true);
+
+    controllers.imageEditor.open(view, marker, { node: { attrs: { alt: 'Original', src: '/image.png' } } });
+    const removeButton = Array.from(imageEditor.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Remove')!;
+    altInput.value = 'Must not save either';
+    removeButton.focus();
+    removeButton.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter' }));
+    removeButton.click();
+
+    expect(imageUpdates).toEqual([]);
+    expect(imageRemovals).toBe(1);
+
+    controllers.imageEditor.open(view, marker, { node: { attrs: { alt: 'Original', src: '/image.png' } } });
+    srcInput.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      isComposing: true,
+      key: 'Enter',
+    }));
+    expect(imageEditor.hidden).toBe(false);
+    expect(imageUpdates).toEqual([]);
+
+    controllers.linkEditor.open(view, marker, '/docs');
+    const linkEditor = document.querySelector<HTMLElement>('.mdw-link-editor')!;
+    const linkInput = linkEditor.querySelector<HTMLInputElement>('[aria-label="Link URL"]')!;
+    const linkCancel = Array.from(linkEditor.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Cancel')!;
+    linkInput.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      isComposing: true,
+      key: 'Enter',
+    }));
+    expect(linkUpdates).toBe(0);
+    expect(linkEditor.hidden).toBe(false);
+
+    linkCancel.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+    expect(linkEditor.hidden).toBe(true);
+    expect(focus).toHaveBeenCalled();
+
+    destroyControllers(controllers);
+  });
+
   it('keeps media editors open when a URL update is rejected', () => {
     const hostElement = document.createElement('div');
     const marker = document.createElement('span');
@@ -366,6 +445,11 @@ describe('createDefaultUi', () => {
 
     expect(linkEditor?.hidden).toBe(false);
     expect(linkInput?.getAttribute('aria-invalid')).toBe('true');
+    const linkErrorId = linkInput?.getAttribute('aria-errormessage');
+    expect(linkErrorId).toBeTruthy();
+    expect(linkInput?.getAttribute('aria-describedby')).toBe(linkErrorId);
+    expect(document.getElementById(linkErrorId!)?.getAttribute('role')).toBe('alert');
+    expect(document.getElementById(linkErrorId!)?.hidden).toBe(false);
 
     controllers.imageEditor.open(view, marker, { node: { attrs: {} } });
     const imageEditor = document.querySelector<HTMLElement>('.mdw-image-editor');
@@ -376,6 +460,11 @@ describe('createDefaultUi', () => {
 
     expect(imageEditor?.hidden).toBe(false);
     expect(imageSrc?.getAttribute('aria-invalid')).toBe('true');
+    const imageErrorId = imageSrc?.getAttribute('aria-errormessage');
+    expect(imageErrorId).toBeTruthy();
+    expect(imageSrc?.getAttribute('aria-describedby')).toBe(imageErrorId);
+    expect(document.getElementById(imageErrorId!)?.getAttribute('role')).toBe('alert');
+    expect(document.getElementById(imageErrorId!)?.hidden).toBe(false);
 
     destroyControllers(controllers);
   });
@@ -552,6 +641,75 @@ describe('createDefaultUi', () => {
       expect(toolbar.style.top).toBe('188px');
       expect(toolbar.querySelector('[aria-label="Align center"]')?.classList.contains('is-active')).toBe(true);
     }
+
+    destroyControllers(controllers);
+  });
+
+  it('exposes pressed alignment state and roves table-toolbar focus', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('table');
+    document.body.append(hostElement, marker);
+    const focus = vi.fn();
+    const alignments: string[] = [];
+    let tableRemovals = 0;
+    const controllers = createControllers(hostElement, undefined, {
+      getTableContext() {
+        return { cell: { attrs: { align: 'center' } }, tablePos: 0 };
+      },
+      normalizeTableAlignment(value) {
+        return value === 'center' ? 'center' : null;
+      },
+      removeActiveTable() {
+        tableRemovals += 1;
+      },
+      setTableColumnAlignment(_view, align) {
+        alignments.push(align);
+      },
+    });
+    const view = {
+      ...createView(),
+      focus,
+      nodeDOM() {
+        return marker;
+      },
+    };
+    controllers.tableToolbar.update(view);
+
+    const toolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
+    const buttons = Array.from(toolbar.querySelectorAll<HTMLButtonElement>('button'));
+    const alignLeft = toolbar.querySelector<HTMLButtonElement>('[aria-label="Align left"]')!;
+    const alignCenter = toolbar.querySelector<HTMLButtonElement>('[aria-label="Align center"]')!;
+    const alignRight = toolbar.querySelector<HTMLButtonElement>('[aria-label="Align right"]')!;
+    const deleteTable = toolbar.querySelector<HTMLButtonElement>('[aria-label="Delete table"]')!;
+
+    expect(toolbar.getAttribute('aria-orientation')).toBe('horizontal');
+    expect(buttons.map((button) => button.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1, -1]);
+    expect(alignLeft.getAttribute('aria-pressed')).toBe('false');
+    expect(alignCenter.getAttribute('aria-pressed')).toBe('true');
+    expect(alignRight.getAttribute('aria-pressed')).toBe('false');
+
+    buttons[0]!.focus();
+    buttons[0]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowRight' }));
+    expect(document.activeElement).toBe(buttons[1]);
+    expect(buttons.map((button) => button.tabIndex)).toEqual([-1, 0, -1, -1, -1, -1, -1, -1]);
+
+    buttons[1]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'End' }));
+    expect(document.activeElement).toBe(deleteTable);
+    deleteTable.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Home' }));
+    expect(document.activeElement).toBe(buttons[0]);
+
+    alignCenter.focus();
+    alignCenter.click();
+    expect(alignments).toEqual(['center']);
+    expect(document.activeElement).toBe(alignCenter);
+    expect(focus).not.toHaveBeenCalled();
+
+    alignCenter.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+    expect(focus).toHaveBeenCalledOnce();
+
+    deleteTable.click();
+    expect(tableRemovals).toBe(1);
+    expect(focus).toHaveBeenCalledTimes(2);
 
     destroyControllers(controllers);
   });

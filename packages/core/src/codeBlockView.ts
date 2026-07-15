@@ -12,6 +12,7 @@ import {
   normalizeCodeBlockLanguage,
   type CodeBlockLanguageRegistry,
 } from "./codeBlockLanguages";
+import { rejectFileTransferEvent } from "./fileTransferGuard";
 
 type CodeBlockViewInstance = {
   dom: HTMLElement;
@@ -169,6 +170,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         }),
         parent: editorHost,
       });
+      this.cm.contentDOM.setAttribute("aria-label", "Code block editor");
 
       this.update(node);
     }
@@ -661,6 +663,11 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       return [
         lineNumbers(),
         drawSelection(),
+        CodeMirrorView.domEventHandlers({
+          paste: (event) => rejectFileTransferEvent(event),
+          dragover: (event) => rejectFileTransferEvent(event),
+          drop: (event) => rejectFileTransferEvent(event),
+        }),
         indentOnInput(),
         syntaxHighlighting(defaultHighlightStyle),
         this.languageCompartment.of([]),

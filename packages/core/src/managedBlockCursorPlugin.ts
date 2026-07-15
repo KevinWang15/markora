@@ -141,7 +141,12 @@ export type CreateManagedBlockBoundaryPluginOptions = {
   setManagedBlockBoundarySelection: (view: EditorView, blockPos: number, side: BoundarySide) => boolean;
   getManagedBlockBoundary: (state: EditorView["state"]) => ManagedBlockBoundary | null;
   moveInsideManagedBlock: (view: EditorView, boundary: ManagedBlockBoundary) => boolean;
-  insertParagraphAtManagedBlockBoundary: (view: EditorView, boundary: ManagedBlockBoundary, text?: string) => boolean;
+  insertParagraphAtManagedBlockBoundary: (
+    view: EditorView,
+    boundary: ManagedBlockBoundary,
+    text?: string,
+    scheduleFocus?: boolean,
+  ) => boolean;
   removeManagedBlockAtBoundary: (view: EditorView, boundary: ManagedBlockBoundary) => boolean;
 };
 
@@ -285,6 +290,18 @@ export function createManagedBlockBoundaryPlugin(options: CreateManagedBlockBoun
         }
 
         return options.insertParagraphAtManagedBlockBoundary(view, boundary, text);
+      },
+      handleDOMEvents: {
+        compositionstart(view) {
+          const boundary = options.getManagedBlockBoundary(view.state);
+
+          if (!boundary) {
+            return false;
+          }
+
+          options.insertParagraphAtManagedBlockBoundary(view, boundary, "", false);
+          return false;
+        },
       },
     },
     view(editorView) {

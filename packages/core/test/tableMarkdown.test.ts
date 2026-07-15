@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { DOMParser as ProseMirrorDOMParser, DOMSerializer } from 'prosemirror-model';
 import { EditorState, Selection } from 'prosemirror-state';
 import { createEditor } from '../src/createEditor';
+
+if (!Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = (() => [] as unknown as DOMRectList);
+}
+
+if (!Range.prototype.getBoundingClientRect) {
+  Range.prototype.getBoundingClientRect = (() => new DOMRect());
+}
 
 function createHost() {
   const element = document.createElement('div');
@@ -67,7 +76,43 @@ describe('table markdown fidelity', () => {
       ['H', 'J'],
       ['A', 'B'],
     ]);
+    expect(table?.firstChild?.content.content.map((cell) => cell.attrs.scope)).toEqual(['col', 'col']);
+    expect(editor.view.dom.querySelector('th')?.getAttribute('scope')).toBe('col');
     expect(editor.getMarkdown()).toBe(markdown);
+  });
+
+  it('preserves explicit HTML row and column header scope through the clipboard parser', () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: '',
+    });
+    const html = [
+      '<table><tbody>',
+      '<tr><th scope="col">Name</th><th scope="col">Status</th></tr>',
+      '<tr><th scope="row">Alpha</th><td>Ready</td></tr>',
+      '</tbody></table>',
+    ].join('');
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', {
+      configurable: true,
+      value: {
+        files: { length: 0 },
+        items: [{ kind: 'string' }],
+        types: ['text/html', 'text/plain'],
+        getData(type: string) {
+          return type.toLowerCase() === 'text/html' ? html : 'Name Status Alpha Ready';
+        },
+      },
+    });
+
+    editor.view.dom.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    const headers = [...editor.view.dom.querySelectorAll('th')];
+    expect(headers.map((header) => header.getAttribute('scope'))).toEqual(['col', 'col', 'row']);
+    const table = editor.view.state.doc.firstChild;
+    expect(table?.child(0).content.content.map((cell) => cell.attrs.scope)).toEqual(['col', 'col']);
+    expect(table?.child(1).firstChild?.attrs.scope).toBe('row');
   });
 
   it('imports alignment, escaped pipes, code, and inline marks', () => {
@@ -172,6 +217,8 @@ describe('table markdown fidelity', () => {
     setSelectionToEndOfLastBlock(editor);
 
     expect(pressKey(editor, 'Enter')).toBe(true);
+    expect([...editor.view.dom.querySelectorAll('th')].map((header) => header.getAttribute('scope')))
+      .toEqual(['col', 'col']);
     expect(editor.getMarkdown()).toBe([
       '| *Alpha* | [Beta](https://example.com/) |',
       '| --- | --- |',
@@ -223,8 +270,108 @@ describe('task list accessibility', () => {
     });
 
     const taskItem = editor.view.dom.querySelector('li[data-task="true"]');
+    const taskControl = taskItem?.querySelector<HTMLElement>('[data-mdw-task-control="true"]');
     expect(taskItem).toBeInstanceOf(HTMLElement);
-    expect(taskItem?.getAttribute('role')).toBe('checkbox');
-    expect(taskItem?.getAttribute('aria-checked')).toBe('true');
+    expect(taskItem?.getAttribute('role')).toBeNull();
+    expect(taskControl?.getAttribute('role')).toBe('checkbox');
+    expect(taskControl?.getAttribute('aria-checked')).toBe('true');
+    expect(taskControl?.tabIndex).toBe(0);
+
+    const labelledBy = taskControl?.getAttribute('aria-labelledby')?.split(/\s+/) ?? [];
+    expect(labelledBy).toHaveLength(2);
+    expect(labelledBy.map((id) => editor.view.dom.ownerDocument.getElementById(id)?.textContent).join(' '))
+      .toBe('Completed task: done');
+  });
+
+  it('toggles from the keyboard, keeps checkbox focus, and remains undoable', async () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: '- [ ] todo',
+    });
+    const getControl = () => editor.view.dom.querySelector<HTMLElement>('[data-mdw-task-control="true"]');
+    const control = getControl();
+    expect(control).not.toBeNull();
+    control?.focus();
+    control?.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: ' ',
+    }));
+    await Promise.resolve();
+
+    expect(editor.getMarkdown()).toBe('* [x] todo');
+    expect(getControl()?.getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(getControl());
+
+    const undoEvent = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: 'z',
+    });
+    getControl()?.dispatchEvent(undoEvent);
+    await Promise.resolve();
+
+    expect(undoEvent.defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe('* [ ] todo');
+    expect(getControl()?.getAttribute('aria-checked')).toBe('false');
+    expect(document.activeElement).toBe(getControl());
+
+    const redoEvent = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: 'z',
+      shiftKey: true,
+    });
+    getControl()?.dispatchEvent(redoEvent);
+    await Promise.resolve();
+
+    expect(redoEvent.defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe('* [x] todo');
+    expect(getControl()?.getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(getControl());
+  });
+
+  it('leaves Tab and Shift-Tab on task controls to native focus navigation', () => {
+    const markdown = '* [ ] first\n* [ ] second';
+    const editor = createEditor({
+      element: createHost(),
+      markdown,
+    });
+    const controls = [...editor.view.dom.querySelectorAll<HTMLElement>('[data-mdw-task-control="true"]')];
+    expect(controls).toHaveLength(2);
+    controls[1].focus();
+
+    for (const shiftKey of [false, true]) {
+      const event = new KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        key: 'Tab',
+        shiftKey,
+      });
+
+      expect(controls[1].dispatchEvent(event)).toBe(true);
+      expect(event.defaultPrevented).toBe(false);
+      expect(editor.getMarkdown()).toBe(markdown);
+      expect(editor.view.state.doc.firstChild?.childCount).toBe(2);
+      expect(editor.view.dom.querySelectorAll('li[data-task="true"] li[data-task="true"]')).toHaveLength(0);
+    }
+  });
+
+  it('ignores checkbox chrome when task DOM is parsed back into a document', () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: '- [x] done',
+    });
+    const container = document.createElement('div');
+    container.append(DOMSerializer.fromSchema(editor.view.state.schema).serializeFragment(
+      editor.view.state.doc.content,
+    ));
+
+    expect(container.textContent).toContain('Completed task:');
+    const reparsed = ProseMirrorDOMParser.fromSchema(editor.view.state.schema).parse(container);
+    expect(reparsed.textContent).toBe('done');
+    expect(reparsed.firstChild?.firstChild?.attrs.checked).toBe(true);
   });
 });

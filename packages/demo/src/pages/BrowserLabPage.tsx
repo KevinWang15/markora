@@ -13,11 +13,31 @@ export type BrowserLabRoot = "document" | "shadow";
 export type BrowserLabPortal = "body" | "default" | "local" | "positioned" | "transformed";
 
 export type BrowserLabEditorSpec = {
+  direction?: "auto" | "ltr" | "rtl";
   id: string;
   markdown?: string;
   placement?: "bottom-right" | "normal";
   portal?: BrowserLabPortal;
   root?: BrowserLabRoot;
+};
+
+export type BrowserLabTransferSpec = {
+  event: "dragover" | "drop" | "paste";
+  files?: Array<{
+    contents: string;
+    name: string;
+    type: string;
+  }>;
+  html?: string;
+  markdown?: string;
+  plain?: string;
+  target?: "code-mirror" | "prosemirror";
+};
+
+export type BrowserLabTransferResult = {
+  defaultPrevented: boolean;
+  fileCount: number;
+  types: string[];
 };
 
 export type BrowserLabSnapshot = {
@@ -44,6 +64,7 @@ export type BrowserLabApi = {
   ) => boolean;
   destroy: (id: string) => boolean;
   destroyAll: () => void;
+  dispatchTransfer: (id: string, spec: BrowserLabTransferSpec) => BrowserLabTransferResult;
   dispatchViewportEvent: (type: "resize" | "scroll") => void;
   getMarkdown: (id: string) => string;
   listenerSnapshot: (id?: string) => ListenerSnapshot;
@@ -250,6 +271,7 @@ export function BrowserLabPage() {
         const frame = document.createElement("div");
         frame.className = `browser-lab-frame browser-lab-frame--${portalMode}`;
         frame.dataset.e2eFrame = id;
+        frame.dir = spec.direction ?? "auto";
         const host = document.createElement("div");
         host.className = "browser-lab-editor-host";
         host.dataset.e2eHost = id;
@@ -273,6 +295,8 @@ export function BrowserLabPage() {
         output.dataset.e2eOutput = id;
         output.dataset.changeCount = "0";
         output.dataset.transactionCount = "0";
+        output.setAttribute("aria-label", `${id} Markdown output`);
+        output.tabIndex = 0;
         section.append(output);
         labRoot.append(section);
 
@@ -312,6 +336,13 @@ export function BrowserLabPage() {
               ? createDefaultUi({ portalRoot: explicitPortalRoot })
               : createDefaultUi(),
           }));
+
+          // EE-007 will expose typed DOM attributes. Until then the browser
+          // fixture models the host's accessible-name obligation through the
+          // documented EditorView escape hatch.
+          mounted.editor.view.dom.setAttribute("aria-label", `${id} Markdown editor`);
+          mounted.editor.view.dom.setAttribute("aria-multiline", "true");
+          mounted.editor.view.dom.setAttribute("role", "textbox");
 
         } catch (error) {
           section.remove();
@@ -440,6 +471,68 @@ export function BrowserLabPage() {
       listenerSnapshot(id) {
         return listenerLedger.snapshot(id);
       },
+      dispatchTransfer(id, spec) {
+        const mounted = requireEditor(editors, id);
+        const target = spec.target === "code-mirror"
+          ? mounted.editor.view.dom.querySelector<HTMLElement>(".cm-content")
+          : mounted.editor.view.dom;
+
+        if (!target) {
+          throw new Error(`Browser lab editor \"${id}\" has no ${spec.target ?? "prosemirror"} transfer target.`);
+        }
+
+        target.focus();
+        const transfer = new DataTransfer();
+
+        if (spec.plain !== undefined) {
+          transfer.setData("text/plain", spec.plain);
+        }
+
+        if (spec.html !== undefined) {
+          transfer.setData("text/html", spec.html);
+        }
+
+        if (spec.markdown !== undefined) {
+          transfer.setData("text/markdown", spec.markdown);
+        }
+
+        for (const file of spec.files ?? []) {
+          transfer.items.add(new File([file.contents], file.name, { type: file.type }));
+        }
+
+        const rect = target.getBoundingClientRect();
+        const eventInit = {
+          bubbles: true,
+          cancelable: true,
+          clientX: rect.left + Math.min(12, rect.width / 2),
+          clientY: rect.top + Math.min(12, rect.height / 2),
+          composed: true,
+        };
+        const event = spec.event === "paste"
+          ? new ClipboardEvent("paste", { ...eventInit, clipboardData: transfer })
+          : new DragEvent(spec.event, { ...eventInit, dataTransfer: transfer });
+        const attachedTransfer = spec.event === "paste"
+          ? (event as ClipboardEvent).clipboardData
+          : (event as DragEvent).dataTransfer;
+
+        // Firefox does not retain constructor-supplied transfer data on
+        // synthetic clipboard events. Attach it explicitly so this test-only
+        // fixture exercises the same product path in every required engine.
+        if (attachedTransfer !== transfer) {
+          Object.defineProperty(event, spec.event === "paste" ? "clipboardData" : "dataTransfer", {
+            configurable: true,
+            value: transfer,
+          });
+        }
+
+        target.dispatchEvent(event);
+
+        return {
+          defaultPrevented: event.defaultPrevented,
+          fileCount: transfer.files.length,
+          types: Array.from(transfer.types),
+        };
+      },
       mountedIds() {
         return [...editors.keys()];
       },
@@ -473,8 +566,14 @@ export function BrowserLabPage() {
   }, []);
 
   return (
-    <main ref={labRootRef} className="browser-lab" data-e2e-browser-lab data-ready="false">
-      <h1 className="browser-lab-title">Markora browser regression lab</h1>
-    </main>
+    <section
+      ref={labRootRef}
+      aria-labelledby="browser-lab-title"
+      className="browser-lab"
+      data-e2e-browser-lab
+      data-ready="false"
+    >
+      <h1 id="browser-lab-title" className="browser-lab-title">Markora browser regression lab</h1>
+    </section>
   );
 }

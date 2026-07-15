@@ -1,6 +1,7 @@
 import { expect, test as base, type ConsoleMessage, type Page, type TestInfo } from "@playwright/test";
 
 export type LabEditorSpec = {
+  direction?: "auto" | "ltr" | "rtl";
   id: string;
   markdown?: string;
   placement?: "bottom-right" | "normal";
@@ -17,6 +18,15 @@ export type LabSnapshot = {
   prosemirrorFocused: boolean;
   selection: { anchor: number; from: number; head: number; to: number };
   transactionCount: number;
+};
+
+export type LabTransferSpec = {
+  event: "dragover" | "drop" | "paste";
+  files?: Array<{ contents: string; name: string; type: string }>;
+  html?: string;
+  markdown?: string;
+  plain?: string;
+  target?: "code-mirror" | "prosemirror";
 };
 
 type BrowserFailure = {
@@ -137,6 +147,13 @@ export async function settleEditor(page: Page, id?: string) {
 
 export async function snapshotEditor(page: Page, id: string) {
   return page.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId), id) as Promise<LabSnapshot>;
+}
+
+export async function dispatchTransfer(page: Page, id: string, spec: LabTransferSpec) {
+  return page.evaluate(
+    ({ editorId, transferSpec }) => window.__MARKORA_BROWSER_LAB__!.dispatchTransfer(editorId, transferSpec),
+    { editorId: id, transferSpec: spec },
+  );
 }
 
 export function editorLocator(page: Page, id: string) {

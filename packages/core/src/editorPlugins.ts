@@ -165,6 +165,10 @@ export function createImagePlugin(options: { schema: Schema }) {
         return null;
       }
 
+      if (transactions.some((transaction) => transaction.getMeta("composition") !== undefined)) {
+        return null;
+      }
+
       const { selection } = newState;
 
       if (!selection.empty) {
@@ -287,7 +291,9 @@ export function createMarkBoundaryPlugin(options: {
   convertFenceToCodeBlock: (view: EditorView) => boolean;
   maybeExtendSelectionAcrossCodeBlock: (view: EditorView, direction: -1 | 1) => boolean;
   escapeBoundaryMark: (view: EditorView, direction: "left" | "right") => boolean;
-  maybeToggleTaskListItem: (view: EditorView, pos: number, event: MouseEvent) => boolean;
+  maybeToggleTaskListItem: (view: EditorView, pos: number, event: MouseEvent | KeyboardEvent) => boolean;
+  scheduleTaskControlFocusAfterHistoryShortcut: (view: EditorView, event: KeyboardEvent) => boolean;
+  shouldUseNativeTaskControlTab: (view: EditorView, event: KeyboardEvent) => boolean;
   maybeOpenImage: (event: MouseEvent) => boolean;
   maybeOpenLink: (view: EditorView, event: MouseEvent) => boolean;
   maybeEditActiveImage: (view: EditorView, event: MouseEvent, imageEditor: ImageEditorOverlay) => boolean;
@@ -309,12 +315,24 @@ export function createMarkBoundaryPlugin(options: {
     maybeOpenImage,
     maybeOpenLink,
     maybeToggleTaskListItem,
+    scheduleTaskControlFocusAfterHistoryShortcut,
+    shouldUseNativeTaskControlTab,
     tableToolbar,
   } = options;
 
   return new Plugin({
     props: {
       handleDOMEvents: {
+        keydown(view, event) {
+          if (shouldUseNativeTaskControlTab(view, event)) {
+            // Returning true from handleDOMEvents skips ProseMirror's keymaps
+            // without cancelling the browser's native sequential focus move.
+            return true;
+          }
+
+          scheduleTaskControlFocusAfterHistoryShortcut(view, event);
+          return false;
+        },
         mousedown(view, event) {
           const mouseEvent = event as MouseEvent;
           const position = view.posAtCoords({
@@ -323,8 +341,15 @@ export function createMarkBoundaryPlugin(options: {
           })?.pos ?? view.state.selection.from;
           return maybeToggleTaskListItem(view, position, mouseEvent);
         },
+        click(view, event) {
+          return maybeToggleTaskListItem(view, view.state.selection.from, event as MouseEvent);
+        },
       },
       handleKeyDown(view, event) {
+        if (maybeToggleTaskListItem(view, view.state.selection.from, event)) {
+          return true;
+        }
+
         if (event.key === "Enter" && convertFenceToCodeBlock(view)) {
           return true;
         }

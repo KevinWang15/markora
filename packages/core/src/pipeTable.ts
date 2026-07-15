@@ -115,7 +115,7 @@ export function createPipeTableHelpers(options: {
       null,
       normalizedHeaderCells.map((cellText, index) =>
         schema.nodes.table_header.create(
-          { align: alignments[index] ?? null },
+          { align: alignments[index] ?? null, scope: "col" },
           createTableCellContentFromMarkdown(cellText),
         ),
       ),

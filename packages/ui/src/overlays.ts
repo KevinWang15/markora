@@ -23,6 +23,16 @@ type OverlayEnvironment = {
 
 const OVERLAY_GAP = 8;
 const VIEWPORT_MARGIN = 12;
+let nextOverlayMessageId = 0;
+
+function createOverlayMessageId(kind: "image" | "link") {
+  nextOverlayMessageId += 1;
+  return `mdw-${kind}-editor-error-${nextOverlayMessageId}`;
+}
+
+function isComposingKeyboardEvent(event: KeyboardEvent) {
+  return event.isComposing || event.keyCode === 229;
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -156,6 +166,15 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
   input.placeholder = "https://example.com";
   input.setAttribute("aria-label", "Link URL");
 
+  const errorMessage = doc.createElement("div");
+  errorMessage.className = "mdw-editor-error";
+  errorMessage.hidden = true;
+  errorMessage.id = createOverlayMessageId("link");
+  errorMessage.setAttribute("role", "alert");
+  errorMessage.textContent = "Enter a valid link URL.";
+  input.setAttribute("aria-describedby", errorMessage.id);
+  input.setAttribute("aria-errormessage", errorMessage.id);
+
   const saveButton = doc.createElement("button");
   saveButton.type = "button";
   saveButton.textContent = "Save";
@@ -218,17 +237,23 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
   const actions = doc.createElement("div");
   actions.className = "mdw-link-editor-actions";
   actions.append(saveButton, unlinkButton, cancelButton);
-  dom.append(input, actions);
+  dom.append(input, errorMessage, actions);
   portalRoot.append(dom);
+
+  const clearValidationError = () => {
+    input.removeAttribute("aria-invalid");
+    errorMessage.hidden = true;
+  };
 
   saveButton.addEventListener("click", () => {
     if (!activeView) return;
     if (updateLinkHref(activeView, input.value) === false) {
       input.setAttribute("aria-invalid", "true");
+      errorMessage.hidden = false;
       input.focus();
       return;
     }
-    input.removeAttribute("aria-invalid");
+    clearValidationError();
     close(true);
   });
   unlinkButton.addEventListener("click", () => {
@@ -237,17 +262,23 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
     close(true);
   });
   cancelButton.addEventListener("click", () => close(true));
-  input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      saveButton.click();
+  dom.addEventListener("keydown", (event) => {
+    if (isComposingKeyboardEvent(event)) {
+      return;
     }
+
     if (event.key === "Escape") {
       event.preventDefault();
       close(true);
+      return;
+    }
+
+    if (event.key === "Enter" && event.target === input) {
+      event.preventDefault();
+      saveButton.click();
     }
   });
-  input.addEventListener("input", () => input.removeAttribute("aria-invalid"));
+  input.addEventListener("input", clearValidationError);
   doc.addEventListener("mousedown", handleDocumentMouseDown, true);
   win.addEventListener("resize", handleWindowChange);
   win.addEventListener("scroll", handleWindowChange, true);
@@ -258,7 +289,7 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
       activeView = view;
       activeMarker = marker;
       input.value = href;
-      input.removeAttribute("aria-invalid");
+      clearValidationError();
       dom.hidden = false;
       dom.style.display = "flex";
       reposition();
@@ -295,6 +326,15 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   srcInput.type = "text";
   srcInput.placeholder = "Image URL";
   srcInput.setAttribute("aria-label", "Image URL");
+
+  const errorMessage = doc.createElement("div");
+  errorMessage.className = "mdw-editor-error";
+  errorMessage.hidden = true;
+  errorMessage.id = createOverlayMessageId("image");
+  errorMessage.setAttribute("role", "alert");
+  errorMessage.textContent = "Enter a valid image URL.";
+  srcInput.setAttribute("aria-describedby", errorMessage.id);
+  srcInput.setAttribute("aria-errormessage", errorMessage.id);
 
   const altInput = doc.createElement("input");
   altInput.className = "mdw-image-editor-input";
@@ -359,17 +399,23 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   const actions = doc.createElement("div");
   actions.className = "mdw-image-editor-actions";
   actions.append(saveButton, removeButton, cancelButton);
-  dom.append(srcInput, altInput, titleInput, actions);
+  dom.append(srcInput, altInput, titleInput, errorMessage, actions);
   portalRoot.append(dom);
+
+  const clearValidationError = () => {
+    srcInput.removeAttribute("aria-invalid");
+    errorMessage.hidden = true;
+  };
 
   saveButton.addEventListener("click", () => {
     if (!activeView) return;
     if (updateActiveImage(activeView, { src: srcInput.value, alt: altInput.value, title: titleInput.value }) === false) {
       srcInput.setAttribute("aria-invalid", "true");
+      errorMessage.hidden = false;
       srcInput.focus();
       return;
     }
-    srcInput.removeAttribute("aria-invalid");
+    clearValidationError();
     close(true);
   });
   removeButton.addEventListener("click", () => {
@@ -379,16 +425,22 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   });
   cancelButton.addEventListener("click", () => close(true));
   dom.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      saveButton.click();
+    if (isComposingKeyboardEvent(event)) {
+      return;
     }
+
     if (event.key === "Escape") {
       event.preventDefault();
       close(true);
+      return;
+    }
+
+    if (event.key === "Enter" && event.target instanceof win.HTMLInputElement) {
+      event.preventDefault();
+      saveButton.click();
     }
   });
-  srcInput.addEventListener("input", () => srcInput.removeAttribute("aria-invalid"));
+  srcInput.addEventListener("input", clearValidationError);
   doc.addEventListener("mousedown", handleDocumentMouseDown, true);
   win.addEventListener("resize", handleWindowChange);
   win.addEventListener("scroll", handleWindowChange, true);
@@ -401,7 +453,7 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
       srcInput.value = typeof imageInfo.node.attrs.src === "string" ? imageInfo.node.attrs.src : "";
       altInput.value = typeof imageInfo.node.attrs.alt === "string" ? imageInfo.node.attrs.alt : "";
       titleInput.value = typeof imageInfo.node.attrs.title === "string" ? imageInfo.node.attrs.title : "";
-      srcInput.removeAttribute("aria-invalid");
+      clearValidationError();
       dom.hidden = false;
       dom.style.display = "flex";
       reposition();
@@ -450,6 +502,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   dom.style.display = "none";
   dom.setAttribute("role", "toolbar");
   dom.setAttribute("aria-label", "Table controls");
+  dom.setAttribute("aria-orientation", "horizontal");
 
   let activeView: EditorView | null = null;
   let activeMarker: HTMLElement | null = null;
@@ -479,6 +532,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     button.type = "button";
     button.className = "mdw-table-toolbar-button";
     button.title = title;
+    button.tabIndex = -1;
     button.setAttribute("aria-label", title);
     button.append(icon);
     return button;
@@ -541,9 +595,35 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     "M5 6h14",
     "M7 6l1 13h8l1-13",
   ]));
+  const toolbarButtons = [
+    addColumnButton,
+    removeColumnButton,
+    addRowButton,
+    removeRowButton,
+    alignLeftButton,
+    alignCenterButton,
+    alignRightButton,
+    removeButton,
+  ];
+  let rovingIndex = 0;
+
+  const setRovingIndex = (index: number, focus: boolean) => {
+    rovingIndex = (index + toolbarButtons.length) % toolbarButtons.length;
+
+    toolbarButtons.forEach((button, buttonIndex) => {
+      button.tabIndex = buttonIndex === rovingIndex ? 0 : -1;
+    });
+
+    if (focus) {
+      toolbarButtons[rovingIndex]?.focus();
+    }
+  };
+
+  setRovingIndex(0, false);
 
   const setButtonState = (button: HTMLButtonElement, active: boolean) => {
     button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
   };
 
   const updateAlignmentButtons = (active: TableAlignment | null) => {
@@ -562,14 +642,74 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     }
   };
 
-  const close = () => {
+  const close = (refocusIfToolbarFocused = true) => {
+    const view = activeView;
+    const root = dom.getRootNode();
+    const activeElement = root instanceof win.ShadowRoot ? root.activeElement : doc.activeElement;
+    const hadToolbarFocus = activeElement instanceof win.Node && dom.contains(activeElement);
     activeView = null;
     activeMarker = null;
     dom.hidden = true;
     dom.style.display = "none";
+
+    if (refocusIfToolbarFocused && hadToolbarFocus && view) {
+      view.focus();
+    }
   };
 
-  const handleMouseDown = (event: MouseEvent) => event.preventDefault();
+  const handleMouseDown = (event: MouseEvent) => {
+    const target = event.target;
+
+    if (target instanceof win.Element) {
+      const button = target.closest("button");
+      const index = toolbarButtons.indexOf(button as HTMLButtonElement);
+
+      if (index >= 0) {
+        setRovingIndex(index, false);
+      }
+    }
+
+    event.preventDefault();
+  };
+
+  const handleFocusIn = (event: FocusEvent) => {
+    const index = toolbarButtons.indexOf(event.target as HTMLButtonElement);
+
+    if (index >= 0) {
+      setRovingIndex(index, false);
+    }
+  };
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    const currentIndex = toolbarButtons.indexOf(event.target as HTMLButtonElement);
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      activeView?.focus();
+      return;
+    }
+
+    if (currentIndex < 0) {
+      return;
+    }
+
+    let nextIndex: number | null = null;
+
+    if (event.key === "ArrowRight") {
+      nextIndex = currentIndex + 1;
+    } else if (event.key === "ArrowLeft") {
+      nextIndex = currentIndex - 1;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = toolbarButtons.length - 1;
+    }
+
+    if (nextIndex !== null) {
+      event.preventDefault();
+      setRovingIndex(nextIndex, true);
+    }
+  };
 
   const handleWindowChange = () => {
     if (!dom.hidden) reposition();
@@ -582,13 +722,15 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   portalRoot.append(dom);
 
   dom.addEventListener("mousedown", handleMouseDown);
-  addColumnButton.addEventListener("click", () => { const view = activeView; if (!view) return; appendTableColumn(view); view.focus(); });
-  removeColumnButton.addEventListener("click", () => { const view = activeView; if (!view) return; removeTableColumn(view); view.focus(); });
-  addRowButton.addEventListener("click", () => { const view = activeView; if (!view) return; appendTableRow(view); view.focus(); });
-  removeRowButton.addEventListener("click", () => { const view = activeView; if (!view) return; removeTableRow(view); view.focus(); });
-  alignLeftButton.addEventListener("click", () => { const view = activeView; if (!view) return; setTableColumnAlignment(view, "left"); view.focus(); });
-  alignCenterButton.addEventListener("click", () => { const view = activeView; if (!view) return; setTableColumnAlignment(view, "center"); view.focus(); });
-  alignRightButton.addEventListener("click", () => { const view = activeView; if (!view) return; setTableColumnAlignment(view, "right"); view.focus(); });
+  dom.addEventListener("focusin", handleFocusIn);
+  dom.addEventListener("keydown", handleKeyDown);
+  addColumnButton.addEventListener("click", () => { const view = activeView; if (!view) return; appendTableColumn(view); });
+  removeColumnButton.addEventListener("click", () => { const view = activeView; if (!view) return; removeTableColumn(view); });
+  addRowButton.addEventListener("click", () => { const view = activeView; if (!view) return; appendTableRow(view); });
+  removeRowButton.addEventListener("click", () => { const view = activeView; if (!view) return; removeTableRow(view); });
+  alignLeftButton.addEventListener("click", () => { const view = activeView; if (!view) return; setTableColumnAlignment(view, "left"); });
+  alignCenterButton.addEventListener("click", () => { const view = activeView; if (!view) return; setTableColumnAlignment(view, "center"); });
+  alignRightButton.addEventListener("click", () => { const view = activeView; if (!view) return; setTableColumnAlignment(view, "right"); });
   removeButton.addEventListener("click", () => { const view = activeView; if (!view) return; removeActiveTable(view); view.focus(); });
   win.addEventListener("resize", handleWindowChange);
   win.addEventListener("scroll", handleWindowChange, true);
@@ -614,8 +756,10 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       reposition();
     },
     destroy() {
-      close();
+      close(false);
       dom.removeEventListener("mousedown", handleMouseDown);
+      dom.removeEventListener("focusin", handleFocusIn);
+      dom.removeEventListener("keydown", handleKeyDown);
       win.removeEventListener("resize", handleWindowChange);
       win.removeEventListener("scroll", handleWindowChange, true);
       removeViewportListeners(win, handleWindowChange);
