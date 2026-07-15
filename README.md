@@ -53,6 +53,8 @@ if (!hostElement) {
 const editor = createEditor({
   element: hostElement,
   markdown: "# Hello Markora",
+  ariaLabel: "Document body",
+  autofocus: true,
   ui: createDefaultUi(),
   onChangeMode: "animationFrame",
   onChange(nextMarkdown) {
@@ -60,11 +62,45 @@ const editor = createEditor({
   },
 });
 
-editor.view.focus();
+const unsubscribe = editor.subscribe("selection", ({ selection }) => {
+  console.log(selection.from, selection.to);
+});
 
 // Later, when the host screen unmounts:
+unsubscribe();
 editor.destroy();
 ```
+
+`ariaLabel` or `ariaLabelledBy` gives the inner editor its host-specific accessible name. Use `editor.focus()`, `editor.blur()`, and `editor.subscribe(...)` for ordinary lifecycle integration; initial autofocus and selection are configured through `createEditor()` and are not replayed to subscriptions added after creation.
+
+## Embed configuration and lifecycle
+
+`createEditor()` accepts host-facing configuration without requiring ProseMirror access:
+
+- `editable` defaults to `true`; read-only mode still permits selection and copy, while blocking user, UI, formatting, and history mutations. Host-controlled `editor.commands.setMarkdown()` remains available.
+- `placeholder` supplies empty-editor guidance.
+- `autofocus` defaults to `false`, and `initialSelection` accepts `"start"`, `"end"`, `"all"`, or `{ anchor, head? }`.
+- Object selection targets use in-range integer ProseMirror positions that resolve inside text blocks.
+- `attributes` are lowercased and applied to the inner editor DOM. Markora-managed contenteditable, read-only, and placeholder attributes take precedence; inline event-handler attributes and `nodeName` are rejected.
+- `ariaLabel` and `ariaLabelledBy` provide accessible naming. Prefer `ariaLabelledBy` when the host already renders a visible label.
+
+Options that do not reconstruct editor state can change in place:
+
+```ts
+editor.updateOptions({
+  editable: false,
+  placeholder: null,
+  ariaLabel: "Document preview",
+  attributes: { "data-document-id": documentId },
+  onChange: null,
+});
+```
+
+`updateOptions()` also accepts `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Replacing `onChange` or its batching mode first flushes pending output once through the previous listener, then installs the new configuration. `element`, `markdown`, `initialSelection`, the autofocus action, `ui`, and `codeBlockLanguages` are creation-only.
+
+`focus`, `blur`, `selection`, `update`, and `error` subscriptions return idempotent unsubscribe functions. Selection and update events are synchronous and expose host-facing selection snapshots; focus and blur each cross one microtask boundary so host callbacks run outside nested editor focus internals and movement within the composite surface does not produce a false boundary. Update events do not serialize Markdown. Keep using `onChange` when you need normalized Markdown, optionally batched with `onChangeMode`. `onTransaction` remains available for advanced ProseMirror-aware integrations.
+
+`editor.destroy()` flushes one pending `onChange`, releases all owned resources even if teardown reports an error, and is safe to call more than once. After destruction, `editor.isDestroyed` is `true`, `getMarkdown()` returns the cached final value, and `flushChange()`, `destroy()`, and previously returned unsubscribe functions are no-ops. Other high-level calls throw `MarkdownEditorDestroyedError`; `editor.view` is then a destroyed raw view and must not be used.
 
 ## Architecture notes
 
@@ -74,6 +110,7 @@ editor.destroy();
 - `editor.commands.setMarkdown(markdown, { emitChange: true })` is the programmatic update path when you want `onChange` to re-fire
 - `onEditOpaqueMarkdown` lets the host open its own source editor for protected opaque atoms; its guarded update function rejects stale writes
 - `editor.flushChange()` forces any pending animation-frame batched Markdown emission to run immediately
+- `editor.view` is a version-coupled advanced escape hatch. Inspection and `dispatch()` are supported for advanced integrations; direct `setProps()`, `updateState()`, DOM mutation, or `destroy()` can bypass Markora invariants and events and are outside the public semver contract
 
 ## Roadmap
 
@@ -133,6 +170,8 @@ Notes:
 - `createEditor({ onChangeMode: "animationFrame" })` batches Markdown serialization once per frame
 - `createEditor()` is headless by default; pass `ui: createDefaultUi()` from `markora-ui` for the built-in overlays
 - `createDefaultUi({ portalRoot })` helps when the editor lives inside a Shadow DOM host
+- `editor.updateOptions(...)` changes editable state, placeholder, attributes, and accessible naming without rebuilding editor state or emitting a document update
+- `editor.subscribe(...)` exposes typed focus, blur, selection, update, and recoverable runtime error events
 - built-in code block languages cover JavaScript, TypeScript, JSON, CSS, HTML, XML, Markdown, Python, C/C++, Java, Rust, and shell
 - `editor.state.can.*` and `editor.state.isActive.*` expose host-friendly capability and activity checks
 - `editor.getToolbarState()` remains available for toolbar integrations that prefer a compatibility snapshot

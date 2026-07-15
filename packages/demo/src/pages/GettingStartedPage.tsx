@@ -5,15 +5,22 @@ import { installCommand, quickStartCode } from "../lib/content";
 const lifecycleCode = `const editor = createEditor({
   element: hostElement,
   markdown: initialMarkdown,
+  ariaLabel: "Document body",
+  initialSelection: "end",
   onChangeMode: "animationFrame",
   onChange(nextMarkdown) {
     saveDraft(nextMarkdown);
   },
 });
 
-editor.view.focus();
+const unsubscribe = editor.subscribe("update", ({ selection }) => {
+  renderToolbar(selection);
+});
+
+editor.focus();
 
 // When your host screen unmounts:
+unsubscribe();
 editor.destroy();`;
 
 export function GettingStartedPage() {
@@ -57,10 +64,10 @@ export function GettingStartedPage() {
       <section className="docs-grid docs-grid-two">
         <article className="doc-card">
           <span className="card-kicker">Lifecycle</span>
-          <h3>Focus once, destroy on teardown</h3>
+          <h3>Subscribe, focus, and destroy safely</h3>
           <p>
-            Keep a stable host element, focus via <code>editor.view</code>, and call <code>editor.destroy()</code>
-            {" "}when the surrounding screen or component unmounts.
+            Keep a stable host element, use the typed focus and event APIs, and call <code>editor.destroy()</code>
+            {" "}when the surrounding screen or component unmounts. Unsubscribe and destroy are both idempotent.
           </p>
           <CodeBlock code={lifecycleCode} language="ts" title="Lifecycle" />
         </article>

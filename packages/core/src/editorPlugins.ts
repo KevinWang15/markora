@@ -300,6 +300,9 @@ export function createMarkBoundaryPlugin(options: {
   maybeEditActiveLink: (view: EditorView, event: MouseEvent, linkEditor: LinkEditorOverlay) => boolean;
   getMarkInfo: (state: EditorState, markName: MarkName) => MarkInfo | null;
   getActiveImageInfo: (state: EditorState) => unknown;
+  onDestroyError: (error: unknown) => void;
+  onInitializeError: (error: unknown) => void;
+  onUpdateError: (error: unknown) => void;
 }) {
   const {
     convertFenceToCodeBlock,
@@ -315,6 +318,9 @@ export function createMarkBoundaryPlugin(options: {
     maybeOpenImage,
     maybeOpenLink,
     maybeToggleTaskListItem,
+    onDestroyError,
+    onInitializeError,
+    onUpdateError,
     scheduleTaskControlFocusAfterHistoryShortcut,
     shouldUseNativeTaskControlTab,
     tableToolbar,
@@ -334,6 +340,10 @@ export function createMarkBoundaryPlugin(options: {
           return false;
         },
         mousedown(view, event) {
+          if (!view.editable) {
+            return false;
+          }
+
           const mouseEvent = event as MouseEvent;
           const position = view.posAtCoords({
             left: mouseEvent.clientX,
@@ -346,6 +356,10 @@ export function createMarkBoundaryPlugin(options: {
         },
       },
       handleKeyDown(view, event) {
+        if (!view.editable) {
+          return false;
+        }
+
         if (maybeToggleTaskListItem(view, view.state.selection.from, event)) {
           return true;
         }
@@ -376,29 +390,57 @@ export function createMarkBoundaryPlugin(options: {
         return (
           maybeOpenImage(event) ||
           maybeOpenLink(view, event) ||
-          (enableDefaultUi && maybeEditActiveImage(view, event, imageEditor)) ||
-          (enableDefaultUi && maybeEditActiveLink(view, event, linkEditor))
+          (view.editable && enableDefaultUi && maybeEditActiveImage(view, event, imageEditor)) ||
+          (view.editable && enableDefaultUi && maybeEditActiveLink(view, event, linkEditor))
         );
       },
     },
     view(editorView) {
-      tableToolbar.update(editorView);
+      try {
+        tableToolbar.update(editorView);
+      } catch (error) {
+        onInitializeError(error);
+      }
 
       return {
         update(updatedView) {
-          if (!getMarkInfo(updatedView.state, "link")) {
-            linkEditor.close(false);
-          }
+          const updates = [
+            ...(!updatedView.editable || !getMarkInfo(updatedView.state, "link")
+              ? [() => linkEditor.close(false)]
+              : []),
+            ...(!updatedView.editable || !getActiveImageInfo(updatedView.state)
+              ? [() => imageEditor.close(false)]
+              : []),
+            () => tableToolbar.update(updatedView),
+          ];
 
-          if (!getActiveImageInfo(updatedView.state)) {
-            imageEditor.close(false);
-          }
+          for (const update of updates) {
+            if (updatedView.isDestroyed) {
+              break;
+            }
 
-          tableToolbar.update(updatedView);
+            try {
+              update();
+            } catch (error) {
+              onUpdateError(error);
+            }
+
+            if (updatedView.isDestroyed) {
+              break;
+            }
+          }
         },
         destroy() {
-          linkEditor.close(false);
-          imageEditor.close(false);
+          for (const close of [
+            () => linkEditor.close(false),
+            () => imageEditor.close(false),
+          ]) {
+            try {
+              close();
+            } catch (error) {
+              onDestroyError(error);
+            }
+          }
         },
       };
     },

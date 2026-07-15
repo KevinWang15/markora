@@ -1,11 +1,14 @@
 import {
   createEditor,
   type MarkdownEditor,
+  type MarkdownEditorEventName,
   type MarkdownEditorMark,
+  type MarkdownEditorSelectionSnapshot,
+  type MarkdownEditorSelectionTarget,
   type OpaqueMarkdownEditRequest,
+  type UpdateEditorOptions,
 } from "markora";
 import { createDefaultUi } from "markora-ui";
-import { TextSelection } from "prosemirror-state";
 import { useEffect, useRef } from "react";
 import { createGlobalListenerLedger, type ListenerSnapshot } from "../browser-lab/listenerLedger";
 
@@ -13,12 +16,49 @@ export type BrowserLabRoot = "document" | "shadow";
 export type BrowserLabPortal = "body" | "default" | "local" | "positioned" | "transformed";
 
 export type BrowserLabEditorSpec = {
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
+  attributes?: Record<string, string>;
+  autofocus?: boolean;
   direction?: "auto" | "ltr" | "rtl";
+  editable?: boolean;
   id: string;
+  initialSelection?: MarkdownEditorSelectionTarget;
   markdown?: string;
   placement?: "bottom-right" | "normal";
+  placeholder?: string;
   portal?: BrowserLabPortal;
   root?: BrowserLabRoot;
+};
+
+export type BrowserLabUpdateOptions = Pick<
+  UpdateEditorOptions,
+  "ariaLabel" | "ariaLabelledBy" | "attributes" | "editable" | "placeholder"
+>;
+
+export type BrowserLabEventRecord = {
+  code?: string;
+  language?: string;
+  message?: string;
+  previousSelection?: MarkdownEditorSelectionSnapshot;
+  selection?: MarkdownEditorSelectionSnapshot;
+  type: MarkdownEditorEventName;
+};
+
+export type BrowserLabEventSnapshot = {
+  counts: Record<MarkdownEditorEventName, number>;
+  log: BrowserLabEventRecord[];
+};
+
+export type BrowserLabCopyResult = {
+  defaultPrevented: boolean;
+  html: string;
+  plain: string;
+};
+
+export type BrowserLabUpdateResult = {
+  snapshot: BrowserLabSnapshot;
+  statePreserved: boolean;
 };
 
 export type BrowserLabTransferSpec = {
@@ -57,27 +97,40 @@ export type BrowserLabSnapshot = {
 };
 
 export type BrowserLabApi = {
+  blur: (id: string) => void;
+  clearEvents: (id: string) => void;
   command: (
     id: string,
     command: "insertImage" | "redo" | "setLink" | "toggleMark" | "undo",
     value?: string | { alt?: string | null; src: string; title?: string | null } | MarkdownEditorMark,
   ) => boolean;
+  copySelection: (id: string) => BrowserLabCopyResult;
   destroy: (id: string) => boolean;
+  destroyEditor: (id: string) => boolean;
   destroyAll: () => void;
   dispatchTransfer: (id: string, spec: BrowserLabTransferSpec) => BrowserLabTransferResult;
   dispatchViewportEvent: (type: "resize" | "scroll") => void;
+  events: (id: string) => BrowserLabEventSnapshot;
+  focus: (id: string, selection?: MarkdownEditorSelectionTarget) => void;
   getMarkdown: (id: string) => string;
+  isDestroyed: (id: string) => boolean;
   listenerSnapshot: (id?: string) => ListenerSnapshot;
   mount: (spec: BrowserLabEditorSpec) => BrowserLabSnapshot;
   mountedIds: () => string[];
   openUi: (id: string, kind: "image" | "link") => boolean;
   pendingOpaqueEdit: (id: string) => Pick<OpaqueMarkdownEditRequest, "kind" | "source"> | null;
   ready: true;
+  remount: (
+    id: string,
+    options?: Omit<BrowserLabEditorSpec, "direction" | "id" | "placement" | "portal" | "root">,
+  ) => BrowserLabSnapshot;
   reset: (id: string, markdown: string) => string;
   selectText: (id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number) => boolean;
   settle: (id?: string) => Promise<void>;
   snapshot: (id: string) => BrowserLabSnapshot;
+  unsubscribe: (id: string, type: MarkdownEditorEventName) => boolean;
   updateOpaque: (id: string, source: string) => boolean;
+  updateOptions: (id: string, options: BrowserLabUpdateOptions) => BrowserLabUpdateResult;
 };
 
 declare global {
@@ -89,15 +142,77 @@ declare global {
 type MountedEditor = {
   changeCount: number;
   editor: MarkdownEditor;
+  eventCounts: Record<MarkdownEditorEventName, number>;
+  eventLog: BrowserLabEventRecord[];
+  eventUnsubscribes: Map<MarkdownEditorEventName, () => void>;
+  explicitPortalRoot?: HTMLElement | ShadowRoot;
   host: HTMLElement;
+  id: string;
   output: HTMLOutputElement;
   opaqueEditRequest: OpaqueMarkdownEditRequest | null;
+  portalRoot: HTMLElement | ShadowRoot;
   root: Document | ShadowRoot;
   section: HTMLElement;
   transactionCount: number;
 };
 
 const OVERLAY_SELECTOR = ".mdw-link-editor, .mdw-image-editor, .mdw-table-toolbar";
+const EVENT_NAMES: MarkdownEditorEventName[] = ["focus", "blur", "selection", "update", "error"];
+
+function createEventCounts(): Record<MarkdownEditorEventName, number> {
+  return {
+    blur: 0,
+    error: 0,
+    focus: 0,
+    selection: 0,
+    update: 0,
+  };
+}
+
+function clearEventTracking(mounted: MountedEditor) {
+  mounted.eventCounts = createEventCounts();
+  mounted.eventLog.length = 0;
+}
+
+function recordEvent(mounted: MountedEditor, event: BrowserLabEventRecord) {
+  mounted.eventCounts[event.type] += 1;
+  mounted.eventLog.push(event);
+}
+
+function subscribeToEditorEvents(mounted: MountedEditor) {
+  for (const unsubscribe of mounted.eventUnsubscribes.values()) {
+    unsubscribe();
+  }
+
+  mounted.eventUnsubscribes.clear();
+  mounted.eventUnsubscribes.set("focus", mounted.editor.subscribe("focus", () => {
+    recordEvent(mounted, { type: "focus" });
+  }));
+  mounted.eventUnsubscribes.set("blur", mounted.editor.subscribe("blur", () => {
+    recordEvent(mounted, { type: "blur" });
+  }));
+  mounted.eventUnsubscribes.set("selection", mounted.editor.subscribe("selection", (event) => {
+    recordEvent(mounted, {
+      previousSelection: event.previousSelection,
+      selection: event.selection,
+      type: "selection",
+    });
+  }));
+  mounted.eventUnsubscribes.set("update", mounted.editor.subscribe("update", (event) => {
+    recordEvent(mounted, {
+      selection: event.selection,
+      type: "update",
+    });
+  }));
+  mounted.eventUnsubscribes.set("error", mounted.editor.subscribe("error", (event) => {
+    recordEvent(mounted, {
+      code: event.code,
+      language: event.context.language,
+      message: event.error instanceof Error ? event.error.message : String(event.error),
+      type: "error",
+    });
+  }));
+}
 
 function requireEditor(editors: Map<string, MountedEditor>, id: string) {
   const mounted = editors.get(id);
@@ -208,6 +323,54 @@ export function BrowserLabPage() {
     // before measurements so editor lifecycle deltas remain exact.
     listenerLedger.acceptBaseline(codeMirrorBaselineOwner);
 
+    const mountEditorInHost = (
+      mounted: MountedEditor,
+      spec: Omit<BrowserLabEditorSpec, "direction" | "id" | "placement" | "portal" | "root">,
+    ) => {
+      const existingOverlays = new Set(
+        mounted.portalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR),
+      );
+
+      mounted.editor = listenerLedger.scope(mounted.id, () => createEditor({
+        ariaLabel: spec.ariaLabel ?? (spec.ariaLabelledBy ? undefined : `${mounted.id} Markdown editor`),
+        ariaLabelledBy: spec.ariaLabelledBy,
+        attributes: spec.attributes,
+        autofocus: spec.autofocus,
+        editable: spec.editable,
+        element: mounted.host,
+        initialSelection: spec.initialSelection,
+        markdown: spec.markdown ?? `# ${mounted.id}\n\nBrowser lab paragraph.`,
+        onChangeMode: "animationFrame",
+        onChange(markdown) {
+          mounted.changeCount += 1;
+          mounted.output.dataset.changeCount = String(mounted.changeCount);
+          mounted.output.textContent = markdown;
+        },
+        onTransaction() {
+          mounted.transactionCount += 1;
+          mounted.output.dataset.transactionCount = String(mounted.transactionCount);
+        },
+        onEditOpaqueMarkdown(request) {
+          mounted.opaqueEditRequest = request;
+          mounted.section.dataset.pendingOpaqueKind = request.kind;
+        },
+        placeholder: spec.placeholder,
+        ui: mounted.explicitPortalRoot
+          ? createDefaultUi({ portalRoot: mounted.explicitPortalRoot })
+          : createDefaultUi(),
+      }));
+
+      subscribeToEditorEvents(mounted);
+
+      for (const overlay of mounted.portalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR)) {
+        if (!existingOverlays.has(overlay)) {
+          overlay.dataset.e2eOwner = mounted.id;
+        }
+      }
+
+      mounted.output.textContent = mounted.editor.getMarkdown();
+    };
+
     const destroy = (id: string) => {
       const mounted = editors.get(id);
 
@@ -215,9 +378,18 @@ export function BrowserLabPage() {
         return false;
       }
 
-      mounted.editor.destroy();
-      mounted.section.remove();
-      editors.delete(id);
+      try {
+        mounted.editor.destroy();
+      } finally {
+        for (const unsubscribe of mounted.eventUnsubscribes.values()) {
+          unsubscribe();
+        }
+
+        mounted.eventUnsubscribes.clear();
+        mounted.section.remove();
+        editors.delete(id);
+      }
+
       return true;
     };
 
@@ -229,6 +401,12 @@ export function BrowserLabPage() {
 
     const api: BrowserLabApi = {
       ready: true,
+      blur(id) {
+        requireEditor(editors, id).editor.blur();
+      },
+      clearEvents(id) {
+        clearEventTracking(requireEditor(editors, id));
+      },
       mount(spec) {
         const id = spec.id.trim();
 
@@ -251,6 +429,7 @@ export function BrowserLabPage() {
 
         const heading = document.createElement("h2");
         heading.className = "browser-lab-editor-label";
+        heading.id = `browser-lab-editor-label-${id}`;
         heading.textContent = id;
         section.append(heading);
 
@@ -302,69 +481,117 @@ export function BrowserLabPage() {
 
         const effectivePortalRoot = explicitPortalRoot
           ?? (rootMode === "shadow" ? editorRoot as ShadowRoot : document.body);
-        const existingOverlays = new Set(effectivePortalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR));
         const mounted: MountedEditor = {
           changeCount: 0,
           editor: null as unknown as MarkdownEditor,
+          eventCounts: createEventCounts(),
+          eventLog: [],
+          eventUnsubscribes: new Map(),
+          explicitPortalRoot,
           host,
+          id,
           opaqueEditRequest: null,
           output,
+          portalRoot: effectivePortalRoot,
           root: editorRoot,
           section,
           transactionCount: 0,
         };
 
         try {
-          mounted.editor = listenerLedger.scope(id, () => createEditor({
-            element: host,
-            markdown: spec.markdown ?? `# ${id}\n\nBrowser lab paragraph.`,
-            onChangeMode: "animationFrame",
-            onChange(markdown) {
-              mounted.changeCount += 1;
-              output.dataset.changeCount = String(mounted.changeCount);
-              output.textContent = markdown;
-            },
-            onTransaction() {
-              mounted.transactionCount += 1;
-              output.dataset.transactionCount = String(mounted.transactionCount);
-            },
-            onEditOpaqueMarkdown(request) {
-              mounted.opaqueEditRequest = request;
-              section.dataset.pendingOpaqueKind = request.kind;
-            },
-            ui: explicitPortalRoot
-              ? createDefaultUi({ portalRoot: explicitPortalRoot })
-              : createDefaultUi(),
-          }));
-
-          // EE-007 will expose typed DOM attributes. Until then the browser
-          // fixture models the host's accessible-name obligation through the
-          // documented EditorView escape hatch.
-          mounted.editor.view.dom.setAttribute("aria-label", `${id} Markdown editor`);
-          mounted.editor.view.dom.setAttribute("aria-multiline", "true");
-          mounted.editor.view.dom.setAttribute("role", "textbox");
-
+          mountEditorInHost(mounted, spec);
         } catch (error) {
           section.remove();
           throw error;
         }
 
-        for (const overlay of effectivePortalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR)) {
-          if (!existingOverlays.has(overlay)) {
-            overlay.dataset.e2eOwner = id;
-          }
-        }
-
-        output.textContent = mounted.editor.getMarkdown();
         editors.set(id, mounted);
         return readSnapshot(mounted);
       },
+      copySelection(id) {
+        const mounted = requireEditor(editors, id);
+        const activeElement = mounted.root instanceof ShadowRoot
+          ? mounted.root.activeElement
+          : mounted.host.ownerDocument.activeElement;
+        const target = activeElement instanceof Node && mounted.editor.view.dom.contains(activeElement)
+          ? activeElement
+          : mounted.editor.view.dom;
+        const transfer = new DataTransfer();
+        const event = new ClipboardEvent("copy", {
+          bubbles: true,
+          cancelable: true,
+          clipboardData: transfer,
+          composed: true,
+        });
+
+        if (event.clipboardData !== transfer) {
+          Object.defineProperty(event, "clipboardData", {
+            configurable: true,
+            value: transfer,
+          });
+        }
+
+        target.dispatchEvent(event);
+
+        return {
+          defaultPrevented: event.defaultPrevented,
+          html: transfer.getData("text/html"),
+          plain: transfer.getData("text/plain"),
+        };
+      },
       destroy,
+      destroyEditor(id) {
+        const mounted = requireEditor(editors, id);
+        const wasDestroyed = mounted.editor.isDestroyed;
+        mounted.editor.destroy();
+        return !wasDestroyed && mounted.editor.isDestroyed;
+      },
       destroyAll,
+      events(id) {
+        const mounted = requireEditor(editors, id);
+        const counts = createEventCounts();
+
+        for (const eventName of EVENT_NAMES) {
+          counts[eventName] = mounted.eventCounts[eventName];
+        }
+
+        return {
+          counts,
+          log: mounted.eventLog.map((event) => ({ ...event })),
+        };
+      },
+      focus(id, selection) {
+        requireEditor(editors, id).editor.focus(selection);
+      },
       getMarkdown(id) {
         const mounted = requireEditor(editors, id);
         mounted.editor.flushChange();
         return mounted.editor.getMarkdown();
+      },
+      isDestroyed(id) {
+        return requireEditor(editors, id).editor.isDestroyed;
+      },
+      remount(id, options = {}) {
+        const mounted = requireEditor(editors, id);
+
+        if (!mounted.editor.isDestroyed) {
+          throw new Error(`Browser lab editor \"${id}\" must be destroyed before remounting.`);
+        }
+
+        for (const unsubscribe of mounted.eventUnsubscribes.values()) {
+          unsubscribe();
+        }
+
+        mounted.eventUnsubscribes.clear();
+        mounted.changeCount = 0;
+        mounted.transactionCount = 0;
+        mounted.opaqueEditRequest = null;
+        mounted.output.dataset.changeCount = "0";
+        mounted.output.dataset.transactionCount = "0";
+        delete mounted.section.dataset.pendingOpaqueKind;
+        clearEventTracking(mounted);
+        mountEditorInHost(mounted, options);
+        return readSnapshot(mounted);
       },
       reset(id, markdown) {
         const mounted = requireEditor(editors, id);
@@ -418,9 +645,7 @@ export function BrowserLabPage() {
 
         const from = mode === "end" ? resolvedMatch.to : resolvedMatch.from;
         const to = mode === "start" ? resolvedMatch.from : mode === "end" ? resolvedMatch.to : resolvedMatch.to;
-        const selection = TextSelection.create(mounted.editor.view.state.doc, from, to);
-        mounted.editor.view.dispatch(mounted.editor.view.state.tr.setSelection(selection).scrollIntoView());
-        mounted.editor.view.focus();
+        mounted.editor.focus({ anchor: from, head: to });
         return true;
       },
       snapshot(id) {
@@ -467,6 +692,28 @@ export function BrowserLabPage() {
         mounted.editor.flushChange();
         mounted.output.textContent = mounted.editor.getMarkdown();
         return true;
+      },
+      unsubscribe(id, type) {
+        const mounted = requireEditor(editors, id);
+        const unsubscribe = mounted.eventUnsubscribes.get(type);
+
+        if (!unsubscribe) {
+          return false;
+        }
+
+        unsubscribe();
+        mounted.eventUnsubscribes.delete(type);
+        return true;
+      },
+      updateOptions(id, options) {
+        const mounted = requireEditor(editors, id);
+        const previousState = mounted.editor.view.state;
+        mounted.editor.updateOptions(options);
+
+        return {
+          snapshot: readSnapshot(mounted),
+          statePreserved: mounted.editor.view.state === previousState,
+        };
       },
       listenerSnapshot(id) {
         return listenerLedger.snapshot(id);

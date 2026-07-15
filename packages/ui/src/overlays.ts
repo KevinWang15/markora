@@ -246,7 +246,10 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
   };
 
   saveButton.addEventListener("click", () => {
-    if (!activeView) return;
+    if (!activeView || !activeView.editable) {
+      close(false);
+      return;
+    }
     if (updateLinkHref(activeView, input.value) === false) {
       input.setAttribute("aria-invalid", "true");
       errorMessage.hidden = false;
@@ -257,7 +260,10 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
     close(true);
   });
   unlinkButton.addEventListener("click", () => {
-    if (!activeView) return;
+    if (!activeView || !activeView.editable) {
+      close(false);
+      return;
+    }
     removeActiveLink(activeView);
     close(true);
   });
@@ -286,6 +292,11 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
 
   return {
     open(view, marker, href) {
+      if (!view.editable) {
+        close(false);
+        return;
+      }
+
       activeView = view;
       activeMarker = marker;
       input.value = href;
@@ -408,7 +419,10 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   };
 
   saveButton.addEventListener("click", () => {
-    if (!activeView) return;
+    if (!activeView || !activeView.editable) {
+      close(false);
+      return;
+    }
     if (updateActiveImage(activeView, { src: srcInput.value, alt: altInput.value, title: titleInput.value }) === false) {
       srcInput.setAttribute("aria-invalid", "true");
       errorMessage.hidden = false;
@@ -419,7 +433,10 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
     close(true);
   });
   removeButton.addEventListener("click", () => {
-    if (!activeView) return;
+    if (!activeView || !activeView.editable) {
+      close(false);
+      return;
+    }
     removeActiveImage(activeView);
     close(true);
   });
@@ -448,6 +465,11 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
 
   return {
     open(view, marker, imageInfo) {
+      if (!view.editable) {
+        close(false);
+        return;
+      }
+
       activeView = view;
       activeMarker = marker;
       srcInput.value = typeof imageInfo.node.attrs.src === "string" ? imageInfo.node.attrs.src : "";
@@ -724,20 +746,25 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   dom.addEventListener("mousedown", handleMouseDown);
   dom.addEventListener("focusin", handleFocusIn);
   dom.addEventListener("keydown", handleKeyDown);
-  addColumnButton.addEventListener("click", () => { const view = activeView; if (!view) return; appendTableColumn(view); });
-  removeColumnButton.addEventListener("click", () => { const view = activeView; if (!view) return; removeTableColumn(view); });
-  addRowButton.addEventListener("click", () => { const view = activeView; if (!view) return; appendTableRow(view); });
-  removeRowButton.addEventListener("click", () => { const view = activeView; if (!view) return; removeTableRow(view); });
-  alignLeftButton.addEventListener("click", () => { const view = activeView; if (!view) return; setTableColumnAlignment(view, "left"); });
-  alignCenterButton.addEventListener("click", () => { const view = activeView; if (!view) return; setTableColumnAlignment(view, "center"); });
-  alignRightButton.addEventListener("click", () => { const view = activeView; if (!view) return; setTableColumnAlignment(view, "right"); });
-  removeButton.addEventListener("click", () => { const view = activeView; if (!view) return; removeActiveTable(view); view.focus(); });
+  addColumnButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; appendTableColumn(view); });
+  removeColumnButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; removeTableColumn(view); });
+  addRowButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; appendTableRow(view); });
+  removeRowButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; removeTableRow(view); });
+  alignLeftButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; setTableColumnAlignment(view, "left"); });
+  alignCenterButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; setTableColumnAlignment(view, "center"); });
+  alignRightButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; setTableColumnAlignment(view, "right"); });
+  removeButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; removeActiveTable(view); view.focus(); });
   win.addEventListener("resize", handleWindowChange);
   win.addEventListener("scroll", handleWindowChange, true);
   addViewportListeners(win, handleWindowChange);
 
   return {
     update(view) {
+      if (!view.editable) {
+        close();
+        return;
+      }
+
       const info = getTableContext(view.state);
       if (!info) {
         close();

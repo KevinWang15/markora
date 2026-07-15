@@ -89,8 +89,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-004 | DONE | L | Preserve unsupported Markdown through opaque source nodes |
 | EE-005 | DONE | M | Check in a Chromium, Firefox, and WebKit browser regression suite |
 | EE-006 | DONE | M | Cover IME, clipboard, drop, touch, RTL, and accessibility behavior |
-| EE-007 | NEXT | M | Add production embed configuration and lifecycle APIs |
-| EE-008 | QUEUED | M | Separate reconciled external updates from hard document resets |
+| EE-007 | DONE | M | Add production embed configuration and lifecycle APIs |
+| EE-008 | NEXT | M | Separate reconciled external updates from hard document resets |
 | EE-009 | QUEUED | S | Approve a versioned editor and Markdown extension RFC |
 | EE-010 | QUEUED | L | Implement the extension kernel and migrate built-ins onto it |
 | EE-011 | QUEUED | M | Complete the block, list, task, code, and table command surface |
@@ -298,7 +298,7 @@ Cover interaction classes that jsdom and ordinary Latin keyboard tests miss.
 
 ### EE-007 — Add production embed configuration and lifecycle APIs
 
-Status: `NEXT`
+Status: `DONE` (2026-07-15)
 
 #### Goal
 
@@ -312,9 +312,18 @@ Let hosts implement standard editor states without reaching into ProseMirror int
 - Support dynamic updates for options that do not require state reconstruction.
 - Keep the lower-level `view` escape hatch while documenting its compatibility boundary.
 
+#### Completion notes
+
+- `createEditor()` now accepts editable/read-only state, placeholder text, autofocus, initial selection targets, copied DOM attributes, and accessible naming. `updateOptions()` changes the non-reconstructive subset plus runtime callbacks without replacing `EditorState`; creation-only boundaries and validation behavior are documented.
+- Read-only mode covers ProseMirror, nested CodeMirror editors, task controls, opaque-source controls, commands, history, and optional UI while retaining selection, copy, and host-controlled `commands.setMarkdown()` updates. Placeholder rendering is limited to the canonical empty paragraph.
+- Typed focus, blur, selection, update, and recoverable error subscriptions return idempotent unsubscribe functions. Selection/update delivery is synchronous and state-aware; focus/blur cross a microtask boundary around the composite ProseMirror/CodeMirror surface; code-language loaders and extensions also start after the current outer update so host code cannot re-enter a partially mutated view.
+- Destruction is idempotent, caches the final Markdown, releases same-host ownership for remounting, drains all owned cleanup even when callbacks fail, and defines stable no-op or `MarkdownEditorDestroyedError` behavior for every high-level post-destroy API. Reentrancy guards stop callbacks, UI controllers, focus work, and nested editor synchronization as soon as destruction begins.
+- Public declarations, packed-consumer coverage, the API demo, browser lab, root/core documentation, and the advanced version-coupled `editor.view` boundary were updated. Adversarial lifecycle tests cover callback failure, teardown failure, option accessors, nested updates, stale async work, and state/DOM synchronization.
+- Final verification: `pnpm check` passes all 507 unit/conformance tests; `pnpm test:browser:required` passes 58 production-preview cases with two expected non-Chromium CDP skips (60 total); `pnpm test:browser` passes 101 cases with four expected engine-specific skips (105 total), and its web server runs `pnpm build`; `pnpm pack:smoke` and `git diff --check` pass.
+
 ### EE-008 — Define external update semantics
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -562,8 +571,8 @@ An item is `DONE` only when all applicable requirements below are met:
 - The work lands in one focused, reviewable commit.
 - This document is updated with the item status and any resulting plan changes.
 
-## First iteration
+## Completed iterations
 
-`EE-001` through `EE-006` were completed on 2026-07-15, satisfying Gate A's content-safety requirements and establishing the browser, complex-input, and accessibility foundation for Gate B.
+`EE-001` through `EE-007` were completed on 2026-07-15, satisfying Gate A's content-safety requirements and establishing the browser, complex-input, accessibility, and host-lifecycle foundation for Gate B.
 
-The next iteration is `EE-007 — Add production embed configuration and lifecycle APIs`.
+The next iteration is `EE-008 — Define external update semantics`.

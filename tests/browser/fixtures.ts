@@ -1,10 +1,51 @@
 import { expect, test as base, type ConsoleMessage, type Page, type TestInfo } from "@playwright/test";
 
+export type LabSelectionTarget =
+  | "all"
+  | "end"
+  | "start"
+  | { anchor: number; head?: number };
+
+export type LabEventName = "blur" | "error" | "focus" | "selection" | "update";
+
+export type LabSelectionSnapshot = {
+  anchor: number;
+  empty: boolean;
+  from: number;
+  head: number;
+  kind: "all" | "managed-block" | "node" | "other" | "text";
+  to: number;
+};
+
+export type LabEventRecord = {
+  code?: string;
+  language?: string;
+  message?: string;
+  previousSelection?: LabSelectionSnapshot;
+  selection?: LabSelectionSnapshot;
+  type: LabEventName;
+};
+
+export type LabUpdateOptions = {
+  ariaLabel?: string | null;
+  ariaLabelledBy?: string | null;
+  attributes?: Record<string, string> | null;
+  editable?: boolean;
+  placeholder?: string | null;
+};
+
 export type LabEditorSpec = {
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
+  attributes?: Record<string, string>;
+  autofocus?: boolean;
   direction?: "auto" | "ltr" | "rtl";
+  editable?: boolean;
   id: string;
+  initialSelection?: LabSelectionTarget;
   markdown?: string;
   placement?: "bottom-right" | "normal";
+  placeholder?: string;
   portal?: "body" | "default" | "local" | "positioned" | "transformed";
   root?: "document" | "shadow";
 };
@@ -128,6 +169,65 @@ export { expect } from "@playwright/test";
 
 export async function mountEditor(page: Page, spec: LabEditorSpec) {
   return page.evaluate((nextSpec) => window.__MARKORA_BROWSER_LAB__!.mount(nextSpec), spec) as Promise<LabSnapshot>;
+}
+
+export async function focusEditor(page: Page, id: string, selection?: LabSelectionTarget) {
+  await page.evaluate(
+    ({ editorId, target }) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, target),
+    { editorId: id, target: selection },
+  );
+}
+
+export async function blurEditor(page: Page, id: string) {
+  await page.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.blur(editorId), id);
+}
+
+export async function clearEditorEvents(page: Page, id: string) {
+  await page.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.clearEvents(editorId), id);
+}
+
+export async function getEditorEvents(page: Page, id: string) {
+  return page.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.events(editorId), id) as Promise<{
+    counts: Record<LabEventName, number>;
+    log: LabEventRecord[];
+  }>;
+}
+
+export async function unsubscribeEditorEvent(page: Page, id: string, type: LabEventName) {
+  return page.evaluate(
+    ({ editorId, eventType }) => window.__MARKORA_BROWSER_LAB__!.unsubscribe(editorId, eventType),
+    { editorId: id, eventType: type },
+  );
+}
+
+export async function updateEditorOptions(page: Page, id: string, options: LabUpdateOptions) {
+  return page.evaluate(
+    ({ editorId, nextOptions }) => window.__MARKORA_BROWSER_LAB__!.updateOptions(editorId, nextOptions),
+    { editorId: id, nextOptions: options },
+  ) as Promise<{ snapshot: LabSnapshot; statePreserved: boolean }>;
+}
+
+export async function copyEditorSelection(page: Page, id: string) {
+  return page.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.copySelection(editorId), id);
+}
+
+export async function destroyEditorOnly(page: Page, id: string) {
+  return page.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.destroyEditor(editorId), id);
+}
+
+export async function isEditorDestroyed(page: Page, id: string) {
+  return page.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.isDestroyed(editorId), id);
+}
+
+export async function remountEditor(
+  page: Page,
+  id: string,
+  options: Omit<LabEditorSpec, "direction" | "id" | "placement" | "portal" | "root"> = {},
+) {
+  return page.evaluate(
+    ({ editorId, nextOptions }) => window.__MARKORA_BROWSER_LAB__!.remount(editorId, nextOptions),
+    { editorId: id, nextOptions: options },
+  ) as Promise<LabSnapshot>;
 }
 
 export async function getMarkdown(page: Page, id: string) {

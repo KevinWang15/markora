@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { schema } from '../src/markdownCodec';
 import { createTaskListHelpers } from '../src/taskListUtils';
 
-function createFixture() {
+function createFixture(options: { editable?: boolean } = {}) {
   const foreignWindow = new JSDOM('<!doctype html><html><body></body></html>').window;
   const viewDom = foreignWindow.document.createElement('div');
   const listItemElement = foreignWindow.document.createElement('li');
@@ -30,6 +30,7 @@ function createFixture() {
   const focus = vi.fn();
   const view = {
     dom: viewDom,
+    editable: options.editable ?? true,
     get state() {
       return state;
     },
@@ -56,6 +57,53 @@ function createFixture() {
 }
 
 describe('task list realm handling', () => {
+  it('leaves task controls inert in read-only mode while preserving native tab navigation', () => {
+    const fixture = createFixture({ editable: false });
+
+    try {
+      const {
+        maybeToggleTaskListItem,
+        scheduleTaskControlFocusAfterHistoryShortcut,
+        shouldUseNativeTaskControlTab,
+        toggleTaskListItemAtResolvedPos,
+      } = createTaskListHelpers(schema);
+      const activation = new fixture.foreignWindow.KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        key: 'Enter',
+      });
+      fixture.control.dispatchEvent(activation);
+
+      expect(maybeToggleTaskListItem(fixture.view, 3, activation as unknown as KeyboardEvent)).toBe(false);
+      expect(activation.defaultPrevented).toBe(false);
+      expect(toggleTaskListItemAtResolvedPos(fixture.view, 3)).toBe(false);
+      expect(fixture.getState().doc.firstChild?.firstChild?.attrs.checked).toBe(false);
+      expect(fixture.focus).not.toHaveBeenCalled();
+
+      const historyShortcut = new fixture.foreignWindow.KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        ctrlKey: true,
+        key: 'z',
+      });
+      fixture.control.dispatchEvent(historyShortcut);
+      expect(scheduleTaskControlFocusAfterHistoryShortcut(
+        fixture.view,
+        historyShortcut as unknown as KeyboardEvent,
+      )).toBe(false);
+
+      const tab = new fixture.foreignWindow.KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        key: 'Tab',
+      });
+      fixture.control.dispatchEvent(tab);
+      expect(shouldUseNativeTaskControlTab(fixture.view, tab as unknown as KeyboardEvent)).toBe(true);
+    } finally {
+      fixture.foreignWindow.close();
+    }
+  });
+
   it('toggles on primary mousedown and suppresses the following pointer click', () => {
     const fixture = createFixture();
 

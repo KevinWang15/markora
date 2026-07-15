@@ -1,20 +1,32 @@
 # Embedded input and accessibility contract
 
-This document defines the behavior certified by `EE-006` for Markora in an embedded host. It is a baseline contract, not a claim that a headless browser can replace testing with real input methods or assistive technology.
+This document defines the input behavior certified by `EE-006` and the typed host setup added by `EE-007` for Markora in an embedded host. It is a baseline contract, not a claim that a headless browser can replace testing with real input methods or assistive technology.
 
 ## Host setup required for the baseline
 
-Until `EE-007` adds typed DOM-attribute options, the embedding host must give each editor a unique accessible name through the existing `EditorView` escape hatch:
+The embedding host must give each editor a unique accessible name through the typed `ariaLabel` or `ariaLabelledBy` option:
 
 ```ts
-const editor = createEditor({ element, markdown });
-
-editor.view.dom.setAttribute("role", "textbox");
-editor.view.dom.setAttribute("aria-multiline", "true");
-editor.view.dom.setAttribute("aria-label", "Document body");
+const editor = createEditor({
+  element,
+  markdown,
+  ariaLabel: "Document body",
+});
 ```
 
-The label must describe the editor's purpose in the host product; a fixed library-provided English label would be wrong for pages with multiple editors and for localized products. The `/__browser` fixture applies this host obligation before running axe.
+When the host already renders a visible label, reference it instead of repeating its text:
+
+```ts
+const editor = createEditor({
+  element,
+  markdown,
+  ariaLabelledBy: "document-body-label",
+});
+```
+
+The label must describe the editor's purpose in the host product; a fixed library-provided English label would be wrong for pages with multiple editors and for localized products. Markora supplies textbox-role and multiline defaults; hosts claiming this baseline must not replace them without equivalent assistive-technology validation. Its contenteditable/read-only state and placeholder metadata take precedence over conflicts in the general `attributes` option. The `/__browser` fixture applies this host obligation before running axe.
+
+Use `editor.focus()` and `editor.blur()` for ordinary focus management. Typed focus and blur subscriptions treat the outer editing surface and nested CodeMirror editors as one focus boundary; movement between them does not produce a false blur/focus pair. Portaled optional UI remains outside that core boundary and follows the dialog/toolbar focus behavior below.
 
 Hosts that require all interactive content to sit inside a page landmark should pass `createDefaultUi({ portalRoot })` a portal within the appropriate host landmark. The axe fixture uses an editor-local portal so the toolbar and dialogs are assessed in their real host context.
 

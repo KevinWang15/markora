@@ -277,12 +277,13 @@ describe('editor runtime', () => {
 
     const codeMirrorDom = editor.view.dom.querySelector('.cm-editor');
 
-    expect(loader).toHaveBeenCalledTimes(1);
+    expect(loader).not.toHaveBeenCalled();
     expect(codeMirrorDom?.getAttribute('data-language-loaded')).toBeNull();
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    expect(loader).toHaveBeenCalledTimes(1);
     expect(codeMirrorDom?.getAttribute('data-language-loaded')).toBe('custom');
     editor.destroy();
   });

@@ -141,7 +141,11 @@ export function createCodeBlockSelectionHelpers(options: { schema: Schema }) {
       if ((direction < 0 && boundaryPos === codeBlock.pos) || (direction > 0 && boundaryPos === codeBlock.pos + codeBlock.node.nodeSize)) {
         const tr = view.state.tr.setSelection(TextSelection.create(doc, selection.anchor, fallbackOuterHead));
         view.dispatch(tr.scrollIntoView());
-        view.focus();
+
+        if (!view.isDestroyed) {
+          view.focus();
+        }
+
         return true;
       }
 
@@ -150,7 +154,11 @@ export function createCodeBlockSelectionHelpers(options: { schema: Schema }) {
 
     const tr = view.state.tr.setSelection(TextSelection.create(doc, selection.anchor, outerSelection.head));
     view.dispatch(tr.scrollIntoView());
-    view.focus();
+
+    if (!view.isDestroyed) {
+      view.focus();
+    }
+
     return true;
   }
 

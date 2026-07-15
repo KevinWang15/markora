@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { history, undo } from "prosemirror-history";
 import { Schema, type Node as ProseMirrorNode } from "prosemirror-model";
 import { EditorState } from "prosemirror-state";
@@ -54,7 +54,10 @@ const editors: EditorView[] = [];
 
 type CreateTestEditorOptions = {
   display?: "block" | "inline";
+  getEditable?: () => boolean;
+  getOnEdit?: () => ((request: OpaqueMarkdownEditRequest) => void) | undefined;
   kind?: OpaqueMarkdownKind;
+  onNodeViewClass?: (nodeViewClass: ReturnType<typeof createOpaqueNodeViewClass>) => void;
   onEdit?: (request: OpaqueMarkdownEditRequest) => void;
   source: string;
 };
@@ -64,9 +67,11 @@ function createTestEditor(options: CreateTestEditorOptions) {
   const nodeType = display === "block" ? schema.nodes.raw_block : schema.nodes.raw_inline;
   const OpaqueNodeView = createOpaqueNodeViewClass({
     display,
+    getOnEdit: options.getOnEdit,
     nodeType,
     onEdit: options.onEdit,
   });
+  options.onNodeViewClass?.(OpaqueNodeView);
   const opaqueNode = nodeType.create({
     kind: options.kind ?? (display === "block" ? "html-block" : "inline-html"),
     source: options.source,
@@ -80,6 +85,7 @@ function createTestEditor(options: CreateTestEditorOptions) {
   document.body.append(host);
 
   const editor = new EditorView(host, {
+    editable: options.getEditable ? () => options.getEditable!() : undefined,
     state: EditorState.create({ doc, plugins: [history()] }),
     nodeViews: {
       [nodeType.name](node, view, getPos) {
@@ -116,6 +122,57 @@ afterEach(() => {
 });
 
 describe("opaque Markdown node view", () => {
+  it("refreshes a live edit hook and blocks stale or read-only edits", () => {
+    let editable = true;
+    let onEdit: ((request: OpaqueMarkdownEditRequest) => void) | undefined;
+    let NodeViewClass: ReturnType<typeof createOpaqueNodeViewClass> | undefined;
+    let request: OpaqueMarkdownEditRequest | null = null;
+    const editor = createTestEditor({
+      getEditable: () => editable,
+      getOnEdit: () => onEdit,
+      onNodeViewClass(nodeViewClass) {
+        NodeViewClass = nodeViewClass;
+      },
+      source: "<!-- dynamic -->",
+    });
+    const button = editor.dom.querySelector<HTMLButtonElement>(".mdw-opaque-edit");
+
+    expect(button).toBeInstanceOf(HTMLButtonElement);
+    expect(button?.hidden).toBe(true);
+    expect(button?.disabled).toBe(true);
+    expect(button?.getAttribute("aria-disabled")).toBe("true");
+
+    onEdit = vi.fn((nextRequest: OpaqueMarkdownEditRequest) => {
+      request = nextRequest;
+    });
+    NodeViewClass?.refresh();
+
+    expect(button?.hidden).toBe(false);
+    expect(button?.disabled).toBe(false);
+    expect(button?.getAttribute("aria-disabled")).toBe("false");
+    button?.click();
+    expect(onEdit).toHaveBeenCalledOnce();
+
+    editable = false;
+    editor.setProps({ editable: () => editable });
+    NodeViewClass?.refresh();
+
+    expect(button?.hidden).toBe(false);
+    expect(button?.disabled).toBe(true);
+    expect(button?.getAttribute("aria-disabled")).toBe("true");
+
+    if (!request) {
+      throw new Error("Expected the live edit hook to receive a request");
+    }
+
+    expect(request.update("<!-- rejected -->")).toBe(false);
+    expect(findNode(editor, "raw_block").node.attrs.source).toBe("<!-- dynamic -->");
+
+    onEdit = undefined;
+    NodeViewClass?.refresh();
+    expect(button?.hidden).toBe(true);
+  });
+
   it("renders hostile HTML as text without creating executable elements", () => {
     const source = '</code><script>window.__opaqueExecuted = true</script><img src=x onerror="alert(1)">';
     const editor = createTestEditor({ source });

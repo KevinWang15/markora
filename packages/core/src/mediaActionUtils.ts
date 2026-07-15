@@ -291,7 +291,11 @@ export function createMediaActionHelpers(options: {
 
     event.preventDefault();
     win.open(safeHref, "_blank", "noopener,noreferrer");
-    view.focus();
+
+    if (!view.isDestroyed) {
+      view.focus();
+    }
+
     return true;
   }
 

@@ -12,6 +12,10 @@ if (!hostElement) {
 const editor = createEditor({
   element: hostElement,
   markdown: "# Hello Markora",
+  ariaLabel: "Document body",
+  autofocus: true,
+  initialSelection: "end",
+  placeholder: "Start writing…",
   ui: createDefaultUi(),
   onChangeMode: "animationFrame",
   onChange(nextMarkdown) {

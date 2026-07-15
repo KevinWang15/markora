@@ -11,9 +11,14 @@ type OpaqueNodeViewConstructor = new (
   getPos: () => number | undefined,
 ) => NodeView;
 
+type OpaqueNodeViewClass = OpaqueNodeViewConstructor & {
+  refresh: () => void;
+};
+
 type CreateOpaqueNodeViewClassOptions = {
   nodeType: NodeType;
   display: "block" | "inline";
+  getOnEdit?: () => ((request: OpaqueMarkdownEditRequest) => void) | undefined;
   onEdit?: (request: OpaqueMarkdownEditRequest) => void;
 };
 
@@ -44,10 +49,18 @@ function isEventTargetInside(target: EventTarget | null, container: HTMLElement)
 
 export function createOpaqueNodeViewClass(
   options: CreateOpaqueNodeViewClassOptions,
-): OpaqueNodeViewConstructor {
-  const { display, nodeType, onEdit } = options;
+): OpaqueNodeViewClass {
+  const { display, getOnEdit, nodeType, onEdit } = options;
+  const refreshers = new Set<() => void>();
+  const resolveOnEdit = () => getOnEdit ? getOnEdit() : onEdit;
 
   return class OpaqueNodeView implements NodeView {
+    static refresh() {
+      for (const refresh of [...refreshers]) {
+        refresh();
+      }
+    }
+
     readonly dom: HTMLElement;
 
     private node: ProseMirrorNode;
@@ -105,6 +118,7 @@ export function createOpaqueNodeViewClass(
       }
 
       this.renderNode(node);
+      refreshers.add(this.refresh);
     }
 
     update(node: ProseMirrorNode) {
@@ -134,12 +148,23 @@ export function createOpaqueNodeViewClass(
     }
 
     destroy() {
+      if (this.destroyed) {
+        return;
+      }
+
       this.destroyed = true;
+      refreshers.delete(this.refresh);
       this.editButton?.removeEventListener("click", this.handleEditClick);
     }
 
+    private readonly refresh = () => {
+      if (!this.destroyed) {
+        this.renderNode(this.node);
+      }
+    };
+
     private createEditButton(ownerDocument: Document) {
-      if (!onEdit) {
+      if (!onEdit && !getOnEdit) {
         return null;
       }
 
@@ -152,7 +177,9 @@ export function createOpaqueNodeViewClass(
     }
 
     private readonly handleEditClick = () => {
-      if (!onEdit || this.destroyed) {
+      const currentOnEdit = resolveOnEdit();
+
+      if (!currentOnEdit || this.destroyed || !this.view.editable) {
         return;
       }
 
@@ -160,7 +187,7 @@ export function createOpaqueNodeViewClass(
       const kind = readOpaqueKind(requestedNode);
       const source = readOpaqueSource(requestedNode);
 
-      onEdit({
+      currentOnEdit({
         kind,
         source,
         update: (nextSource) => this.updateSource(requestedNode, kind, source, nextSource),
@@ -173,7 +200,7 @@ export function createOpaqueNodeViewClass(
       requestedSource: string,
       nextSource: string,
     ) {
-      if (this.destroyed) {
+      if (this.destroyed || !this.view.editable) {
         return false;
       }
 
@@ -225,7 +252,15 @@ export function createOpaqueNodeViewClass(
         this.kindElement.textContent = kindLabel;
       }
 
-      this.editButton?.setAttribute("aria-label", `Edit ${kindLabel} Markdown source`);
+      if (this.editButton) {
+        const hasEditHandler = !!resolveOnEdit();
+        const editDisabled = !hasEditHandler || !this.view.editable;
+        this.editButton.hidden = !hasEditHandler;
+        this.editButton.disabled = editDisabled;
+        this.editButton.setAttribute("aria-disabled", editDisabled ? "true" : "false");
+        this.editButton.setAttribute("aria-label", `Edit ${kindLabel} Markdown source`);
+      }
+
       this.sourceElement.textContent = readOpaqueSource(node);
     }
   };

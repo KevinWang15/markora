@@ -11,8 +11,9 @@ import { createDefaultUi } from "markora-ui";
 const editor = createEditor({
   element,
   markdown: initialDoc,
+  ariaLabel: "Product document",
   ui: createDefaultUi(),
-  onChange(saveDraft),
+  onChange: saveDraft,
   onChangeMode: "animationFrame",
 });`,
   },
@@ -20,16 +21,30 @@ const editor = createEditor({
     title: "AI draft review surface",
     summary: "Constrain or validate generated Markdown against the supported dialect before loading it for visual review.",
     snippet: `editor.commands.setMarkdown(aiDraft, { emitChange: true });
-editor.flushChange();`,
+editor.flushChange();
+editor.updateOptions({ editable: false, ariaLabel: "AI draft preview" });`,
   },
   {
     title: "Toolbar-driven CMS field",
     summary: "Bind editor state into your app shell and expose only the controls your product wants to support.",
-    snippet: `if (editor.state.can.setLink()) {
-  editor.commands.setLink("https://example.com");
-}
+    snippet: `const applyLink = () => {
+  if (editor.state.can.setLink()) {
+    editor.commands.setLink("https://example.com");
+  }
+};
 
-const isLinkActive = editor.state.isActive.mark("link");`,
+const render = () => {
+  const isLinkActive = editor.state.isActive.mark("link");
+  renderToolbar({ isLinkActive });
+};
+
+const stopSelection = editor.subscribe("selection", render);
+const stopUpdates = editor.subscribe("update", render);
+render();
+
+// During host teardown:
+stopSelection();
+stopUpdates();`,
   },
   {
     title: "Shadow DOM host",
@@ -40,6 +55,7 @@ shadowRoot.append(editorMount);
 
 const editor = createEditor({
   element: editorMount,
+  ariaLabel: "Shadow-root document",
   ui: createDefaultUi({ portalRoot: shadowRoot }),
 });`,
   },
@@ -50,6 +66,7 @@ const editor = createEditor({
 
 const editor = createEditor({
   element,
+  ariaLabel: "Code sample document",
   codeBlockLanguages: {
     ...createDefaultCodeBlockLanguageRegistry(),
     custom: async () => [],
@@ -67,16 +84,16 @@ const editor = createEditor({
 
 const recipes = [
   {
-    heading: "Sync with external state",
-    body: "Use `editor.commands.setMarkdown()` when upstream content changes, and call `flushChange()` if you need immediate serialized output after the update.",
+    heading: "Replace from host state",
+    body: "Use `editor.commands.setMarkdown()` for an explicit document replacement, and call `flushChange()` if you need immediate serialized output. Reconciled external updates are tracked separately.",
   },
   {
     heading: "Observe editor behavior",
-    body: "Use `onTransaction` when you want analytics, selection awareness, or app-level reactions without serializing Markdown on every keystroke.",
+    body: "Subscribe to `selection` and `update` for typed host snapshots without serialization. Keep `onTransaction` for integrations that deliberately depend on ProseMirror transactions.",
   },
   {
-    heading: "Use optional UI selectively",
-    body: "Start with the headless core and add `createDefaultUi()` only where link, image, and table overlays save product time.",
+    heading: "Update runtime options",
+    body: "Use `updateOptions()` to change editable state, placeholder, attributes, accessible naming, or callbacks without rebuilding editor state or emitting a document update.",
   },
   {
     heading: "Lean on the internal dev lab",
@@ -105,6 +122,7 @@ export function MarkdownField({ value, onChange }: {
     const editor = createEditor({
       element: hostRef.current,
       markdown: value,
+      ariaLabel: "Markdown field",
       ui: createDefaultUi(),
       onChangeMode: "animationFrame",
       onChange,
@@ -137,6 +155,7 @@ onMounted(() => {
   editor.value = createEditor({
     element: hostRef.value,
     markdown: props.modelValue,
+    ariaLabel: "Markdown field",
     ui: createDefaultUi(),
     onChangeMode: "animationFrame",
     onChange: (md) => emit("update:modelValue", md),
@@ -168,6 +187,7 @@ onBeforeUnmount(() => { editor.value?.destroy(); });
     editor = createEditor({
       element: hostElement,
       markdown: value,
+      ariaLabel: "Markdown field",
       ui: createDefaultUi(),
       onChangeMode: "animationFrame",
       onChange,

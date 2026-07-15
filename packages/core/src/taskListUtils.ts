@@ -38,6 +38,10 @@ export function createTaskListHelpers(schema: Schema) {
   }
 
   function toggleTaskListItemAtResolvedPos(view: EditorView, resolvedPos: number) {
+    if (!view.editable) {
+      return false;
+    }
+
     const listItem = getTaskListItemAtResolvedPos(view.state, resolvedPos);
 
     if (!listItem) {
@@ -58,7 +62,7 @@ export function createTaskListHelpers(schema: Schema) {
     shouldFocus?: (listItem: ProseMirrorNode) => boolean,
   ) {
     queueMicrotask(() => {
-      if (view.isDestroyed) {
+      if (view.isDestroyed || !view.editable) {
         return;
       }
 
@@ -119,6 +123,10 @@ export function createTaskListHelpers(schema: Schema) {
   }
 
   function scheduleTaskControlFocusAfterHistoryShortcut(view: EditorView, event: KeyboardEvent) {
+    if (!view.editable) {
+      return false;
+    }
+
     const key = event.key.toLowerCase();
     const isHistoryShortcut = !event.altKey
       && (event.ctrlKey || event.metaKey)
@@ -156,6 +164,10 @@ export function createTaskListHelpers(schema: Schema) {
   }
 
   function maybeToggleTaskListItem(view: EditorView, pos: number, event: MouseEvent | KeyboardEvent) {
+    if (!view.editable) {
+      return false;
+    }
+
     const ownerWindow = view.dom.ownerDocument.defaultView;
     const control = getOwnedTaskControl(view, event);
 
@@ -210,7 +222,7 @@ export function createTaskListHelpers(schema: Schema) {
 
     const handled = toggleTaskListItemAtResolvedPos(view, listItem.resolvedPos);
 
-    if (handled) {
+    if (handled && !view.isDestroyed) {
       if (shouldRefocusControl) {
         focusTaskControl(view, listItem.pos);
       } else {

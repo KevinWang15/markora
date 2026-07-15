@@ -7,8 +7,15 @@ export type ChangeEmitterOptions<TDoc> = {
   serialize: (doc: TDoc) => string;
 };
 
+export type ChangeEmitterRuntimeOptions = {
+  mode?: "immediate" | "animationFrame";
+  onChange?: ((markdown: string) => void) | null;
+};
+
 export function createChangeEmitter<TDoc>(options: ChangeEmitterOptions<TDoc>) {
-  const { cancelFrame, initialDoc, mode, onChange, requestFrame, serialize } = options;
+  const { cancelFrame, initialDoc, requestFrame, serialize } = options;
+  let mode = options.mode;
+  let onChange = options.onChange;
   let lastSerializedDoc = initialDoc;
   let lastSerializedMarkdown = serialize(initialDoc);
   let pendingFrame: number | null = null;
@@ -86,5 +93,14 @@ export function createChangeEmitter<TDoc>(options: ChangeEmitterOptions<TDoc>) {
     flush,
     getMarkdown,
     schedule,
+    update(nextOptions: ChangeEmitterRuntimeOptions) {
+      if (nextOptions.mode !== undefined) {
+        mode = nextOptions.mode;
+      }
+
+      if (nextOptions.onChange !== undefined) {
+        onChange = nextOptions.onChange ?? undefined;
+      }
+    },
   };
 }

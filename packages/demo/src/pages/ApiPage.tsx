@@ -3,8 +3,12 @@ import { CodeBlock } from "../components/CodeBlock";
 import { DocPageNav } from "../components/DocPageNav";
 
 const apiRows = [
-  ["createEditor({ element, markdown, onChange, onTransaction, onChangeMode, onEditOpaqueMarkdown, ui, codeBlockLanguages })", "Creates the editor view and returns the host API."],
-  ["editor.view", "Exposes the underlying ProseMirror view for focus and DOM coordination."],
+  ["createEditor(options: CreateEditorOptions)", "Creates the editor view and returns the host API."],
+  ["editor.focus(target?) / editor.blur()", "Moves focus without reaching into the raw ProseMirror view."],
+  ["editor.subscribe(type, listener)", "Subscribes to typed focus, blur, selection, update, or error events and returns an idempotent unsubscribe function."],
+  ["editor.updateOptions(options)", "Updates editable state, placeholder, attributes, accessible naming, and callbacks without rebuilding editor state."],
+  ["editor.isDestroyed", "Reports whether the high-level editor is no longer active."],
+  ["editor.view", "Exposes the version-coupled ProseMirror view for advanced inspection and dispatch."],
   ["editor.getMarkdown()", "Returns the current normalized Markdown serialization."],
   ["editor.commands.setMarkdown(markdown, { emitChange })", "Replaces the document, normalizing supported syntax while retaining recognized opaque source islands."],
   ["editor.flushChange()", "Flushes any pending animation-frame batched Markdown emission."],
@@ -15,7 +19,7 @@ const apiRows = [
   ["editor.commands.insertImage({ src, alt, title }) / removeImage()", "Creates or removes images without UI assumptions."],
   ["editor.ui?.editLink() / editor.ui?.editImage()", "Optional namespaced UI entry points when overlays are attached."],
   ["editor.commands.undo() / editor.commands.redo()", "Runs history commands."],
-  ["editor.destroy()", "Destroys the editor view and listeners."],
+  ["editor.destroy()", "Idempotently flushes pending output and releases the editor, nested code views, optional UI, listeners, and subscriptions."],
 ] as const;
 
 const builtInLanguages = [
@@ -29,6 +33,7 @@ const portalRootCode = `import { createDefaultUi } from "markora-ui";
 
 const editor = createEditor({
   element: editorMount,
+  ariaLabel: "Shadow-root document",
   ui: createDefaultUi({ portalRoot: shadowRoot }),
 });`;
 
@@ -36,6 +41,7 @@ const languageRegistryCode = `import { createDefaultCodeBlockLanguageRegistry, c
 
 const editor = createEditor({
   element: hostElement,
+  ariaLabel: "Code sample document",
   codeBlockLanguages: {
     ...createDefaultCodeBlockLanguageRegistry(),
     custom: async () => [
@@ -47,6 +53,7 @@ const editor = createEditor({
 const opaqueSourceEditorCode = `const editor = createEditor({
   element: hostElement,
   markdown: initialMarkdown,
+  ariaLabel: "Document body",
   onEditOpaqueMarkdown({ kind, source, update }) {
     openSourceDialog({
       title: \`Edit \${kind} source\`,
@@ -59,9 +66,56 @@ const opaqueSourceEditorCode = `const editor = createEditor({
   },
 });`;
 
-const createEditorOptionsType = `type CreateEditorOptions = {
+const eventSubscriptionCode = `const stopSelection = editor.subscribe(
+  "selection",
+  ({ previousSelection, selection }) => {
+    renderSelection(previousSelection, selection);
+  },
+);
+
+const stopUpdates = editor.subscribe("update", ({ selection }) => {
+  renderToolbar(selection);
+});
+
+const stopErrors = editor.subscribe("error", ({ code, context, error }) => {
+  if (code === "code-block-language-load-failed") {
+    reportLanguageFailure(context.language, error);
+  }
+});
+
+// Later, during host teardown. Each function is safe to call more than once.
+function disposeSubscriptions() {
+  stopSelection();
+  stopUpdates();
+  stopErrors();
+}`;
+
+const dynamicOptionsCode = `editor.updateOptions({
+  editable: false,
+  placeholder: null,
+  attributes: { "data-document-id": documentId },
+  ariaLabel: "Document preview",
+  onChange: null,
+});`;
+
+const createEditorOptionsType = `type MarkdownEditorDomAttributes = Readonly<Record<string, string>>;
+
+type MarkdownEditorSelectionTarget =
+  | "all"
+  | "end"
+  | "start"
+  | { anchor: number; head?: number };
+
+type CreateEditorOptions = {
   element: HTMLElement;
   markdown?: string;
+  editable?: boolean;
+  placeholder?: string;
+  autofocus?: boolean;
+  initialSelection?: MarkdownEditorSelectionTarget;
+  attributes?: MarkdownEditorDomAttributes;
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
   onChange?: (markdown: string) => void;
   onTransaction?: (transaction: Transaction, view: EditorView) => void;
   onChangeMode?: "immediate" | "animationFrame";
@@ -70,16 +124,75 @@ const createEditorOptionsType = `type CreateEditorOptions = {
   codeBlockLanguages?: CodeBlockLanguageRegistry;
 };`;
 
+const updateEditorOptionsType = `type UpdateEditorOptions = {
+  editable?: boolean;
+  placeholder?: string | null;
+  attributes?: MarkdownEditorDomAttributes | null;
+  ariaLabel?: string | null;
+  ariaLabelledBy?: string | null;
+  onChange?: ((markdown: string) => void) | null;
+  onTransaction?: CreateEditorOptions["onTransaction"] | null;
+  onChangeMode?: "immediate" | "animationFrame";
+  onEditOpaqueMarkdown?: ((request: OpaqueMarkdownEditRequest) => void) | null;
+};`;
+
 const markdownEditorType = `type MarkdownEditor = {
-  view: EditorView;
+  readonly isDestroyed: boolean;
+  readonly view: EditorView;
   commands: MarkdownEditorCommands;
   state: MarkdownEditorState;
   ui: MarkdownEditorUi | null;
+  focus: (selection?: MarkdownEditorSelectionTarget) => void;
+  blur: () => void;
+  updateOptions: (options: UpdateEditorOptions) => void;
+  subscribe: <Type extends MarkdownEditorEventName>(
+    type: Type,
+    listener: MarkdownEditorEventListener<Type>,
+  ) => MarkdownEditorUnsubscribe;
   getMarkdown: () => string;
   flushChange: () => void;
   getToolbarState: () => ToolbarState;
   destroy: () => void;
 };`;
+
+const markdownEditorEventTypes = `type MarkdownEditorSelectionSnapshot = {
+  anchor: number;
+  empty: boolean;
+  from: number;
+  head: number;
+  kind: "all" | "managed-block" | "node" | "other" | "text";
+  to: number;
+};
+
+type MarkdownEditorEventMap = {
+  focus: { editor: MarkdownEditor; type: "focus"; nativeEvent: FocusEvent };
+  blur: { editor: MarkdownEditor; type: "blur"; nativeEvent: FocusEvent };
+  selection: {
+    editor: MarkdownEditor;
+    type: "selection";
+    previousSelection: MarkdownEditorSelectionSnapshot;
+    selection: MarkdownEditorSelectionSnapshot;
+  };
+  update: {
+    editor: MarkdownEditor;
+    type: "update";
+    selection: MarkdownEditorSelectionSnapshot;
+  };
+  error: {
+    editor: MarkdownEditor;
+    type: "error";
+    code: "code-block-language-load-failed";
+    context: { language: string };
+    error: unknown;
+    recoverable: true;
+  };
+};
+
+type MarkdownEditorEventName = keyof MarkdownEditorEventMap;
+type MarkdownEditorEventListener<Type extends MarkdownEditorEventName> = (
+  event: MarkdownEditorEventMap[Type],
+) => void;
+type MarkdownEditorUnsubscribe = () => void;`;
 
 const markdownEditorCommandsType = `type MarkdownEditorCommands = {
   setMarkdown: (markdown: string, options?: { emitChange?: boolean }) => void;
@@ -167,6 +280,9 @@ export function ApiPage() {
           <ul className="check-list compact">
             <li><code>element</code> is required and owns the mounted editor view.</li>
             <li><code>markdown</code> seeds the initial document content.</li>
+            <li><code>editable</code> defaults to <code>true</code>; read-only mode preserves selection, copy, and host <code>setMarkdown()</code> while blocking user/UI/format/history mutations.</li>
+            <li><code>placeholder</code>, <code>autofocus</code>, and <code>initialSelection</code> configure the initial surface. Object selection targets are in-range integer ProseMirror positions inside text blocks.</li>
+            <li><code>attributes</code>, <code>ariaLabel</code>, and <code>ariaLabelledBy</code> configure the inner editor DOM and accessible name.</li>
             <li><code>onChange</code> receives serialized Markdown output.</li>
             <li><code>onTransaction</code> lets hosts observe editor activity without forcing serialization.</li>
             <li><code>onChangeMode</code> supports <code>"immediate"</code> and <code>"animationFrame"</code>.</li>
@@ -187,6 +303,51 @@ export function ApiPage() {
             ))}
           </ul>
         </article>
+      </section>
+
+      <section className="docs-grid docs-grid-two">
+        <article className="doc-card">
+          <span className="card-kicker">Typed subscriptions</span>
+          <h3>Observe the editor without serializing</h3>
+          <p>
+            Focus, blur, selection, and update events expose host-facing state. Selection and update events are synchronous,
+            {" "}with selection first for the same change; update events carry the current selection and contain neither Markdown
+            {" "}nor a ProseMirror transaction. Focus and blur each cross one microtask boundary so callbacks run outside nested
+            {" "}editor focus internals and movement within the composite surface does not create a false boundary. Error events report recoverable code-language-load failures;
+            {" "}loaders and extensions run after the current editor update completes. Initial focus and selection actions are
+            {" "}not replayed to subscriptions added after creation; call <code>event.editor.getMarkdown()</code> only
+            {" "}when a particular listener needs a serialized snapshot.
+          </p>
+          <CodeBlock code={eventSubscriptionCode} language="ts" title="Subscriptions" />
+        </article>
+        <article className="doc-card">
+          <span className="card-kicker">Dynamic configuration</span>
+          <h3>Change options without rebuilding state</h3>
+          <p>
+            <code>updateOptions()</code> changes editable state, presentation attributes, accessible naming, and callbacks.
+            {" "}It does not reconstruct EditorState or emit a document update. Changing <code>onChange</code> or its mode
+            {" "}first flushes pending output once through the previous listener. The mount element, initial Markdown,
+            {" "}initial focus/selection actions, UI factory, and language registry remain creation-only.
+          </p>
+          <CodeBlock code={dynamicOptionsCode} language="ts" title="Runtime options" />
+        </article>
+      </section>
+
+      <section className="panel doc-panel">
+        <span className="card-kicker">Lifecycle boundary</span>
+        <h2>Teardown runs once; repeated calls are no-ops.</h2>
+        <p>
+          Destruction flushes one pending <code>onChange</code> and releases every owned resource even when teardown
+          {" "}reports an error. It also clears subscriptions. Afterward, <code>isDestroyed</code> is true,
+          {" "}<code>getMarkdown()</code> returns the cached final value, and <code>flushChange()</code>, repeated destroy,
+          {" "}and old unsubscribe functions are no-ops. Other high-level calls throw
+          {" "}<code>MarkdownEditorDestroyedError</code>.
+        </p>
+        <p>
+          The raw <code>view</code> is a version-coupled advanced escape hatch. Inspection and <code>dispatch()</code> are
+          {" "}supported advanced usage; direct <code>setProps()</code>, <code>updateState()</code>, DOM mutation,
+          {" "}or <code>destroy()</code> can bypass Markora invariants and events and are outside the semver contract.
+        </p>
       </section>
 
       <section className="panel doc-panel">
@@ -229,7 +390,9 @@ export function ApiPage() {
           {" "}type your host integration and get full editor-state autocomplete.
         </p>
         <CodeBlock code={createEditorOptionsType} language="ts" title="CreateEditorOptions" />
+        <CodeBlock code={updateEditorOptionsType} language="ts" title="UpdateEditorOptions" />
         <CodeBlock code={markdownEditorType} language="ts" title="MarkdownEditor" />
+        <CodeBlock code={markdownEditorEventTypes} language="ts" title="MarkdownEditorEventMap" />
         <CodeBlock code={markdownEditorCommandsType} language="ts" title="MarkdownEditorCommands" />
         <CodeBlock code={markdownEditorStateType} language="ts" title="MarkdownEditorState" />
       </section>

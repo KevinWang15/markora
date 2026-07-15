@@ -12,6 +12,7 @@ const tarballRoot = join(tempRoot, "tarballs");
 const smokeAppDir = join(tempRoot, "app");
 const smokeNodeModulesDir = join(smokeAppDir, "node_modules");
 const viteCliPath = resolve(rootDir, "packages/demo/node_modules/vite/bin/vite.js");
+const tscCliPath = resolve(rootDir, "node_modules/typescript/bin/tsc");
 const rootPackageJson = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf8"));
 
 mkdirSync(npmCachePath, { recursive: true });
@@ -135,6 +136,48 @@ app.textContent = [
 ].join(":");
 `);
 
+writeFileSync(join(smokeAppDir, "src/api.ts"), `import {
+  MarkdownEditorDestroyedError,
+  createEditor,
+  type MarkdownEditorEventMap,
+  type UpdateEditorOptions,
+} from "markora";
+
+declare const element: HTMLElement;
+
+const editor = createEditor({
+  ariaLabel: "Packed editor",
+  autofocus: true,
+  editable: true,
+  element,
+  initialSelection: "end",
+  placeholder: "Start writing",
+});
+const options: UpdateEditorOptions = { editable: false, placeholder: null };
+editor.updateOptions(options);
+const unsubscribe = editor.subscribe("selection", (event: MarkdownEditorEventMap["selection"]) => {
+  event.selection.kind satisfies "all" | "managed-block" | "node" | "other" | "text";
+});
+unsubscribe();
+editor.focus("start");
+editor.blur();
+editor.destroy();
+void new MarkdownEditorDestroyedError("focus the editor");
+`);
+
+writeFileSync(join(smokeAppDir, "tsconfig.json"), `${JSON.stringify({
+  compilerOptions: {
+    lib: ["DOM", "ES2022"],
+    module: "ESNext",
+    moduleResolution: "Bundler",
+    noEmit: true,
+    strict: true,
+    target: "ES2022",
+  },
+  include: ["src/api.ts"],
+}, null, 2)}\n`);
+
+run("node", [tscCliPath, "-p", "tsconfig.json"], { cwd: smokeAppDir });
 run("node", [viteCliPath, "build"], { cwd: smokeAppDir });
 
 console.log(`Pack smoke test passed in ${smokeAppDir}`);

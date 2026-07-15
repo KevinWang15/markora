@@ -8,6 +8,14 @@
   word-break: break-word;
 }
 
+.mdw-host .ProseMirror .mdw-placeholder::before {
+  content: attr(data-placeholder);
+  float: inline-start;
+  height: 0;
+  color: #8c959f;
+  pointer-events: none;
+}
+
 .mdw-host .ProseMirror-gapcursor {
   display: none;
   pointer-events: none;

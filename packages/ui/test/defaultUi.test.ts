@@ -44,6 +44,7 @@ function createView() {
     coordsAtPos() {
       return { bottom: 24, left: 12, right: 12, top: 8 };
     },
+    editable: true,
     focus() {},
     state: {
       selection: {
@@ -119,6 +120,73 @@ afterEach(() => {
 });
 
 describe('createDefaultUi', () => {
+  it('keeps editing overlays closed and inert while the editor is read-only', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('table');
+    document.body.append(hostElement, marker);
+    let editable = false;
+    const linkUpdates = vi.fn();
+    const imageRemovals = vi.fn();
+    const tableUpdates = vi.fn();
+    const controllers = createControllers(hostElement, undefined, {
+      appendTableColumn: tableUpdates,
+      getTableContext() {
+        return { cell: { attrs: {} }, tablePos: 0 };
+      },
+      removeActiveImage: imageRemovals,
+      updateLinkHref() {
+        linkUpdates();
+        return true;
+      },
+    });
+    const view = {
+      ...createView(),
+      get editable() {
+        return editable;
+      },
+      nodeDOM() {
+        return marker;
+      },
+    };
+    const linkEditor = document.querySelector<HTMLElement>('.mdw-link-editor')!;
+    const imageEditor = document.querySelector<HTMLElement>('.mdw-image-editor')!;
+    const tableToolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
+
+    controllers.linkEditor.open(view, marker, 'https://example.com');
+    controllers.imageEditor.open(view, marker, { node: { attrs: { src: '/image.png' } } });
+    controllers.tableToolbar.update(view);
+    expect(linkEditor.hidden).toBe(true);
+    expect(imageEditor.hidden).toBe(true);
+    expect(tableToolbar.hidden).toBe(true);
+
+    editable = true;
+    controllers.linkEditor.open(view, marker, 'https://example.com');
+    controllers.imageEditor.open(view, marker, { node: { attrs: { src: '/image.png' } } });
+    controllers.tableToolbar.update(view);
+    expect(linkEditor.hidden).toBe(false);
+    expect(imageEditor.hidden).toBe(false);
+    expect(tableToolbar.hidden).toBe(false);
+
+    editable = false;
+    Array.from(linkEditor.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Save')
+      ?.click();
+    Array.from(imageEditor.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Remove')
+      ?.click();
+    tableToolbar.querySelector<HTMLButtonElement>('[aria-label="Insert column"]')?.click();
+    controllers.tableToolbar.update(view);
+
+    expect(linkUpdates).not.toHaveBeenCalled();
+    expect(imageRemovals).not.toHaveBeenCalled();
+    expect(tableUpdates).not.toHaveBeenCalled();
+    expect(linkEditor.hidden).toBe(true);
+    expect(imageEditor.hidden).toBe(true);
+    expect(tableToolbar.hidden).toBe(true);
+
+    destroyControllers(controllers);
+  });
+
   it('appends overlays and selection anchors to the host document by default', () => {
     const foreignWindow = trackWindow(new JSDOM('<!doctype html><html><body></body></html>').window as unknown as Window);
     const hostElement = foreignWindow.document.createElement('div');

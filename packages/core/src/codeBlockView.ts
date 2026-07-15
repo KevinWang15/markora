@@ -31,10 +31,20 @@ type CodeBlockViewConstructor = new (
   getPos: () => number,
 ) => CodeBlockViewInstance;
 
+type CodeBlockViewClass = CodeBlockViewConstructor & {
+  setEditable: (editable: boolean) => void;
+};
+
 type CreateCodeBlockViewClassOptions = {
   schema: Schema;
   languageRegistry?: CodeBlockLanguageRegistry;
   moveBeforeManagedBlock: (view: EditorView, blockPos: number) => boolean;
+  onDestroyError?: (error: unknown) => void;
+  onLanguageLoadError?: (
+    error: unknown,
+    language: string,
+    delivery: { defer: boolean; isCurrent: () => boolean },
+  ) => void;
   setManagedBlockBoundarySelection: (view: EditorView, blockPos: number, side: "before" | "after") => boolean;
 };
 
@@ -44,9 +54,18 @@ const DEBUG_CODE_BLOCK_CURSOR = false;
 
 // Returns a new class per call so each instance captures its own schema and
 // language registry via the closure — intentional, not a leak.
-export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOptions): CodeBlockViewConstructor {
-  const { schema, languageRegistry, moveBeforeManagedBlock, setManagedBlockBoundarySelection } = options;
+export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOptions): CodeBlockViewClass {
+  const {
+    schema,
+    languageRegistry,
+    moveBeforeManagedBlock,
+    onDestroyError,
+    onLanguageLoadError,
+    setManagedBlockBoundarySelection,
+  } = options;
   const languageResolver = createCodeBlockLanguageResolver(languageRegistry);
+  const instances = new Set<CodeBlockView>();
+  const reportedLanguageFailures = new WeakSet<object>();
 
   function getOwnerWindow(view: EditorView): BrowserWindow {
     const ownerWindow = view.dom.ownerDocument.defaultView as BrowserWindow | null;
@@ -66,6 +85,15 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
   function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
     return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";
+  }
+
+  function createLanguageLoadError(language: string, errors: unknown[]) {
+    const error = new Error(`Failed to load the ${language || "plain text"} code-block language.`) as Error & {
+      errors: unknown[];
+    };
+    error.name = "AggregateError";
+    error.errors = errors;
+    return error;
   }
 
   function asHTMLElement(value: Element | null, ownerWindow: BrowserWindow) {
@@ -135,6 +163,12 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
   }
 
   class CodeBlockView {
+    static setEditable(editable: boolean) {
+      for (const instance of [...instances]) {
+        instance.applyEditable(editable);
+      }
+    }
+
     dom: HTMLElement;
     private languageBadge: HTMLElement;
     private cm: CodeMirrorView;
@@ -144,6 +178,8 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     private activeLanguage = "";
     private languageLoadVersion = 0;
     private languageCompartment = new Compartment();
+    private editableCompartment = new Compartment();
+    private editable: boolean;
 
     constructor(
       private node: ProseMirrorNode,
@@ -151,6 +187,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       private getPos: () => number,
     ) {
       const ownerDocument = this.ownerDocument;
+      this.editable = outerView.editable;
 
       this.dom = ownerDocument.createElement("div");
       this.dom.className = "mdw-code-block";
@@ -172,7 +209,20 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       });
       this.cm.contentDOM.setAttribute("aria-label", "Code block editor");
 
-      this.update(node);
+      try {
+        this.update(node);
+        instances.add(this);
+      } catch (error) {
+        this.destroyed = true;
+
+        try {
+          this.cm.destroy();
+        } catch (destroyError) {
+          onDestroyError?.(destroyError);
+        }
+
+        throw error;
+      }
     }
 
     update(node: ProseMirrorNode) {
@@ -180,14 +230,17 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         return false;
       }
 
+      this.applyEditable(this.outerView.editable);
       this.node = node;
       const language = this.getLanguageLabel();
       this.languageBadge.textContent = language || "plain text";
       this.syncLanguageSupport(language);
 
       if (!this.updating && this.cm.state.doc.toString() !== node.textContent) {
-        this.cm.dispatch({
-          changes: { from: 0, to: this.cm.state.doc.length, insert: node.textContent },
+        this.runWhileUpdating(() => {
+          this.cm.dispatch({
+            changes: { from: 0, to: this.cm.state.doc.length, insert: node.textContent },
+          });
         });
       }
 
@@ -210,18 +263,18 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         const innerHead = Math.max(0, Math.min(this.cm.state.doc.length, selection.head - codeStart));
 
         if (currentSelection.anchor !== innerAnchor || currentSelection.head !== innerHead) {
-          this.updating = true;
-          this.cm.dispatch({
-            selection: EditorSelection.range(innerAnchor, innerHead),
+          this.runWhileUpdating(() => {
+            this.cm.dispatch({
+              selection: EditorSelection.range(innerAnchor, innerHead),
+            });
           });
-          this.updating = false;
         }
       } else if (currentSelection.anchor !== currentSelection.head) {
-        this.updating = true;
-        this.cm.dispatch({
-          selection: EditorSelection.cursor(currentSelection.head),
+        this.runWhileUpdating(() => {
+          this.cm.dispatch({
+            selection: EditorSelection.cursor(currentSelection.head),
+          });
         });
-        this.updating = false;
       }
 
       if (selection instanceof ManagedBlockCursor) {
@@ -241,6 +294,11 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
     setSelection(anchor: number, head: number) {
       this.cm.focus();
+
+      if (this.destroyed || this.outerView.isDestroyed) {
+        return;
+      }
+
       this.cm.dispatch({
         selection: EditorSelection.range(anchor, head),
         scrollIntoView: true,
@@ -263,9 +321,19 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     }
 
     destroy() {
+      if (this.destroyed) {
+        return;
+      }
+
       this.destroyed = true;
       this.languageLoadVersion += 1;
-      this.cm.destroy();
+      instances.delete(this);
+
+      try {
+        this.cm.destroy();
+      } catch (error) {
+        onDestroyError?.(error);
+      }
     }
 
     private get ownerDocument() {
@@ -274,6 +342,42 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
     private get ownerWindow() {
       return getOwnerWindow(this.outerView);
+    }
+
+    private get canEdit() {
+      return !this.destroyed && this.outerView.editable && this.editable;
+    }
+
+    private getEditableExtensions(editable: boolean): Extension {
+      return [
+        CodeMirrorState.readOnly.of(!editable),
+        CodeMirrorView.editable.of(editable),
+        CodeMirrorView.contentAttributes.of({
+          "aria-readonly": editable ? "false" : "true",
+        }),
+      ];
+    }
+
+    private applyEditable(editable: boolean) {
+      if (this.destroyed || this.editable === editable) {
+        return;
+      }
+
+      this.editable = editable;
+      this.cm.dispatch({
+        effects: this.editableCompartment.reconfigure(this.getEditableExtensions(editable)),
+      });
+    }
+
+    private runWhileUpdating<T>(operation: () => T) {
+      const wasUpdating = this.updating;
+      this.updating = true;
+
+      try {
+        return operation();
+      } finally {
+        this.updating = wasUpdating;
+      }
     }
 
     private isOuterSelectionInsideCodeBlock(selection = this.outerView.state.selection) {
@@ -296,6 +400,10 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       const ownerWindow = this.ownerWindow;
 
       requestFrame(ownerWindow, () => {
+        if (this.destroyed || this.outerView.isDestroyed) {
+          return;
+        }
+
         const activeElement = getActiveElement(ownerDocument, ownerWindow);
 
         logCodeBlockCursor(this.outerView, this.dom, this.cm, "scheduleOuterFocusAfterExit:before", () => ({
@@ -346,9 +454,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
       const tr = this.outerView.state.tr.setSelection(TextSelection.create(this.outerView.state.doc, anchor, head));
       tr.setMeta("addToHistory", false);
-      this.updating = true;
-      this.outerView.dispatch(tr);
-      this.updating = false;
+      this.runWhileUpdating(() => this.outerView.dispatch(tr));
     }
 
     private getEditorRoot(): Document | ShadowRoot {
@@ -370,43 +476,129 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       }
 
       this.activeLanguage = normalized;
-      const nextSupport = languageResolver.resolve(normalized);
       const loadVersion = ++this.languageLoadVersion;
+      const ownerWindow = this.ownerWindow;
 
-      if (!nextSupport) {
+      // Language registries and CodeMirror extensions are public extension
+      // points. Running either while ProseMirror is updating its node-view
+      // tree lets host code re-enter the outer editor before that tree is
+      // internally consistent. Always cross a microtask boundary first.
+      ownerWindow.queueMicrotask(() => {
+        this.resolveLanguageSupport(normalized, loadVersion);
+      });
+    }
+
+    private isCurrentLanguageLoad(normalized: string, loadVersion: number) {
+      return (
+        !this.destroyed
+        && loadVersion === this.languageLoadVersion
+        && normalized === this.activeLanguage
+      );
+    }
+
+    private reportLanguageLoadFailure(error: unknown, normalized: string, loadVersion: number) {
+      if (!this.isCurrentLanguageLoad(normalized, loadVersion)) {
+        return;
+      }
+
+      onLanguageLoadError?.(error, normalized, {
+        defer: false,
+        isCurrent: () => this.isCurrentLanguageLoad(normalized, loadVersion),
+      });
+    }
+
+    private recoverFromLanguageLoadFailure(error: unknown, normalized: string, loadVersion: number) {
+      if (!this.isCurrentLanguageLoad(normalized, loadVersion)) {
+        return;
+      }
+
+      const errors = [error];
+
+      try {
         this.cm.dispatch({
           effects: this.languageCompartment.reconfigure([]),
         });
+      } catch (recoveryError) {
+        errors.push(recoveryError);
+      }
+
+      if (!this.isCurrentLanguageLoad(normalized, loadVersion)) {
+        return;
+      }
+
+      this.reportLanguageLoadFailure(
+        errors.length === 1
+          ? error
+          : createLanguageLoadError(normalized, errors),
+        normalized,
+        loadVersion,
+      );
+    }
+
+    private applyLanguageSupport(
+      extension: Extension,
+      normalized: string,
+      loadVersion: number,
+      recoverOnFailure = true,
+    ) {
+      if (!this.isCurrentLanguageLoad(normalized, loadVersion)) {
+        return;
+      }
+
+      try {
+        this.cm.dispatch({
+          effects: this.languageCompartment.reconfigure(extension),
+        });
+      } catch (error) {
+        if (recoverOnFailure) {
+          this.recoverFromLanguageLoadFailure(error, normalized, loadVersion);
+        } else {
+          this.reportLanguageLoadFailure(error, normalized, loadVersion);
+        }
+      }
+    }
+
+    private resolveLanguageSupport(normalized: string, loadVersion: number) {
+      if (!this.isCurrentLanguageLoad(normalized, loadVersion)) {
+        return;
+      }
+
+      let nextSupport: ReturnType<typeof languageResolver.resolve>;
+
+      try {
+        nextSupport = languageResolver.resolve(normalized);
+      } catch (error) {
+        this.recoverFromLanguageLoadFailure(error, normalized, loadVersion);
+        return;
+      }
+
+      if (!this.isCurrentLanguageLoad(normalized, loadVersion)) {
+        return;
+      }
+
+      if (!nextSupport) {
+        this.applyLanguageSupport([], normalized, loadVersion, false);
         return;
       }
 
       if (isPromiseLike(nextSupport)) {
-        this.cm.dispatch({
-          effects: this.languageCompartment.reconfigure([]),
-        });
+        this.applyLanguageSupport([], normalized, loadVersion, false);
         void nextSupport.then((extension) => {
-          if (this.destroyed || loadVersion !== this.languageLoadVersion || normalized !== this.activeLanguage) {
+          this.applyLanguageSupport(extension, normalized, loadVersion);
+        }).catch((error: unknown) => {
+          if (!this.isCurrentLanguageLoad(normalized, loadVersion)) {
             return;
           }
 
-          this.cm.dispatch({
-            effects: this.languageCompartment.reconfigure(extension),
-          });
-        }).catch(() => {
-          if (this.destroyed || loadVersion !== this.languageLoadVersion || normalized !== this.activeLanguage) {
-            return;
+          if (!reportedLanguageFailures.has(nextSupport)) {
+            reportedLanguageFailures.add(nextSupport);
+            this.recoverFromLanguageLoadFailure(error, normalized, loadVersion);
           }
-
-          this.cm.dispatch({
-            effects: this.languageCompartment.reconfigure([]),
-          });
         });
         return;
       }
 
-      this.cm.dispatch({
-        effects: this.languageCompartment.reconfigure(nextSupport),
-      });
+      this.applyLanguageSupport(nextSupport, normalized, loadVersion);
     }
 
     private maybeEscapeHorizontal(unit: -1 | 1) {
@@ -470,9 +662,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       const tr = this.outerView.state.tr.setSelection(TextSelection.create(this.outerView.state.doc, outerAnchor, outerHead));
 
       this.releaseInnerSelectionOwnership();
-      this.updating = true;
-      this.outerView.dispatch(tr.scrollIntoView());
-      this.updating = false;
+      this.runWhileUpdating(() => this.outerView.dispatch(tr.scrollIntoView()));
       this.scheduleOuterFocusAfterExit();
       return true;
     }
@@ -489,6 +679,10 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     }
 
     private maybeUnwrapCodeBlockAtStart() {
+      if (!this.canEdit) {
+        return false;
+      }
+
       const selection = this.cm.state.selection.main;
 
       if (!selection.empty || selection.from !== 0) {
@@ -508,11 +702,13 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       );
 
       tr.setSelection(TextSelection.create(tr.doc, codeBlockPos + 1));
-      this.updating = true;
-      this.outerView.dispatch(tr.scrollIntoView());
-      this.updating = false;
+      this.runWhileUpdating(() => this.outerView.dispatch(tr.scrollIntoView()));
 
       requestFrame(this.ownerWindow, () => {
+        if (this.destroyed || this.outerView.isDestroyed) {
+          return;
+        }
+
         this.outerView.focus();
       });
 
@@ -549,9 +745,9 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       }
 
       this.releaseInnerSelectionOwnership();
-      this.updating = true;
-      this.outerView.dispatch(this.outerView.state.tr.setSelection(targetSelection).scrollIntoView());
-      this.updating = false;
+      this.runWhileUpdating(() => {
+        this.outerView.dispatch(this.outerView.state.tr.setSelection(targetSelection).scrollIntoView());
+      });
       this.scheduleOuterFocusAfterExit();
       return true;
     }
@@ -577,9 +773,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
       const tr = this.outerView.state.tr.setSelection(TextSelection.create(this.outerView.state.doc, anchor, head));
       tr.setMeta("addToHistory", false);
-      this.updating = true;
-      this.outerView.dispatch(tr);
-      this.updating = false;
+      this.runWhileUpdating(() => this.outerView.dispatch(tr));
     }
 
     private forwardUpdate() {
@@ -604,6 +798,10 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         return;
       }
 
+      if (!this.canEdit) {
+        return;
+      }
+
       const pos = this.getPos();
       const selection = this.cm.state.selection.main;
       const tr = this.outerView.state.tr.replaceWith(
@@ -612,16 +810,22 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         newText ? this.outerView.state.schema.text(newText) : Fragment.empty,
       );
       tr.setSelection(TextSelection.create(tr.doc, pos + 1 + selection.anchor, pos + 1 + selection.head));
-      this.updating = true;
-      this.outerView.dispatch(tr);
-      this.updating = false;
+      this.runWhileUpdating(() => this.outerView.dispatch(tr));
     }
 
     private applyOuterHistory(command: typeof undo | typeof redo) {
+      if (!this.canEdit) {
+        return false;
+      }
+
       const applied = command(this.outerView.state, this.outerView.dispatch);
 
       if (!applied) {
         return false;
+      }
+
+      if (this.destroyed || this.outerView.isDestroyed) {
+        return true;
       }
 
       const { selection } = this.outerView.state;
@@ -639,7 +843,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     }
 
     private forwardManagedBoundaryKey(key: string) {
-      if (!(this.outerView.state.selection instanceof ManagedBlockCursor)) {
+      if (!this.canEdit || !(this.outerView.state.selection instanceof ManagedBlockCursor)) {
         return false;
       }
 
@@ -668,9 +872,13 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
           dragover: (event) => rejectFileTransferEvent(event),
           drop: (event) => rejectFileTransferEvent(event),
         }),
+        CodeMirrorState.transactionFilter.of((transaction) => (
+          transaction.docChanged && !this.updating && !this.canEdit ? [] : transaction
+        )),
         indentOnInput(),
         syntaxHighlighting(defaultHighlightStyle),
         this.languageCompartment.of([]),
+        this.editableCompartment.of(this.getEditableExtensions(this.editable)),
         codeMirrorKeymap.of([
           {
             key: "Enter",

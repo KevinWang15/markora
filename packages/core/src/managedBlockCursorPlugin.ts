@@ -104,6 +104,10 @@ function focusOuterViewForManagedCursor(view: EditorView) {
   }
 
   queueMicrotask(() => {
+    if (view.isDestroyed) {
+      return;
+    }
+
     debugManagedBlockCursor(() => ({
       phase: "focus-sync:microtask:before",
       selectionType: view.state.selection.constructor.name,
