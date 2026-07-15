@@ -67,6 +67,10 @@ editor.destroy();
 - `editor.commands.setMarkdown(markdown, { emitChange: true })` is the programmatic update path when you want `onChange` to re-fire
 - `editor.flushChange()` forces any pending animation-frame batched Markdown emission to run immediately
 
+## Roadmap
+
+See the [embedded editor production plan](./docs/embedded-editor-production-plan.md) for the ordered path from the current editor kernel to a production-grade embedded editing component.
+
 ## Development
 
 ```bash

@@ -1,0 +1,508 @@
+# Markora Embedded Editor Production Plan
+
+- Status: Active
+- Last updated: 2026-07-15
+- Scope: Embeddable Markdown editor packages (`markora` and `markora-ui`) only
+
+## Purpose
+
+This plan closes the gap between Markora's current early-stage editor kernel and a production-grade, Typora-like editing experience embedded inside another product.
+
+The objective is not feature-for-feature desktop Typora parity. The objective is:
+
+> A trustworthy, extensible GFM editor component with Typora-quality interaction for supported syntax and lossless preservation for everything else.
+
+Work is intentionally ordered. We will complete, verify, and commit one item before starting the next one. The sequence may be amended when a completed item reveals new evidence, but a later feature must not bypass an earlier safety gate.
+
+## Scope boundaries
+
+### Markora owns
+
+- Markdown parsing, editing, and serialization fidelity
+- Cursor, selection, composition, clipboard, and undo/redo behavior
+- Headless commands, state, events, lifecycle, and extension contracts
+- Optional editor-local overlays and accessibility behavior
+- Host callbacks for links, resources, pasted files, and uploaded assets
+- Browser compatibility, performance, packaging, and regression assurance
+
+### The embedding host owns
+
+- Persistence, autosave policy, drafts, versioning, and conflict resolution
+- Product navigation, authentication, authorization, and analytics
+- The surrounding toolbar, menus, layout, and product-specific workflows
+- Asset storage and upload implementation behind Markora hooks
+- Collaboration, comments, and presence unless added later as extensions
+
+### Explicit non-goals
+
+- Filesystem browsing, tabs, recent files, or workspace management
+- Native desktop shells, installers, signing, auto-update, or OS integration
+- Built-in PDF, DOCX, EPUB, Pandoc, print, or publishing workflows
+- A theme marketplace or full application preferences system
+- Bundling MathJax, Mermaid, or other large renderers into the base package
+
+## Product principles
+
+1. **Never silently lose source content.** Unsupported Markdown must be preserved opaquely or rejected explicitly.
+2. **Specify the dialect.** “Markdown” is not a sufficient compatibility contract.
+3. **Real browsers are the authority.** jsdom remains useful, but it cannot certify contenteditable behavior.
+4. **The public API is the product.** Hosts should not need undocumented ProseMirror mutations for normal integrations.
+5. **Keep the base editor small.** Advanced syntax and expensive renderers belong in optional extensions.
+6. **Measure before optimizing.** Performance, accessibility, and compatibility claims require explicit budgets and tests.
+7. **One focused iteration at a time.** Each item ends with tests, verification, documentation, and a reviewable commit.
+
+## Status legend
+
+- `NEXT` — the next item to implement
+- `QUEUED` — ordered but not started
+- `IN PROGRESS` — currently being implemented
+- `BLOCKED` — cannot proceed without an explicit decision or dependency
+- `DONE` — acceptance criteria are met and committed
+
+## Release gates
+
+### Gate A — Content safety
+
+Markora can import supported documents without semantic loss and preserve unsupported constructs without destructive reinterpretation.
+
+Required items: `EE-001` through `EE-004`.
+
+### Gate B — Production embed
+
+Markora has a stable host contract, repeatable real-browser assurance, accessible core interactions, and measured performance.
+
+Required items: `EE-005` through `EE-015`.
+
+### Gate C — Typora-quality supported experience
+
+The supported dialect has mature clipboard, table, media, theming, and syntax-extension experiences without increasing the base bundle indiscriminately.
+
+Required items: `EE-016` through `EE-021`, selected according to product needs.
+
+## Ordered work queue
+
+| ID | Status | Size | Outcome |
+| --- | --- | --- | --- |
+| EE-001 | NEXT | S | Fix destructive pipe-table import and add true round-trip coverage |
+| EE-002 | QUEUED | S | Publish the supported Markdown dialect and normalization contract |
+| EE-003 | QUEUED | M | Build the conformance, golden-document, and property-test harness |
+| EE-004 | QUEUED | L | Preserve unsupported Markdown through opaque source nodes |
+| EE-005 | QUEUED | M | Check in a Chromium, Firefox, and WebKit browser regression suite |
+| EE-006 | QUEUED | M | Cover IME, clipboard, drop, touch, RTL, and accessibility behavior |
+| EE-007 | QUEUED | M | Add production embed configuration and lifecycle APIs |
+| EE-008 | QUEUED | M | Separate reconciled external updates from hard document resets |
+| EE-009 | QUEUED | S | Approve a versioned editor and Markdown extension RFC |
+| EE-010 | QUEUED | L | Implement the extension kernel and migrate built-ins onto it |
+| EE-011 | QUEUED | M | Complete the block, list, task, code, and table command surface |
+| EE-012 | QUEUED | M | Add host-controlled URL, resource, and asset insertion hooks |
+| EE-013 | QUEUED | S | Establish document-size, latency, memory, and bundle budgets |
+| EE-014 | QUEUED | M | Remove synchronous full-document serialization from hot typing paths |
+| EE-015 | QUEUED | L | Lazily activate CodeMirror blocks and reduce base bundle cost |
+| EE-016 | QUEUED | M | Make task and overlay interactions keyboard and screen-reader complete |
+| EE-017 | QUEUED | M | Add deliberate Markdown, rich HTML, and plain-text clipboard behavior |
+| EE-018 | QUEUED | L | Add mature table resize, reorder, selection, and keyboard operations |
+| EE-019 | QUEUED | M | Add configurable auto-pairing, shortcuts, and code-language editing |
+| EE-020 | QUEUED | M | Tokenize styling and add dark, high-contrast, reduced-motion, RTL, and i18n support |
+| EE-021 | QUEUED | L | Ship optional front matter, footnote, math, callout, TOC, HTML, and diagram extensions |
+
+Sizes are relative planning aids: `S` is a focused change, `M` spans several related surfaces, and `L` requires an architectural or multi-stage implementation.
+
+## Work item details
+
+### EE-001 — Fix destructive pipe-table import
+
+Status: `NEXT`
+
+#### Problem
+
+The production codec currently loses ordinary imported table contents. For example:
+
+```md
+| H | J |
+| --- | --- |
+| A | B |
+```
+
+currently serializes as:
+
+```md
+|  |
+|  |
+```
+
+The tokenizer/parser configuration around `thead` and `tbody` is the suspected source. Existing table tests exercise constructed ProseMirror nodes and typed table conversion, but the Markdown round-trip fixtures do not include imported tables.
+
+#### Scope
+
+- Correct Markdown table token handling without weakening URL/content sanitization.
+- Preserve header/body rows, cell counts, cell text, inline marks, escaped pipes, and column alignment.
+- Add imported-table fixtures to the same round-trip path used by real consumers.
+- Add a `/__dev` regression fixture that loads a Markdown table, edits a cell, and serializes it.
+
+#### Acceptance criteria
+
+- The reproduction above round-trips with two columns and all four cell values.
+- Left, center, right, and default alignment round-trip correctly.
+- Escaped pipes and inline code containing pipes remain in their original cells.
+- Inline bold, italic, strike, code, and links inside cells retain semantics.
+- Ragged pasted HTML table behavior remains structurally valid.
+- `pnpm check`, `pnpm build`, and `pnpm pack:smoke` pass.
+- The `/__dev` fixture passes a documented CDP verification; it becomes an automated browser case in `EE-005`.
+
+#### Deliverable
+
+One focused commit containing the codec fix, fixtures, tests, and any necessary compatibility note.
+
+### EE-002 — Define the Markdown dialect and fidelity contract
+
+Status: `QUEUED`
+
+#### Goal
+
+Replace broad “round-trip Markdown” claims with a precise public contract.
+
+#### Acceptance criteria
+
+- Document the supported CommonMark/GFM features and Markora-specific extensions.
+- Classify each construct as semantic round-trip, lexical round-trip, normalized output, opaque preservation, or unsupported error.
+- Document normalization of bullets, whitespace, reference links, escapes, and line endings.
+- Add explicit policy for YAML front matter, footnotes, math, callouts, raw HTML, directives, TOC, and diagrams.
+- Update README and package documentation to match the verified contract.
+
+### EE-003 — Build the conformance and corpus harness
+
+Status: `QUEUED`
+
+#### Goal
+
+Make content fidelity measurable rather than anecdotal.
+
+#### Acceptance criteria
+
+- Run the relevant CommonMark and GFM examples through parser/serializer assertions.
+- Add at least 100 curated real-world documents initially, growing toward 500 before component 1.0.
+- Test semantic stability with `parse -> serialize -> parse` invariants.
+- Test lexical preservation for constructs promised as lossless.
+- Store intentional normalizations as reviewed expected fixtures.
+- Produce an actionable failure summary instead of a single opaque snapshot failure.
+
+### EE-004 — Preserve unsupported source opaquely
+
+Status: `QUEUED`
+
+#### Goal
+
+Ensure valid but unsupported Markdown survives visual editing elsewhere in the document.
+
+#### Acceptance criteria
+
+- Introduce raw block and, where necessary, raw inline representations carrying original source.
+- Preserve front matter, display math, HTML blocks/comments, directives, and unknown fenced constructs exactly when untouched.
+- Provide a safe source editor or host hook for editing opaque constructs.
+- Never execute raw HTML or embedded scripts in the editor.
+- Add move, copy, delete, undo, paste, and surrounding-edit regressions for opaque nodes.
+
+### EE-005 — Add a checked-in real-browser matrix
+
+Status: `QUEUED`
+
+#### Goal
+
+Turn the manual Chrome DevTools Protocol audit into a repeatable release gate.
+
+#### Acceptance criteria
+
+- Add Playwright or an equivalent harness for Chromium, Firefox, and WebKit.
+- Cover editor creation/destruction, typing rules, marks, history, links, images, tasks, tables, and CodeMirror boundaries.
+- Cover responsive overlays, `visualViewport`, positioned/transformed portals, Shadow DOM, and multiple editors.
+- Capture console errors, unhandled exceptions, failed requests, and listener leaks as failures.
+- Run a small required browser suite in CI and a broader scheduled matrix where appropriate.
+
+### EE-006 — Certify complex input and accessibility paths
+
+Status: `QUEUED`
+
+#### Goal
+
+Cover interaction classes that jsdom and ordinary Latin keyboard tests miss.
+
+#### Acceptance criteria
+
+- Exercise Chinese, Japanese, and Korean composition without premature Markdown conversion.
+- Cover dead keys, emoji, surrogate pairs, bidirectional text, and RTL selection.
+- Cover rich HTML paste, Markdown paste, plain-text paste, files, and drag/drop.
+- Cover touch-sized layouts, virtual keyboards, zoom, and visual viewport movement.
+- Add axe checks plus a documented VoiceOver and NVDA keyboard checklist.
+- Establish expected behavior for every task, overlay, table control, and managed block boundary.
+
+### EE-007 — Add production embed configuration and lifecycle APIs
+
+Status: `QUEUED`
+
+#### Goal
+
+Let hosts implement standard editor states without reaching into ProseMirror internals.
+
+#### Acceptance criteria
+
+- Support read-only/editable state, placeholder, autofocus/initial selection, DOM attributes, and accessible naming.
+- Add typed focus, blur, selection, update, and error subscriptions with unsubscribe behavior.
+- Make destroy idempotent and define behavior for calls after destroy.
+- Support dynamic updates for options that do not require state reconstruction.
+- Keep the lower-level `view` escape hatch while documenting its compatibility boundary.
+
+### EE-008 — Define external update semantics
+
+Status: `QUEUED`
+
+#### Goal
+
+Prevent ordinary host updates from unnecessarily discarding selection, history, and plugin state.
+
+#### Acceptance criteria
+
+- Separate a reconciled document update API from an explicit hard reset.
+- Preserve selection and history where the incoming change can be mapped safely.
+- Identify transaction origin (`user`, `command`, `external`, `reset`, or extension-defined).
+- Prevent controlled-host feedback loops.
+- Document conflict behavior when local and external updates race.
+
+### EE-009 — Approve an extension-system RFC
+
+Status: `QUEUED`
+
+#### Goal
+
+Design the stable customization contract before adding more built-in syntax.
+
+#### Acceptance criteria
+
+- Specify extension composition, ordering, dependency, naming, and conflict rules.
+- Cover schema nodes/marks, Markdown tokens, parser/serializer handlers, commands, keymaps, input rules, NodeViews, paste/drop hooks, and UI contributions.
+- Define extension storage/state and cleanup lifecycle.
+- Define package/version compatibility and failure reporting.
+- Prototype at least one block syntax and one inline syntax outside the core package.
+
+### EE-010 — Implement the extension kernel
+
+Status: `QUEUED`
+
+#### Goal
+
+Move from a fixed editor assembly to the approved composable architecture.
+
+#### Acceptance criteria
+
+- Implement the approved RFC without exposing unstable internal helper modules.
+- Migrate tables, tasks, strike, CodeMirror fences, and optional UI through the public extension path where practical.
+- Add extension ordering, conflict, cleanup, and API type tests.
+- Ensure a minimal editor can omit expensive optional behavior.
+- Preserve existing public behavior or provide a documented migration path.
+
+### EE-011 — Complete the command and state surface
+
+Status: `QUEUED`
+
+#### Goal
+
+Make every supported editing operation accessible to host toolbars and menus.
+
+#### Acceptance criteria
+
+- Add commands for paragraphs, heading levels, blockquotes, lists, tasks, hard breaks, rules, code blocks, and tables.
+- Add matching `can` and `isActive` state queries.
+- Define consistent focus, selection, history, and boolean-return behavior.
+- Add command-level tests independent of the default UI.
+- Update API type tests and integration documentation.
+
+### EE-012 — Add host-controlled resource and asset hooks
+
+Status: `QUEUED`
+
+#### Goal
+
+Support production image/media workflows without making storage a core responsibility.
+
+#### Acceptance criteria
+
+- Make link and image protocol policy host-configurable with secure defaults.
+- Add hooks for pasted/dropped files, asynchronous upload, progress, cancellation, retry, and failure.
+- Add host-controlled URL resolution, link opening, image loading, and privacy policy.
+- Define MIME, size, count, and `data:` URL limits.
+- Keep document mutations transactional and undoable after asynchronous completion.
+
+### EE-013 — Establish performance and bundle budgets
+
+Status: `QUEUED`
+
+#### Goal
+
+Create reproducible baselines before changing performance-sensitive architecture.
+
+#### Acceptance criteria
+
+- Benchmark initial parse/render, keystroke-to-paint, serialization, memory, and teardown for representative 100 KB, 500 KB, and 1 MB documents.
+- Include documents with many code blocks, tables, images, and nested lists.
+- Measure a packed consumer rather than only the docs application.
+- Record baseline hardware/browser details and variance.
+- Set CI warning and failure budgets approved by the project.
+
+### EE-014 — Remove full serialization from hot typing paths
+
+Status: `QUEUED`
+
+#### Goal
+
+Keep editing responsive as documents grow.
+
+#### Acceptance criteria
+
+- Provide lazy Markdown snapshots or an explicit save-snapshot API.
+- Make update notifications useful without requiring immediate serialization.
+- Coalesce or idle-schedule serialization without losing the final state.
+- Preserve a synchronous flush path for form submission and teardown.
+- Meet the budgets established in `EE-013`.
+
+### EE-015 — Lazily activate CodeMirror and reduce bundle cost
+
+Status: `QUEUED`
+
+#### Goal
+
+Avoid paying the full code-editor cost for every fence and every consumer.
+
+#### Acceptance criteria
+
+- Avoid eagerly creating a full CodeMirror editor for every offscreen code block.
+- Preserve syntax display, selection, copy, search, and transition behavior before activation.
+- Keep language grammars in optional lazy chunks with observable load errors.
+- Define a slim base entry point if CodeMirror cannot be removed through tree shaking.
+- Meet bundle and memory budgets from `EE-013`.
+
+### EE-016 — Complete keyboard and screen-reader interactions
+
+Status: `QUEUED`
+
+#### Goal
+
+Make the supported UI operable without pointer-coordinate assumptions.
+
+#### Acceptance criteria
+
+- Replace or augment the task pseudo-checkbox hit zone with a keyboard-operable semantic control.
+- Define non-modal popover/dialog semantics, focus movement, Escape, Enter, and focus restoration.
+- Make table controls reachable and understandable through keyboard and screen readers.
+- Preserve contenteditable selection while interacting with controls.
+- Pass the automated and manual checks established in `EE-006`.
+
+### EE-017 — Add deliberate clipboard semantics
+
+Status: `QUEUED`
+
+#### Goal
+
+Interoperate predictably with rich editors, code editors, and Markdown tools.
+
+#### Acceptance criteria
+
+- Support explicit paste-as-Markdown/plain-text behavior.
+- Convert supported rich HTML into safe semantic Markdown.
+- Put useful HTML and Markdown/plain-text representations on copy where browser permissions allow.
+- Preserve code, tables, lists, links, whitespace, and line breaks across supported clipboard paths.
+- Route pasted files through `EE-012` asset hooks.
+
+### EE-018 — Mature table editing
+
+Status: `QUEUED`
+
+#### Goal
+
+Move beyond basic insertion/deletion/alignment toward a production table workflow.
+
+#### Acceptance criteria
+
+- Add table creation and resizing controls.
+- Add row/column reordering and before/after insertion choices.
+- Add multi-cell selection and predictable copy/paste behavior.
+- Define keyboard navigation for empty, multiline, nested, and ragged cells.
+- Preserve valid GFM output or report constructs that GFM cannot represent.
+
+### EE-019 — Add configurable typing ergonomics
+
+Status: `QUEUED`
+
+#### Goal
+
+Provide Typora-like typing assistance without hard-coding product preferences.
+
+#### Acceptance criteria
+
+- Add configurable bracket, quote, and Markdown-marker auto-pairing.
+- Support wrapping selected text with compatible delimiters.
+- Make code-fence language editable and update highlighting safely.
+- Expose a configurable shortcut/keymap layer through the extension system.
+- Verify IME and undo behavior for every automatic transformation.
+
+### EE-020 — Add a theme, localization, and RTL contract
+
+Status: `QUEUED`
+
+#### Goal
+
+Let Markora fit production design systems and international products.
+
+#### Acceptance criteria
+
+- Replace hard-coded colors and dimensions with documented CSS custom properties.
+- Provide reference light, dark, high-contrast, and reduced-motion behavior.
+- Make all default UI text and accessible labels injectable.
+- Support logical CSS properties and test RTL layout/selection.
+- Document which visual responsibilities belong to core, default UI, and host.
+
+### EE-021 — Ship advanced syntax as optional extensions
+
+Status: `QUEUED`
+
+#### Goal
+
+Broaden document compatibility without turning the base editor into a monolith.
+
+#### Recommended order
+
+1. YAML front matter
+2. Footnotes
+3. Inline and block math
+4. GitHub-style callouts/alerts
+5. Generated TOC nodes
+6. Sanitized raw HTML editing/preview
+7. Mermaid and other diagram previews
+
+#### Acceptance criteria
+
+- Each feature is independently installable and tree-shakable.
+- Source remains preserved when the rendering dependency is absent or fails.
+- Expensive or executable renderers are isolated and governed by host security policy.
+- Each extension ships codec, command, browser, accessibility, and package-consumer tests.
+
+## Definition of done for every iteration
+
+An item is `DONE` only when all applicable requirements below are met:
+
+- The problem and compatibility decision are documented.
+- Regression tests fail before the change and pass afterward.
+- Browser-facing behavior has a retained real-browser test, or a documented CDP check until the `EE-005` harness is available.
+- Public API changes include type tests and migration notes.
+- Accessibility and security implications were reviewed.
+- Performance-sensitive changes were measured against established budgets.
+- `pnpm check` passes.
+- `pnpm build` passes when build output is affected.
+- `pnpm pack:smoke` passes when package output or exports are affected.
+- `git diff --check` passes.
+- The work lands in one focused, reviewable commit.
+- This document is updated with the item status and any resulting plan changes.
+
+## First iteration
+
+The next iteration is `EE-001 — Fix destructive pipe-table import`.
+
+No later parity or architecture work should start until the imported table reproduction is fixed and retained as a true Markdown round-trip regression.
