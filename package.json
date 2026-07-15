@@ -22,7 +22,7 @@
     "build:ui": "pnpm --filter markora-ui build",
     "build:demo": "pnpm --filter demo build",
     "browser:install": "playwright install chromium firefox webkit",
-    "check": "pnpm --filter markora build && pnpm --filter markora typecheck && pnpm --filter markora typecheck:api && pnpm --filter markora smoke:node-esm && pnpm --filter markora-ui build && pnpm --filter markora-ui typecheck && pnpm --filter markora-ui smoke:node-esm && pnpm --filter demo typecheck && pnpm typecheck:browser && pnpm test",
+    "check": "pnpm --filter markora build && pnpm --filter markora typecheck && pnpm --filter markora typecheck:api && pnpm --filter markora smoke:node-esm && pnpm --filter markora-ui build && pnpm --filter markora-ui typecheck && pnpm --filter markora-ui smoke:node-esm && pnpm --filter @markora-internal/extension-rfc-prototype typecheck && pnpm --filter demo typecheck && pnpm typecheck:browser && pnpm test",
     "pack:core": "node ./scripts/release-core.mjs pack",
     "release:check": "node ./scripts/release-core.mjs check && pnpm run pack:smoke",
     "publish:core": "node ./scripts/release-core.mjs publish",

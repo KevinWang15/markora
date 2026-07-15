@@ -135,6 +135,8 @@ Document activity is classified as `"user"`, `"command"`, `"external"`, `"reset"
 
 See the [embedded editor production plan](./docs/embedded-editor-production-plan.md) for the ordered path from the current editor kernel to a production-grade embedded editing component.
 
+The accepted [extension system RFC](./docs/extension-system-rfc.md) defines the creation-time composition, lifecycle, compatibility, and packaging contract targeted by the next kernel iteration.
+
 Hosts preparing a release should also review the [embedded input and accessibility contract](./docs/input-accessibility-certification.md) and run the [assistive-technology checklist](./docs/assistive-technology-checklist.md) on their supported platform matrix.
 
 ## Development

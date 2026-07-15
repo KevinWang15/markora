@@ -91,8 +91,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-006 | DONE | M | Cover IME, clipboard, drop, touch, RTL, and accessibility behavior |
 | EE-007 | DONE | M | Add production embed configuration and lifecycle APIs |
 | EE-008 | DONE | M | Separate reconciled external updates from hard document resets |
-| EE-009 | NEXT | S | Approve a versioned editor and Markdown extension RFC |
-| EE-010 | QUEUED | L | Implement the extension kernel and migrate built-ins onto it |
+| EE-009 | DONE | S | Approve a versioned editor and Markdown extension RFC |
+| EE-010 | NEXT | L | Implement the extension kernel and migrate built-ins onto it |
 | EE-011 | QUEUED | M | Complete the block, list, task, code, and table command surface |
 | EE-012 | QUEUED | M | Add host-controlled URL, resource, and asset insertion hooks |
 | EE-013 | QUEUED | S | Establish document-size, latency, memory, and bundle budgets |
@@ -349,7 +349,7 @@ Prevent ordinary host updates from unnecessarily discarding selection, history, 
 
 ### EE-009 — Approve an extension-system RFC
 
-Status: `NEXT`
+Status: `DONE` (2026-07-15)
 
 #### Goal
 
@@ -363,9 +363,19 @@ Design the stable customization contract before adding more built-in syntax.
 - Define package/version compatibility and failure reporting.
 - Prototype at least one block syntax and one inline syntax outside the core package.
 
+#### Completion notes
+
+- The accepted [extension system RFC](./extension-system-rfc.md) versions the API independently at `1.0.0` and defines a compile-before-mount architecture for schema, Markdown codec, runtime behavior, typed handles, and lifecycle resources.
+- The contract now covers branded heterogeneous definitions, exact-object typed lookup, a single inferred per-editor `createRuntime()` boundary, required/optional dependency and order edges, stable tokenizer anchors, compiler-qualified local token IDs, additive schema ownership, deterministic fixed runtime lanes, collision policy, clipboard pipelines, NodeViews, and headless UI actions.
+- Per-editor storage, the late-bound state/dispatch/command bridge, reset behavior, phase-owned cleanup scopes, reverse teardown, structured system/extension errors, trusted runtime-only callbacks, persistence manifests, SemVer rules, compatibility adapters, and the separate `markora/minimal` bundle boundary are specified before implementation.
+- The private, non-publishable `@markora-internal/extension-rfc-prototype` package implements an external multiline callout block and inline highlight mark using only public Markdown-it/ProseMirror APIs. Ten runtime tests prove semantic round-trip, registration-independent tokenizer precedence, optional fallback composition, host-shaped commands, storage isolation, fixed contribution lanes, key fallback chains, and ownership failures.
+- A declaration-only fixture proves inferred command/state/storage handles, a no-storage overload, heterogeneous branded arrays, exact registry lookup, and structural-impostor rejection without casts. The package has no entry point or exports and imports no Markora/private-core module.
+- Security, accessibility, persistence, and packaging responsibilities are explicit in the RFC. This iteration changes no shipped editor API, DOM, input, or browser behavior, so browser/CDP and performance measurements are not applicable; `EE-010` must add proportional browser, accessibility, packed-consumer, and minimal-bundle tests when implementing the contract.
+- Final verification: `pnpm check` passes all 568 unit/conformance/prototype tests; `pnpm build`, `pnpm pack:smoke`, the private prototype typecheck, its 10 targeted runtime tests, and `git diff --check` pass.
+
 ### EE-010 — Implement the extension kernel
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -583,6 +593,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-008` were completed on 2026-07-15, satisfying Gate A's content-safety requirements and establishing the browser, complex-input, accessibility, host-lifecycle, and external-update foundations for Gate B.
+`EE-001` through `EE-009` were completed on 2026-07-15, satisfying Gate A's content-safety requirements and establishing the browser, complex-input, accessibility, host-lifecycle, external-update, and extension-contract foundations for Gate B.
 
-The next iteration is `EE-009 — Approve an extension-system RFC`.
+The next iteration is `EE-010 — Implement the extension kernel`.

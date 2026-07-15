@@ -155,6 +155,43 @@ importers:
         specifier: ^6.2.1
         version: 6.4.1
 
+  packages/extension-rfc-prototype:
+    dependencies:
+      markdown-it:
+        specifier: ^14.1.0
+        version: 14.1.1
+      prosemirror-commands:
+        specifier: ^1.7.1
+        version: 1.7.1
+      prosemirror-inputrules:
+        specifier: ^1.5.1
+        version: 1.5.1
+      prosemirror-keymap:
+        specifier: ^1.2.3
+        version: 1.2.3
+      prosemirror-markdown:
+        specifier: ^1.13.2
+        version: 1.13.4
+      prosemirror-model:
+        specifier: ^1.25.4
+        version: 1.25.4
+      prosemirror-state:
+        specifier: ^1.4.3
+        version: 1.4.4
+      prosemirror-view:
+        specifier: ^1.41.0
+        version: 1.41.6
+    devDependencies:
+      '@types/markdown-it':
+        specifier: ^14.1.2
+        version: 14.1.2
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(jsdom@28.1.0)
+
   packages/ui:
     devDependencies:
       markora:
