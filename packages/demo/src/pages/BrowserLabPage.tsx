@@ -20,6 +20,7 @@ export type BrowserLabEditorSpec = {
   ariaLabelledBy?: string;
   attributes?: Record<string, string>;
   autofocus?: boolean;
+  controlledEcho?: boolean;
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   id: string;
@@ -59,6 +60,11 @@ export type BrowserLabCopyResult = {
 export type BrowserLabUpdateResult = {
   snapshot: BrowserLabSnapshot;
   statePreserved: boolean;
+};
+
+export type BrowserLabReconcileResult = {
+  changed: boolean;
+  snapshot: BrowserLabSnapshot;
 };
 
 export type BrowserLabTransferSpec = {
@@ -120,6 +126,11 @@ export type BrowserLabApi = {
   openUi: (id: string, kind: "image" | "link") => boolean;
   pendingOpaqueEdit: (id: string) => Pick<OpaqueMarkdownEditRequest, "kind" | "source"> | null;
   ready: true;
+  reconcile: (
+    id: string,
+    markdown: string,
+    options?: { emitChange?: boolean },
+  ) => BrowserLabReconcileResult;
   remount: (
     id: string,
     options?: Omit<BrowserLabEditorSpec, "direction" | "id" | "placement" | "portal" | "root">,
@@ -141,6 +152,7 @@ declare global {
 
 type MountedEditor = {
   changeCount: number;
+  controlledEcho: boolean;
   editor: MarkdownEditor;
   eventCounts: Record<MarkdownEditorEventName, number>;
   eventLog: BrowserLabEventRecord[];
@@ -327,6 +339,7 @@ export function BrowserLabPage() {
       mounted: MountedEditor,
       spec: Omit<BrowserLabEditorSpec, "direction" | "id" | "placement" | "portal" | "root">,
     ) => {
+      mounted.controlledEcho = spec.controlledEcho ?? false;
       const existingOverlays = new Set(
         mounted.portalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR),
       );
@@ -345,6 +358,10 @@ export function BrowserLabPage() {
           mounted.changeCount += 1;
           mounted.output.dataset.changeCount = String(mounted.changeCount);
           mounted.output.textContent = markdown;
+
+          if (mounted.controlledEcho) {
+            mounted.editor.commands.reconcileMarkdown(markdown);
+          }
         },
         onTransaction() {
           mounted.transactionCount += 1;
@@ -483,6 +500,7 @@ export function BrowserLabPage() {
           ?? (rootMode === "shadow" ? editorRoot as ShadowRoot : document.body);
         const mounted: MountedEditor = {
           changeCount: 0,
+          controlledEcho: false,
           editor: null as unknown as MarkdownEditor,
           eventCounts: createEventCounts(),
           eventLog: [],
@@ -597,10 +615,23 @@ export function BrowserLabPage() {
         const mounted = requireEditor(editors, id);
         mounted.opaqueEditRequest = null;
         delete mounted.section.dataset.pendingOpaqueKind;
-        mounted.editor.commands.setMarkdown(markdown, { emitChange: true });
+        mounted.editor.commands.resetMarkdown(markdown, { emitChange: true });
         mounted.editor.flushChange();
         mounted.output.textContent = mounted.editor.getMarkdown();
         return mounted.editor.getMarkdown();
+      },
+      reconcile(id, markdown, options) {
+        const mounted = requireEditor(editors, id);
+        mounted.opaqueEditRequest = null;
+        delete mounted.section.dataset.pendingOpaqueKind;
+        const changed = mounted.editor.commands.reconcileMarkdown(markdown, options);
+        mounted.editor.flushChange();
+        mounted.output.textContent = mounted.editor.getMarkdown();
+
+        return {
+          changed,
+          snapshot: readSnapshot(mounted),
+        };
       },
       selectText(id, text, mode = "all", occurrence = 0) {
         if (!text || occurrence < 0) {

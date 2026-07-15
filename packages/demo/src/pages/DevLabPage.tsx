@@ -73,7 +73,8 @@ export function DevLabPage() {
       opaqueEditRequestRef.current = null;
       setOpaqueSourceKind(null);
       setActiveSlug(nextExample.slug);
-      editor.commands.setMarkdown(nextExample.markdown);
+      // Presets represent different documents, so discard transient editor state.
+      editor.commands.resetMarkdown(nextExample.markdown);
       editor.flushChange();
       setMarkdownSource(editor.getMarkdown());
     };
@@ -163,7 +164,8 @@ export function DevLabPage() {
       return;
     }
 
-    editorRef.current.commands.setMarkdown(example.markdown);
+    // Presets represent different documents, so discard transient editor state.
+    editorRef.current.commands.resetMarkdown(example.markdown);
     editorRef.current.flushChange();
     setMarkdownSource(editorRef.current.getMarkdown());
     setIsPresetsOpen(false);
@@ -189,7 +191,8 @@ export function DevLabPage() {
       return;
     }
 
-    editorRef.current.commands.setMarkdown(markdownSource);
+    // Source edits update the current document through mapped selection/history.
+    editorRef.current.commands.reconcileMarkdown(markdownSource);
     editorRef.current.flushChange();
     setMarkdownSource(editorRef.current.getMarkdown());
     setIsSourceOpen(false);

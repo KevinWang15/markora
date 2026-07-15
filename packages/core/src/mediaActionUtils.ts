@@ -1,10 +1,24 @@
 import type { Schema } from "prosemirror-model";
-import { NodeSelection, TextSelection, type EditorState } from "prosemirror-state";
+import { NodeSelection, TextSelection, type EditorState, type Transaction } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import type { ActiveImageInfo, ImageEditorOverlay, LinkEditorOverlay } from "./uiTypes";
 import { DEFAULT_IMAGE_PROTOCOLS, DEFAULT_LINK_PROTOCOLS, getSafeOpenUrl, sanitizeStoredUrl } from "./urlUtils";
 
 type BrowserWindow = Window & typeof globalThis;
+type DispatchTransaction = (transaction: Transaction) => void;
+
+function dispatchEditorTransaction(
+  view: EditorView,
+  transaction: Transaction,
+  dispatch?: DispatchTransaction,
+) {
+  if (dispatch) {
+    dispatch(transaction);
+    return;
+  }
+
+  view.dispatch(transaction);
+}
 
 type TargetContext = {
   HTMLAnchorElementCtor: typeof HTMLAnchorElement;
@@ -52,7 +66,7 @@ export function createMediaActionHelpers(options: {
     return !!getMarkInfo(state, "link");
   }
 
-  function setLink(view: EditorView, href: string) {
+  function setLink(view: EditorView, href: string, dispatch?: DispatchTransaction) {
     const normalizedHref = sanitizeStoredUrl(href, DEFAULT_LINK_PROTOCOLS);
 
     if (!normalizedHref) {
@@ -62,7 +76,7 @@ export function createMediaActionHelpers(options: {
     const markInfo = getMarkInfo(view.state, "link");
 
     if (markInfo) {
-      return updateLinkHref(view, normalizedHref);
+      return updateLinkHref(view, normalizedHref, dispatch);
     }
 
     const { selection } = view.state;
@@ -77,7 +91,7 @@ export function createMediaActionHelpers(options: {
     }));
     tr.removeStoredMark(schema.marks.link);
     tr.setSelection(TextSelection.create(tr.doc, selection.to));
-    view.dispatch(tr);
+    dispatchEditorTransaction(view, tr, dispatch);
     return true;
   }
 
@@ -87,7 +101,11 @@ export function createMediaActionHelpers(options: {
     return $from.parent.canReplaceWith(index, index, schema.nodes.image);
   }
 
-  function insertImage(view: EditorView, attrs: { src: string; alt?: string | null; title?: string | null }) {
+  function insertImage(
+    view: EditorView,
+    attrs: { src: string; alt?: string | null; title?: string | null },
+    dispatch?: DispatchTransaction,
+  ) {
     const normalizedSrc = sanitizeStoredUrl(attrs.src, DEFAULT_IMAGE_PROTOCOLS);
 
     if (!normalizedSrc || !canInsertImage(view.state)) {
@@ -108,11 +126,11 @@ export function createMediaActionHelpers(options: {
       tr.setSelection(NodeSelection.create(tr.doc, imagePos));
     }
 
-    view.dispatch(tr.scrollIntoView());
+    dispatchEditorTransaction(view, tr.scrollIntoView(), dispatch);
     return true;
   }
 
-  function updateLinkHref(view: EditorView, href: string) {
+  function updateLinkHref(view: EditorView, href: string, dispatch?: DispatchTransaction) {
     const markInfo = getMarkInfo(view.state, "link");
 
     if (!markInfo) {
@@ -131,7 +149,7 @@ export function createMediaActionHelpers(options: {
       href: normalizedHref,
     }));
     tr.setSelection(TextSelection.create(tr.doc, view.state.selection.from));
-    view.dispatch(tr);
+    dispatchEditorTransaction(view, tr, dispatch);
     return true;
   }
 
@@ -171,7 +189,7 @@ export function createMediaActionHelpers(options: {
     return true;
   }
 
-  function removeActiveImage(view: EditorView) {
+  function removeActiveImage(view: EditorView, dispatch?: DispatchTransaction) {
     const imageInfo = getActiveImageInfo(view.state);
 
     if (!imageInfo) {
@@ -179,11 +197,11 @@ export function createMediaActionHelpers(options: {
     }
 
     const tr = view.state.tr.delete(imageInfo.pos, imageInfo.pos + imageInfo.node.nodeSize);
-    view.dispatch(tr);
+    dispatchEditorTransaction(view, tr, dispatch);
     return true;
   }
 
-  function removeActiveLink(view: EditorView) {
+  function removeActiveLink(view: EditorView, dispatch?: DispatchTransaction) {
     const markInfo = getMarkInfo(view.state, "link");
 
     if (!markInfo) {
@@ -192,7 +210,7 @@ export function createMediaActionHelpers(options: {
 
     const tr = view.state.tr.removeMark(markInfo.start, markInfo.end, schema.marks.link);
     tr.setSelection(TextSelection.create(tr.doc, view.state.selection.from));
-    view.dispatch(tr);
+    dispatchEditorTransaction(view, tr, dispatch);
     return true;
   }
 

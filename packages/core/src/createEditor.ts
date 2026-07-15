@@ -1,5 +1,5 @@
 import { baseKeymap, chainCommands, liftEmptyBlock, toggleMark } from "prosemirror-commands";
-import { history, redo, undo } from "prosemirror-history";
+import { closeHistory, history, redo, undo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
 import { type Node as ProseMirrorNode, type NodeType } from "prosemirror-model";
 import { sinkListItem, splitListItem, liftListItem } from "prosemirror-schema-list";
@@ -29,6 +29,17 @@ import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import { createOpaqueNodeViewClass } from "./opaqueNodeView";
 import type { OpaqueMarkdownEditRequest } from "./opaqueMarkdown";
 import { createPlaceholderPlugin } from "./placeholderPlugin";
+import { buildReconciledDocumentTransaction } from "./documentUpdate";
+import {
+  getMarkdownEditorTransactionEmitChange,
+  getMarkdownEditorTransactionOrigin,
+  hasMarkdownEditorExternalUpdatePermission,
+  setBuiltinMarkdownEditorTransactionOrigin,
+  setMarkdownEditorExternalUpdatePermission,
+  setMarkdownEditorTransactionEmitChange,
+  type MarkdownEditorChangeContext,
+  type MarkdownEditorChangeOrigin,
+} from "./transactionOrigin";
 import {
   createEditorEventDispatcher,
   MarkdownEditorDestroyedError,
@@ -50,6 +61,10 @@ export type MarkdownEditorSelectionTarget =
     head?: number;
   };
 
+export type MarkdownEditorMarkdownUpdateOptions = {
+  emitChange?: boolean;
+};
+
 export type CreateEditorOptions = {
   ariaLabel?: string;
   ariaLabelledBy?: string;
@@ -60,8 +75,12 @@ export type CreateEditorOptions = {
   element: HTMLElement;
   initialSelection?: MarkdownEditorSelectionTarget;
   markdown?: string;
-  onTransaction?: (transaction: Parameters<EditorView["dispatch"]>[0], view: EditorView) => void;
-  onChange?: (markdown: string) => void;
+  onTransaction?: (
+    transaction: Parameters<EditorView["dispatch"]>[0],
+    view: EditorView,
+    context: MarkdownEditorChangeContext,
+  ) => void;
+  onChange?: (markdown: string, context: MarkdownEditorChangeContext) => void;
   onChangeMode?: "immediate" | "animationFrame";
   onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
   placeholder?: string;
@@ -73,7 +92,7 @@ export type UpdateEditorOptions = {
   ariaLabelledBy?: string | null;
   attributes?: MarkdownEditorDomAttributes | null;
   editable?: boolean;
-  onChange?: ((markdown: string) => void) | null;
+  onChange?: CreateEditorOptions["onChange"] | null;
   onChangeMode?: "immediate" | "animationFrame";
   onEditOpaqueMarkdown?: ((request: OpaqueMarkdownEditRequest) => void) | null;
   onTransaction?: CreateEditorOptions["onTransaction"] | null;
@@ -85,7 +104,10 @@ export type MarkdownEditorActiveMark = MarkdownEditorMark | "link";
 export type MarkdownEditorActiveNode = "image" | "table" | "code_block";
 
 export type MarkdownEditorCommands = {
-  setMarkdown: (markdown: string, options?: { emitChange?: boolean }) => void;
+  reconcileMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => boolean;
+  resetMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => void;
+  /** @deprecated Use resetMarkdown() for an explicit hard reset, or reconcileMarkdown() for ordinary host updates. */
+  setMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => void;
   toggleMark: (mark: MarkdownEditorMark) => boolean;
   setLink: (href: string) => boolean;
   removeLink: () => boolean;
@@ -175,7 +197,7 @@ type EditorRuntimeOptions = {
   ariaLabelledBy: string | null | undefined;
   attributes: Record<string, string>;
   editable: boolean;
-  onChange: ((markdown: string) => void) | undefined;
+  onChange: ((markdown: string, context: MarkdownEditorChangeContext) => void) | undefined;
   onChangeMode: "immediate" | "animationFrame";
   onEditOpaqueMarkdown: ((request: OpaqueMarkdownEditRequest) => void) | undefined;
   onTransaction: CreateEditorOptions["onTransaction"];
@@ -377,6 +399,10 @@ function throwCollectedErrors(message: string, errors: unknown[]) {
   if (errors.length > 1) {
     throw createCleanupError(message, errors);
   }
+}
+
+function createChangeContext(origin: MarkdownEditorChangeOrigin): MarkdownEditorChangeContext {
+  return Object.freeze({ origin });
 }
 
 const {
@@ -969,7 +995,11 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const plugins = [
     new Plugin({
       filterTransaction(transaction) {
-        return runtimeOptions.editable || !transaction.docChanged;
+        return (
+          runtimeOptions.editable
+          || !transaction.docChanged
+          || hasMarkdownEditorExternalUpdatePermission(transaction)
+        );
       },
     }),
     createPlaceholderPlugin(() => runtimeOptions.placeholder),
@@ -1052,7 +1082,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   let finalMarkdown = "";
   let compositeFocused = false;
   let pendingBlurVersion = 0;
-  const changeEmitter = createChangeEmitter<ProseMirrorNode>({
+  const changeEmitter = createChangeEmitter<ProseMirrorNode, MarkdownEditorChangeContext>({
     cancelFrame,
     initialDoc: doc,
     mode: runtimeOptions.onChangeMode,
@@ -1072,6 +1102,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     previousSelection: Selection,
     selection: Selection,
     expectedState: EditorState,
+    origin: MarkdownEditorChangeOrigin,
   ) => {
     if (
       previousSelection.eq(selection)
@@ -1085,6 +1116,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       "selection",
       {
         editor,
+        origin,
         previousSelection: snapshotSelection(previousSelection),
         selection: snapshotSelection(selection),
         type: "selection",
@@ -1097,7 +1129,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     );
   };
 
-  const emitUpdate = () => {
+  const emitUpdate = (origin: MarkdownEditorChangeOrigin) => {
     if (lifecycle !== "active" || !eventDispatcher.has("update")) {
       return;
     }
@@ -1108,6 +1140,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       "update",
       {
         editor,
+        origin,
         selection: snapshotSelection(expectedState.selection),
         type: "update",
       },
@@ -1123,13 +1156,14 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     previousState: EditorState,
     nextState: EditorState,
     documentChanged: boolean,
+    origin: MarkdownEditorChangeOrigin,
   ) => {
     if (lifecycle !== "active" || view.isDestroyed) {
       return;
     }
 
     if (view.state === nextState) {
-      emitSelectionChange(previousState.selection, nextState.selection, nextState);
+      emitSelectionChange(previousState.selection, nextState.selection, nextState, origin);
     }
 
     if (
@@ -1138,7 +1172,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       && !view.isDestroyed
       && view.state.doc.eq(nextState.doc)
     ) {
-      emitUpdate();
+      emitUpdate(origin);
     }
   };
 
@@ -1149,7 +1183,14 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       return false;
     }
 
-    const handled = command(view.state, view.dispatch, view);
+    const handled = command(
+      view.state,
+      (transaction) => {
+        setBuiltinMarkdownEditorTransactionOrigin(transaction, "command");
+        view.dispatch(transaction);
+      },
+      view,
+    );
 
     if (handled && lifecycle === "active" && !view.isDestroyed) {
       view.focus();
@@ -1165,10 +1206,16 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     strike: commands.toggleStrike,
   };
 
-  const setMarkdownValue = (nextMarkdown: string, setOptions?: { emitChange?: boolean }) => {
-    assertActive("set Markdown");
+  const replaceMarkdownState = (
+    nextMarkdown: string,
+    setOptions: MarkdownEditorMarkdownUpdateOptions | undefined,
+    operation: "reset Markdown" | "set Markdown",
+  ) => {
+    assertActive(operation);
+    const action = operation === "set Markdown" ? "setting" : "resetting";
+    const failureMessage = `Multiple Markora callbacks failed while ${action} Markdown.`;
     const emitChange = setOptions?.emitChange ?? false;
-    assertActive("set Markdown");
+    assertActive(operation);
     const nextDoc = parseMarkdown(nextMarkdown);
 
     if (!nextDoc) {
@@ -1187,7 +1234,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     runWithViewErrorCollector(callbackErrors, () => view.updateState(nextState));
 
     if (lifecycle !== "active" || view.isDestroyed) {
-      throwCollectedErrors("Multiple Markora callbacks failed while setting Markdown.", callbackErrors);
+      throwCollectedErrors(failureMessage, callbackErrors);
       return;
     }
 
@@ -1196,14 +1243,53 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
     if (emitChange) {
       try {
-        changeEmitter.schedule(nextState.doc);
+        changeEmitter.schedule(nextState.doc, createChangeContext("reset"));
       } catch (error) {
         callbackErrors.push(error);
       }
     }
 
-    emitStateEvents(previousState, nextState, !previousState.doc.eq(nextState.doc));
-    throwCollectedErrors("Multiple Markora callbacks failed while setting Markdown.", callbackErrors);
+    emitStateEvents(previousState, nextState, !previousState.doc.eq(nextState.doc), "reset");
+    throwCollectedErrors(failureMessage, callbackErrors);
+  };
+
+  const resetMarkdownValue = (
+    nextMarkdown: string,
+    setOptions?: MarkdownEditorMarkdownUpdateOptions,
+  ) => replaceMarkdownState(nextMarkdown, setOptions, "reset Markdown");
+
+  const setMarkdownValue = (
+    nextMarkdown: string,
+    setOptions?: MarkdownEditorMarkdownUpdateOptions,
+  ) => replaceMarkdownState(nextMarkdown, setOptions, "set Markdown");
+
+  const reconcileMarkdownValue = (
+    nextMarkdown: string,
+    updateOptions?: MarkdownEditorMarkdownUpdateOptions,
+  ) => {
+    assertActive("reconcile Markdown");
+    const emitChange = updateOptions?.emitChange ?? false;
+    assertActive("reconcile Markdown");
+    const nextDoc = parseMarkdown(nextMarkdown);
+
+    if (!nextDoc) {
+      throw new Error("Failed to parse Markdown into a ProseMirror document.");
+    }
+
+    const currentState = view.state;
+
+    if (currentState.doc.eq(nextDoc)) {
+      return false;
+    }
+
+    const transaction = closeHistory(buildReconciledDocumentTransaction(currentState, nextDoc));
+    transaction.setMeta("addToHistory", false);
+    setBuiltinMarkdownEditorTransactionOrigin(transaction, "external");
+    setMarkdownEditorExternalUpdatePermission(transaction);
+    setMarkdownEditorTransactionEmitChange(transaction, emitChange);
+    changeEmitter.cancel();
+    view.dispatch(transaction);
+    return true;
   };
 
   const runToggleMark = (mark: MarkdownEditorMark) => runCommand(toggleMarkCommands[mark]);
@@ -1215,7 +1301,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       return false;
     }
 
-    const handled = setLink(view, href);
+    const handled = setLink(view, href, (transaction) => {
+      setBuiltinMarkdownEditorTransactionOrigin(transaction, "command");
+      view.dispatch(transaction);
+    });
 
     if (handled && lifecycle === "active" && !view.isDestroyed) {
       uiControllers.clearSelectionAnchor();
@@ -1241,7 +1330,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     assertActive("insert an image");
     const title = attrs.title;
     assertActive("insert an image");
-    const handled = insertImage(view, { src, alt, title });
+    const handled = insertImage(view, { src, alt, title }, (transaction) => {
+      setBuiltinMarkdownEditorTransactionOrigin(transaction, "command");
+      view.dispatch(transaction);
+    });
 
     if (handled && lifecycle === "active" && !view.isDestroyed) {
       uiControllers.clearSelectionAnchor();
@@ -1370,6 +1462,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   };
 
   const editorCommandApi: MarkdownEditorCommands = {
+    reconcileMarkdown: reconcileMarkdownValue,
+    resetMarkdown: resetMarkdownValue,
     setMarkdown: setMarkdownValue,
     toggleMark(mark) {
       return runToggleMark(mark);
@@ -1377,12 +1471,18 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     setLink: setLinkValue,
     removeLink() {
       assertActive("remove a link");
-      return runtimeOptions.editable && removeActiveLink(view);
+      return runtimeOptions.editable && removeActiveLink(view, (transaction) => {
+        setBuiltinMarkdownEditorTransactionOrigin(transaction, "command");
+        view.dispatch(transaction);
+      });
     },
     insertImage: insertImageValue,
     removeImage() {
       assertActive("remove an image");
-      return runtimeOptions.editable && removeActiveImage(view);
+      return runtimeOptions.editable && removeActiveImage(view, (transaction) => {
+        setBuiltinMarkdownEditorTransactionOrigin(transaction, "command");
+        view.dispatch(transaction);
+      });
     },
     undo() {
       return runCommand(commands.undo);
@@ -1489,6 +1589,17 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       },
       dispatchTransaction(this: EditorView, transaction) {
         const activeView = this;
+        let origin = getMarkdownEditorTransactionOrigin(transaction);
+
+        if (!origin) {
+          origin = "user";
+          setBuiltinMarkdownEditorTransactionOrigin(transaction, origin);
+        }
+
+        const changeContext = createChangeContext(origin);
+        const shouldEmitChange = (
+          getMarkdownEditorTransactionEmitChange(transaction) ?? (origin !== "external")
+        );
         const previousState = activeView.state;
         const nextState = previousState.apply(transaction);
         const callbackErrors: unknown[] = [];
@@ -1496,7 +1607,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
         if (lifecycle === "active" && !activeView.isDestroyed) {
           try {
-            runtimeOptions.onTransaction?.(transaction, activeView);
+            runtimeOptions.onTransaction?.(transaction, activeView, changeContext);
           } catch (error) {
             callbackErrors.push(error);
           }
@@ -1509,16 +1620,16 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
           && !activeView.isDestroyed
           && activeView.state.doc.eq(nextState.doc)
         ) {
-          if (documentChanged) {
+          if (documentChanged && shouldEmitChange) {
             try {
-              changeEmitter.schedule(nextState.doc);
+              changeEmitter.schedule(nextState.doc, changeContext);
             } catch (error) {
               callbackErrors.push(error);
             }
           }
 
           if (editor) {
-            emitStateEvents(previousState, nextState, documentChanged);
+            emitStateEvents(previousState, nextState, documentChanged, origin);
           }
         }
 
@@ -1801,7 +1912,9 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         assertActive("focus the editor");
 
         if (!view.state.selection.eq(nextSelection)) {
-          view.dispatch(view.state.tr.setSelection(nextSelection).scrollIntoView());
+          const transaction = view.state.tr.setSelection(nextSelection).scrollIntoView();
+          setBuiltinMarkdownEditorTransactionOrigin(transaction, "command");
+          view.dispatch(transaction);
         }
       }
 

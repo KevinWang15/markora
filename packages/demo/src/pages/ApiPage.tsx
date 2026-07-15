@@ -10,7 +10,9 @@ const apiRows = [
   ["editor.isDestroyed", "Reports whether the high-level editor is no longer active."],
   ["editor.view", "Exposes the version-coupled ProseMirror view for advanced inspection and dispatch."],
   ["editor.getMarkdown()", "Returns the current normalized Markdown serialization."],
-  ["editor.commands.setMarkdown(markdown, { emitChange })", "Replaces the document, normalizing supported syntax while retaining recognized opaque source islands."],
+  ["editor.commands.reconcileMarkdown(markdown, { emitChange })", "Applies an authoritative host snapshot while mapping selection/history and preserving plugin state; returns whether the parsed document changed."],
+  ["editor.commands.resetMarkdown(markdown, { emitChange })", "Explicitly replaces EditorState, resetting selection and clearing history/plugin state."],
+  ["editor.commands.setMarkdown(...) (deprecated)", "Retains the historical hard-reset behavior as an alias of resetMarkdown()."],
   ["editor.flushChange()", "Flushes any pending animation-frame batched Markdown emission."],
   ["editor.state.can.* / editor.state.isActive.*", "Lets hosts derive toolbar and feature state without built-in UI."],
   ["editor.getToolbarState()", "Returns a compatibility snapshot for toolbar buttons."],
@@ -68,13 +70,13 @@ const opaqueSourceEditorCode = `const editor = createEditor({
 
 const eventSubscriptionCode = `const stopSelection = editor.subscribe(
   "selection",
-  ({ previousSelection, selection }) => {
-    renderSelection(previousSelection, selection);
+  ({ origin, previousSelection, selection }) => {
+    renderSelection(previousSelection, selection, origin);
   },
 );
 
-const stopUpdates = editor.subscribe("update", ({ selection }) => {
-  renderToolbar(selection);
+const stopUpdates = editor.subscribe("update", ({ origin, selection }) => {
+  renderToolbar(selection, origin);
 });
 
 const stopErrors = editor.subscribe("error", ({ code, context, error }) => {
@@ -89,6 +91,31 @@ function disposeSubscriptions() {
   stopUpdates();
   stopErrors();
 }`;
+
+const externalUpdatesCode = `// Ordinary controlled/server update: silent by default.
+const changed = editor.commands.reconcileMarkdown(nextMarkdown);
+
+// Switching to a different document and deliberately clearing transient state.
+editor.commands.resetMarkdown(nextDocumentMarkdown);
+
+// Host-owned revisions must be checked before reconciliation.
+if (response.revision > appliedRevision) {
+  editor.commands.reconcileMarkdown(response.markdown);
+  appliedRevision = response.revision;
+}`;
+
+const extensionOriginCode = `import {
+  getMarkdownEditorTransactionOrigin,
+  setMarkdownEditorTransactionOrigin,
+} from "markora";
+
+const transaction = setMarkdownEditorTransactionOrigin(
+  editor.view.state.tr.insertText("completion"),
+  "extension:autocomplete",
+);
+
+editor.view.dispatch(transaction);
+console.log(getMarkdownEditorTransactionOrigin(transaction));`;
 
 const dynamicOptionsCode = `editor.updateOptions({
   editable: false,
@@ -106,6 +133,17 @@ type MarkdownEditorSelectionTarget =
   | "start"
   | { anchor: number; head?: number };
 
+type MarkdownEditorChangeOrigin =
+  | "user"
+  | "command"
+  | "external"
+  | "reset"
+  | \`extension:\${string}\`;
+
+type MarkdownEditorChangeContext = {
+  origin: MarkdownEditorChangeOrigin;
+};
+
 type CreateEditorOptions = {
   element: HTMLElement;
   markdown?: string;
@@ -116,8 +154,12 @@ type CreateEditorOptions = {
   attributes?: MarkdownEditorDomAttributes;
   ariaLabel?: string;
   ariaLabelledBy?: string;
-  onChange?: (markdown: string) => void;
-  onTransaction?: (transaction: Transaction, view: EditorView) => void;
+  onChange?: (markdown: string, context: MarkdownEditorChangeContext) => void;
+  onTransaction?: (
+    transaction: Transaction,
+    view: EditorView,
+    context: MarkdownEditorChangeContext,
+  ) => void;
   onChangeMode?: "immediate" | "animationFrame";
   onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
   ui?: EditorUiFactory;
@@ -170,12 +212,14 @@ type MarkdownEditorEventMap = {
   selection: {
     editor: MarkdownEditor;
     type: "selection";
+    origin: MarkdownEditorChangeOrigin;
     previousSelection: MarkdownEditorSelectionSnapshot;
     selection: MarkdownEditorSelectionSnapshot;
   };
   update: {
     editor: MarkdownEditor;
     type: "update";
+    origin: MarkdownEditorChangeOrigin;
     selection: MarkdownEditorSelectionSnapshot;
   };
   error: {
@@ -194,8 +238,24 @@ type MarkdownEditorEventListener<Type extends MarkdownEditorEventName> = (
 ) => void;
 type MarkdownEditorUnsubscribe = () => void;`;
 
-const markdownEditorCommandsType = `type MarkdownEditorCommands = {
-  setMarkdown: (markdown: string, options?: { emitChange?: boolean }) => void;
+const markdownEditorCommandsType = `type MarkdownEditorMarkdownUpdateOptions = {
+  emitChange?: boolean;
+};
+
+type MarkdownEditorCommands = {
+  reconcileMarkdown: (
+    markdown: string,
+    options?: MarkdownEditorMarkdownUpdateOptions,
+  ) => boolean;
+  resetMarkdown: (
+    markdown: string,
+    options?: MarkdownEditorMarkdownUpdateOptions,
+  ) => void;
+  /** @deprecated Use resetMarkdown() or reconcileMarkdown(). */
+  setMarkdown: (
+    markdown: string,
+    options?: MarkdownEditorMarkdownUpdateOptions,
+  ) => void;
   toggleMark: (mark: "strong" | "em" | "code" | "strike") => boolean;
   setLink: (href: string) => boolean;
   removeLink: () => boolean;
@@ -280,11 +340,11 @@ export function ApiPage() {
           <ul className="check-list compact">
             <li><code>element</code> is required and owns the mounted editor view.</li>
             <li><code>markdown</code> seeds the initial document content.</li>
-            <li><code>editable</code> defaults to <code>true</code>; read-only mode preserves selection, copy, and host <code>setMarkdown()</code> while blocking user/UI/format/history mutations.</li>
+            <li><code>editable</code> defaults to <code>true</code>; read-only mode preserves selection, copy, and host reconciliation/reset while blocking user/UI/format/history mutations.</li>
             <li><code>placeholder</code>, <code>autofocus</code>, and <code>initialSelection</code> configure the initial surface. Object selection targets are in-range integer ProseMirror positions inside text blocks.</li>
             <li><code>attributes</code>, <code>ariaLabel</code>, and <code>ariaLabelledBy</code> configure the inner editor DOM and accessible name.</li>
-            <li><code>onChange</code> receives serialized Markdown output.</li>
-            <li><code>onTransaction</code> lets hosts observe editor activity without forcing serialization.</li>
+            <li><code>onChange</code> receives serialized Markdown output plus its change origin.</li>
+            <li><code>onTransaction</code> lets hosts observe transaction dispatch attempts and their origin without forcing serialization.</li>
             <li><code>onChangeMode</code> supports <code>"immediate"</code> and <code>"animationFrame"</code>.</li>
             <li><code>onEditOpaqueMarkdown</code> opens a host-owned source editor for inert unsupported syntax.</li>
             <li><code>ui</code> and <code>codeBlockLanguages</code> are optional extension points.</li>
@@ -311,7 +371,7 @@ export function ApiPage() {
           <h3>Observe the editor without serializing</h3>
           <p>
             Focus, blur, selection, and update events expose host-facing state. Selection and update events are synchronous,
-            {" "}with selection first for the same change; update events carry the current selection and contain neither Markdown
+            {" "}with selection first for the same change; both carry its origin, while update events contain neither Markdown
             {" "}nor a ProseMirror transaction. Focus and blur each cross one microtask boundary so callbacks run outside nested
             {" "}editor focus internals and movement within the composite surface does not create a false boundary. Error events report recoverable code-language-load failures;
             {" "}loaders and extensions run after the current editor update completes. Initial focus and selection actions are
@@ -327,9 +387,39 @@ export function ApiPage() {
             <code>updateOptions()</code> changes editable state, presentation attributes, accessible naming, and callbacks.
             {" "}It does not reconstruct EditorState or emit a document update. Changing <code>onChange</code> or its mode
             {" "}first flushes pending output once through the previous listener. The mount element, initial Markdown,
-            {" "}initial focus/selection actions, UI factory, and language registry remain creation-only.
+            {" "}initial focus/selection actions, UI factory, and language registry remain creation-only. Use
+            {" "}<code>reconcileMarkdown()</code> or <code>resetMarkdown()</code> for later document values.
           </p>
           <CodeBlock code={dynamicOptionsCode} language="ts" title="Runtime options" />
+        </article>
+      </section>
+
+      <section className="docs-grid docs-grid-two">
+        <article className="doc-card">
+          <span className="card-kicker">External updates</span>
+          <h3>Reconcile ordinary snapshots; reset deliberately</h3>
+          <p>
+            <code>reconcileMarkdown()</code> is silent by default and returns <code>false</code> for a strict semantic no-op.
+            {" "}A changed update maps selection/history and preserves plugin state, including in read-only mode. Disjoint
+            {" "}local history remains usable; overlapping entries may map to a no-op or be consumed. It also
+            {" "}cancels pending animation-frame output; a no-op leaves that output alone. <code>resetMarkdown()</code> rebuilds
+            {" "}EditorState and bypasses <code>onTransaction</code>. Deprecated <code>setMarkdown()</code> remains its alias.
+          </p>
+          <p>
+            Calls run synchronously in invocation order. Each incoming string is a complete authoritative snapshot, so the
+            {" "}last changed call wins. Markora provides no merge or revision protocol; the host must reject stale responses.
+          </p>
+          <CodeBlock code={externalUpdatesCode} language="ts" title="Host document updates" />
+        </article>
+        <article className="doc-card">
+          <span className="card-kicker">Change origins</span>
+          <h3>Trace where accepted activity entered</h3>
+          <p>
+            Change callbacks and selection/update events report <code>user</code>, <code>command</code>, <code>external</code>,
+            {" "}<code>reset</code>, or a namespaced extension origin. <code>onTransaction</code> also reports origins for dispatch
+            {" "}attempts, so it is not proof that policy accepted a state change. Origins are not revision IDs or authorization checks.
+          </p>
+          <CodeBlock code={extensionOriginCode} language="ts" title="Extension transaction origin" />
         </article>
       </section>
 

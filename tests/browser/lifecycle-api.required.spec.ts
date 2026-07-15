@@ -11,6 +11,7 @@ import {
   getMarkdown,
   isEditorDestroyed,
   mountEditor,
+  reconcileEditor,
   remountEditor,
   resetEditor,
   settleEditor,
@@ -236,6 +237,69 @@ test("@required dynamic read-only mode covers ProseMirror, CodeMirror, tasks, co
 
   expect((await updateEditorOptions(labPage, id, { editable: false })).statePreserved).toBe(true);
   expect(await resetEditor(labPage, id, "external replacement")).toBe("external replacement");
+});
+
+test("@required reconciled external updates preserve caret, focus, history, and controlled-host boundaries", async ({ labPage }) => {
+  const id = "lifecycle-reconcile";
+  await mountEditor(labPage, {
+    controlledEcho: true,
+    id,
+    markdown: "alpha\n\ncaret",
+  });
+  const editor = editorLocator(labPage, id);
+
+  await editor.locator("p").first().click();
+  await labPage.keyboard.press("End");
+  const beforeTyping = await snapshotEditor(labPage, id);
+  await labPage.keyboard.insertText("!");
+  await settleEditor(labPage, id);
+  const typed = await snapshotEditor(labPage, id);
+
+  expect(typed.markdown).toBe("alpha!\n\ncaret");
+  expect(typed.transactionCount).toBe(beforeTyping.transactionCount + 1);
+  expect(typed.changeCount).toBe(beforeTyping.changeCount + 1);
+
+  expect(await selectText(labPage, id, "caret", "end")).toBe(true);
+  const beforeExternal = await snapshotEditor(labPage, id);
+  const external = await reconcileEditor(labPage, id, "prefix\n\nalpha!\n\ncaret");
+
+  expect(external.changed).toBe(true);
+  expect(external.snapshot.markdown).toBe("prefix\n\nalpha!\n\ncaret");
+  expect(external.snapshot.transactionCount).toBe(beforeExternal.transactionCount + 1);
+  expect(external.snapshot.changeCount).toBe(beforeExternal.changeCount);
+  expect(external.snapshot.activeElement).toBe("prosemirror");
+  expect(external.snapshot.prosemirrorFocused).toBe(true);
+  expect(external.snapshot.selection).toEqual({
+    anchor: beforeExternal.selection.anchor + 8,
+    from: beforeExternal.selection.from + 8,
+    head: beforeExternal.selection.head + 8,
+    to: beforeExternal.selection.to + 8,
+  });
+
+  expect(await runCommand(labPage, id, "undo")).toBe(true);
+  await settleEditor(labPage, id);
+  const undone = await snapshotEditor(labPage, id);
+  expect(undone.markdown).toBe("prefix\n\nalpha\n\ncaret");
+  expect(undone.transactionCount).toBe(external.snapshot.transactionCount + 1);
+  expect(undone.changeCount).toBe(external.snapshot.changeCount + 1);
+
+  const equivalent = await reconcileEditor(labPage, id, "prefix\n\nalpha\n\ncaret");
+  expect(equivalent.changed).toBe(false);
+  expect(equivalent.snapshot.transactionCount).toBe(undone.transactionCount);
+  expect(equivalent.snapshot.changeCount).toBe(undone.changeCount);
+
+  expect(await selectText(labPage, id, "alpha", "end")).toBe(true);
+  await labPage.keyboard.insertText("?");
+  await settleEditor(labPage, id);
+  const beforeReset = await snapshotEditor(labPage, id);
+  expect(beforeReset.markdown).toBe("prefix\n\nalpha?\n\ncaret");
+
+  expect(await resetEditor(labPage, id, "hard reset")).toBe("hard reset");
+  const reset = await snapshotEditor(labPage, id);
+  expect(reset.selection).toEqual({ anchor: 1, from: 1, head: 1, to: 1 });
+  expect(reset.transactionCount).toBe(beforeReset.transactionCount);
+  expect(reset.changeCount).toBe(beforeReset.changeCount + 1);
+  expect(await runCommand(labPage, id, "undo")).toBe(false);
 });
 
 test("@required destroy is idempotent and remounts into the identical retained host", async ({ labPage }) => {

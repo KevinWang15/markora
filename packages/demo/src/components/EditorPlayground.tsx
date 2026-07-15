@@ -351,7 +351,7 @@ export function EditorPlayground() {
   const notes = useMemo(
     () => [
       "This page mounts the headless markora core with the optional markora-ui overlays.",
-      "Use the source panel to exercise setMarkdown() plus flushChange() against the live editor.",
+      "Use the source panel to reconcile an authoritative snapshot into the live editor.",
       "The output panel shows the exact serialized Markdown emitted from editor state.",
     ],
     [],
@@ -537,7 +537,7 @@ export function EditorPlayground() {
       if (!editorRef.current || !sourceTextareaRef.current) {
         return;
       }
-      editorRef.current.commands.setMarkdown(sourceTextareaRef.current.value, { emitChange: true });
+      editorRef.current.commands.reconcileMarkdown(sourceTextareaRef.current.value, { emitChange: true });
       editorRef.current.flushChange();
       renderToolbar();
     };
@@ -600,8 +600,9 @@ export function EditorPlayground() {
           <div className="panel-header">
             <h3>Markdown source</h3>
             <p>
-              Applying source parses it immediately. Supported syntax is normalized; recognized opaque
-              {" "}constructs retain their exact source while other extensions may change.
+              Applying source reconciles an authoritative snapshot while mapping selection and history.
+              {" "}Supported syntax is normalized; recognized opaque constructs retain their exact source while other
+              {" "}extensions may change.
             </p>
           </div>
           <textarea ref={sourceTextareaRef} id="source" spellCheck={false} defaultValue={initialMarkdown} />

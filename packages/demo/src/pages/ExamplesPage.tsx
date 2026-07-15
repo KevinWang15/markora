@@ -20,7 +20,8 @@ const editor = createEditor({
   {
     title: "AI draft review surface",
     summary: "Constrain or validate generated Markdown against the supported dialect before loading it for visual review.",
-    snippet: `editor.commands.setMarkdown(aiDraft, { emitChange: true });
+    snippet: `// Treat loading a different draft as an intentional hard reset.
+editor.commands.resetMarkdown(aiDraft, { emitChange: true });
 editor.flushChange();
 editor.updateOptions({ editable: false, ariaLabel: "AI draft preview" });`,
   },
@@ -84,12 +85,12 @@ const editor = createEditor({
 
 const recipes = [
   {
-    heading: "Replace from host state",
-    body: "Use `editor.commands.setMarkdown()` for an explicit document replacement, and call `flushChange()` if you need immediate serialized output. Reconciled external updates are tracked separately.",
+    heading: "Apply host state intentionally",
+    body: "Use `reconcileMarkdown()` for ordinary authoritative snapshots; it maps selection/history and preserves plugin state (overlapping undo entries can become no-ops). Use `resetMarkdown()` only when switching documents or deliberately clearing transient state. `setMarkdown()` is a deprecated reset alias.",
   },
   {
     heading: "Observe editor behavior",
-    body: "Subscribe to `selection` and `update` for typed host snapshots without serialization. Keep `onTransaction` for integrations that deliberately depend on ProseMirror transactions.",
+    body: "Subscribe to `selection` and `update` for typed host snapshots and their origins without serialization. Keep `onTransaction` for integrations that deliberately depend on ProseMirror transactions.",
   },
   {
     heading: "Update runtime options",
@@ -132,6 +133,10 @@ export function MarkdownField({ value, onChange }: {
     return () => { editor.destroy(); editorRef.current = null; };
   }, []);
 
+  useEffect(() => {
+    editorRef.current?.commands.reconcileMarkdown(value);
+  }, [value]);
+
   return <div ref={hostRef} />;
 }`,
   },
@@ -141,7 +146,7 @@ export function MarkdownField({ value, onChange }: {
     snippet: `<script setup lang="ts">
 import { createEditor, type MarkdownEditor } from "markora";
 import { createDefaultUi } from "markora-ui";
-import { onMounted, onBeforeUnmount, ref, shallowRef } from "vue";
+import { onMounted, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 
 const props = defineProps<{ modelValue: string }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
@@ -160,6 +165,10 @@ onMounted(() => {
     onChangeMode: "animationFrame",
     onChange: (md) => emit("update:modelValue", md),
   });
+});
+
+watch(() => props.modelValue, (value) => {
+  editor.value?.commands.reconcileMarkdown(value);
 });
 
 onBeforeUnmount(() => { editor.value?.destroy(); });
@@ -193,6 +202,8 @@ onBeforeUnmount(() => { editor.value?.destroy(); });
       onChange,
     });
   });
+
+  $: if (editor) editor.commands.reconcileMarkdown(value);
 
   onDestroy(() => { editor?.destroy(); });
 </script>

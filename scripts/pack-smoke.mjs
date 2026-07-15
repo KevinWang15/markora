@@ -118,7 +118,12 @@ writeFileSync(join(smokeAppDir, "index.html"), `<!doctype html>
 `);
 
 mkdirSync(join(smokeAppDir, "src"), { recursive: true });
-writeFileSync(join(smokeAppDir, "src/main.js"), `import { createEditor, createDefaultCodeBlockLanguageRegistry } from "markora";
+writeFileSync(join(smokeAppDir, "src/main.js"), `import {
+  createEditor,
+  createDefaultCodeBlockLanguageRegistry,
+  getMarkdownEditorTransactionOrigin,
+  setMarkdownEditorTransactionOrigin,
+} from "markora";
 import { createDefaultUi } from "markora-ui";
 import "markora/styles.css";
 import "markora-ui/styles.css";
@@ -132,6 +137,8 @@ if (!app) {
 app.textContent = [
   typeof createEditor,
   typeof createDefaultCodeBlockLanguageRegistry,
+  typeof getMarkdownEditorTransactionOrigin,
+  typeof setMarkdownEditorTransactionOrigin,
   typeof createDefaultUi,
 ].join(":");
 `);
@@ -139,7 +146,12 @@ app.textContent = [
 writeFileSync(join(smokeAppDir, "src/api.ts"), `import {
   MarkdownEditorDestroyedError,
   createEditor,
+  getMarkdownEditorTransactionOrigin,
+  setMarkdownEditorTransactionOrigin,
+  type CreateEditorOptions,
+  type MarkdownEditorChangeOrigin,
   type MarkdownEditorEventMap,
+  type MarkdownEditorExtensionOrigin,
   type UpdateEditorOptions,
 } from "markora";
 
@@ -151,18 +163,69 @@ const editor = createEditor({
   editable: true,
   element,
   initialSelection: "end",
+  onChange(markdown, context) {
+    const origin: MarkdownEditorChangeOrigin = context.origin;
+    void markdown;
+    void origin;
+  },
+  onTransaction(transaction, view, context) {
+    const origin: MarkdownEditorChangeOrigin = context.origin;
+    void transaction;
+    void view;
+    void origin;
+  },
   placeholder: "Start writing",
 });
-const options: UpdateEditorOptions = { editable: false, placeholder: null };
+const legacyCreateOptions: CreateEditorOptions = {
+  element,
+  onChange(markdown) {
+    void markdown;
+  },
+  onTransaction(transaction, view) {
+    void transaction;
+    void view;
+  },
+};
+const options: UpdateEditorOptions = {
+  editable: false,
+  onChange(markdown) {
+    void markdown;
+  },
+  onTransaction(transaction, view) {
+    void transaction;
+    void view;
+  },
+  placeholder: null,
+};
 editor.updateOptions(options);
 const unsubscribe = editor.subscribe("selection", (event: MarkdownEditorEventMap["selection"]) => {
+  const origin: MarkdownEditorChangeOrigin = event.origin;
   event.selection.kind satisfies "all" | "managed-block" | "node" | "other" | "text";
+  void origin;
 });
+const unsubscribeUpdate = editor.subscribe("update", (event: MarkdownEditorEventMap["update"]) => {
+  const origin: MarkdownEditorChangeOrigin = event.origin;
+  void origin;
+});
+const reconciled: boolean = editor.commands.reconcileMarkdown("# Reconciled");
+editor.commands.resetMarkdown("# Reset", { emitChange: true });
+editor.commands.setMarkdown("# Compatibility reset");
+const extensionOrigin: MarkdownEditorExtensionOrigin = "extension:pack-smoke";
+const taggedTransaction = setMarkdownEditorTransactionOrigin(
+  editor.view.state.tr,
+  extensionOrigin,
+);
+const transactionOrigin: MarkdownEditorChangeOrigin | undefined =
+  getMarkdownEditorTransactionOrigin(taggedTransaction);
 unsubscribe();
+unsubscribeUpdate();
 editor.focus("start");
 editor.blur();
 editor.destroy();
 void new MarkdownEditorDestroyedError("focus the editor");
+void legacyCreateOptions;
+void reconciled;
+void transactionOrigin;
 `);
 
 writeFileSync(join(smokeAppDir, "tsconfig.json"), `${JSON.stringify({

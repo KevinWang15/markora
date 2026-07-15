@@ -2,7 +2,7 @@
 
 Status: current `markora` `0.0.x` behavior, verified on 2026-07-15.
 
-This contract applies to Markdown passed through `createEditor({ markdown })` or `editor.commands.setMarkdown()` and returned by `editor.getMarkdown()` or `onChange`.
+This contract applies to Markdown passed through `createEditor({ markdown })`, `editor.commands.reconcileMarkdown()`, or `editor.commands.resetMarkdown()` and returned by `editor.getMarkdown()` or `onChange`. Deprecated `setMarkdown()` uses the same parsing boundary as `resetMarkdown()`.
 
 ## Read this before storing arbitrary Markdown
 
@@ -169,7 +169,7 @@ These limitations are outside the semantic round-trip promise. They are candidat
 
 ## Host integration rules
 
-1. Constrain generated or user-supplied Markdown to this dialect and, when needed, the documented opaque shapes before calling `setMarkdown()`.
+1. Constrain generated or user-supplied Markdown to this dialect and, when needed, the documented opaque shapes before initial creation, `reconcileMarkdown()`, or `resetMarkdown()`.
 2. Treat `getMarkdown()` as normalized output with exact source islands, not the original document string.
 3. Do not use raw string equality as the only dirty-state check across initial import.
 4. If syntax outside the documented supported and opaque shapes is possible, retain the original separately and provide a recovery or broader source-editing path.

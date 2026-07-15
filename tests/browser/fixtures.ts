@@ -39,6 +39,7 @@ export type LabEditorSpec = {
   ariaLabelledBy?: string;
   attributes?: Record<string, string>;
   autofocus?: boolean;
+  controlledEcho?: boolean;
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   id: string;
@@ -239,6 +240,20 @@ export async function resetEditor(page: Page, id: string, markdown: string) {
     ({ editorId, source }) => window.__MARKORA_BROWSER_LAB__!.reset(editorId, source),
     { editorId: id, source: markdown },
   );
+}
+
+export async function reconcileEditor(
+  page: Page,
+  id: string,
+  markdown: string,
+  options?: { emitChange?: boolean },
+) {
+  return page.evaluate(
+    ({ editorId, nextOptions, source }) => (
+      window.__MARKORA_BROWSER_LAB__!.reconcile(editorId, source, nextOptions)
+    ),
+    { editorId: id, nextOptions: options, source: markdown },
+  ) as Promise<{ changed: boolean; snapshot: LabSnapshot }>;
 }
 
 export async function settleEditor(page: Page, id?: string) {

@@ -7,6 +7,7 @@ export type {
   MarkdownEditorActiveNode,
   MarkdownEditorCommands,
   MarkdownEditorMark,
+  MarkdownEditorMarkdownUpdateOptions,
   MarkdownEditorState,
   MarkdownEditorSelectionTarget,
   MarkdownEditorUi,
@@ -14,6 +15,16 @@ export type {
   ToolbarState,
   UpdateEditorOptions,
 } from "./createEditor";
+export {
+  getMarkdownEditorTransactionOrigin,
+  setMarkdownEditorTransactionOrigin,
+} from "./transactionOrigin";
+export type {
+  MarkdownEditorBuiltinChangeOrigin,
+  MarkdownEditorChangeContext,
+  MarkdownEditorChangeOrigin,
+  MarkdownEditorExtensionOrigin,
+} from "./transactionOrigin";
 export { MarkdownEditorDestroyedError } from "./editorEvents";
 export type {
   MarkdownEditorBlurEvent,

@@ -1,4 +1,5 @@
 import type { MarkdownEditor } from "./createEditor";
+import type { MarkdownEditorChangeOrigin } from "./transactionOrigin";
 
 export type MarkdownEditorSelectionKind =
   | "all"
@@ -30,11 +31,13 @@ export type MarkdownEditorBlurEvent = MarkdownEditorEventBase<"blur"> & {
 };
 
 export type MarkdownEditorSelectionEvent = MarkdownEditorEventBase<"selection"> & {
+  origin: MarkdownEditorChangeOrigin;
   previousSelection: MarkdownEditorSelectionSnapshot;
   selection: MarkdownEditorSelectionSnapshot;
 };
 
 export type MarkdownEditorUpdateEvent = MarkdownEditorEventBase<"update"> & {
+  origin: MarkdownEditorChangeOrigin;
   selection: MarkdownEditorSelectionSnapshot;
 };
 

@@ -1,18 +1,18 @@
-export type ChangeEmitterOptions<TDoc> = {
+export type ChangeEmitterOptions<TDoc, TContext> = {
   initialDoc: TDoc;
   mode: "immediate" | "animationFrame";
-  onChange?: (markdown: string) => void;
+  onChange?: (markdown: string, context: TContext) => void;
   requestFrame: (callback: FrameRequestCallback) => number;
   cancelFrame: (frameId: number) => void;
   serialize: (doc: TDoc) => string;
 };
 
-export type ChangeEmitterRuntimeOptions = {
+export type ChangeEmitterRuntimeOptions<TContext> = {
   mode?: "immediate" | "animationFrame";
-  onChange?: ((markdown: string) => void) | null;
+  onChange?: ((markdown: string, context: TContext) => void) | null;
 };
 
-export function createChangeEmitter<TDoc>(options: ChangeEmitterOptions<TDoc>) {
+export function createChangeEmitter<TDoc, TContext>(options: ChangeEmitterOptions<TDoc, TContext>) {
   const { cancelFrame, initialDoc, requestFrame, serialize } = options;
   let mode = options.mode;
   let onChange = options.onChange;
@@ -20,6 +20,7 @@ export function createChangeEmitter<TDoc>(options: ChangeEmitterOptions<TDoc>) {
   let lastSerializedMarkdown = serialize(initialDoc);
   let pendingFrame: number | null = null;
   let pendingDoc: TDoc | null = null;
+  let pendingContext: TContext | null = null;
 
   const getMarkdown = (targetDoc: TDoc) => {
     if (targetDoc === lastSerializedDoc) {
@@ -31,9 +32,10 @@ export function createChangeEmitter<TDoc>(options: ChangeEmitterOptions<TDoc>) {
     return lastSerializedMarkdown;
   };
 
-  const emit = (targetDoc: TDoc) => {
+  const emit = (targetDoc: TDoc, context: TContext) => {
     pendingDoc = null;
-    onChange?.(getMarkdown(targetDoc));
+    pendingContext = null;
+    onChange?.(getMarkdown(targetDoc), context);
   };
 
   const cancel = () => {
@@ -43,6 +45,7 @@ export function createChangeEmitter<TDoc>(options: ChangeEmitterOptions<TDoc>) {
     }
 
     pendingDoc = null;
+    pendingContext = null;
   };
 
   const flush = () => {
@@ -51,22 +54,23 @@ export function createChangeEmitter<TDoc>(options: ChangeEmitterOptions<TDoc>) {
       pendingFrame = null;
     }
 
-    if (pendingDoc) {
-      emit(pendingDoc);
+    if (pendingDoc && pendingContext) {
+      emit(pendingDoc, pendingContext);
     }
   };
 
-  const schedule = (targetDoc: TDoc) => {
+  const schedule = (targetDoc: TDoc, context: TContext) => {
     if (!onChange) {
       return;
     }
 
     if (mode === "immediate") {
-      emit(targetDoc);
+      emit(targetDoc, context);
       return;
     }
 
     pendingDoc = targetDoc;
+    pendingContext = context;
 
     if (pendingFrame !== null) {
       return;
@@ -75,8 +79,8 @@ export function createChangeEmitter<TDoc>(options: ChangeEmitterOptions<TDoc>) {
     pendingFrame = requestFrame(() => {
       pendingFrame = null;
 
-      if (pendingDoc) {
-        emit(pendingDoc);
+      if (pendingDoc && pendingContext) {
+        emit(pendingDoc, pendingContext);
       }
     });
   };
@@ -93,7 +97,7 @@ export function createChangeEmitter<TDoc>(options: ChangeEmitterOptions<TDoc>) {
     flush,
     getMarkdown,
     schedule,
-    update(nextOptions: ChangeEmitterRuntimeOptions) {
+    update(nextOptions: ChangeEmitterRuntimeOptions<TContext>) {
       if (nextOptions.mode !== undefined) {
         mode = nextOptions.mode;
       }

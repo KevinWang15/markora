@@ -264,7 +264,7 @@ describe("production editor options", () => {
 
     editor.updateOptions({ editable: true });
     editor.view.dispatch(editor.view.state.tr.insertText("?", editor.view.state.doc.content.size - 1));
-    expect(nextChanges).toHaveBeenCalledWith("alpha!?");
+    expect(nextChanges).toHaveBeenCalledWith("alpha!?", { origin: "user" });
   });
 
   it("blocks task and opaque-source controls while read-only and re-enables them dynamically", () => {
@@ -327,10 +327,10 @@ describe("production editor options", () => {
       onTransaction: nextTransactions,
     });
     expect(oldChanges).toHaveBeenCalledOnce();
-    expect(oldChanges).toHaveBeenLastCalledWith("alpha!");
+    expect(oldChanges).toHaveBeenLastCalledWith("alpha!", { origin: "user" });
 
     editor.view.dispatch(editor.view.state.tr.insertText("?", editor.view.state.doc.content.size - 1));
-    expect(nextChanges).toHaveBeenCalledWith("alpha!?");
+    expect(nextChanges).toHaveBeenCalledWith("alpha!?", { origin: "user" });
     expect(oldTransactions).toHaveBeenCalledTimes(1);
     expect(nextTransactions).toHaveBeenCalledTimes(1);
 
@@ -356,7 +356,7 @@ describe("production editor options", () => {
 
     editor.flushChange();
     expect(changes).toHaveBeenCalledOnce();
-    expect(changes).toHaveBeenCalledWith("alpha!");
+    expect(changes).toHaveBeenCalledWith("alpha!", { origin: "user" });
   });
 
   it("preserves reentrant option changes made while the previous callback is flushing", () => {
@@ -385,7 +385,7 @@ describe("production editor options", () => {
     editor.updateOptions({ editable: true });
     editor.view.dispatch(editor.view.state.tr.insertText("?", editor.view.state.doc.content.size - 1));
     editor.flushChange();
-    expect(nextChanges).toHaveBeenCalledWith("alpha!?");
+    expect(nextChanges).toHaveBeenCalledWith("alpha!?", { origin: "user" });
   });
 
   it("updates custom UI surfaces once per relevant option refresh", () => {

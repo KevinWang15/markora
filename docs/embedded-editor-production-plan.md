@@ -90,8 +90,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-005 | DONE | M | Check in a Chromium, Firefox, and WebKit browser regression suite |
 | EE-006 | DONE | M | Cover IME, clipboard, drop, touch, RTL, and accessibility behavior |
 | EE-007 | DONE | M | Add production embed configuration and lifecycle APIs |
-| EE-008 | NEXT | M | Separate reconciled external updates from hard document resets |
-| EE-009 | QUEUED | S | Approve a versioned editor and Markdown extension RFC |
+| EE-008 | DONE | M | Separate reconciled external updates from hard document resets |
+| EE-009 | NEXT | S | Approve a versioned editor and Markdown extension RFC |
 | EE-010 | QUEUED | L | Implement the extension kernel and migrate built-ins onto it |
 | EE-011 | QUEUED | M | Complete the block, list, task, code, and table command surface |
 | EE-012 | QUEUED | M | Add host-controlled URL, resource, and asset insertion hooks |
@@ -323,7 +323,7 @@ Let hosts implement standard editor states without reaching into ProseMirror int
 
 ### EE-008 — Define external update semantics
 
-Status: `NEXT`
+Status: `DONE` (2026-07-15)
 
 #### Goal
 
@@ -337,9 +337,19 @@ Prevent ordinary host updates from unnecessarily discarding selection, history, 
 - Prevent controlled-host feedback loops.
 - Document conflict behavior when local and external updates race.
 
+#### Completion notes
+
+- `commands.reconcileMarkdown()` now parses an authoritative snapshot, returns `false` for a semantic no-op, and otherwise applies one verified minimal ProseMirror replacement transaction. The transaction maps selection and history, stays out of undo, preserves plugin state and unaffected NodeViews, and is accepted through a private capability while read-only.
+- `commands.resetMarkdown()` names the deliberate EditorState reconstruction path. It resets selection and clears history/plugin state even for the same document. Deprecated `setMarkdown()` remains an exact hard-reset alias, including its established lifecycle-error label.
+- Change provenance is typed as `user`, `command`, `external`, `reset`, or `extension:${string}`. `onChange`, `onTransaction`, and selection/update events expose it; advanced extensions can tag/read namespaced origins without acquiring the private read-only bypass.
+- Controlled echoes terminate because normalized-equivalent reconciliations dispatch nothing and external updates are silent by default. Equal echoes retain pending batched local output; a divergent authoritative update cancels it. Reconciliations run synchronously in invocation order and do not merge or version snapshots, so hosts remain responsible for rejecting stale revisions.
+- Root/package documentation, the compatibility contract, API reference, framework examples, source playgrounds, Browser Lab, public declaration tests, and the packed consumer now use the explicit reconcile/reset contract. React, Vue, and Svelte examples reconcile controlled prop updates.
+- Regression coverage includes Unicode and structural diff pairs, defensive full-document fallback, selection/history mapping, same-document resets, CodeMirror NodeView identity, read-only authority separation, batching and reentrancy, every origin class, lifecycle compatibility, and packed exports.
+- Final verification: `pnpm check` passes all 558 unit/conformance tests; `pnpm test:browser:required` passes 61 production-preview cases with two expected non-Chromium CDP skips (63 total); `pnpm test:browser` passes 104 cases with four expected engine-specific skips (108 total), and its web server runs `pnpm build`; `pnpm pack:smoke` and `git diff --check` pass.
+
 ### EE-009 — Approve an extension-system RFC
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -573,6 +583,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-007` were completed on 2026-07-15, satisfying Gate A's content-safety requirements and establishing the browser, complex-input, accessibility, and host-lifecycle foundation for Gate B.
+`EE-001` through `EE-008` were completed on 2026-07-15, satisfying Gate A's content-safety requirements and establishing the browser, complex-input, accessibility, host-lifecycle, and external-update foundations for Gate B.
 
-The next iteration is `EE-008 — Define external update semantics`.
+The next iteration is `EE-009 — Approve an extension-system RFC`.

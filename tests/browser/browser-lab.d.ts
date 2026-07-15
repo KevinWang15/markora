@@ -37,6 +37,7 @@ type BrowserLabTestSpec = {
   ariaLabelledBy?: string;
   attributes?: Record<string, string>;
   autofocus?: boolean;
+  controlledEcho?: boolean;
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   id: string;
@@ -94,6 +95,11 @@ interface Window {
     openUi(id: string, kind: "image" | "link"): boolean;
     pendingOpaqueEdit(id: string): { kind: string; source: string } | null;
     ready: true;
+    reconcile(
+      id: string,
+      markdown: string,
+      options?: { emitChange?: boolean },
+    ): { changed: boolean; snapshot: BrowserLabTestSnapshot };
     remount(
       id: string,
       options?: Omit<BrowserLabTestSpec, "direction" | "id" | "placement" | "portal" | "root">,

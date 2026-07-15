@@ -1,4 +1,35 @@
-import { MarkdownEditorDestroyedError, createEditor, createDefaultCodeBlockLanguageRegistry, type CodeBlockLanguageRegistry, type CreateEditorOptions, type EditorUiFactory, type MarkdownEditor, type MarkdownEditorActiveMark, type MarkdownEditorActiveNode, type MarkdownEditorCommands, type MarkdownEditorDomAttributes, type MarkdownEditorErrorEvent, type MarkdownEditorEventMap, type MarkdownEditorMark, type MarkdownEditorSelectionSnapshot, type MarkdownEditorSelectionTarget, type MarkdownEditorState, type MarkdownEditorUi, type MarkdownEditorUnsubscribe, type OpaqueMarkdownEditRequest, type OpaqueMarkdownKind, type ToolbarState, type UpdateEditorOptions } from "../src/index";
+import {
+  MarkdownEditorDestroyedError,
+  createDefaultCodeBlockLanguageRegistry,
+  createEditor,
+  getMarkdownEditorTransactionOrigin,
+  setMarkdownEditorTransactionOrigin,
+  type CodeBlockLanguageRegistry,
+  type CreateEditorOptions,
+  type EditorUiFactory,
+  type MarkdownEditor,
+  type MarkdownEditorActiveMark,
+  type MarkdownEditorActiveNode,
+  type MarkdownEditorBuiltinChangeOrigin,
+  type MarkdownEditorChangeContext,
+  type MarkdownEditorChangeOrigin,
+  type MarkdownEditorCommands,
+  type MarkdownEditorDomAttributes,
+  type MarkdownEditorErrorEvent,
+  type MarkdownEditorEventMap,
+  type MarkdownEditorExtensionOrigin,
+  type MarkdownEditorMark,
+  type MarkdownEditorMarkdownUpdateOptions,
+  type MarkdownEditorSelectionSnapshot,
+  type MarkdownEditorSelectionTarget,
+  type MarkdownEditorState,
+  type MarkdownEditorUi,
+  type MarkdownEditorUnsubscribe,
+  type OpaqueMarkdownEditRequest,
+  type OpaqueMarkdownKind,
+  type ToolbarState,
+  type UpdateEditorOptions,
+} from "../src/index";
 import type { EditorView } from "prosemirror-view";
 
 declare const hostElement: HTMLElement;
@@ -22,6 +53,10 @@ const stateApi: MarkdownEditorState = editor.state;
 const toolbarState: ToolbarState = editor.getToolbarState();
 const editorUi: MarkdownEditorUi | null = editor.ui;
 const destroyed: boolean = editor.isDestroyed;
+const builtinOrigin: MarkdownEditorBuiltinChangeOrigin = "external";
+const extensionOrigin: MarkdownEditorExtensionOrigin = "extension:collaboration";
+const changeOrigin: MarkdownEditorChangeOrigin = extensionOrigin;
+const changeContext: MarkdownEditorChangeContext = { origin: builtinOrigin };
 
 editor.focus("end");
 editor.focus({ anchor: 1 });
@@ -42,15 +77,19 @@ editor.updateOptions(updateOptions);
 
 const unsubscribeUpdate: MarkdownEditorUnsubscribe = editor.subscribe("update", (event) => {
   const type: "update" = event.type;
+  const origin: MarkdownEditorChangeOrigin = event.origin;
   const selection: MarkdownEditorSelectionSnapshot = event.selection;
   const currentEditor: MarkdownEditor = event.editor;
   void type;
+  void origin;
   void selection;
   void currentEditor;
 });
 const unsubscribeSelection = editor.subscribe("selection", (event) => {
+  const origin: MarkdownEditorChangeOrigin = event.origin;
   const previous: MarkdownEditorSelectionSnapshot = event.previousSelection;
   const current: MarkdownEditorSelectionSnapshot = event.selection;
+  void origin;
   void previous;
   void current;
 });
@@ -79,13 +118,25 @@ unsubscribeError();
 
 const mark: MarkdownEditorMark = "strong";
 commands.toggleMark(mark);
-commands.setMarkdown("# Hello", { emitChange: true });
+const markdownUpdateOptions: MarkdownEditorMarkdownUpdateOptions = { emitChange: true };
+const reconciled: boolean = commands.reconcileMarkdown("# Reconciled", markdownUpdateOptions);
+const resetResult: void = commands.resetMarkdown("# Reset", markdownUpdateOptions);
+const compatibilityResetResult: void = commands.setMarkdown("# Compatible reset", markdownUpdateOptions);
 commands.setLink("https://example.com");
 commands.insertImage({ src: "/image.png", alt: "demo", title: null });
 commands.removeLink();
 commands.removeImage();
 commands.undo();
 commands.redo();
+
+const taggedTransaction = setMarkdownEditorTransactionOrigin(
+  editor.view.state.tr,
+  extensionOrigin,
+);
+const taggedOrigin: MarkdownEditorChangeOrigin | undefined =
+  getMarkdownEditorTransactionOrigin(taggedTransaction);
+const untaggedOrigin: MarkdownEditorChangeOrigin | undefined =
+  getMarkdownEditorTransactionOrigin(editor.view.state.tr);
 
 stateApi.can.toggleMark("em");
 stateApi.can.setLink();
@@ -159,15 +210,76 @@ const optionsWithOpaqueEditor: CreateEditorOptions = {
   },
 };
 
+const optionsWithChangeContexts: CreateEditorOptions = {
+  element: hostElement,
+  onChange(markdown, context) {
+    const origin: MarkdownEditorChangeOrigin = context.origin;
+    void markdown;
+    void origin;
+  },
+  onTransaction(transaction, currentView, context) {
+    const origin: MarkdownEditorChangeOrigin = context.origin;
+    void transaction;
+    void currentView;
+    void origin;
+  },
+};
+
+const legacyCallbackOptions: CreateEditorOptions = {
+  element: hostElement,
+  onChange(markdown) {
+    void markdown;
+  },
+  onTransaction(transaction, currentView) {
+    void transaction;
+    void currentView;
+  },
+};
+
+const updateOptionsWithChangeContexts: UpdateEditorOptions = {
+  onChange(markdown, context) {
+    const origin: MarkdownEditorChangeOrigin = context.origin;
+    void markdown;
+    void origin;
+  },
+  onTransaction(transaction, currentView, context) {
+    const origin: MarkdownEditorChangeOrigin = context.origin;
+    void transaction;
+    void currentView;
+    void origin;
+  },
+};
+
+const legacyCallbackUpdateOptions: UpdateEditorOptions = {
+  onChange(markdown) {
+    void markdown;
+  },
+  onTransaction(transaction, currentView) {
+    void transaction;
+    void currentView;
+  },
+};
+
 void typedEditor;
 void view;
 void toolbarState;
 void editorUi;
 void destroyed;
+void changeOrigin;
+void changeContext;
 void eventMap;
+void reconciled;
+void resetResult;
+void compatibilityResetResult;
+void taggedOrigin;
+void untaggedOrigin;
 void optionsWithUi;
 void opaqueKind;
 void optionsWithOpaqueEditor;
+void optionsWithChangeContexts;
+void legacyCallbackOptions;
+void updateOptionsWithChangeContexts;
+void legacyCallbackUpdateOptions;
 
 const destroyedError = new MarkdownEditorDestroyedError("focus the editor");
 const destroyedOperation: string = destroyedError.operation;
@@ -195,6 +307,14 @@ editor.subscribe("selection", (event: MarkdownEditorEventMap["update"]) => event
 
 // @ts-expect-error invalid initial selection target
 editor.focus("middle");
+
+// @ts-expect-error built-in origins are reserved for Markora internals
+setMarkdownEditorTransactionOrigin(editor.view.state.tr, "external");
+
+// @ts-expect-error extension origins must use the extension namespace
+const invalidExtensionOrigin: MarkdownEditorExtensionOrigin = "collaboration";
+
+void invalidExtensionOrigin;
 
 // @ts-expect-error DOM attribute values must be strings
 editor.updateOptions({ attributes: { tabindex: 0 } });
