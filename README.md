@@ -94,9 +94,13 @@ Useful scripts:
 - `pnpm dev:demo` — run the docs/demo site only
 - `pnpm build` — build `markora`, `markora-ui`, and the demo app
 - `pnpm check` — build packages, run typechecks, verify API types, smoke-test Node ESM imports, and execute the test suite
+- `pnpm browser:install` — install the pinned Playwright Chromium, Firefox, and WebKit engines
+- `pnpm test:browser:required` — run the compact release-gate browser cases in all three engines
+- `pnpm test:browser` — run the complete embedded-editor browser matrix against a production demo build
 - `pnpm pack:smoke` — pack `markora` and `markora-ui`, install them into a tiny Vite app, and verify the build
 - `pnpm release:check` — dry-run the `markora` tarball and then run the packed-consumer smoke test
 - open `/__dev` in the demo app for fixture-driven regression checks while developing the editor itself
+- `/__browser` is the private deferred-mount fixture used by Playwright for lifecycle, portal, Shadow DOM, and multi-editor checks
 
 ## Publishing
 

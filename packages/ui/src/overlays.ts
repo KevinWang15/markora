@@ -55,6 +55,18 @@ function removeViewportListeners(win: Window, listener: () => void) {
   win.visualViewport?.removeEventListener("scroll", listener);
 }
 
+function isEventInside(event: Event, element: HTMLElement | null, NodeCtor: typeof Node) {
+  if (!element) {
+    return false;
+  }
+
+  if (typeof event.composedPath === "function" && event.composedPath().includes(element)) {
+    return true;
+  }
+
+  return event.target instanceof NodeCtor && element.contains(event.target);
+}
+
 function positionOverlay(
   dom: HTMLElement,
   markerRect: DOMRect,
@@ -185,14 +197,12 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
   };
 
   const handleDocumentMouseDown = (event: MouseEvent) => {
-    const target = event.target;
-    const targetNode = target instanceof NodeCtor ? target : null;
-
-    if (!targetNode) {
-      return;
-    }
-
-    if (dom.hidden || dom.style.display === "none" || dom.contains(targetNode) || activeMarker?.contains(targetNode)) {
+    if (
+      dom.hidden
+      || dom.style.display === "none"
+      || isEventInside(event, dom, NodeCtor)
+      || isEventInside(event, activeMarker, NodeCtor)
+    ) {
       return;
     }
 
@@ -333,10 +343,12 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   };
 
   const handleDocumentMouseDown = (event: MouseEvent) => {
-    const target = event.target;
-    const targetNode = target instanceof NodeCtor ? target : null;
-    if (!targetNode) return;
-    if (dom.hidden || dom.style.display === "none" || dom.contains(targetNode) || activeMarker?.contains(targetNode)) return;
+    if (
+      dom.hidden
+      || dom.style.display === "none"
+      || isEventInside(event, dom, NodeCtor)
+      || isEventInside(event, activeMarker, NodeCtor)
+    ) return;
     close(false);
   };
 

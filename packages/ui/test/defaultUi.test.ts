@@ -158,6 +158,51 @@ describe('createDefaultUi', () => {
     destroyControllers(controllers);
   });
 
+  it('keeps Shadow DOM media editors active through composed button clicks', () => {
+    const shadowHost = document.createElement('div');
+    const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('span');
+    shadowRoot.append(hostElement, marker);
+    document.body.append(shadowHost);
+    const linkUpdates: string[] = [];
+    const imageUpdates: string[] = [];
+    const controllers = createControllers(hostElement, undefined, {
+      updateActiveImage(_view, attrs) {
+        imageUpdates.push(attrs.src);
+        return true;
+      },
+      updateLinkHref(_view, href) {
+        linkUpdates.push(href);
+        return true;
+      },
+    });
+    const view = createView();
+
+    controllers.linkEditor.open(view, marker, 'https://example.com');
+    const linkEditor = shadowRoot.querySelector<HTMLElement>('.mdw-link-editor');
+    const linkInput = linkEditor?.querySelector<HTMLInputElement>('[aria-label="Link URL"]');
+    const linkSave = Array.from(linkEditor?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent === 'Save');
+    linkInput!.value = 'https://example.com/updated';
+    linkSave?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, composed: true }));
+    linkSave?.click();
+
+    controllers.imageEditor.open(view, marker, { node: { attrs: { src: 'old.png' } } });
+    const imageEditor = shadowRoot.querySelector<HTMLElement>('.mdw-image-editor');
+    const imageInput = imageEditor?.querySelector<HTMLInputElement>('[aria-label="Image URL"]');
+    const imageSave = Array.from(imageEditor?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent === 'Save');
+    imageInput!.value = 'updated.png';
+    imageSave?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, composed: true }));
+    imageSave?.click();
+
+    expect(linkUpdates).toEqual(['https://example.com/updated']);
+    expect(imageUpdates).toEqual(['updated.png']);
+
+    destroyControllers(controllers);
+  });
+
   it('respects an explicit portal root override', () => {
     const shadowHost = document.createElement('div');
     const shadowRoot = shadowHost.attachShadow({ mode: 'open' });

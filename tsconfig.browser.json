@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "sourceMap": false
+  },
+  "include": [
+    "playwright.config.ts",
+    "tests/browser/**/*.ts",
+    "tests/browser/**/*.tsx"
+  ]
+}

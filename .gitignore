@@ -3,3 +3,6 @@ node_modules
 packages/*/dist
 
 .npm-cache
+blob-report
+playwright-report
+test-results

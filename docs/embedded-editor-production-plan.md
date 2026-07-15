@@ -87,8 +87,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-002 | DONE | S | Publish the supported Markdown dialect and normalization contract |
 | EE-003 | DONE | M | Build the conformance, golden-document, and property-test harness |
 | EE-004 | DONE | L | Preserve unsupported Markdown through opaque source nodes |
-| EE-005 | NEXT | M | Check in a Chromium, Firefox, and WebKit browser regression suite |
-| EE-006 | QUEUED | M | Cover IME, clipboard, drop, touch, RTL, and accessibility behavior |
+| EE-005 | DONE | M | Check in a Chromium, Firefox, and WebKit browser regression suite |
+| EE-006 | NEXT | M | Cover IME, clipboard, drop, touch, RTL, and accessibility behavior |
 | EE-007 | QUEUED | M | Add production embed configuration and lifecycle APIs |
 | EE-008 | QUEUED | M | Separate reconciled external updates from hard document resets |
 | EE-009 | QUEUED | S | Approve a versioned editor and Markdown extension RFC |
@@ -246,7 +246,7 @@ Ensure valid but unsupported Markdown survives visual editing elsewhere in the d
 
 ### EE-005 — Add a checked-in real-browser matrix
 
-Status: `NEXT`
+Status: `DONE` (2026-07-15)
 
 #### Goal
 
@@ -260,9 +260,19 @@ Turn the manual Chrome DevTools Protocol audit into a repeatable release gate.
 - Capture console errors, unhandled exceptions, failed requests, and listener leaks as failures.
 - Run a small required browser suite in CI and a broader scheduled matrix where appropriate.
 
+#### Completion notes
+
+- Playwright `1.61.1` is pinned at the workspace root with named Chromium, Firefox, and WebKit projects. Tests run against a production-built Vite preview with failure-only screenshots, video, and traces. Browser test types are part of `pnpm check`, while engine installation and execution remain explicit commands.
+- The private `/__browser` route provides deferred editor creation, destruction, resets, exact Markdown snapshots, deterministic selection setup, host commands, opaque-source updates, open Shadow DOM, body/local/positioned/transformed portals, narrow viewport placement, multiple independent editors, and per-instance output/counters. It is a demo-only regression surface and does not change either published package API.
+- Six required scenarios cover lifecycle/remount and listener cleanup, real heading/mark typing plus undo/redo, link/image/task controls, imported table editing and alignment, CodeMirror editing and boundary exit, and exact inert opaque-source behavior. Six broader scenarios cover multiple-editor isolation, Shadow DOM UI and CodeMirror, local/positioned/transformed responsive overlays with `visualViewport` events, and a transformed responsive table toolbar.
+- Every browser case fails on console errors/assertions, uncaught page errors, failed requests, HTTP responses at or above 400, retained editor/overlay DOM, or an unbalanced document/window/`visualViewport` listener delta. A one-time headless CodeMirror warm-up makes its intentional Firefox document-level copy/cut workaround part of the baseline without exempting later editor-owned listeners.
+- The matrix found and fixed two production interaction bugs. Shadow DOM retargeting closed link/image overlays before their Save clicks; outside-click detection now uses the composed event path. In WebKit, deselecting an image collapsed its source row between task-checkbox `mousedown` and `mouseup`, moving the task and cancelling the click; task activation now occurs on the primary `mousedown` before selection-driven layout can shift.
+- Pull requests and pushes run the six required cases in all three engines. A weekly schedule and manual dispatch run the complete three-engine matrix, with isolated engine installation and retained artifacts per job.
+- Final local browser verification passed all 36 production-preview cases: 12 scenarios each in Chromium, Firefox, and WebKit, with zero collected runtime/network failures and exact listener cleanup. `pnpm check` (419 tests), `pnpm build`, `pnpm pack:smoke`, and `git diff --check` pass.
+
 ### EE-006 — Certify complex input and accessibility paths
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -545,6 +555,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## First iteration
 
-`EE-001` through `EE-004` were completed on 2026-07-15, satisfying Gate A's content-safety requirements.
+`EE-001` through `EE-005` were completed on 2026-07-15, satisfying Gate A's content-safety requirements and establishing the first Gate B release assurance.
 
-The next iteration is `EE-005 — Add a checked-in real-browser matrix`.
+The next iteration is `EE-006 — Certify complex input and accessibility paths`.

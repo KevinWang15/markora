@@ -51,6 +51,100 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, m
   padding: 0;
 }
 
+.browser-lab {
+  min-height: 100vh;
+  padding: 24px;
+  overflow: hidden;
+  background: #eef2ff;
+}
+
+.browser-lab-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.browser-lab-editor {
+  position: relative;
+  width: min(760px, 100%);
+  min-width: 0;
+  margin: 0 auto 28px;
+  border: 1px solid rgba(100, 116, 139, 0.28);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.browser-lab-editor[data-placement="bottom-right"] {
+  width: min(520px, calc(100vw - 40px));
+  margin-top: max(0px, calc(100vh - 440px));
+  margin-right: 0;
+}
+
+.browser-lab-editor-label {
+  position: absolute;
+  z-index: 2;
+  top: 4px;
+  left: 8px;
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.browser-lab-frame {
+  min-width: 0;
+  padding: 28px 20px 20px;
+}
+
+.browser-lab-frame--positioned {
+  position: relative;
+  left: 47px;
+  top: 31px;
+  width: calc(100% - 64px);
+  margin-bottom: 40px;
+}
+
+.browser-lab-frame--transformed {
+  position: relative;
+  left: 41px;
+  top: 27px;
+  width: calc(100% - 56px);
+  margin-bottom: 42px;
+  transform: translate(29px, 19px) scale(0.82);
+  transform-origin: 0 0;
+}
+
+.browser-lab-editor-host {
+  min-height: 260px;
+}
+
+.browser-lab-portal {
+  position: relative;
+  z-index: 10;
+}
+
+.browser-lab-output {
+  display: block;
+  max-height: 100px;
+  padding: 8px 12px;
+  overflow: auto;
+  border-top: 1px solid #e2e8f0;
+  color: #334155;
+  background: #f8fafc;
+  font: 11px/1.4 "SFMono-Regular", Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.browser-lab-shadow-host {
+  display: block;
+}
+
 .topbar,
 .hero-banner,
 .panel,

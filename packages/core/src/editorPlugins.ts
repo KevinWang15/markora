@@ -314,6 +314,16 @@ export function createMarkBoundaryPlugin(options: {
 
   return new Plugin({
     props: {
+      handleDOMEvents: {
+        mousedown(view, event) {
+          const mouseEvent = event as MouseEvent;
+          const position = view.posAtCoords({
+            left: mouseEvent.clientX,
+            top: mouseEvent.clientY,
+          })?.pos ?? view.state.selection.from;
+          return maybeToggleTaskListItem(view, position, mouseEvent);
+        },
+      },
       handleKeyDown(view, event) {
         if (event.key === "Enter" && convertFenceToCodeBlock(view)) {
           return true;
@@ -339,7 +349,6 @@ export function createMarkBoundaryPlugin(options: {
       },
       handleClick(view, pos, event) {
         return (
-          maybeToggleTaskListItem(view, pos, event) ||
           maybeOpenImage(event) ||
           maybeOpenLink(view, event) ||
           (enableDefaultUi && maybeEditActiveImage(view, event, imageEditor)) ||

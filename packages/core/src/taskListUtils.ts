@@ -39,7 +39,13 @@ export function createTaskListHelpers(schema: Schema) {
     const target = event.target;
     const ownerWindow = view.dom.ownerDocument.defaultView;
 
-    if (!ownerWindow || !(target instanceof ownerWindow.HTMLElement) || event.metaKey || event.ctrlKey) {
+    if (
+      !ownerWindow
+      || !(target instanceof ownerWindow.HTMLElement)
+      || event.button !== 0
+      || event.metaKey
+      || event.ctrlKey
+    ) {
       return false;
     }
 

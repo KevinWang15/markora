@@ -4,6 +4,7 @@ import { CodeBlock } from "./components/CodeBlock";
 import { EditorPlayground } from "./components/EditorPlayground";
 import { docsNavigation, installCommand, quickStartCode } from "./lib/content";
 import { ApiPage } from "./pages/ApiPage";
+import { BrowserLabPage } from "./pages/BrowserLabPage";
 import { ExamplesPage } from "./pages/ExamplesPage";
 import { DevLabPage } from "./pages/DevLabPage";
 import { GettingStartedPage } from "./pages/GettingStartedPage";
@@ -12,7 +13,7 @@ import { MarkdownCompatibilityPage } from "./pages/MarkdownCompatibilityPage";
 export function App() {
   const location = useLocation();
   const showHeroBanner = location.pathname === "/" || location.pathname === "/docs/getting-started";
-  const isDevLabRoute = location.pathname === "/__dev";
+  const isInternalLabRoute = location.pathname === "/__dev" || location.pathname === "/__browser";
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -24,8 +25,8 @@ export function App() {
   }, [location.pathname]);
 
   return (
-    <div className={isDevLabRoute ? "docs-site docs-site-dev" : "docs-site"}>
-      {isDevLabRoute ? null : (
+    <div className={isInternalLabRoute ? "docs-site docs-site-dev" : "docs-site"}>
+      {isInternalLabRoute ? null : (
         <header className="topbar">
           <NavLink className="brand" to="/docs/getting-started">
             <span className="brand-badge">M</span>
@@ -67,8 +68,8 @@ export function App() {
         </div>
       ) : null}
 
-      <div className={isDevLabRoute ? "docs-layout docs-layout-dev" : "docs-layout"}>
-        {isDevLabRoute ? null : <aside className="sidebar panel">
+      <div className={isInternalLabRoute ? "docs-layout docs-layout-dev" : "docs-layout"}>
+        {isInternalLabRoute ? null : <aside className="sidebar panel">
           <div className="sidebar-section">
             <span className="card-kicker">Guide</span>
             {docsNavigation.map((item) => (
@@ -83,7 +84,7 @@ export function App() {
           </div>
         </aside>}
 
-        <main className={isDevLabRoute ? "docs-main docs-main-dev" : "docs-main"}>
+        <main className={isInternalLabRoute ? "docs-main docs-main-dev" : "docs-main"}>
           <Routes>
             <Route path="/" element={<Navigate to="/docs/getting-started" replace />} />
             <Route path="/docs/getting-started" element={<GettingStartedPage />} />
@@ -92,6 +93,7 @@ export function App() {
             <Route path="/docs/examples" element={<ExamplesPage />} />
             <Route path="/demo" element={<EditorPlayground />} />
             <Route path="/__dev" element={<DevLabPage />} />
+            <Route path="/__browser" element={<BrowserLabPage />} />
             <Route path="*" element={<Navigate to="/docs/getting-started" replace />} />
           </Routes>
         </main>
