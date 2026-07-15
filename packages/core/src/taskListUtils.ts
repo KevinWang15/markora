@@ -37,19 +37,20 @@ export function createTaskListHelpers(schema: Schema) {
 
   function maybeToggleTaskListItem(view: EditorView, pos: number, event: MouseEvent) {
     const target = event.target;
+    const ownerWindow = view.dom.ownerDocument.defaultView;
 
-    if (!(target instanceof HTMLElement) || event.metaKey || event.ctrlKey) {
+    if (!ownerWindow || !(target instanceof ownerWindow.HTMLElement) || event.metaKey || event.ctrlKey) {
       return false;
     }
 
     const listItemElement = target.closest('li[data-task="true"]');
 
-    if (!(listItemElement instanceof HTMLElement)) {
+    if (!(listItemElement instanceof ownerWindow.HTMLElement)) {
       return false;
     }
 
     const paragraph = listItemElement.querySelector(":scope > p");
-    const contentLeft = paragraph instanceof HTMLElement ? paragraph.getBoundingClientRect().left : listItemElement.getBoundingClientRect().left;
+    const contentLeft = paragraph instanceof ownerWindow.HTMLElement ? paragraph.getBoundingClientRect().left : listItemElement.getBoundingClientRect().left;
     const checkboxZoneLeft = contentLeft - 32;
     const checkboxZoneRight = contentLeft + 8;
 

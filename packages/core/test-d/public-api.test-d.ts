@@ -47,27 +47,34 @@ if (typeof maybeSupport === "function") {
   void maybeSupport();
 }
 
-const uiFactory: EditorUiFactory = (_options) => ({
-  enabled: true,
-  clearSelectionAnchor() {},
-  createSelectionAnchor() {
-    return hostElement;
-  },
-  imageEditor: {
-    open() {},
-    close() {},
-    destroy() {},
-  },
-  linkEditor: {
-    open() {},
-    close() {},
-    destroy() {},
-  },
-  tableToolbar: {
-    update() {},
-    destroy() {},
-  },
-});
+const uiFactory: EditorUiFactory = (_options) => {
+  const linkUpdated: boolean = _options.updateLinkHref(view, "https://example.com");
+  const imageUpdated: boolean = _options.updateActiveImage(view, { src: "/image.png", alt: null, title: null });
+  void linkUpdated;
+  void imageUpdated;
+
+  return {
+    enabled: true,
+    clearSelectionAnchor() {},
+    createSelectionAnchor() {
+      return hostElement;
+    },
+    imageEditor: {
+      open() {},
+      close() {},
+      destroy() {},
+    },
+    linkEditor: {
+      open() {},
+      close() {},
+      destroy() {},
+    },
+    tableToolbar: {
+      update() {},
+      destroy() {},
+    },
+  };
+};
 
 const optionsWithUi: CreateEditorOptions = {
   element: hostElement,

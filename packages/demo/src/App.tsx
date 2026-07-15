@@ -1,3 +1,4 @@
+import { useLayoutEffect } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { CodeBlock } from "./components/CodeBlock";
 import { EditorPlayground } from "./components/EditorPlayground";
@@ -11,6 +12,15 @@ export function App() {
   const location = useLocation();
   const showHeroBanner = location.pathname === "/" || location.pathname === "/docs/getting-started";
   const isDevLabRoute = location.pathname === "/__dev";
+
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const inlineScrollBehavior = root.style.scrollBehavior;
+    root.style.scrollBehavior = "auto";
+    root.scrollTop = 0;
+    document.body.scrollTop = 0;
+    root.style.scrollBehavior = inlineScrollBehavior;
+  }, [location.pathname]);
 
   return (
     <div className={isDevLabRoute ? "docs-site docs-site-dev" : "docs-site"}>
@@ -79,6 +89,7 @@ export function App() {
             <Route path="/docs/examples" element={<ExamplesPage />} />
             <Route path="/demo" element={<EditorPlayground />} />
             <Route path="/__dev" element={<DevLabPage />} />
+            <Route path="*" element={<Navigate to="/docs/getting-started" replace />} />
           </Routes>
         </main>
       </div>

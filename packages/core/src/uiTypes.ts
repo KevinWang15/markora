@@ -45,8 +45,8 @@ export type EditorUiFactory = (options: {
   removeTableColumn: (view: EditorView) => void;
   removeTableRow: (view: EditorView) => void;
   setTableColumnAlignment: (view: EditorView, align: TableAlignment) => void;
-  updateActiveImage: (view: EditorView, attrs: { src: string; alt: string | null; title: string | null }) => void;
-  updateLinkHref: (view: EditorView, href: string) => void;
+  updateActiveImage: (view: EditorView, attrs: { src: string; alt: string | null; title: string | null }) => boolean;
+  updateLinkHref: (view: EditorView, href: string) => boolean;
 }) => EditorUiControllers;
 
 const noopLinkEditor: LinkEditorOverlay = {

@@ -13,6 +13,7 @@ type PopoverControls = {
   open: (button: HTMLButtonElement, defaults?: Record<string, string>) => void;
   close: (refocusEditor?: boolean) => void;
   isOpen: () => boolean;
+  destroy: () => void;
 };
 
 const isApplePlatform = (() => {
@@ -283,7 +284,6 @@ function createToolbarPopover(
     }
   });
   cancelButton.addEventListener("click", () => close(true));
-  panel.addEventListener("mousedown", (event) => event.preventDefault());
   panel.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -295,20 +295,18 @@ function createToolbarPopover(
       saveButton.click();
     }
   });
-  document.addEventListener(
-    "mousedown",
-    (event) => {
-      const target = event.target;
-      if (!(target instanceof Node) || panel.hidden) {
-        return;
-      }
-      if (panel.contains(target) || activeButton?.contains(target)) {
-        return;
-      }
-      close(false);
-    },
-    true,
-  );
+  const handleDocumentMouseDown = (event: MouseEvent) => {
+    const target = event.target;
+    if (!(target instanceof Node) || panel.hidden) {
+      return;
+    }
+    if (panel.contains(target) || activeButton?.contains(target)) {
+      return;
+    }
+    close(false);
+  };
+
+  document.addEventListener("mousedown", handleDocumentMouseDown, true);
   window.addEventListener("resize", reposition);
   window.addEventListener("scroll", reposition, true);
 
@@ -332,6 +330,13 @@ function createToolbarPopover(
     close,
     isOpen() {
       return !panel.hidden;
+    },
+    destroy() {
+      close(false);
+      document.removeEventListener("mousedown", handleDocumentMouseDown, true);
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+      panel.remove();
     },
   };
 }
@@ -364,7 +369,8 @@ export function EditorPlayground() {
     const tooltipController = createToolbarTooltip();
     toolbarElement.setAttribute("role", "toolbar");
     toolbarElement.setAttribute("aria-label", "Formatting");
-    toolbarElement.addEventListener("mousedown", (event) => event.preventDefault());
+    const preserveEditorSelection = (event: MouseEvent) => event.preventDefault();
+    toolbarElement.addEventListener("mousedown", preserveEditorSelection);
 
     const linkPopover = createToolbarPopover(editorRef, {
       title: "Add link",
@@ -531,7 +537,7 @@ export function EditorPlayground() {
       if (!editorRef.current || !sourceTextareaRef.current) {
         return;
       }
-      editorRef.current.commands.setMarkdown(sourceTextareaRef.current.value);
+      editorRef.current.commands.setMarkdown(sourceTextareaRef.current.value, { emitChange: true });
       editorRef.current.flushChange();
       renderToolbar();
     };
@@ -551,12 +557,13 @@ export function EditorPlayground() {
       applyButton?.removeEventListener("click", applyMarkdown);
       sourceTextarea.removeEventListener("focus", closeFromFocus);
       editorElement.removeEventListener("mousedown", closeFromMouse);
+      toolbarElement.removeEventListener("mousedown", preserveEditorSelection);
       editor.destroy();
       editorRef.current = null;
       toolbarElement.innerHTML = "";
       tooltipController.destroy();
-      linkPopover.panel.remove();
-      imagePopover.panel.remove();
+      linkPopover.destroy();
+      imagePopover.destroy();
     };
   }, []);
 

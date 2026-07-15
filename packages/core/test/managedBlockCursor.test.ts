@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
+import { EditorView as CodeMirrorView, ViewPlugin } from '@codemirror/view';
 import { EditorState, Selection, TextSelection } from 'prosemirror-state';
 import { createEditor } from '../src/createEditor';
 import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from '../src/managedBlockCursor';
@@ -305,6 +306,63 @@ describe('ManagedBlockCursor', () => {
     dispatchDomKey(focusCodeMirrorContent(editor), 'ArrowLeft');
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
     expect(editor.view.state.selection.from).toBe(paragraph.pos + paragraph.node.nodeSize - 1);
+  });
+
+  it('claims the outer selection when a code block is clicked from another block', () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: ['before', '', '```js', 'const a = 1;', '```'].join('\n'),
+    });
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const cmContent = editor.view.dom.querySelector('.cm-content') as HTMLElement | null;
+
+    expect(cmContent).not.toBeNull();
+    expect(editor.view.state.selection.from).toBeLessThan(codeBlock.pos);
+
+    cmContent!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+
+    expect(editor.view.state.selection.from).toBeGreaterThanOrEqual(codeBlock.pos + 1);
+    expect(editor.view.state.selection.to).toBeLessThanOrEqual(codeBlock.pos + codeBlock.node.nodeSize - 1);
+    editor.destroy();
+  });
+
+  it('forwards an edit after CodeMirror receives focus from a managed boundary', async () => {
+    let codeMirrorView: CodeMirrorView | null = null;
+    const editor = createEditor({
+      codeBlockLanguages: {
+        captured: async () => ViewPlugin.define((view) => {
+          codeMirrorView = view;
+          return {};
+        }),
+      },
+      element: createHost(),
+      markdown: ['```captured', 'const a = 1;', '```'].join('\n'),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    setSelection(editor, ManagedBlockCursor.create(
+      editor.view.state.doc,
+      codeBlock.pos,
+      'after',
+      (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node),
+    )!);
+    focusCodeMirrorContent(editor);
+
+    expect(codeMirrorView).not.toBeNull();
+    const capturedView = codeMirrorView as CodeMirrorView;
+    capturedView.dispatch({
+      changes: {
+        from: capturedView.state.doc.length,
+        insert: '!',
+      },
+    });
+
+    expect(editor.getMarkdown()).toContain('const a = 1;!');
+    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+    editor.destroy();
   });
 
   it('extends selection upward into a top-of-document code block with Shift+ArrowUp', () => {

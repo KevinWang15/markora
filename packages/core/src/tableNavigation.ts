@@ -172,10 +172,17 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
       return false;
     }
 
-    if (info.row.childCount <= 1) {
+    let columnCount = 0;
+    info.table.forEach((row) => {
+      columnCount = Math.max(columnCount, row.childCount);
+    });
+
+    if (columnCount <= 1) {
       return removeActiveTable(view);
     }
 
+    const remainingAlignments = getTableColumnAlignments(info.table).filter((_align, index) => index !== info.cellIndex);
+    const fallbackAlignment = remainingAlignments[0] ?? null;
     const rows: ProseMirrorNode[] = [];
 
     info.table.forEach((row) => {
@@ -186,6 +193,13 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
           cells.push(cell);
         }
       });
+
+      if (cells.length === 0) {
+        const cellType = row.firstChild?.type === schema.nodes.table_header
+          ? schema.nodes.table_header
+          : schema.nodes.table_cell;
+        cells.push(createParagraphCell(cellType, fallbackAlignment));
+      }
 
       rows.push(row.type.create(row.attrs, cells, row.marks));
     });

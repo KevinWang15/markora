@@ -26,6 +26,8 @@ export function createImageViewClass(options: { imageNodeType: NodeType }): Imag
     private errorIcon: HTMLSpanElement;
     private statusText: HTMLSpanElement;
     private requestVersion = 0;
+    private loadState: "loading" | "loaded" | "error" = "loading";
+    private errorUsesAltText = false;
 
     constructor(private node: ProseMirrorNode, private ownerDocument: Document) {
       const doc = this.ownerDocument;
@@ -92,13 +94,15 @@ export function createImageViewClass(options: { imageNodeType: NodeType }): Imag
       this.spinner.style.borderTopColor = "rgba(59, 130, 246, 0.95)";
       this.spinner.style.borderRadius = "999px";
       this.spinner.style.display = "inline-block";
-      this.spinner.animate(
-        [
-          { transform: "rotate(0deg)" },
-          { transform: "rotate(360deg)" },
-        ],
-        { duration: 900, iterations: Infinity },
-      );
+      if (typeof this.spinner.animate === "function") {
+        this.spinner.animate(
+          [
+            { transform: "rotate(0deg)" },
+            { transform: "rotate(360deg)" },
+          ],
+          { duration: 900, iterations: Infinity },
+        );
+      }
 
       this.errorIcon = doc.createElement("span");
       this.errorIcon.textContent = "⚠️";
@@ -123,11 +127,15 @@ export function createImageViewClass(options: { imageNodeType: NodeType }): Imag
       }
 
       const previousSrc = typeof this.node.attrs.src === "string" ? this.node.attrs.src : "";
+      const previousAlt = typeof this.node.attrs.alt === "string" ? this.node.attrs.alt : "";
       this.node = node;
       this.syncMeta();
+      const nextAlt = typeof node.attrs.alt === "string" ? node.attrs.alt : "";
 
       if (previousSrc !== (typeof node.attrs.src === "string" ? node.attrs.src : "")) {
         this.load();
+      } else if (previousAlt !== nextAlt && this.loadState === "error" && this.errorUsesAltText) {
+        this.setState("error", nextAlt || "Image failed to load");
       }
 
       return true;
@@ -176,6 +184,12 @@ export function createImageViewClass(options: { imageNodeType: NodeType }): Imag
     }
 
     private setState(state: "loading" | "loaded" | "error", message = "") {
+      this.loadState = state;
+
+      if (state !== "error") {
+        this.errorUsesAltText = false;
+      }
+
       if (state === "loaded") {
         this.status.hidden = true;
         this.status.style.display = "none";
@@ -196,11 +210,15 @@ export function createImageViewClass(options: { imageNodeType: NodeType }): Imag
 
     private load() {
       const src = typeof this.node.attrs.src === "string" ? this.node.attrs.src.trim() : "";
-      const fallbackMessage = typeof this.node.attrs.alt === "string" && this.node.attrs.alt ? this.node.attrs.alt : "Image failed to load";
+      const getFallbackMessage = () =>
+        typeof this.node.attrs.alt === "string" && this.node.attrs.alt
+          ? this.node.attrs.alt
+          : "Image failed to load";
       const requestVersion = ++this.requestVersion;
 
       if (!src) {
         this.img.removeAttribute("src");
+        this.errorUsesAltText = false;
         this.setState("error", "Missing image URL");
         return;
       }
@@ -222,7 +240,8 @@ export function createImageViewClass(options: { imageNodeType: NodeType }): Imag
             return;
           }
 
-          this.setState("error", fallbackMessage);
+          this.errorUsesAltText = true;
+          this.setState("error", getFallbackMessage());
         };
 
         this.img.onerror = () => {
@@ -230,7 +249,8 @@ export function createImageViewClass(options: { imageNodeType: NodeType }): Imag
             return;
           }
 
-          this.setState("error", fallbackMessage);
+          this.errorUsesAltText = true;
+          this.setState("error", getFallbackMessage());
         };
 
         this.img.src = src;

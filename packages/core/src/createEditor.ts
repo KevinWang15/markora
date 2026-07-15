@@ -799,7 +799,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       view.updateState(nextState);
       onTransaction?.(transaction, view);
 
-      if (transaction.docChanged) {
+      if (transaction.docChanged && view.state.doc === nextState.doc) {
         changeEmitter.schedule(nextState.doc);
       }
     },
@@ -823,9 +823,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     destroy() {
       changeEmitter.flush();
       uiControllers.clearSelectionAnchor();
+      view.destroy();
       linkEditor.destroy();
       imageEditor.destroy();
-      view.destroy();
+      tableToolbar.destroy();
     },
   };
 }

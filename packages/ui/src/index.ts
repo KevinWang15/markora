@@ -1,5 +1,6 @@
 import type { EditorUiFactory, MarkdownEditor } from "markora";
 import { createImageEditorOverlay, createLinkEditorOverlay, createTableToolbarOverlay } from "./overlays";
+import { setViewportPosition } from "./positioning";
 
 type EditorView = MarkdownEditor["view"];
 type BrowserWindow = Window & typeof globalThis;
@@ -67,12 +68,13 @@ export function createDefaultUi(config: { portalRoot?: PortalRoot } = {}): Edito
       const anchor = ownerDocument.createElement("span");
       anchor.setAttribute("aria-hidden", "true");
       anchor.style.position = "absolute";
-      anchor.style.left = `${coords.left + win.scrollX}px`;
-      anchor.style.top = `${coords.bottom + win.scrollY}px`;
+      anchor.style.left = "0";
+      anchor.style.top = "0";
       anchor.style.width = "0";
       anchor.style.height = "0";
       anchor.style.pointerEvents = "none";
       portalRoot.append(anchor);
+      setViewportPosition(anchor, coords.left, coords.bottom);
       ephemeralSelectionAnchor = anchor;
       return anchor;
     };

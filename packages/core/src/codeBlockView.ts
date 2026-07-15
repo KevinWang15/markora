@@ -247,7 +247,13 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
     stopEvent(event: Event) {
       const target = event.target;
-      return target instanceof this.ownerWindow.Node && this.cm.dom.contains(target);
+      const isInside = target instanceof this.ownerWindow.Node && this.cm.dom.contains(target);
+
+      if (isInside && (event.type === "mousedown" || event.type === "pointerdown" || event.type === "touchstart")) {
+        this.claimInnerSelection();
+      }
+
+      return isInside;
     }
 
     ignoreMutation() {
@@ -318,6 +324,29 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       if (this.cm.hasFocus && this.isOuterSelectionInsideCodeBlock()) {
         this.suppressForwarding = false;
       }
+    }
+
+    private claimInnerSelection() {
+      if (this.updating) {
+        return;
+      }
+
+      this.suppressForwarding = false;
+      const pos = this.getPos();
+      const selection = this.cm.state.selection.main;
+      const anchor = pos + 1 + selection.anchor;
+      const head = pos + 1 + selection.head;
+      const outerSelection = this.outerView.state.selection;
+
+      if (outerSelection.anchor === anchor && outerSelection.head === head) {
+        return;
+      }
+
+      const tr = this.outerView.state.tr.setSelection(TextSelection.create(this.outerView.state.doc, anchor, head));
+      tr.setMeta("addToHistory", false);
+      this.updating = true;
+      this.outerView.dispatch(tr);
+      this.updating = false;
     }
 
     private getEditorRoot(): Document | ShadowRoot {
@@ -556,11 +585,18 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         return;
       }
 
-      if (this.suppressForwarding || !this.isOuterSelectionInsideCodeBlock()) {
+      const newText = this.cm.state.doc.toString();
+      const isManagedCursorEdit =
+        this.outerView.state.selection instanceof ManagedBlockCursor && newText !== this.node.textContent;
+
+      if ((this.suppressForwarding || !this.isOuterSelectionInsideCodeBlock()) && !isManagedCursorEdit) {
         return;
       }
 
-      const newText = this.cm.state.doc.toString();
+      if (isManagedCursorEdit) {
+        this.suppressForwarding = false;
+      }
+
       if (newText === this.node.textContent) {
         this.forwardSelection();
         return;
@@ -676,7 +712,15 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
           ...defaultKeymap,
           indentWithTab,
         ]),
-        CodeMirrorView.updateListener.of(() => {
+        CodeMirrorView.updateListener.of((update) => {
+          if (
+            update.focusChanged &&
+            update.view.hasFocus &&
+            !(this.outerView.state.selection instanceof ManagedBlockCursor)
+          ) {
+            this.claimInnerSelection();
+          }
+
           this.forwardUpdate();
         }),
       ];

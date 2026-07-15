@@ -42,6 +42,9 @@
 .mdw-host .ProseMirror h1,
 .mdw-host .ProseMirror h2,
 .mdw-host .ProseMirror h3,
+.mdw-host .ProseMirror h4,
+.mdw-host .ProseMirror h5,
+.mdw-host .ProseMirror h6,
 .mdw-host .ProseMirror blockquote,
 .mdw-host .ProseMirror ul,
 .mdw-host .ProseMirror ol,
@@ -92,6 +95,29 @@
   font-size: 1.25rem;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.mdw-host .ProseMirror h4 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.mdw-host .ProseMirror h5 {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.mdw-host .ProseMirror h6 {
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.mdw-host .ProseMirror :is(p, h1, h2, h3, h4, h5, h6) + :is(h4, h5, h6),
+.mdw-host .ProseMirror :is(h4, h5, h6) + :is(p, h1, h2, h3, h4, h5, h6) {
+  margin-top: 0.75rem;
 }
 
 
@@ -229,13 +255,17 @@
   vertical-align: middle;
 }
 
-.mdw-host .ProseMirror p > img:only-child {
-  display: block;
+.mdw-host .ProseMirror .mdw-image.mdw-image-standalone {
+  display: flex !important;
+  width: fit-content;
   margin: 0.5rem auto;
+}
+
+.mdw-host .ProseMirror .mdw-image.mdw-image-standalone img {
   box-shadow: 0 1px 2px rgba(31, 35, 40, 0.08);
 }
 
-.mdw-host .ProseMirror img.ProseMirror-selectednode {
+.mdw-host .ProseMirror .mdw-image.ProseMirror-selectednode img {
   outline: 2px solid #0969da;
   outline-offset: 2px;
 }
@@ -256,6 +286,10 @@
   overflow: hidden;
   position: relative;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.mdw-host .mdw-code-block + :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol) {
+  margin-top: 0.75rem;
 }
 
 .mdw-host .mdw-code-block-language {

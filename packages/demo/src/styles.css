@@ -378,6 +378,10 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, m
   flex-direction: column;
   gap: 18px;
 }
+.docs-main,
+.sidebar {
+  min-width: 0;
+}
 .doc-panel,
 .panel,
 .doc-card,
@@ -435,6 +439,7 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, m
 }
 .panel-header { margin-bottom: 14px; }
 #editor { min-height: 520px; }
+#editor > .ProseMirror { min-height: 520px; }
 #source {
   width: 100%;
   min-height: 520px;
@@ -641,7 +646,7 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, m
   .docs-grid-two,
   .examples-grid,
   .api-table {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .sidebar { position: static; }
 }
@@ -660,6 +665,7 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, m
   .doc-card,
   .sidebar { padding: 18px; }
   #editor,
+  #editor > .ProseMirror,
   #source { min-height: 380px; }
   .doc-page-nav { flex-direction: column; }
   .doc-page-nav-next { text-align: left; margin-left: 0; }
@@ -677,6 +683,10 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, m
 }
 
 .dev-lab-editor {
+  min-height: 72vh;
+}
+
+.dev-lab-editor > .ProseMirror {
   min-height: 72vh;
 }
 

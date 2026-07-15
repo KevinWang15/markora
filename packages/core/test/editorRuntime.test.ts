@@ -187,6 +187,37 @@ describe('editor runtime', () => {
     expect(changes).toEqual(['fresh']);
   });
 
+  it.each(['immediate', 'animationFrame'] as const)(
+    'does not emit a stale transaction after a reentrant silent setMarkdown in %s mode',
+    (onChangeMode) => {
+      const changes: string[] = [];
+      const animationFrames = installAnimationFrameStub();
+      let editor: ReturnType<typeof createEditor> | null = null;
+
+      editor = createEditor({
+        element: createHost(),
+        markdown: 'alpha',
+        onChangeMode,
+        onChange(markdown) {
+          changes.push(markdown);
+        },
+        onTransaction(transaction) {
+          if (transaction.docChanged) {
+            editor?.commands.setMarkdown('replacement');
+          }
+        },
+      });
+
+      const insertPos = editor.view.state.doc.content.size - 1;
+      editor.view.dispatch(editor.view.state.tr.insertText('!', insertPos));
+      animationFrames.flush();
+
+      expect(editor.getMarkdown()).toBe('replacement');
+      expect(changes).toEqual([]);
+      editor.destroy();
+    },
+  );
+
   it('uses the host window requestAnimationFrame for scheduled updates', () => {
     const globalAnimationFrames = installAnimationFrameStub();
     const foreignWindow = createForeignWindow();
@@ -421,5 +452,53 @@ describe('editor runtime', () => {
 
     editor.destroy();
     expect(linkEditorDestroyed).toBe(true);
+  });
+
+  it('closes plugin-managed overlays before destroying their controllers', () => {
+    const lifecycle: string[] = [];
+    const ui: EditorUiFactory = () => ({
+      enabled: true,
+      clearSelectionAnchor() {},
+      createSelectionAnchor() {
+        return null;
+      },
+      imageEditor: {
+        close() {
+          lifecycle.push('image:close');
+        },
+        destroy() {
+          lifecycle.push('image:destroy');
+        },
+        open() {},
+      },
+      linkEditor: {
+        close() {
+          lifecycle.push('link:close');
+        },
+        destroy() {
+          lifecycle.push('link:destroy');
+        },
+        open() {},
+      },
+      tableToolbar: {
+        destroy() {
+          lifecycle.push('table:destroy');
+        },
+        update() {},
+      },
+    });
+    const editor = createEditor({
+      element: createHost(),
+      ui,
+    });
+
+    editor.commands.setMarkdown('replacement');
+    expect(lifecycle).not.toContain('table:destroy');
+
+    editor.destroy();
+
+    expect(lifecycle.indexOf('link:close')).toBeLessThan(lifecycle.indexOf('link:destroy'));
+    expect(lifecycle.indexOf('image:close')).toBeLessThan(lifecycle.indexOf('image:destroy'));
+    expect(lifecycle.filter((event) => event === 'table:destroy')).toHaveLength(1);
   });
 });

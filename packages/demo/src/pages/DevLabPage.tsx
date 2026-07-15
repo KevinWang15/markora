@@ -20,6 +20,10 @@ function getExampleFromHash(hash: string) {
 export function DevLabPage() {
   const editorElementRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<MarkdownEditor | null>(null);
+  const presetsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const presetsDialogRef = useRef<HTMLElement | null>(null);
+  const sourceButtonRef = useRef<HTMLButtonElement | null>(null);
+  const sourceDialogRef = useRef<HTMLElement | null>(null);
   const activeExampleRef = useRef<DevExample>(getExampleFromHash(window.location.hash));
   const [activeSlug, setActiveSlug] = useState(activeExampleRef.current.slug);
   const [markdownSource, setMarkdownSource] = useState(activeExampleRef.current.markdown);
@@ -60,23 +64,66 @@ export function DevLabPage() {
       setMarkdownSource(editor.getMarkdown());
     };
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsSourceOpen(false);
-        setIsPresetsOpen(false);
-      }
-    };
-
     window.addEventListener("hashchange", handleHashChange);
-    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       window.removeEventListener("hashchange", handleHashChange);
-      window.removeEventListener("keydown", handleKeyDown);
       editor.destroy();
       editorRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const dialog = isSourceOpen ? sourceDialogRef.current : isPresetsOpen ? presetsDialogRef.current : null;
+    const trigger = isSourceOpen ? sourceButtonRef.current : isPresetsOpen ? presetsButtonRef.current : null;
+
+    if (!dialog) {
+      return;
+    }
+
+    const focusableSelector = "button:not(:disabled), textarea:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex='-1'])";
+    const focusableElements = () => Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+    const initialFocus = dialog.querySelector<HTMLElement>("[data-autofocus]") ?? focusableElements()[0] ?? dialog;
+    initialFocus.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setIsSourceOpen(false);
+        setIsPresetsOpen(false);
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const elements = focusableElements();
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+
+      if (!first || !last) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    dialog.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      dialog.removeEventListener("keydown", handleKeyDown);
+      trigger?.focus();
+    };
+  }, [isPresetsOpen, isSourceOpen]);
 
   const activeExample = useMemo(
     () => devLabExamples.find((example) => example.slug === activeSlug) ?? DEFAULT_EXAMPLE,
@@ -118,8 +165,12 @@ export function DevLabPage() {
 
       <div className="dev-lab-floating-tools">
         <button
+          ref={presetsButtonRef}
           type="button"
           className="dev-floating-button"
+          aria-controls="dev-presets-dialog"
+          aria-expanded={isPresetsOpen}
+          aria-haspopup="dialog"
           onClick={() => {
             setIsPresetsOpen((open) => !open);
             setIsSourceOpen(false);
@@ -128,8 +179,12 @@ export function DevLabPage() {
           Presets
         </button>
         <button
+          ref={sourceButtonRef}
           type="button"
           className="dev-floating-button"
+          aria-controls="dev-source-dialog"
+          aria-expanded={isSourceOpen}
+          aria-haspopup="dialog"
           onClick={() => {
             setIsSourceOpen((open) => !open);
             setIsPresetsOpen(false);
@@ -142,9 +197,14 @@ export function DevLabPage() {
       {isPresetsOpen ? (
         <div className="dev-modal-backdrop" onClick={() => setIsPresetsOpen(false)}>
           <section
+            ref={presetsDialogRef}
+            id="dev-presets-dialog"
             className="dev-modal dev-modal-presets"
             onClick={(event) => event.stopPropagation()}
             aria-label="Preset markdown examples"
+            aria-modal="true"
+            role="dialog"
+            tabIndex={-1}
           >
             <div className="dev-modal-header">
               <div>
@@ -160,6 +220,7 @@ export function DevLabPage() {
                 <button
                   key={example.slug}
                   type="button"
+                  data-autofocus={example.slug === activeSlug ? "true" : undefined}
                   className={example.slug === activeSlug ? "dev-example-button is-active" : "dev-example-button"}
                   onClick={() => loadExample(example)}
                 >
@@ -175,9 +236,14 @@ export function DevLabPage() {
       {isSourceOpen ? (
         <div className="dev-modal-backdrop" onClick={() => setIsSourceOpen(false)}>
           <section
+            ref={sourceDialogRef}
+            id="dev-source-dialog"
             className="dev-modal dev-modal-source"
             onClick={(event) => event.stopPropagation()}
             aria-label="Markdown source"
+            aria-modal="true"
+            role="dialog"
+            tabIndex={-1}
           >
             <div className="dev-modal-header">
               <div>
@@ -195,6 +261,7 @@ export function DevLabPage() {
             </div>
             <textarea
               className="dev-lab-source"
+              data-autofocus="true"
               spellCheck={false}
               value={markdownSource}
               onChange={(event) => setMarkdownSource(event.target.value)}

@@ -139,6 +139,27 @@ export function createImagePlugin(options: { schema: Schema }) {
   const { schema } = options;
 
   return new Plugin({
+    props: {
+      decorations(state) {
+        const decorations: Decoration[] = [];
+
+        state.doc.descendants((node, pos) => {
+          if (
+            node.type === schema.nodes.paragraph &&
+            node.childCount === 1 &&
+            node.firstChild?.type === schema.nodes.image
+          ) {
+            decorations.push(Decoration.node(pos + 1, pos + 1 + node.firstChild.nodeSize, {
+              class: "mdw-image-standalone",
+            }));
+          }
+
+          return true;
+        });
+
+        return decorations.length > 0 ? DecorationSet.create(state.doc, decorations) : null;
+      },
+    },
     appendTransaction(transactions, _oldState, newState) {
       if (!transactions.some((transaction) => transaction.docChanged)) {
         return null;
@@ -344,7 +365,6 @@ export function createMarkBoundaryPlugin(options: {
         destroy() {
           linkEditor.close(false);
           imageEditor.close(false);
-          tableToolbar.destroy();
         },
       };
     },

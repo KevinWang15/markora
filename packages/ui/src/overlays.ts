@@ -1,4 +1,5 @@
 import type { MarkdownEditor } from "markora";
+import { measurePositionSpace, setViewportPosition } from "./positioning";
 
 type EditorView = MarkdownEditor["view"];
 type BrowserWindow = Window & typeof globalThis;
@@ -20,8 +21,91 @@ type OverlayEnvironment = {
   win: BrowserWindow;
 };
 
-function getViewportWidth(doc: Document, win: Window) {
-  return doc.documentElement.clientWidth || win.innerWidth;
+const OVERLAY_GAP = 8;
+const VIEWPORT_MARGIN = 12;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getViewportBounds(doc: Document, win: Window) {
+  const visualViewport = win.visualViewport;
+  const left = visualViewport?.offsetLeft ?? 0;
+  const top = visualViewport?.offsetTop ?? 0;
+  const width = visualViewport?.width || doc.documentElement.clientWidth || win.innerWidth;
+  const height = visualViewport?.height || doc.documentElement.clientHeight || win.innerHeight;
+
+  return {
+    bottom: top + height,
+    height,
+    left,
+    right: left + width,
+    top,
+    width,
+  };
+}
+
+function addViewportListeners(win: Window, listener: () => void) {
+  win.visualViewport?.addEventListener("resize", listener);
+  win.visualViewport?.addEventListener("scroll", listener);
+}
+
+function removeViewportListeners(win: Window, listener: () => void) {
+  win.visualViewport?.removeEventListener("resize", listener);
+  win.visualViewport?.removeEventListener("scroll", listener);
+}
+
+function positionOverlay(
+  dom: HTMLElement,
+  markerRect: DOMRect,
+  doc: Document,
+  win: Window,
+  preferredSide: "above" | "below",
+) {
+  const viewport = getViewportBounds(doc, win);
+  const availableWidth = Math.max(0, viewport.width - VIEWPORT_MARGIN * 2);
+  const availableHeight = Math.max(0, viewport.height - VIEWPORT_MARGIN * 2);
+  const initialSpace = measurePositionSpace(dom);
+
+  dom.style.maxWidth = `${availableWidth / initialSpace.scaleX}px`;
+  dom.style.maxHeight = `${availableHeight / initialSpace.scaleY}px`;
+
+  const space = measurePositionSpace(dom);
+  const overlayRect = dom.getBoundingClientRect();
+  const overlayWidth = Math.min(overlayRect.width || dom.offsetWidth * space.scaleX, availableWidth);
+  const overlayHeight = Math.min(overlayRect.height || dom.offsetHeight * space.scaleY, availableHeight);
+  const minLeft = viewport.left + VIEWPORT_MARGIN;
+  const maxLeft = Math.max(minLeft, viewport.right - overlayWidth - VIEWPORT_MARGIN);
+  const left = clamp(markerRect.left, minLeft, maxLeft);
+  const topAbove = markerRect.top - overlayHeight - OVERLAY_GAP;
+  const topBelow = markerRect.bottom + OVERLAY_GAP;
+  const aboveFits = topAbove >= viewport.top + VIEWPORT_MARGIN;
+  const belowFits = topBelow + overlayHeight <= viewport.bottom - VIEWPORT_MARGIN;
+
+  let top: number;
+
+  if (preferredSide === "above") {
+    if (aboveFits) {
+      top = topAbove;
+    } else if (belowFits) {
+      top = topBelow;
+    } else {
+      top = markerRect.top - viewport.top > viewport.bottom - markerRect.bottom ? topAbove : topBelow;
+    }
+  } else {
+    if (belowFits) {
+      top = topBelow;
+    } else if (aboveFits) {
+      top = topAbove;
+    } else {
+      top = viewport.bottom - markerRect.bottom >= markerRect.top - viewport.top ? topBelow : topAbove;
+    }
+  }
+
+  const minTop = viewport.top + VIEWPORT_MARGIN;
+  const maxTop = Math.max(minTop, viewport.bottom - overlayHeight - VIEWPORT_MARGIN);
+
+  setViewportPosition(dom, left, clamp(top, minTop, maxTop), space);
 }
 
 export type LinkEditorOverlay = {
@@ -42,7 +126,7 @@ export type TableToolbarOverlay = {
 };
 
 export function createLinkEditorOverlay(options: OverlayEnvironment & {
-  updateLinkHref: (view: EditorView, href: string) => void;
+  updateLinkHref: (view: EditorView, href: string) => boolean;
   removeActiveLink: (view: EditorView) => void;
 }): LinkEditorOverlay {
   const { doc, portalRoot, removeActiveLink, updateLinkHref, win } = options;
@@ -82,14 +166,7 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
 
     try {
       const markerRect = activeMarker.getBoundingClientRect();
-      const top = markerRect.bottom + win.scrollY + 8;
-      const left = Math.min(
-        markerRect.left + win.scrollX,
-        win.scrollX + getViewportWidth(doc, win) - dom.offsetWidth - 12,
-      );
-
-      dom.style.top = `${Math.max(12, top)}px`;
-      dom.style.left = `${Math.max(12, left)}px`;
+      positionOverlay(dom, markerRect, doc, win, "below");
     } catch {
       // Marker may have been detached from the DOM.
     }
@@ -136,7 +213,12 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
 
   saveButton.addEventListener("click", () => {
     if (!activeView) return;
-    updateLinkHref(activeView, input.value);
+    if (updateLinkHref(activeView, input.value) === false) {
+      input.setAttribute("aria-invalid", "true");
+      input.focus();
+      return;
+    }
+    input.removeAttribute("aria-invalid");
     close(true);
   });
   unlinkButton.addEventListener("click", () => {
@@ -155,15 +237,18 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
       close(true);
     }
   });
+  input.addEventListener("input", () => input.removeAttribute("aria-invalid"));
   doc.addEventListener("mousedown", handleDocumentMouseDown, true);
   win.addEventListener("resize", handleWindowChange);
   win.addEventListener("scroll", handleWindowChange, true);
+  addViewportListeners(win, handleWindowChange);
 
   return {
     open(view, marker, href) {
       activeView = view;
       activeMarker = marker;
       input.value = href;
+      input.removeAttribute("aria-invalid");
       dom.hidden = false;
       dom.style.display = "flex";
       reposition();
@@ -172,16 +257,18 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
     },
     close,
     destroy() {
+      close(false);
       doc.removeEventListener("mousedown", handleDocumentMouseDown, true);
       win.removeEventListener("resize", handleWindowChange);
       win.removeEventListener("scroll", handleWindowChange, true);
+      removeViewportListeners(win, handleWindowChange);
       dom.remove();
     },
   };
 }
 
 export function createImageEditorOverlay(options: OverlayEnvironment & {
-  updateActiveImage: (view: EditorView, attrs: { src: string; alt: string | null; title: string | null }) => void;
+  updateActiveImage: (view: EditorView, attrs: { src: string; alt: string | null; title: string | null }) => boolean;
   removeActiveImage: (view: EditorView) => void;
 }): ImageEditorOverlay {
   const { doc, portalRoot, removeActiveImage, updateActiveImage, win } = options;
@@ -205,6 +292,12 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   altInput.placeholder = "Alt text";
   altInput.setAttribute("aria-label", "Alt text");
 
+  const titleInput = doc.createElement("input");
+  titleInput.className = "mdw-image-editor-input";
+  titleInput.type = "text";
+  titleInput.placeholder = "Title";
+  titleInput.setAttribute("aria-label", "Title");
+
   const saveButton = doc.createElement("button");
   saveButton.type = "button";
   saveButton.textContent = "Save";
@@ -217,7 +310,6 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   cancelButton.type = "button";
   cancelButton.textContent = "Cancel";
 
-  let activeTitle: string | null = null;
   let activeView: EditorView | null = null;
   let activeMarker: HTMLElement | null = null;
 
@@ -225,13 +317,7 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
     if (!activeMarker) return;
     try {
       const markerRect = activeMarker.getBoundingClientRect();
-      const top = markerRect.bottom + win.scrollY + 8;
-      const left = Math.min(
-        markerRect.left + win.scrollX,
-        win.scrollX + getViewportWidth(doc, win) - dom.offsetWidth - 12,
-      );
-      dom.style.top = `${Math.max(12, top)}px`;
-      dom.style.left = `${Math.max(12, left)}px`;
+      positionOverlay(dom, markerRect, doc, win, "below");
     } catch {
       // Marker may have been detached from the DOM.
     }
@@ -239,7 +325,6 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
 
   const close = (refocusEditor: boolean) => {
     const view = activeView;
-    activeTitle = null;
     activeView = null;
     activeMarker = null;
     dom.hidden = true;
@@ -262,12 +347,17 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   const actions = doc.createElement("div");
   actions.className = "mdw-image-editor-actions";
   actions.append(saveButton, removeButton, cancelButton);
-  dom.append(srcInput, altInput, actions);
+  dom.append(srcInput, altInput, titleInput, actions);
   portalRoot.append(dom);
 
   saveButton.addEventListener("click", () => {
     if (!activeView) return;
-    updateActiveImage(activeView, { src: srcInput.value, alt: altInput.value, title: activeTitle });
+    if (updateActiveImage(activeView, { src: srcInput.value, alt: altInput.value, title: titleInput.value }) === false) {
+      srcInput.setAttribute("aria-invalid", "true");
+      srcInput.focus();
+      return;
+    }
+    srcInput.removeAttribute("aria-invalid");
     close(true);
   });
   removeButton.addEventListener("click", () => {
@@ -286,17 +376,20 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
       close(true);
     }
   });
+  srcInput.addEventListener("input", () => srcInput.removeAttribute("aria-invalid"));
   doc.addEventListener("mousedown", handleDocumentMouseDown, true);
   win.addEventListener("resize", handleWindowChange);
   win.addEventListener("scroll", handleWindowChange, true);
+  addViewportListeners(win, handleWindowChange);
 
   return {
     open(view, marker, imageInfo) {
       activeView = view;
       activeMarker = marker;
-      activeTitle = typeof imageInfo.node.attrs.title === "string" ? imageInfo.node.attrs.title : null;
       srcInput.value = typeof imageInfo.node.attrs.src === "string" ? imageInfo.node.attrs.src : "";
       altInput.value = typeof imageInfo.node.attrs.alt === "string" ? imageInfo.node.attrs.alt : "";
+      titleInput.value = typeof imageInfo.node.attrs.title === "string" ? imageInfo.node.attrs.title : "";
+      srcInput.removeAttribute("aria-invalid");
       dom.hidden = false;
       dom.style.display = "flex";
       reposition();
@@ -305,9 +398,11 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
     },
     close,
     destroy() {
+      close(false);
       doc.removeEventListener("mousedown", handleDocumentMouseDown, true);
       win.removeEventListener("resize", handleWindowChange);
       win.removeEventListener("scroll", handleWindowChange, true);
+      removeViewportListeners(win, handleWindowChange);
       dom.remove();
     },
   };
@@ -449,14 +544,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     if (!activeMarker) return;
     try {
       const rect = activeMarker.getBoundingClientRect();
-      const topAbove = rect.top + win.scrollY - dom.offsetHeight - 8;
-      const topBelow = rect.bottom + win.scrollY + 8;
-      const left = Math.min(
-        rect.left + win.scrollX,
-        win.scrollX + getViewportWidth(doc, win) - dom.offsetWidth - 12,
-      );
-      dom.style.top = `${Math.max(12, topAbove > 12 ? topAbove : topBelow)}px`;
-      dom.style.left = `${Math.max(12, left)}px`;
+      positionOverlay(dom, rect, doc, win, "above");
     } catch {
       // Marker may have been detached from the DOM.
     }
@@ -492,6 +580,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   removeButton.addEventListener("click", () => { const view = activeView; if (!view) return; removeActiveTable(view); view.focus(); });
   win.addEventListener("resize", handleWindowChange);
   win.addEventListener("scroll", handleWindowChange, true);
+  addViewportListeners(win, handleWindowChange);
 
   return {
     update(view) {
@@ -513,9 +602,11 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       reposition();
     },
     destroy() {
+      close();
       dom.removeEventListener("mousedown", handleMouseDown);
       win.removeEventListener("resize", handleWindowChange);
       win.removeEventListener("scroll", handleWindowChange, true);
+      removeViewportListeners(win, handleWindowChange);
       dom.remove();
     },
   };
