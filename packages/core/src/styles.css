@@ -292,6 +292,100 @@
   margin-top: 0.75rem;
 }
 
+.mdw-host .mdw-opaque-block {
+  position: relative;
+  margin-top: 0.75rem;
+  overflow: hidden;
+  border: 1px solid #d8dee4;
+  border-radius: 10px;
+  background: #f6f8fa;
+  color: #24292f;
+}
+
+.mdw-host .mdw-opaque-block + :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol),
+.mdw-host :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol) + .mdw-opaque-block {
+  margin-top: 0.75rem;
+}
+
+.mdw-host .mdw-opaque-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #d8dee4;
+  background: #f0f3f6;
+}
+
+.mdw-host .mdw-opaque-kind {
+  color: #57606a;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mdw-host .mdw-opaque-edit {
+  padding: 0.25rem 0.55rem;
+  border: 1px solid #afb8c1;
+  border-radius: 6px;
+  background: #fff;
+  color: #24292f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.mdw-host .mdw-opaque-edit:hover {
+  background: #f6f8fa;
+}
+
+.mdw-host .mdw-opaque-edit:focus-visible {
+  outline: 2px solid #0969da;
+  outline-offset: 2px;
+}
+
+.mdw-host .mdw-opaque-block > .mdw-opaque-source {
+  max-height: 18rem;
+  margin: 0;
+  overflow: auto;
+  padding: 0.75rem;
+  background: #fff;
+  white-space: pre-wrap;
+}
+
+.mdw-host .mdw-opaque-source code,
+.mdw-host code.mdw-opaque-source {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875rem;
+}
+
+.mdw-host .mdw-opaque-inline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  max-width: 100%;
+  border: 1px solid #d8dee4;
+  border-radius: 5px;
+  background: #f6f8fa;
+  vertical-align: baseline;
+}
+
+.mdw-host .mdw-opaque-inline .mdw-opaque-edit {
+  margin-right: 0.2rem;
+}
+
+.mdw-host .mdw-opaque-inline > .mdw-opaque-source {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.mdw-host .mdw-opaque-node.ProseMirror-selectednode {
+  border-color: #0969da;
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.18);
+}
+
 .mdw-host .mdw-code-block-language {
   padding: 0.625rem 0.875rem;
   border-bottom: 1px solid #d8dee4;
@@ -481,14 +575,17 @@
 }
 
 .mdw-host .ProseMirror table.mdw-managed-block-cursor,
-.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor {
+.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor,
+.mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor {
   position: relative;
 }
 
 .mdw-host .ProseMirror table.mdw-managed-block-cursor::before,
 .mdw-host .ProseMirror table.mdw-managed-block-cursor::after,
 .mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor::before,
-.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor::after {
+.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor::after,
+.mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor::before,
+.mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor::after {
   content: none;
   position: absolute;
   top: 8px;
@@ -503,13 +600,15 @@
 }
 
 .mdw-host .ProseMirror table.mdw-managed-block-cursor-before::before,
-.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor-before::before {
+.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor-before::before,
+.mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor-before::before {
   content: "";
   left: -1px;
 }
 
 .mdw-host .ProseMirror table.mdw-managed-block-cursor-after::after,
-.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor-after::after {
+.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor-after::after,
+.mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor-after::after {
   content: "";
   right: -1px;
 }

@@ -3,20 +3,8 @@ import { history, redo, undo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
 import { type Node as ProseMirrorNode, type NodeType } from "prosemirror-model";
 import { sinkListItem, splitListItem, liftListItem } from "prosemirror-schema-list";
-import { EditorState, Selection, TextSelection } from "prosemirror-state";
+import { EditorState, NodeSelection, Selection, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
-
-
-export type CreateEditorOptions = {
-  codeBlockLanguages?: CodeBlockLanguageRegistry;
-  element: HTMLElement;
-  markdown?: string;
-  onTransaction?: (transaction: Parameters<EditorView["dispatch"]>[0], view: EditorView) => void;
-  onChange?: (markdown: string) => void;
-  onChangeMode?: "immediate" | "animationFrame";
-  ui?: EditorUiFactory;
-};
-
 import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from "./managedBlockCursor";
 export { ManagedBlockCursor } from "./managedBlockCursor";
 import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
@@ -37,6 +25,19 @@ import { createNoopUiControllers } from "./uiTypes";
 import { createTaskListHelpers } from "./taskListUtils";
 import { createMediaActionHelpers } from "./mediaActionUtils";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
+import { createOpaqueNodeViewClass } from "./opaqueNodeView";
+import type { OpaqueMarkdownEditRequest } from "./opaqueMarkdown";
+
+export type CreateEditorOptions = {
+  codeBlockLanguages?: CodeBlockLanguageRegistry;
+  element: HTMLElement;
+  markdown?: string;
+  onTransaction?: (transaction: Parameters<EditorView["dispatch"]>[0], view: EditorView) => void;
+  onChange?: (markdown: string) => void;
+  onChangeMode?: "immediate" | "animationFrame";
+  onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
+  ui?: EditorUiFactory;
+};
 
 export type MarkdownEditorMark = "strong" | "em" | "code" | "strike";
 export type MarkdownEditorActiveMark = MarkdownEditorMark | "link";
@@ -382,6 +383,10 @@ function findTextSelectionInsideNode(
   node: ProseMirrorNode,
   direction: -1 | 1,
 ) {
+  if (node.type === schema.nodes.raw_block) {
+    return NodeSelection.create(doc, nodePos);
+  }
+
   const searchPos = direction < 0 ? nodePos + node.nodeSize - 1 : nodePos + 1;
   const selection = Selection.findFrom(doc.resolve(searchPos), direction, true);
 
@@ -458,7 +463,16 @@ const { convertPipeTable } = createPipeTableHelpers({
 });
 
 export function createEditor(options: CreateEditorOptions): MarkdownEditor {
-  const { codeBlockLanguages, element, markdown = "", onChange, onChangeMode = "immediate", onTransaction, ui } = options;
+  const {
+    codeBlockLanguages,
+    element,
+    markdown = "",
+    onChange,
+    onChangeMode = "immediate",
+    onEditOpaqueMarkdown,
+    onTransaction,
+    ui,
+  } = options;
   const ownerWindow = element.ownerDocument.defaultView as BrowserWindow | null;
 
   if (!ownerWindow) {
@@ -493,6 +507,16 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     schema,
     moveBeforeManagedBlock,
     setManagedBlockBoundarySelection,
+  });
+  const RawBlockView = createOpaqueNodeViewClass({
+    display: "block",
+    nodeType: schema.nodes.raw_block,
+    onEdit: onEditOpaqueMarkdown,
+  });
+  const RawInlineView = createOpaqueNodeViewClass({
+    display: "inline",
+    nodeType: schema.nodes.raw_inline,
+    onEdit: onEditOpaqueMarkdown,
   });
   const uiControllers = ui?.({
     updateLinkHref,
@@ -792,6 +816,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       },
       image(node, editorView) {
         return new ImageView(node, editorView.dom.ownerDocument);
+      },
+      raw_block(node, editorView, getPos) {
+        return new RawBlockView(node, editorView, getPos);
+      },
+      raw_inline(node, editorView, getPos) {
+        return new RawInlineView(node, editorView, getPos);
       },
     },
     dispatchTransaction(transaction) {

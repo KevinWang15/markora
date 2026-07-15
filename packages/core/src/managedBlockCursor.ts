@@ -17,7 +17,11 @@ export function isManagedBlockNodeFromSchema(
   schema: ProseMirrorNode["type"]["schema"],
   node: ProseMirrorNode | null | undefined,
 ): node is ProseMirrorNode {
-  return !!node && (node.type === schema.nodes.table || node.type === schema.nodes.code_block);
+  return !!node && (
+    node.type === schema.nodes.table ||
+    node.type === schema.nodes.code_block ||
+    node.type === schema.nodes.raw_block
+  );
 }
 
 export class ManagedBlockCursor extends Selection {

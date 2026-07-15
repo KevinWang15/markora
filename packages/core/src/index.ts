@@ -19,3 +19,4 @@ export type {
   CodeBlockLanguageSupport,
 } from "./codeBlockLanguages";
 export type { EditorUiFactory } from "./uiTypes";
+export type { OpaqueMarkdownEditRequest, OpaqueMarkdownKind } from "./opaqueMarkdown";

@@ -5,6 +5,22 @@ function normalizeMarkdown(markdown: string) {
   return markdownSerializer.serialize(parseMarkdown(markdown));
 }
 
+function collectOpaqueNodes(markdown: string) {
+  const nodes: Array<{ kind: string; source: string; type: string }> = [];
+
+  parseMarkdown(markdown).descendants((node) => {
+    if (node.type.name === 'raw_block' || node.type.name === 'raw_inline') {
+      nodes.push({
+        type: node.type.name,
+        kind: node.attrs.kind,
+        source: node.attrs.source,
+      });
+    }
+  });
+
+  return nodes;
+}
+
 describe('published Markdown dialect contract', () => {
   it.each([
     {
@@ -61,17 +77,40 @@ describe('published Markdown dialect contract', () => {
     {
       construct: 'YAML front matter',
       input: '---\ntitle: Example\n---\n\nBody',
-      output: '---\n\n## title: Example\n\nBody',
+      kind: 'frontmatter',
+      source: '---\ntitle: Example\n---',
     },
+    {
+      construct: 'display math',
+      input: '$$\nx + y\n$$',
+      kind: 'display-math',
+    },
+    {
+      construct: 'raw HTML blocks',
+      input: '<div>\nhello\n</div>',
+      kind: 'html-block',
+    },
+    {
+      construct: 'directives',
+      input: ':::note\nImportant\n:::',
+      kind: 'directive-container',
+    },
+  ])('preserves recognized unsupported $construct as inert opaque source', ({ input, kind, source = input }) => {
+    expect(() => parseMarkdown(input)).not.toThrow();
+    expect(normalizeMarkdown(input)).toBe(input);
+    expect(collectOpaqueNodes(input)).toEqual([{ type: 'raw_block', kind, source }]);
+  });
+
+  it.each([
     {
       construct: 'footnotes',
       input: 'Text[^1]\n\n[^1]: Note',
       output: 'Text[^1](Note)',
     },
     {
-      construct: 'display math',
-      input: '$$\nx + y\n$$',
-      output: '$$ x + y $$',
+      construct: 'inline math',
+      input: 'Inline $x + y$ math',
+      output: 'Inline $x + y$ math',
     },
     {
       construct: 'GitHub callouts',
@@ -79,24 +118,14 @@ describe('published Markdown dialect contract', () => {
       output: '> \\[!NOTE\\] Important',
     },
     {
-      construct: 'raw HTML blocks',
-      input: '<div>\nhello\n</div>',
-      output: '<div> hello </div>',
-    },
-    {
-      construct: 'directives',
-      input: ':::note\nImportant\n:::',
-      output: ':::note Important :::',
-    },
-    {
       construct: 'TOC markers',
       input: '[TOC]',
       output: '\\[TOC\\]',
     },
-  ])('does not promise preservation or an error for unsupported $construct', ({ input, output }) => {
+  ])('characterizes the unreported fallback for unsupported $construct', ({ input, output }) => {
     expect(() => parseMarkdown(input)).not.toThrow();
     expect(normalizeMarkdown(input)).toBe(output);
-    expect(output).not.toBe(input);
+    expect(collectOpaqueNodes(input)).toEqual([]);
   });
 
   it('treats Mermaid fences as generic code blocks, not diagram syntax', () => {

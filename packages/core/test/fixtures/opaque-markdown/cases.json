@@ -1,0 +1,293 @@
+{
+  "schemaVersion": 1,
+  "description": "Reviewed exact-source and negative-detection cases for Markora opaque Markdown nodes.",
+  "reviewStatus": "reviewed",
+  "opaqueKinds": [
+    "frontmatter",
+    "display-math",
+    "html-block",
+    "html-comment",
+    "directive-container",
+    "directive-leaf",
+    "inline-html",
+    "inline-directive",
+    "unknown-fence"
+  ],
+  "cases": [
+    {
+      "id": "frontmatter-basic-with-supported-neighbors",
+      "classification": "opaque-block",
+      "input": "---\ntitle: Example\ntags:\n  - alpha\n  - beta\n...\n\nHeading\n=======\n\n- item\n",
+      "expected": "---\ntitle: Example\ntags:\n  - alpha\n  - beta\n...\n\n# Heading\n\n* item",
+      "opaqueNodes": [
+        {
+          "kind": "frontmatter",
+          "source": "---\ntitle: Example\ntags:\n  - alpha\n  - beta\n..."
+        }
+      ]
+    },
+    {
+      "id": "frontmatter-bom-crlf",
+      "classification": "opaque-block",
+      "note": "The source attribute retains the BOM and CRLF inside the opaque line range; serializer-owned block separation remains canonical LF.",
+      "input": "\uFEFF---\r\ntitle: CRLF\r\nenabled: true\r\n---\r\n\r\nBody\r\n",
+      "expected": "\uFEFF---\r\ntitle: CRLF\r\nenabled: true\r\n---\n\nBody",
+      "opaqueNodes": [
+        {
+          "kind": "frontmatter",
+          "source": "\uFEFF---\r\ntitle: CRLF\r\nenabled: true\r\n---"
+        }
+      ]
+    },
+    {
+      "id": "display-math-multiline",
+      "classification": "opaque-block",
+      "note": "A top-level opaque block after supported content retains legacy CR line endings internally while serializer-owned separators normalize to LF.",
+      "input": "Before\r\r$$\rx + y\\\\\rz = 3\r$$\r\rAfter\r",
+      "expected": "Before\n\n$$\rx + y\\\\\rz = 3\r$$\n\nAfter",
+      "opaqueNodes": [
+        {
+          "kind": "display-math",
+          "source": "$$\rx + y\\\\\rz = 3\r$$"
+        }
+      ]
+    },
+    {
+      "id": "display-math-single-line-standalone",
+      "classification": "opaque-block",
+      "note": "Double-dollar math is block syntax here because the complete construct occupies its own line.",
+      "input": "# Formula\n\n$$ E = mc^2 $$\n\nAfter\n",
+      "expected": "# Formula\n\n$$ E = mc^2 $$\n\nAfter",
+      "opaqueNodes": [
+        {
+          "kind": "display-math",
+          "source": "$$ E = mc^2 $$"
+        }
+      ]
+    },
+    {
+      "id": "html-block-div",
+      "classification": "opaque-block",
+      "input": "Before\n\n<div class=\"note\">\n**do not parse this**\n</div>\n\n- After\n",
+      "expected": "Before\n\n<div class=\"note\">\n**do not parse this**\n</div>\n\n* After",
+      "opaqueNodes": [
+        {
+          "kind": "html-block",
+          "source": "<div class=\"note\">\n**do not parse this**\n</div>"
+        }
+      ]
+    },
+    {
+      "id": "html-comment-multiline-block",
+      "classification": "opaque-block",
+      "input": "<!-- build: keep\nsecond line -->\n\nBody\n",
+      "expected": "<!-- build: keep\nsecond line -->\n\nBody",
+      "opaqueNodes": [
+        {
+          "kind": "html-comment",
+          "source": "<!-- build: keep\nsecond line -->"
+        }
+      ]
+    },
+    {
+      "id": "html-script-multiline-block",
+      "classification": "opaque-block",
+      "note": "The source must be displayed as inert text; it must never create or execute a script element.",
+      "input": "<script>\nwindow.evil = true;\n</script>\n\nBody\n",
+      "expected": "<script>\nwindow.evil = true;\n</script>\n\nBody",
+      "opaqueNodes": [
+        {
+          "kind": "html-block",
+          "source": "<script>\nwindow.evil = true;\n</script>"
+        }
+      ]
+    },
+    {
+      "id": "html-script-single-line-block",
+      "classification": "opaque-block",
+      "note": "A script tag beginning a standalone line is an HTML block even when its closing tag is on that line.",
+      "input": "<script>alert(\"not executed\")</script>\n\nBody\n",
+      "expected": "<script>alert(\"not executed\")</script>\n\nBody",
+      "opaqueNodes": [
+        {
+          "kind": "html-block",
+          "source": "<script>alert(\"not executed\")</script>"
+        }
+      ]
+    },
+    {
+      "id": "html-style-block",
+      "classification": "opaque-block",
+      "input": "<style>\n.note::before { content: \"[raw]\"; }\n</style>\n\nBody\n",
+      "expected": "<style>\n.note::before { content: \"[raw]\"; }\n</style>\n\nBody",
+      "opaqueNodes": [
+        {
+          "kind": "html-block",
+          "source": "<style>\n.note::before { content: \"[raw]\"; }\n</style>"
+        }
+      ]
+    },
+    {
+      "id": "html-declaration-block",
+      "classification": "opaque-block",
+      "input": "<!DOCTYPE html>\n\n# Body\n",
+      "expected": "<!DOCTYPE html>\n\n# Body",
+      "opaqueNodes": [
+        {
+          "kind": "html-block",
+          "source": "<!DOCTYPE html>"
+        }
+      ]
+    },
+    {
+      "id": "html-cdata-block",
+      "classification": "opaque-block",
+      "input": "<![CDATA[\n<a>&literal;</a>\n]]>\n\nBody\n",
+      "expected": "<![CDATA[\n<a>&literal;</a>\n]]>\n\nBody",
+      "opaqueNodes": [
+        {
+          "kind": "html-block",
+          "source": "<![CDATA[\n<a>&literal;</a>\n]]>"
+        }
+      ]
+    },
+    {
+      "id": "inline-html-tags",
+      "classification": "opaque-inline",
+      "input": "Before <span data-label=\"[a] &amp;\">**inside**</span> after.\n",
+      "expected": "Before <span data-label=\"[a] &amp;\">**inside**</span> after.",
+      "opaqueNodes": [
+        {
+          "kind": "inline-html",
+          "source": "<span data-label=\"[a] &amp;\">"
+        },
+        {
+          "kind": "inline-html",
+          "source": "</span>"
+        }
+      ]
+    },
+    {
+      "id": "inline-html-comment",
+      "classification": "opaque-inline",
+      "note": "A top-level multiline inline token retains its internal CRLF rather than inheriting tokenizer line-ending normalization.",
+      "input": "Before <!-- **keep**\r\n[x] --> after.\r\n",
+      "expected": "Before <!-- **keep**\r\n[x] --> after.",
+      "opaqueNodes": [
+        {
+          "kind": "html-comment",
+          "source": "<!-- **keep**\r\n[x] -->"
+        }
+      ]
+    },
+    {
+      "id": "directive-container-nested",
+      "classification": "opaque-block",
+      "note": "The reviewed shape is one outer opaque node; the inner container is source inside that node, not a second editable node.",
+      "input": "Heading\n=======\n\n:::{#outer .note}\nBefore.\n\n:::inner\nInside **untouched**.\n:::\n\nAfter.\n:::\n\n- after\n",
+      "expected": "# Heading\n\n:::{#outer .note}\nBefore.\n\n:::inner\nInside **untouched**.\n:::\n\nAfter.\n:::\n\n* after",
+      "opaqueNodes": [
+        {
+          "kind": "directive-container",
+          "source": ":::{#outer .note}\nBefore.\n\n:::inner\nInside **untouched**.\n:::\n\nAfter.\n:::"
+        }
+      ]
+    },
+    {
+      "id": "directive-leaf-standalone",
+      "classification": "opaque-block",
+      "input": "Before\n\n::youtube[Video]{#abc start=30}\n\n- After\n",
+      "expected": "Before\n\n::youtube[Video]{#abc start=30}\n\n* After",
+      "opaqueNodes": [
+        {
+          "kind": "directive-leaf",
+          "source": "::youtube[Video]{#abc start=30}"
+        }
+      ]
+    },
+    {
+      "id": "directive-inline",
+      "classification": "opaque-inline",
+      "input": "Read :abbr[HTML]{title=\"HyperText Markup Language\"} now.\n",
+      "expected": "Read :abbr[HTML]{title=\"HyperText Markup Language\"} now.",
+      "opaqueNodes": [
+        {
+          "kind": "inline-directive",
+          "source": ":abbr[HTML]{title=\"HyperText Markup Language\"}"
+        }
+      ]
+    },
+    {
+      "id": "negative-frontmatter-after-content",
+      "classification": "negative",
+      "note": "Front matter is recognized only at the document head; these delimiters retain their current CommonMark interpretation.",
+      "input": "Intro\n\n---\ntitle: Example\n---\n\nBody\n",
+      "expected": "Intro\n\n---\n\n## title: Example\n\nBody",
+      "opaqueNodes": []
+    },
+    {
+      "id": "negative-currency-is-not-math",
+      "classification": "negative",
+      "note": "Dollar characters inside ordinary prose must not be consumed by display-math detection.",
+      "input": "Costs $5 today and $6 tomorrow.\n",
+      "expected": "Costs $5 today and $6 tomorrow.",
+      "opaqueNodes": []
+    },
+    {
+      "id": "negative-inline-double-dollar-is-not-display-math",
+      "classification": "negative",
+      "note": "A double-dollar pair embedded in prose is not the standalone display-math shape promised by this fixture version.",
+      "input": "Before $$x + y$$ after.\n",
+      "expected": "Before $$x + y$$ after.",
+      "opaqueNodes": []
+    },
+    {
+      "id": "negative-colon-prose-is-not-directive",
+      "classification": "negative",
+      "note": "Time punctuation and an unstructured double-colon word are plain text.",
+      "input": "Time is 12:30 and scope is ::name.\n",
+      "expected": "Time is 12:30 and scope is ::name.",
+      "opaqueNodes": []
+    },
+    {
+      "id": "negative-autolinks-are-supported-links",
+      "classification": "negative",
+      "note": "Angle autolinks take precedence over inline-HTML recognition and retain the existing link normalization contract.",
+      "input": "See <https://example.com> and <a@example.com>.\n",
+      "expected": "See [https://example.com](https://example.com/) and [a@example.com](mailto:a@example.com).",
+      "opaqueNodes": []
+    },
+    {
+      "id": "negative-angle-comparison-is-text",
+      "classification": "negative",
+      "note": "Angle punctuation that is neither HTML nor an autolink remains ordinary text.",
+      "input": "1 < 2 and 3 > 2.\n",
+      "expected": "1 < 2 and 3 > 2.",
+      "opaqueNodes": []
+    },
+    {
+      "id": "negative-code-span-shields-delimiters",
+      "classification": "negative",
+      "note": "Opaque detectors must not inspect display-math, HTML, or directive-looking text inside a supported code span.",
+      "input": "Literal `$$ <span> :::note` stays code.\n",
+      "expected": "Literal `$$ <span> :::note` stays code.",
+      "opaqueNodes": []
+    },
+    {
+      "id": "negative-code-fence-shields-delimiters",
+      "classification": "negative",
+      "note": "A CommonMark tilde fence remains a supported normalized code block, and opaque block detectors must not inspect its body.",
+      "input": "~~~text\n---\n$$\n<script>alert(1)</script>\n:::note\n~~~\n",
+      "expected": "```text\n---\n$$\n<script>alert(1)</script>\n:::note\n```",
+      "opaqueNodes": []
+    },
+    {
+      "id": "negative-weird-code-info-is-supported",
+      "classification": "negative",
+      "note": "All CommonMark backtick and tilde fences remain generic supported code regardless of whether the info string names a registered highlighter.",
+      "input": "~~~~{python linenos=1 #demo}\nprint(1)\n~~~~\n",
+      "expected": "```{python linenos=1 #demo}\nprint(1)\n```",
+      "opaqueNodes": []
+    }
+  ]
+}

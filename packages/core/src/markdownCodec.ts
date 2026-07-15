@@ -1,4 +1,6 @@
-import { Fragment, Schema, Slice, type Mark, type Node as ProseMirrorNode } from "prosemirror-model";
+import MarkdownIt from "markdown-it";
+import type Token from "markdown-it/lib/token.mjs";
+import { Fragment, Schema, Slice, type Mark, type Node as ProseMirrorNode, type NodeSpec } from "prosemirror-model";
 import {
   MarkdownParser,
   MarkdownSerializer,
@@ -8,6 +10,13 @@ import {
   schema as baseSchema,
 } from "prosemirror-markdown";
 import { Plugin } from "prosemirror-state";
+import {
+  configureOpaqueMarkdown,
+  createOpaqueMarkdownEnvironment,
+  getOpaqueTokenAttrs,
+  normalizeOpaqueMarkdownKind,
+  type OpaqueMarkdownKind,
+} from "./opaqueMarkdown";
 import type { TableAlignment } from "./tableNavigation";
 import { DEFAULT_IMAGE_PROTOCOLS, DEFAULT_LINK_PROTOCOLS, sanitizeStoredUrl } from "./urlUtils";
 
@@ -21,6 +30,7 @@ type MarkdownSerializerStateWithInternals = MarkdownSerializerState & {
 
 const listItemSpec = baseSchema.spec.nodes.get("list_item");
 const codeBlockSpec = baseSchema.spec.nodes.get("code_block");
+const headingSpec = baseSchema.spec.nodes.get("heading");
 const nonSelectableCodeBlockSpec = codeBlockSpec
   ? {
       ...codeBlockSpec,
@@ -84,6 +94,84 @@ function isHTMLElementNode(dom: Node | string): dom is HTMLElement {
   const ownerWindow = dom.ownerDocument?.defaultView as BrowserWindow | null;
   return !!ownerWindow && dom instanceof ownerWindow.HTMLElement;
 }
+
+function getOpaqueDOMAttrs(dom: Node | string, fallback: OpaqueMarkdownKind) {
+  if (!isHTMLElementNode(dom)) {
+    return false;
+  }
+
+  return {
+    kind: normalizeOpaqueMarkdownKind(dom.getAttribute("data-markora-opaque-kind"), fallback),
+    source: dom.textContent ?? "",
+  };
+}
+
+function getOpaqueDOMAttributes(kind: OpaqueMarkdownKind, display: "block" | "inline") {
+  return {
+    "aria-label": `Opaque ${kind} Markdown source`,
+    "class": `mdw-opaque-source mdw-opaque-source-${display}`,
+    "contenteditable": "false",
+    "data-markora-opaque": display,
+    "data-markora-opaque-kind": kind,
+  };
+}
+
+const rawBlockSpec: NodeSpec = {
+  attrs: {
+    kind: { default: "unknown-fence" },
+    source: { default: "" },
+  },
+  atom: true,
+  createGapCursor: true,
+  defining: true,
+  draggable: true,
+  group: "block",
+  isolating: true,
+  leafText(node) {
+    return typeof node.attrs.source === "string" ? node.attrs.source : "";
+  },
+  parseDOM: [{
+    tag: '[data-markora-opaque="block"]',
+    priority: 60,
+    preserveWhitespace: "full",
+    getAttrs(dom) {
+      return getOpaqueDOMAttrs(dom, "unknown-fence");
+    },
+  }],
+  selectable: true,
+  toDOM(node) {
+    const kind = normalizeOpaqueMarkdownKind(node.attrs.kind, "unknown-fence");
+    const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
+    return ["pre", getOpaqueDOMAttributes(kind, "block"), ["code", source]] as const;
+  },
+};
+
+const rawInlineSpec: NodeSpec = {
+  attrs: {
+    kind: { default: "inline-html" },
+    source: { default: "" },
+  },
+  atom: true,
+  draggable: true,
+  group: "inline",
+  inline: true,
+  leafText(node) {
+    return typeof node.attrs.source === "string" ? node.attrs.source : "";
+  },
+  parseDOM: [{
+    tag: '[data-markora-opaque="inline"]',
+    preserveWhitespace: "full",
+    getAttrs(dom) {
+      return getOpaqueDOMAttrs(dom, "inline-html");
+    },
+  }],
+  selectable: true,
+  toDOM(node) {
+    const kind = normalizeOpaqueMarkdownKind(node.attrs.kind, "inline-html");
+    const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
+    return ["span", getOpaqueDOMAttributes(kind, "inline"), ["code", source]] as const;
+  },
+};
 
 export function normalizeTableAlignment(value: unknown): TableAlignment | null {
   return value === "left" || value === "center" || value === "right" ? value : null;
@@ -209,6 +297,9 @@ const schemaNodes = (
   nonSelectableCodeBlockSpec ? baseSchema.spec.nodes.update("code_block", nonSelectableCodeBlockSpec) : baseSchema.spec.nodes
 )
   .update("list_item", taskListItemSpec ?? listItemSpec!)
+  .update("heading", headingSpec ? { ...headingSpec, content: "(text | image | raw_inline)*" } : headingSpec!)
+  .addBefore("image", "raw_inline", rawInlineSpec)
+  .addToEnd("raw_block", rawBlockSpec)
   .addToEnd("table", tableNodeSpecs.table)
   .addToEnd("table_row", tableNodeSpecs.table_row)
   .addToEnd("table_cell", tableNodeSpecs.table_cell)
@@ -219,7 +310,8 @@ export const schema: Schema = new Schema({
   marks: baseSchema.spec.marks.addToEnd("strike", strikeMarkSpec),
 });
 
-const markdownTokenizer = defaultMarkdownParser.tokenizer.enable("strikethrough").enable("table");
+const markdownTokenizer = new MarkdownIt("commonmark", { html: true }).enable("strikethrough").enable("table");
+configureOpaqueMarkdown(markdownTokenizer);
 
 // markdown-it emits cell contents as inline tokens, while table cells accept block content.
 markdownTokenizer.core.ruler.after("inline", "markora_table_cell_paragraphs", (state) => {
@@ -261,6 +353,10 @@ const defaultMarkdownTokens = {
   th: { block: "table_header", getAttrs: getTableCellTokenAttrs },
   td: { block: "table_cell", getAttrs: getTableCellTokenAttrs },
   s: { mark: "strike" },
+  html_block: { node: "raw_block", getAttrs: (token: Token) => getOpaqueTokenAttrs(token, "html-block") },
+  html_inline: { node: "raw_inline", getAttrs: (token: Token) => getOpaqueTokenAttrs(token, "inline-html") },
+  markora_opaque_block: { node: "raw_block", getAttrs: (token: Token) => getOpaqueTokenAttrs(token, "unknown-fence") },
+  markora_opaque_inline: { node: "raw_inline", getAttrs: (token: Token) => getOpaqueTokenAttrs(token, "inline-directive") },
 };
 
 const markdownParser = new MarkdownParser(schema, markdownTokenizer, defaultMarkdownTokens);
@@ -303,6 +399,15 @@ function createTableDividerRow(node: ProseMirrorNode) {
 export const markdownSerializer = new MarkdownSerializer(
   {
     ...defaultMarkdownSerializer.nodes,
+    raw_block(state: MarkdownSerializerState, node: ProseMirrorNode) {
+      const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
+      state.text(source, false);
+      state.closeBlock(node);
+    },
+    raw_inline(state: MarkdownSerializerState, node: ProseMirrorNode) {
+      const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
+      state.text(source, false);
+    },
     table(state: MarkdownSerializerState, node: ProseMirrorNode) {
       const lines: string[] = [];
 
@@ -532,7 +637,9 @@ export function parseMarkdown(markdown: string) {
     return schema.topNodeType.createAndFill();
   }
 
-  return sanitizeImportedDoc(normalizeTaskListNode(markdownParser.parse(markdown)));
+  return sanitizeImportedDoc(normalizeTaskListNode(
+    markdownParser.parse(markdown, createOpaqueMarkdownEnvironment(markdown)),
+  ));
 }
 
 export function createImportedContentSanitizerPlugin() {

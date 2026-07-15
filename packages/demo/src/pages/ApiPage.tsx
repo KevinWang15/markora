@@ -3,10 +3,10 @@ import { CodeBlock } from "../components/CodeBlock";
 import { DocPageNav } from "../components/DocPageNav";
 
 const apiRows = [
-  ["createEditor({ element, markdown, onChange, onTransaction, onChangeMode, ui, codeBlockLanguages })", "Creates the editor view and returns the host API."],
+  ["createEditor({ element, markdown, onChange, onTransaction, onChangeMode, onEditOpaqueMarkdown, ui, codeBlockLanguages })", "Creates the editor view and returns the host API."],
   ["editor.view", "Exposes the underlying ProseMirror view for focus and DOM coordination."],
   ["editor.getMarkdown()", "Returns the current normalized Markdown serialization."],
-  ["editor.commands.setMarkdown(markdown, { emitChange })", "Parses supported Markdown and replaces the document; original lexical source is not retained."],
+  ["editor.commands.setMarkdown(markdown, { emitChange })", "Replaces the document, normalizing supported syntax while retaining recognized opaque source islands."],
   ["editor.flushChange()", "Flushes any pending animation-frame batched Markdown emission."],
   ["editor.state.can.* / editor.state.isActive.*", "Lets hosts derive toolbar and feature state without built-in UI."],
   ["editor.getToolbarState()", "Returns a compatibility snapshot for toolbar buttons."],
@@ -44,12 +44,28 @@ const editor = createEditor({
   },
 });`;
 
+const opaqueSourceEditorCode = `const editor = createEditor({
+  element: hostElement,
+  markdown: initialMarkdown,
+  onEditOpaqueMarkdown({ kind, source, update }) {
+    openSourceDialog({
+      title: \`Edit \${kind} source\`,
+      source,
+      onSave(nextSource) {
+        // false means the original node changed or was removed while the dialog was open.
+        return update(nextSource);
+      },
+    });
+  },
+});`;
+
 const createEditorOptionsType = `type CreateEditorOptions = {
   element: HTMLElement;
   markdown?: string;
   onChange?: (markdown: string) => void;
   onTransaction?: (transaction: Transaction, view: EditorView) => void;
   onChangeMode?: "immediate" | "animationFrame";
+  onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
   ui?: EditorUiFactory;
   codeBlockLanguages?: CodeBlockLanguageRegistry;
 };`;
@@ -154,6 +170,7 @@ export function ApiPage() {
             <li><code>onChange</code> receives serialized Markdown output.</li>
             <li><code>onTransaction</code> lets hosts observe editor activity without forcing serialization.</li>
             <li><code>onChangeMode</code> supports <code>"immediate"</code> and <code>"animationFrame"</code>.</li>
+            <li><code>onEditOpaqueMarkdown</code> opens a host-owned source editor for inert unsupported syntax.</li>
             <li><code>ui</code> and <code>codeBlockLanguages</code> are optional extension points.</li>
           </ul>
         </article>
@@ -170,6 +187,17 @@ export function ApiPage() {
             ))}
           </ul>
         </article>
+      </section>
+
+      <section className="panel doc-panel">
+        <span className="card-kicker">Opaque source editor</span>
+        <h2>Keep unsupported syntax inert and host-controlled.</h2>
+        <p>
+          Recognized front matter, display math, HTML, comments, and directives are displayed as text-only
+          {" "}opaque nodes. Supply an accessible dialog through <code>onEditOpaqueMarkdown</code> when users
+          {" "}need to edit that source. A stale <code>update()</code> returns <code>false</code> without changing the document.
+        </p>
+        <CodeBlock code={opaqueSourceEditorCode} language="ts" title="Host source hook" />
       </section>
 
       <section className="docs-grid docs-grid-two">

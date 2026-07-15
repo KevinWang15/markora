@@ -67,6 +67,7 @@
     "@codemirror/legacy-modes": "^6.5.0",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.2",
+    "markdown-it": "^14.1.0",
     "prosemirror-commands": "^1.7.1",
     "prosemirror-gapcursor": "^1.4.0",
     "prosemirror-history": "^1.4.1",
@@ -77,6 +78,9 @@
     "prosemirror-schema-list": "^1.5.1",
     "prosemirror-state": "^1.4.3",
     "prosemirror-view": "^1.41.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2"
   },
   "sideEffects": [
     "./dist/styles.css"

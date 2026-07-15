@@ -10,13 +10,19 @@ const supportedSyntax = [
   "Rectangular pipe tables with alignment and inline cell content",
 ] as const;
 
+const opaqueSyntax = [
+  "Conservative document-head YAML-like front matter",
+  "Standalone display math",
+  "CommonMark HTML blocks, inline HTML, and comments",
+  "Balanced directive containers, leaves, and inline directives",
+] as const;
+
 const unsupportedSyntax = [
-  "YAML front matter and footnotes",
-  "Inline or display math",
+  "Footnotes and inline math",
   "GitHub alerts and callouts",
-  "Raw HTML and comments",
-  "Directives and generated TOC markers",
+  "Generated TOC markers",
   "Diagram semantics or previews",
+  "Other unrecognized Markdown extensions",
 ] as const;
 
 const normalizationExamples = [
@@ -24,7 +30,8 @@ const normalizationExamples = [
   ["Heading\\n=======", "# Heading"],
   ["_em_ / __strong__", "*em* / **strong**"],
   ["Reference link definitions", "Inline links at each use"],
-  ["CRLF or CR", "LF without a terminal newline"],
+  ["CRLF or CR in supported syntax", "LF without a terminal newline"],
+  ["Top-level opaque source", "Exact source island with canonical separators"],
 ] as const;
 
 export function MarkdownCompatibilityPage() {
@@ -38,8 +45,8 @@ export function MarkdownCompatibilityPage() {
           {" "}not retain original source spelling, whitespace, markers, or reference-definition layout.
         </p>
         <p>
-          Unsupported extensions are not yet preserved opaquely or rejected with an error. Constrain or
-          {" "}validate input before import when the original source must remain recoverable.
+          Conservatively recognized front matter, display math, HTML, comments, and directives are retained
+          {" "}as inert exact-source atoms. Other extensions remain unsupported and may be reinterpreted without an error.
         </p>
         <a
           className="button button-secondary"
@@ -51,13 +58,23 @@ export function MarkdownCompatibilityPage() {
         </a>
       </section>
 
-      <section className="docs-grid docs-grid-two">
+      <section className="docs-grid docs-three-up">
         <article className="doc-card">
           <span className="card-kicker">Supported shapes</span>
           <h3>Semantic import, normalized serialization</h3>
           <ul className="check-list compact">
             {supportedSyntax.map((syntax) => <li key={syntax}>{syntax}</li>)}
           </ul>
+        </article>
+        <article className="doc-card">
+          <span className="card-kicker">Opaque source</span>
+          <h3>Exact, inert source islands</h3>
+          <ul className="check-list compact">
+            {opaqueSyntax.map((syntax) => <li key={syntax}>{syntax}</li>)}
+          </ul>
+          <p>
+            Raw HTML and script source is displayed as text, never executed. Downstream renderers still need independent sanitization.
+          </p>
         </article>
         <article className="doc-card">
           <span className="card-kicker">No preservation guarantee</span>

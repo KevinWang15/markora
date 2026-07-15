@@ -86,8 +86,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-001 | DONE | S | Fix destructive pipe-table import and add true round-trip coverage |
 | EE-002 | DONE | S | Publish the supported Markdown dialect and normalization contract |
 | EE-003 | DONE | M | Build the conformance, golden-document, and property-test harness |
-| EE-004 | NEXT | L | Preserve unsupported Markdown through opaque source nodes |
-| EE-005 | QUEUED | M | Check in a Chromium, Firefox, and WebKit browser regression suite |
+| EE-004 | DONE | L | Preserve unsupported Markdown through opaque source nodes |
+| EE-005 | NEXT | M | Check in a Chromium, Firefox, and WebKit browser regression suite |
 | EE-006 | QUEUED | M | Cover IME, clipboard, drop, touch, RTL, and accessibility behavior |
 | EE-007 | QUEUED | M | Add production embed configuration and lifecycle APIs |
 | EE-008 | QUEUED | M | Separate reconciled external updates from hard document resets |
@@ -219,7 +219,7 @@ Make content fidelity measurable rather than anecdotal.
 
 ### EE-004 — Preserve unsupported source opaquely
 
-Status: `NEXT`
+Status: `DONE` (2026-07-15)
 
 #### Goal
 
@@ -233,9 +233,20 @@ Ensure valid but unsupported Markdown survives visual editing elsewhere in the d
 - Never execute raw HTML or embedded scripts in the editor.
 - Add move, copy, delete, undo, paste, and surrounding-edit regressions for opaque nodes.
 
+#### Completion notes
+
+- The schema now has selectable, draggable, atomic `raw_block` and `raw_inline` nodes carrying a canonical opaque kind and source string. The Markdown codec recognizes conservative document-head YAML-like front matter, standalone display math, CommonMark HTML blocks/comments and inline HTML/comments, plus balanced directive containers, leaves, and inline directives.
+- The exact-source boundary is explicit and fixture-backed: a top-level raw block retains its BOM, internal LF/CRLF/CR line endings, delimiters, indentation, escapes, and whitespace through the final source line, while excluding that line's terminator and following blank separator. Top-level inline atoms retain their exact original span, including internal legacy line endings. Serializer-owned block spacing and the document terminal newline still normalize.
+- Compatibility decision: every CommonMark backtick or tilde fence remains supported generic code for any info string and therefore follows the existing normalized code contract. Balanced non-CommonMark colon fences are retained as directives. The public `unknown-fence` kind is reserved; arbitrary punctuation is not guessed as an extension because that would capture valid prose without a grammar.
+- Opaque node views construct only text nodes and never use raw source as HTML, attributes, or executable DOM. Hostile script, image, iframe, style, declaration, CDATA, and comment cases remain inert in node views and clipboard serialization. Serialized Markdown is still untrusted input to downstream renderers, which remain responsible for sanitization.
+- Hosts can provide an accessible source dialog through `onEditOpaqueMarkdown({ kind, source, update })`. The guarded update is undoable and returns `false` after deletion, replacement, or a newer edit, preventing a stale dialog from overwriting current content. The dev lab demonstrates this integration with explicit save behavior and focus restoration.
+- A reviewed 25-case exact-source manifest covers 13 opaque-block, 3 opaque-inline, and 9 negative detector boundaries. Forty-four new/updated contract tests cover exact serialization, semantic reparse stability, hostile DOM round-trips, text-only rendering, the public hook, stale updates, managed navigation, move, model copy, keyboard delete, undo/redo, rich paste, and surrounding edits.
+- CDP verification against the production-built `/__dev#opaque-source` fixture found five block and two inline opaque atoms, kept authored script/HTML out of the editor DOM, confirmed the script never executed, edited front matter through the host hook, edited supported text beside the atoms, and recovered all exact source islands from the Markdown dialog. Chromium reported zero runtime exceptions, console errors, or failed requests.
+- Final verification: `pnpm check` (418 tests), `pnpm build`, `pnpm pack:smoke`, and `git diff --check` pass. The packed package includes the updated fidelity contract and the new public types.
+
 ### EE-005 — Add a checked-in real-browser matrix
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -534,6 +545,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## First iteration
 
-`EE-001` through `EE-003` were completed on 2026-07-15.
+`EE-001` through `EE-004` were completed on 2026-07-15, satisfying Gate A's content-safety requirements.
 
-The next iteration is `EE-004 — Preserve unsupported source opaquely`.
+The next iteration is `EE-005 — Add a checked-in real-browser matrix`.

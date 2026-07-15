@@ -6,17 +6,17 @@ This contract applies to Markdown passed through `createEditor({ markdown })` or
 
 ## Read this before storing arbitrary Markdown
 
-Markora is a structured editor, not a byte-preserving source editor. Import parses Markdown into a ProseMirror document immediately, and export writes a canonical representation of that document. Calling `getMarkdown()` without making an edit can therefore return different text from the input.
+Markora is a structured editor, not a byte-preserving source editor. Import parses Markdown into a ProseMirror document immediately, and export writes a canonical representation of that document. Calling `getMarkdown()` without making an edit can therefore return different text from the input. The exception is the source carried by the deliberately recognized opaque constructs below.
 
 The current dialect is a CommonMark-derived subset plus GFM-style pipe tables, strikethrough, and flat task-list items. It is not a claim of full CommonMark or GFM conformance.
 
-Only use serialized Markora output as the sole stored copy when input is constrained to the supported dialect and the normalizations below are acceptable. The current release has:
+Only use serialized Markora output as the sole stored copy when input is constrained to the supported dialect, plus the documented opaque shapes, and the normalizations below are acceptable. The current release has:
 
 - no byte-for-byte lexical round-trip guarantee;
-- no opaque node that preserves unsupported source;
+- exact source preservation for the conservative opaque shapes documented below;
 - no preflight validator or structured unsupported-syntax error.
 
-Unsupported constructs can be reinterpreted, flattened, escaped, or dropped without an exception. Hosts accepting arbitrary Markdown should retain the original source, validate it before import, or offer a raw-source path until opaque preservation is implemented.
+Syntax outside both the supported dialect and the recognized opaque shapes can still be reinterpreted, flattened, escaped, or dropped without an exception. Hosts accepting arbitrary Markdown should retain the original source, validate it before import, or offer a broader raw-source path.
 
 ## Fidelity labels
 
@@ -25,7 +25,7 @@ Unsupported constructs can be reinterpreted, flattened, escaped, or dropped with
 | Semantic round-trip | The represented editor structure and content survive `parse -> serialize -> parse`. Source spelling is not promised. | Available only for the supported shapes below. |
 | Lexical round-trip | Original bytes, markers, escapes, whitespace, and reference definitions survive. | None. |
 | Normalized output | The construct is supported semantically and exported in Markora's canonical spelling. | This is the normal guarantee for supported syntax. |
-| Opaque preservation | Unsupported source is retained verbatim without being interpreted. | None. Planned in `EE-004`. |
+| Opaque preservation | Recognized source is retained as an inert atom rather than interpreted as editable structure. | Available only for the conservative block and inline shapes below. |
 | Unsupported / rejected | The construct is outside the dialect and import reports an error instead of changing it. | No runtime error path exists yet. |
 | Unsupported — unreported | The construct is outside the dialect, but the current permissive parser accepts or reinterprets it without a fidelity guarantee. | Transitional behavior documented below. |
 
@@ -51,13 +51,57 @@ Unsupported constructs can be reinterpreted, flattened, escaped, or dropped with
 
 Code-block language loading affects only the embedded CodeMirror experience. Any fenced info string is accepted as generic code metadata even when no language package or renderer exists.
 
+## Opaque source preservation
+
+Markora recognizes the following unsupported constructs and stores their source in `raw_block` or `raw_inline` atoms. They serialize as source rather than as escaped editor text, but they do not gain semantic editing or rendering behavior.
+
+| Construct | Recognized shape | Opaque kind and limits |
+| --- | --- | --- |
+| YAML-like front matter | At the document head only: a `---` opener, a matching `---` or `...` closer, and at least one mapping-looking key between them | `frontmatter`. This is a conservative boundary detector, not a YAML parser or validator. A thematic-break sequence without a mapping entry is not front matter. |
+| Display math | Either a complete `$$ ... $$` construct on one otherwise standalone line, or content between standalone `$$` delimiter lines | `display-math`. Inline `$...$` and `$$...$$` embedded in prose remain unsupported and are not classified as opaque math. |
+| HTML blocks and comments | HTML block shapes recognized by the CommonMark tokenizer, including comments, declarations, CDATA, `script`, and `style` blocks | `html-block` or `html-comment`. Source is inert; it is never inserted into the editor DOM as HTML. |
+| Inline HTML and comments | Inline HTML tokens recognized by the CommonMark tokenizer | `inline-html` or `html-comment`. Opening and closing tags are separate atoms, so supported Markdown between them remains editable. |
+| Directive containers | Balanced fences of at least three colons with a named or attribute-style opener and a compatible closing colon fence; nested containers are balanced as one outer source atom | `directive-container`. The contents are not parsed as editable Markdown. |
+| Directive leaves | A standalone `::name` form with at least one balanced `[...]` or `{...}` payload and no trailing non-whitespace text | `directive-leaf`. |
+| Inline directives | A `:name` form with at least one balanced `[...]` or `{...}` payload | `inline-directive`. Supported text around the atom remains editable. |
+
+All CommonMark backtick and tilde fences remain supported generic code blocks, regardless of their info string or whether a CodeMirror language loader exists. They follow the normalized code-block contract; they are not opaque extension containers. The public `unknown-fence` kind is reserved for a future explicitly recognized non-CommonMark fenced extension. Markora does not currently guess that arbitrary punctuation fences are extensions.
+
+For a top-level opaque block, the stored `source` begins at the construct's first source character and ends at the last character of its closing or final line. It excludes that line's terminator and every following blank separator line. Within that boundary, Markora preserves the original BOM, line endings (including CRLF or CR), indentation, delimiter spelling, escapes, and whitespace. Top-level inline atoms preserve their exact original tokenizer span, including an internal CRLF or CR. Inter-block spacing and the document's terminal-newline policy remain serializer-owned, so the text surrounding an opaque atom can still normalize. Opaque nodes parsed inside supported containers can inherit the container tokenizer's marker, indentation, and line-ending normalization; the exact original-source guarantee applies at the document top level.
+
+Opaque nodes render with text-only DOM operations as non-editable atoms. HTML, comments, scripts, styles, and directive payloads are displayed as source and are never executed by the editor. Enabling HTML tokenization is only a classification step; it does not make a raw node a live DOM subtree.
+
+A host can provide a source editor with `onEditOpaqueMarkdown`:
+
+```ts
+const editor = createEditor({
+  element: hostElement,
+  markdown: initialMarkdown,
+  onEditOpaqueMarkdown({ kind, source, update }) {
+    openHostSourceEditor({
+      label: kind,
+      source,
+      onSave(nextSource) {
+        if (!update(nextSource)) {
+          showSourceConflict();
+        }
+      },
+    });
+  },
+});
+```
+
+The editor exposes an **Edit source** control only when this hook is present. `update(nextSource)` returns `true` when the change is accepted (including an unchanged value) and `false` when the request is stale because the atom was removed, replaced, or changed after the hook opened. A successful update is an undoable editor transaction. It replaces the atom's source under its existing opaque kind; it does not parse, validate, or reclassify the new string. Hosts should provide explicit save/cancel behavior, validate source as their product requires, and handle a `false` result instead of silently overwriting newer content.
+
 ## Canonical output
 
 These transformations are intentional and happen on import/export even when the user makes no visual edit.
 
 | Input characteristic | Canonical output |
 | --- | --- |
-| CRLF or CR line endings | LF |
+| CRLF or CR line endings in supported parsed syntax | LF |
+| Line endings within a top-level recognized opaque block | Retained inside the atom; the separator after the atom is serializer-selected LF |
+| Line endings inside a top-level opaque inline span | Retained inside the atom; supported text around it still follows normal paragraph serialization |
 | Terminal newline | Removed |
 | Excess blank lines between blocks | Serializer-selected block spacing, usually one blank line |
 | Soft line break inside a paragraph | A space |
@@ -93,21 +137,21 @@ Syntax the Markdown tokenizer itself refuses as a link can remain escaped litera
 
 ## Unsupported syntax policy
 
-The constructs below have no semantic, lexical, or opaque fidelity guarantee. “Behavior today” explains observed `0.0.x` behavior; it is not a supported serialization format.
+This table distinguishes the narrow shapes protected as opaque source from related syntax that is still outside the contract. “Behavior today” for unsupported shapes is observational, not a supported serialization format.
 
 | Construct | Classification | Behavior today |
 | --- | --- | --- |
-| YAML front matter | Unsupported — unreported | Delimiters and fields can become thematic breaks, headings, paragraphs, or lists. Metadata structure is lost. |
+| YAML front matter | Opaque for the recognized document-head shape; otherwise unsupported — unreported | A conservatively bounded document-head block with a mapping-looking key is preserved. Other metadata syntaxes can be interpreted as ordinary Markdown. |
 | Footnotes | Unsupported — unreported | Labels and definitions can become ordinary reference links or escaped text; definitions can disappear. |
-| Inline and display math | Unsupported — unreported | Simple inline delimiters may survive accidentally as text. Multiline display math folds into paragraph text. |
+| Math | Opaque for recognized standalone display math; inline math unsupported — unreported | Standalone `$$` block shapes are preserved. Inline `$...$` and `$$...$$` in prose may survive accidentally as text but have no math fidelity guarantee. |
 | GitHub alerts/callouts | Unsupported — unreported | Parsed as an ordinary blockquote; the alert marker is text and source lines can fold together. |
-| Raw HTML and comments | Unsupported — unreported | HTML parsing is disabled, so source becomes editor text rather than DOM. Multiline blocks normalize whitespace and are not opaque. |
-| Directives and container syntax | Unsupported — unreported | Treated as paragraph text; multiline structure and escapes can change. |
+| Raw HTML and comments | Opaque for CommonMark-recognized block and inline shapes | Stored and displayed as inert source atoms, not rendered HTML. Syntax outside the tokenizer's recognized HTML shapes remains unsupported. |
+| Directives and container syntax | Opaque for the balanced container, leaf, and inline shapes above; otherwise unsupported — unreported | Recognized shapes are preserved. Unbalanced or different directive dialects can still be treated as ordinary Markdown text. |
 | TOC markers such as `[TOC]` | Unsupported — unreported | Treated as literal text and normally backslash-escaped on output. |
 | Mermaid and other diagrams | Diagram semantics unsupported; fenced code normalized | A fenced `mermaid` block survives only as a generic code block. Markora does not render or validate the diagram. |
 | Other Markdown extensions | Unsupported — unreported | No preservation guarantee unless the construct is fully representable as a supported generic code block or plain text. |
 
-Raw HTML is not executed by the editor because it is parsed as text. That does not make serialized Markdown safe to render as HTML elsewhere: downstream renderers must apply their own HTML and URL sanitization.
+Opaque raw HTML is not executed by the editor because its source is rendered only as text. The serialized Markdown still contains the original HTML or script source. Downstream renderers must apply their own HTML and URL sanitization; editor display safety is not a publishing security boundary.
 
 ## Known shape limitations
 
@@ -125,10 +169,11 @@ These limitations are outside the semantic round-trip promise. They are candidat
 
 ## Host integration rules
 
-1. Constrain generated or user-supplied Markdown to this dialect before calling `setMarkdown()`.
-2. Treat `getMarkdown()` as normalized output, not the original source string.
+1. Constrain generated or user-supplied Markdown to this dialect and, when needed, the documented opaque shapes before calling `setMarkdown()`.
+2. Treat `getMarkdown()` as normalized output with exact source islands, not the original document string.
 3. Do not use raw string equality as the only dirty-state check across initial import.
-4. If unsupported input is possible, retain the original separately and provide a recovery or source-editing path.
-5. Sanitize the final rendering surface independently; editor import sanitization is not an HTML-rendering security boundary.
+4. If syntax outside the documented supported and opaque shapes is possible, retain the original separately and provide a recovery or broader source-editing path.
+5. Use `onEditOpaqueMarkdown` when users must edit protected source, and handle a stale `update()` result explicitly.
+6. Sanitize the final rendering surface independently; inert editor rendering is not an HTML-rendering security boundary.
 
-The characterization tests are in [`markdownDialect.test.ts`](https://github.com/KevinWang15/markora/blob/main/packages/core/test/markdownDialect.test.ts), with representative [golden documents](https://github.com/KevinWang15/markora/tree/main/packages/core/test/fixtures/markdown-roundtrip). Broader CommonMark/GFM conformance and corpus testing is tracked by `EE-003`.
+The characterization tests are in [`markdownDialect.test.ts`](https://github.com/KevinWang15/markora/blob/main/packages/core/test/markdownDialect.test.ts), with representative [golden documents](https://github.com/KevinWang15/markora/tree/main/packages/core/test/fixtures/markdown-roundtrip) and reviewed [opaque-source cases](https://github.com/KevinWang15/markora/tree/main/packages/core/test/fixtures/opaque-markdown). Broader CommonMark/GFM conformance and corpus tests live alongside them in the core test suite.

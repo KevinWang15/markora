@@ -600,8 +600,8 @@ export function EditorPlayground() {
           <div className="panel-header">
             <h3>Markdown source</h3>
             <p>
-              Applying source parses it immediately. Supported syntax is normalized and unsupported
-              {" "}constructs may change.
+              Applying source parses it immediately. Supported syntax is normalized; recognized opaque
+              {" "}constructs retain their exact source while other extensions may change.
             </p>
           </div>
           <textarea ref={sourceTextareaRef} id="source" spellCheck={false} defaultValue={initialMarkdown} />

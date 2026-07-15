@@ -16,6 +16,7 @@ Write Markdown at the speed of thought.
 
 - Typora-like visual editing with host-owned Markdown input and normalized Markdown output
 - Semantic import/edit/export for the documented dialect: a CommonMark-derived subset, pipe tables, strikethrough, and flat task items
+- Inert, exact-source atoms for conservatively recognized front matter, display math, HTML, comments, and directives
 - Inline marks for bold, italic, code, strike, and links
 - Embedded CodeMirror code blocks with lazy-loaded built-in grammars
 - Headless command/state APIs plus optional overlays from `markora-ui`
@@ -23,7 +24,9 @@ Write Markdown at the speed of thought.
 
 ## Markdown compatibility
 
-Markora is not a byte-for-byte source editor. Supported syntax is serialized to a canonical form, and unsupported extensions are not yet safely preserved or rejected. Review the [Markdown dialect and fidelity contract](./packages/core/MARKDOWN_COMPATIBILITY.md) before importing existing or generated documents.
+Markora is not a byte-for-byte source editor. Supported syntax is serialized to a canonical form. Conservatively recognized front matter, standalone display math, HTML, comments, and directives are preserved as inert source atoms; other unsupported extensions are not guaranteed to be preserved or rejected. Review the [Markdown dialect and fidelity contract](./packages/core/MARKDOWN_COMPATIBILITY.md) before importing existing or generated documents.
+
+Opaque HTML is shown as text and never executed inside the editor, but serialized Markdown still contains its source. Hosts must sanitize any downstream HTML rendering independently. They can provide source editing for opaque atoms through `onEditOpaqueMarkdown`.
 
 ## Install
 
@@ -69,6 +72,7 @@ editor.destroy();
 - `markora-ui` adds the repo's default link editor, image editor, and table toolbar overlays
 - `codeBlockLanguages` lets hosts add or override lazy CodeMirror language loaders
 - `editor.commands.setMarkdown(markdown, { emitChange: true })` is the programmatic update path when you want `onChange` to re-fire
+- `onEditOpaqueMarkdown` lets the host open its own source editor for protected opaque atoms; its guarded update function rejects stale writes
 - `editor.flushChange()` forces any pending animation-frame batched Markdown emission to run immediately
 
 ## Roadmap

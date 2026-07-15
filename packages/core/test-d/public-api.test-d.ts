@@ -1,4 +1,4 @@
-import { createEditor, createDefaultCodeBlockLanguageRegistry, type CodeBlockLanguageRegistry, type CreateEditorOptions, type EditorUiFactory, type MarkdownEditor, type MarkdownEditorActiveMark, type MarkdownEditorActiveNode, type MarkdownEditorCommands, type MarkdownEditorMark, type MarkdownEditorState, type MarkdownEditorUi, type ToolbarState } from "../src/index";
+import { createEditor, createDefaultCodeBlockLanguageRegistry, type CodeBlockLanguageRegistry, type CreateEditorOptions, type EditorUiFactory, type MarkdownEditor, type MarkdownEditorActiveMark, type MarkdownEditorActiveNode, type MarkdownEditorCommands, type MarkdownEditorMark, type MarkdownEditorState, type MarkdownEditorUi, type OpaqueMarkdownEditRequest, type OpaqueMarkdownKind, type ToolbarState } from "../src/index";
 import type { EditorView } from "prosemirror-view";
 
 declare const hostElement: HTMLElement;
@@ -82,11 +82,25 @@ const optionsWithUi: CreateEditorOptions = {
   codeBlockLanguages: registry,
 };
 
+const opaqueKind: OpaqueMarkdownKind = "frontmatter";
+const optionsWithOpaqueEditor: CreateEditorOptions = {
+  element: hostElement,
+  onEditOpaqueMarkdown(request: OpaqueMarkdownEditRequest) {
+    const kind: OpaqueMarkdownKind = request.kind;
+    const source: string = request.source;
+    const updated: boolean = request.update(source);
+    void kind;
+    void updated;
+  },
+};
+
 void typedEditor;
 void view;
 void toolbarState;
 void editorUi;
 void optionsWithUi;
+void opaqueKind;
+void optionsWithOpaqueEditor;
 
 // @ts-expect-error link is active-only, not toggleable
 commands.toggleMark("link");

@@ -7,6 +7,7 @@ Write Markdown at the speed of thought.
 ## Features
 
 - Semantic import/edit/export for the documented Markdown dialect, with normalized serialization
+- Exact, inert source preservation for conservatively recognized front matter, display math, HTML, and directives
 - Headings, blockquotes, lists, flat task items, images, code fences, and pipe tables
 - Inline marks for bold, italic, code, strike, and links
 - Embedded CodeMirror code blocks with language-aware editing
@@ -16,9 +17,11 @@ Write Markdown at the speed of thought.
 
 ## Markdown compatibility
 
-`markdown` and `editor.commands.setMarkdown()` are parsing boundaries. `editor.getMarkdown()` and `onChange` return normalized serialization, not the original source bytes. Unsupported extensions may be reinterpreted without an error; constrain or validate input until opaque preservation is available.
+`markdown` and `editor.commands.setMarkdown()` are parsing boundaries. `editor.getMarkdown()` and `onChange` return normalized serialization, not the original document bytes. Conservatively recognized front matter, standalone display math, HTML, comments, and directives are retained as inert opaque source atoms; other unsupported extensions may still be reinterpreted without an error.
 
 Read the complete [Markdown dialect and fidelity contract](./MARKDOWN_COMPATIBILITY.md), which is also included in the published package.
+
+Opaque HTML is displayed as text and never executed inside the editor. Serialized Markdown still contains that source, so downstream HTML rendering must apply its own sanitization.
 
 ## Install
 
@@ -54,6 +57,30 @@ editor.view.focus();
 // Later, when the host view unmounts:
 editor.destroy();
 ```
+
+## Opaque source editing
+
+Opaque atoms are read-only unless the host supplies `onEditOpaqueMarkdown`. Use the hook to open a host-owned source editor:
+
+```ts
+const editor = createEditor({
+  element: hostElement,
+  markdown: initialMarkdown,
+  onEditOpaqueMarkdown({ kind, source, update }) {
+    openHostSourceEditor({
+      label: kind,
+      source,
+      onSave(nextSource) {
+        if (!update(nextSource)) {
+          showSourceConflict();
+        }
+      },
+    });
+  },
+});
+```
+
+`update(nextSource)` returns `false` if the atom was removed, replaced, or changed while the source editor was open. A successful update is undoable, preserves the atom's existing kind, and does not validate or reclassify the new source. See the compatibility contract for the exact preservation boundary and recognized shapes.
 
 ## Optional default UI
 
@@ -91,6 +118,7 @@ Host-facing behavior to keep in mind:
 - `editor.commands.setMarkdown(markdown)` parses supported Markdown and replaces the document
 - `editor.commands.setMarkdown(markdown, { emitChange: true })` also re-fires `onChange` with normalized output
 - `onTransaction` lets hosts observe editor activity without serializing Markdown on every transaction
+- `onEditOpaqueMarkdown` lets a host provide explicit source editing for otherwise read-only opaque atoms
 - `onChangeMode: "animationFrame"` smooths larger documents by batching Markdown emission once per frame
 - `editor.flushChange()` forces pending batched `onChange` work to run immediately
 - the package ships editor base styles, while surrounding layout and product UI remain the host app's responsibility
@@ -107,6 +135,8 @@ import type {
   MarkdownEditorCommands,
   MarkdownEditorState,
   MarkdownEditorUi,
+  OpaqueMarkdownEditRequest,
+  OpaqueMarkdownKind,
   ToolbarButtonState,
   ToolbarState,
 } from "markora";
@@ -134,6 +164,7 @@ const editor = createEditor({
 
 - `editor.getMarkdown()` returns the current normalized Markdown serialization
 - `editor.commands.setMarkdown(markdown, { emitChange })` parses according to the supported dialect and replaces the document
+- `onEditOpaqueMarkdown` receives an opaque atom's `kind`, exact `source`, and guarded `update(nextSource)` function
 - `editor.commands.toggleMark(...)`, `editor.commands.setLink(...)`, `editor.commands.insertImage(...)`, `editor.commands.undo()`, and `editor.commands.redo()` form the command surface
 - `editor.state.can.*` and `editor.state.isActive.*` expose host-friendly capability and activity checks
 - `editor.getToolbarState()` remains available for toolbar integrations that prefer a compatibility snapshot
