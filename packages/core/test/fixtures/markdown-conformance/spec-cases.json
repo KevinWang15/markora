@@ -1,0 +1,415 @@
+{
+  "schemaVersion": 1,
+  "lexicalGuarantees": [],
+  "sources": [
+    {
+      "id": "commonmark-0.31.2",
+      "title": "CommonMark Specification 0.31.2",
+      "url": "https://spec.commonmark.org/0.31.2/",
+      "license": "CC BY-SA 4.0"
+    },
+    {
+      "id": "gfm-0.29",
+      "title": "GitHub Flavored Markdown Specification 0.29-gfm",
+      "url": "https://github.github.com/gfm/",
+      "license": "CC BY-SA 4.0"
+    }
+  ],
+  "cases": [
+    {
+      "id": "commonmark-16",
+      "source": "commonmark-0.31.2",
+      "section": "Backslash escapes",
+      "url": "https://spec.commonmark.org/0.31.2/#example-16",
+      "classification": "supported-normalized",
+      "input": "foo\\\nbar\n",
+      "expected": "foo\\\nbar"
+    },
+    {
+      "id": "commonmark-17",
+      "source": "commonmark-0.31.2",
+      "section": "Backslash escapes",
+      "url": "https://spec.commonmark.org/0.31.2/#example-17",
+      "classification": "supported-normalized",
+      "input": "`` \\[\\` ``\n",
+      "expected": "`` \\[\\` ``"
+    },
+    {
+      "id": "commonmark-22",
+      "source": "commonmark-0.31.2",
+      "section": "Backslash escapes",
+      "url": "https://spec.commonmark.org/0.31.2/#example-22",
+      "classification": "supported-normalized",
+      "input": "[foo](/bar\\* \"ti\\*tle\")\n",
+      "expected": "[foo](/bar* \"ti*tle\")"
+    },
+    {
+      "id": "commonmark-26",
+      "source": "commonmark-0.31.2",
+      "section": "Entity and numeric character references",
+      "url": "https://spec.commonmark.org/0.31.2/#example-26",
+      "classification": "supported-normalized",
+      "input": "&#35; &#1234; &#992; &#0;\n",
+      "expected": "\\# Ӓ Ϡ �"
+    },
+    {
+      "id": "commonmark-43",
+      "source": "commonmark-0.31.2",
+      "section": "Thematic breaks",
+      "url": "https://spec.commonmark.org/0.31.2/#example-43",
+      "classification": "supported-normalized",
+      "input": "***\n---\n___\n",
+      "expected": "---\n\n---\n\n---"
+    },
+    {
+      "id": "commonmark-62",
+      "source": "commonmark-0.31.2",
+      "section": "ATX headings",
+      "url": "https://spec.commonmark.org/0.31.2/#example-62",
+      "classification": "supported-normalized",
+      "input": "# foo\n## foo\n### foo\n#### foo\n##### foo\n###### foo\n",
+      "expected": "# foo\n\n## foo\n\n### foo\n\n#### foo\n\n##### foo\n\n###### foo"
+    },
+    {
+      "id": "commonmark-63",
+      "source": "commonmark-0.31.2",
+      "section": "ATX headings",
+      "url": "https://spec.commonmark.org/0.31.2/#example-63",
+      "classification": "supported-normalized",
+      "input": "####### foo\n",
+      "expected": "####### foo"
+    },
+    {
+      "id": "commonmark-69",
+      "source": "commonmark-0.31.2",
+      "section": "ATX headings",
+      "url": "https://spec.commonmark.org/0.31.2/#example-69",
+      "classification": "supported-normalized",
+      "input": "    # foo\n",
+      "expected": "```\n# foo\n```"
+    },
+    {
+      "id": "commonmark-80",
+      "source": "commonmark-0.31.2",
+      "section": "Setext headings",
+      "url": "https://spec.commonmark.org/0.31.2/#example-80",
+      "classification": "supported-normalized",
+      "input": "Foo *bar*\n=========\n\nFoo *bar*\n---------\n",
+      "expected": "# Foo *bar*\n\n## Foo *bar*"
+    },
+    {
+      "id": "commonmark-95",
+      "source": "commonmark-0.31.2",
+      "section": "Setext headings",
+      "url": "https://spec.commonmark.org/0.31.2/#example-95",
+      "classification": "supported-normalized",
+      "input": "Foo\nBar\n---\n",
+      "expected": "## Foo Bar"
+    },
+    {
+      "id": "commonmark-107",
+      "source": "commonmark-0.31.2",
+      "section": "Indented code blocks",
+      "url": "https://spec.commonmark.org/0.31.2/#example-107",
+      "classification": "supported-normalized",
+      "input": "    a simple\n      indented code block\n",
+      "expected": "```\na simple\n  indented code block\n```"
+    },
+    {
+      "id": "commonmark-120",
+      "source": "commonmark-0.31.2",
+      "section": "Fenced code blocks",
+      "url": "https://spec.commonmark.org/0.31.2/#example-120",
+      "classification": "supported-normalized",
+      "input": "~~~\n<\n >\n~~~\n",
+      "expected": "```\n<\n >\n```"
+    },
+    {
+      "id": "commonmark-123",
+      "source": "commonmark-0.31.2",
+      "section": "Fenced code blocks",
+      "url": "https://spec.commonmark.org/0.31.2/#example-123",
+      "classification": "supported-normalized",
+      "input": "~~~\naaa\n```\n~~~\n",
+      "expected": "````\naaa\n```\n````"
+    },
+    {
+      "id": "commonmark-192",
+      "source": "commonmark-0.31.2",
+      "section": "Link reference definitions",
+      "url": "https://spec.commonmark.org/0.31.2/#example-192",
+      "classification": "supported-normalized",
+      "input": "[foo]: /url \"title\"\n\n[foo]\n",
+      "expected": "[foo](/url \"title\")"
+    },
+    {
+      "id": "commonmark-199",
+      "source": "commonmark-0.31.2",
+      "section": "Link reference definitions",
+      "url": "https://spec.commonmark.org/0.31.2/#example-199",
+      "classification": "supported-normalized",
+      "input": "[foo]:\n\n[foo]\n",
+      "expected": "\\[foo\\]:\n\n\\[foo\\]"
+    },
+    {
+      "id": "commonmark-220",
+      "source": "commonmark-0.31.2",
+      "section": "Paragraphs",
+      "url": "https://spec.commonmark.org/0.31.2/#example-220",
+      "classification": "supported-normalized",
+      "input": "aaa\nbbb\n\nccc\nddd\n",
+      "expected": "aaa bbb\n\nccc ddd"
+    },
+    {
+      "id": "commonmark-228",
+      "source": "commonmark-0.31.2",
+      "section": "Block quotes",
+      "url": "https://spec.commonmark.org/0.31.2/#example-228",
+      "classification": "supported-normalized",
+      "input": "> # Foo\n> bar\n> baz\n",
+      "expected": "> # Foo\n>\n> bar baz"
+    },
+    {
+      "id": "commonmark-253",
+      "source": "commonmark-0.31.2",
+      "section": "List items",
+      "url": "https://spec.commonmark.org/0.31.2/#example-253",
+      "classification": "supported-normalized",
+      "input": "A paragraph\nwith two lines.\n\n    indented code\n\n> A block quote.\n",
+      "expected": "A paragraph with two lines.\n\n```\nindented code\n```\n\n> A block quote."
+    },
+    {
+      "id": "commonmark-270",
+      "source": "commonmark-0.31.2",
+      "section": "List items",
+      "url": "https://spec.commonmark.org/0.31.2/#example-270",
+      "classification": "supported-normalized",
+      "input": "- foo\n\n      bar\n",
+      "expected": "* foo\n\n  ```\n  bar\n  ```"
+    },
+    {
+      "id": "commonmark-306",
+      "source": "commonmark-0.31.2",
+      "section": "Lists",
+      "url": "https://spec.commonmark.org/0.31.2/#example-306",
+      "classification": "supported-normalized",
+      "input": "- foo\n\n- bar\n\n\n- baz\n",
+      "expected": "* foo\n\n* bar\n\n* baz"
+    },
+    {
+      "id": "commonmark-329",
+      "source": "commonmark-0.31.2",
+      "section": "Code spans",
+      "url": "https://spec.commonmark.org/0.31.2/#example-329",
+      "classification": "supported-normalized",
+      "input": "`` foo ` bar ``\n",
+      "expected": "`` foo ` bar ``"
+    },
+    {
+      "id": "commonmark-350",
+      "source": "commonmark-0.31.2",
+      "section": "Emphasis and strong emphasis",
+      "url": "https://spec.commonmark.org/0.31.2/#example-350",
+      "classification": "supported-normalized",
+      "input": "*foo bar*\n",
+      "expected": "*foo bar*"
+    },
+    {
+      "id": "commonmark-351",
+      "source": "commonmark-0.31.2",
+      "section": "Emphasis and strong emphasis",
+      "url": "https://spec.commonmark.org/0.31.2/#example-351",
+      "classification": "supported-normalized",
+      "input": "a * foo bar*\n",
+      "expected": "a \\* foo bar\\*"
+    },
+    {
+      "id": "commonmark-360",
+      "source": "commonmark-0.31.2",
+      "section": "Emphasis and strong emphasis",
+      "url": "https://spec.commonmark.org/0.31.2/#example-360",
+      "classification": "supported-normalized",
+      "input": "foo_bar_\n",
+      "expected": "foo_bar\\_"
+    },
+    {
+      "id": "commonmark-411",
+      "source": "commonmark-0.31.2",
+      "section": "Emphasis and strong emphasis",
+      "url": "https://spec.commonmark.org/0.31.2/#example-411",
+      "classification": "supported-normalized",
+      "input": "*foo**bar**baz*\n",
+      "expected": "*foo**bar**baz*"
+    },
+    {
+      "id": "commonmark-482",
+      "source": "commonmark-0.31.2",
+      "section": "Links",
+      "url": "https://spec.commonmark.org/0.31.2/#example-482",
+      "classification": "supported-normalized",
+      "input": "[link](/uri \"title\")\n",
+      "expected": "[link](/uri \"title\")"
+    },
+    {
+      "id": "commonmark-515",
+      "source": "commonmark-0.31.2",
+      "section": "Links",
+      "url": "https://spec.commonmark.org/0.31.2/#example-515",
+      "classification": "supported-normalized",
+      "input": "[link \\[bar](/uri)\n",
+      "expected": "[link \\[bar](/uri)"
+    },
+    {
+      "id": "commonmark-572",
+      "source": "commonmark-0.31.2",
+      "section": "Images",
+      "url": "https://spec.commonmark.org/0.31.2/#example-572",
+      "classification": "supported-normalized",
+      "input": "![foo](/url \"title\")\n",
+      "expected": "![foo](/url \"title\")"
+    },
+    {
+      "id": "commonmark-594",
+      "source": "commonmark-0.31.2",
+      "section": "Autolinks",
+      "url": "https://spec.commonmark.org/0.31.2/#example-594",
+      "classification": "supported-normalized",
+      "input": "<http://foo.bar.baz>\n",
+      "expected": "[http://foo.bar.baz](http://foo.bar.baz/)"
+    },
+    {
+      "id": "commonmark-601",
+      "source": "commonmark-0.31.2",
+      "section": "Autolinks",
+      "url": "https://spec.commonmark.org/0.31.2/#example-601",
+      "classification": "security-normalized",
+      "input": "<localhost:5001/foo>\n",
+      "expected": "localhost:5001/foo",
+      "note": "The tokenizer recognizes this URI-like autolink, but Markora's URL policy removes the unsafe link mark while retaining its label."
+    },
+    {
+      "id": "commonmark-633",
+      "source": "commonmark-0.31.2",
+      "section": "Hard line breaks",
+      "url": "https://spec.commonmark.org/0.31.2/#example-633",
+      "classification": "supported-normalized",
+      "input": "foo  \nbaz\n",
+      "expected": "foo\\\nbaz"
+    },
+    {
+      "id": "commonmark-648",
+      "source": "commonmark-0.31.2",
+      "section": "Soft line breaks",
+      "url": "https://spec.commonmark.org/0.31.2/#example-648",
+      "classification": "supported-normalized",
+      "input": "foo\nbaz\n",
+      "expected": "foo baz"
+    },
+    {
+      "id": "gfm-198",
+      "source": "gfm-0.29",
+      "section": "Tables",
+      "url": "https://github.github.com/gfm/#example-198",
+      "classification": "supported-normalized",
+      "input": "| foo | bar |\n| --- | --- |\n| baz | bim |\n",
+      "expected": "| foo | bar |\n| --- | --- |\n| baz | bim |"
+    },
+    {
+      "id": "gfm-199",
+      "source": "gfm-0.29",
+      "section": "Tables",
+      "url": "https://github.github.com/gfm/#example-199",
+      "classification": "supported-normalized",
+      "input": "| abc | defghi |\n:-: | -----------:\nbar | baz\n",
+      "expected": "| abc | defghi |\n| :---: | ---: |\n| bar | baz |"
+    },
+    {
+      "id": "gfm-200",
+      "source": "gfm-0.29",
+      "section": "Tables",
+      "url": "https://github.github.com/gfm/#example-200",
+      "classification": "supported-normalized",
+      "input": "| f\\|oo  |\n| ------ |\n| b `\\|` az |\n| b **\\|** im |\n",
+      "expected": "| f\\|oo |\n| --- |\n| b `\\|` az |\n| b **\\|** im |"
+    },
+    {
+      "id": "gfm-201",
+      "source": "gfm-0.29",
+      "section": "Tables",
+      "url": "https://github.github.com/gfm/#example-201",
+      "classification": "supported-normalized",
+      "input": "| abc | def |\n| --- | --- |\n| bar | baz |\n> bar\n",
+      "expected": "| abc | def |\n| --- | --- |\n| bar | baz |\n\n> bar"
+    },
+    {
+      "id": "gfm-204",
+      "source": "gfm-0.29",
+      "section": "Tables",
+      "url": "https://github.github.com/gfm/#example-204",
+      "classification": "boundary-characterized",
+      "input": "| abc | def |\n| --- | --- |\n| bar |\n| bar | baz | boo |\n",
+      "expected": "| abc | def |\n| --- | --- |\n| bar |  |\n| bar | baz |",
+      "note": "Ragged rows are normalized to the header width; surplus cells are outside the supported rectangular-table shape."
+    },
+    {
+      "id": "gfm-205",
+      "source": "gfm-0.29",
+      "section": "Tables",
+      "url": "https://github.github.com/gfm/#example-205",
+      "classification": "supported-normalized",
+      "input": "| abc | def |\n| --- | --- |\n",
+      "expected": "| abc | def |\n| --- | --- |"
+    },
+    {
+      "id": "gfm-279",
+      "source": "gfm-0.29",
+      "section": "Task list items",
+      "url": "https://github.github.com/gfm/#example-279",
+      "classification": "supported-normalized",
+      "input": "- [ ] foo\n- [x] bar\n",
+      "expected": "* [ ] foo\n* [x] bar"
+    },
+    {
+      "id": "gfm-280",
+      "source": "gfm-0.29",
+      "section": "Task list items",
+      "url": "https://github.github.com/gfm/#example-280",
+      "classification": "known-limitation",
+      "semanticStability": "known-failing",
+      "input": "- [x] foo\n  - [ ] bar\n  - [x] baz\n- [ ] bim\n",
+      "expected": "* [x] foo\n      * [ ] bar\n      * [x] baz\n* [ ] bim",
+      "note": "Only flat task items are supported; nested task content does not satisfy the semantic-stability guarantee."
+    },
+    {
+      "id": "gfm-491",
+      "source": "gfm-0.29",
+      "section": "Strikethrough",
+      "url": "https://github.github.com/gfm/#example-491",
+      "classification": "boundary-characterized",
+      "input": "~~Hi~~ Hello, ~there~ world!\n",
+      "expected": "~~Hi~~ Hello, \\~there\\~ world!",
+      "note": "Markora supports double-tilde strikethrough only; single tildes remain escaped literal text."
+    },
+    {
+      "id": "gfm-493",
+      "source": "gfm-0.29",
+      "section": "Strikethrough",
+      "url": "https://github.github.com/gfm/#example-493",
+      "classification": "known-limitation",
+      "semanticStability": "required",
+      "input": "This will ~~~not~~~ strike.\n",
+      "expected": "This will \\~~~not~~\\~ strike.",
+      "note": "Triple-tilde delimiter behavior differs from GFM and is retained as a visible characterization, not a supported guarantee."
+    },
+    {
+      "id": "gfm-622",
+      "source": "gfm-0.29",
+      "section": "Autolinks",
+      "url": "https://github.github.com/gfm/#example-622",
+      "classification": "unsupported-characterized",
+      "input": "www.commonmark.org\n",
+      "expected": "www.commonmark.org",
+      "note": "Bare GFM autolinks are not enabled and remain plain text."
+    }
+  ]
+}

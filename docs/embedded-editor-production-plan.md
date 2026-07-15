@@ -85,8 +85,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | --- | --- | --- | --- |
 | EE-001 | DONE | S | Fix destructive pipe-table import and add true round-trip coverage |
 | EE-002 | DONE | S | Publish the supported Markdown dialect and normalization contract |
-| EE-003 | NEXT | M | Build the conformance, golden-document, and property-test harness |
-| EE-004 | QUEUED | L | Preserve unsupported Markdown through opaque source nodes |
+| EE-003 | DONE | M | Build the conformance, golden-document, and property-test harness |
+| EE-004 | NEXT | L | Preserve unsupported Markdown through opaque source nodes |
 | EE-005 | QUEUED | M | Check in a Chromium, Firefox, and WebKit browser regression suite |
 | EE-006 | QUEUED | M | Cover IME, clipboard, drop, touch, RTL, and accessibility behavior |
 | EE-007 | QUEUED | M | Add production embed configuration and lifecycle APIs |
@@ -191,7 +191,7 @@ Replace broad “round-trip Markdown” claims with a precise public contract.
 
 ### EE-003 — Build the conformance and corpus harness
 
-Status: `NEXT`
+Status: `DONE` (2026-07-15)
 
 #### Goal
 
@@ -206,9 +206,20 @@ Make content fidelity measurable rather than anecdotal.
 - Store intentional normalizations as reviewed expected fixtures.
 - Produce an actionable failure summary instead of a single opaque snapshot failure.
 
+#### Completion notes
+
+- A versioned, attributed conformance manifest now pins 32 selected CommonMark 0.31.2 examples and 11 GFM 0.29-gfm examples. Each input has an official example URL, reviewed Markora normalization, explicit outcome classification, and adjacent CC BY-SA 4.0 attribution; the suite deliberately characterizes Markora's published dialect rather than claiming full spec compliance.
+- All 43 reviewed first-pass outputs pass. Forty-two cases require semantic stability and serializer idempotence; the single known-failing nested-task case asserts its reviewed output without turning the limitation into a guarantee. Stable-but-non-GFM boundary behavior remains covered by semantic assertions.
+- The initial corpus contains 100 original, reviewed, multi-block documents across ten embedded-editor categories. Every document passes `parse -> serialize -> parse` ProseMirror JSON equality and canonical serialization idempotence, with unique case IDs that identify the exact category and document on failure.
+- A deterministic property suite exercises 128 generated combinations of supported blocks and inline syntax using seed `0x5eed0003`. The shared harness reports case ID, failed stage, first differing JSON path, expected value, and actual value instead of one opaque snapshot diff.
+- The published lexical-guarantee manifest is explicitly empty, matching the current compatibility contract. The harness has an opt-in lexical-capture assertion and a self-test, so adding a future byte-preservation promise requires a visible fixture and test change.
+- A CDP check against the production-built `/__dev#table-with-inline-marks` fixture verified a 3-row, 2-column table, emphasis, link normalization, inline code and escaped pipes, then read the exact canonical table from the Markdown dialog. Chromium reported zero console errors, runtime exceptions, failed requests, or HTTP errors.
+- This iteration changes test and documentation assets only: there is no production API, accessibility behavior, runtime security boundary, or bundle-size change. Official specification excerpts and their licensing notice remain isolated under the test fixtures.
+- Final verification: `pnpm check` (374 tests), `pnpm build`, `pnpm pack:smoke`, and `git diff --check` pass.
+
 ### EE-004 — Preserve unsupported source opaquely
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -523,6 +534,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## First iteration
 
-`EE-001 — Fix destructive pipe-table import` and `EE-002 — Define the Markdown dialect and fidelity contract` were completed on 2026-07-15.
+`EE-001` through `EE-003` were completed on 2026-07-15.
 
-The next iteration is `EE-003 — Build the conformance and corpus harness`.
+The next iteration is `EE-004 — Preserve unsupported source opaquely`.
