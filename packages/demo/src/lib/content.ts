@@ -32,7 +32,7 @@ export const initialMarkdown = [
   "",
   "| Feature | Why it matters |",
   "| :--- | :--- |",
-  "| Markdown round-trip | Keep stored content readable |",
+  "| Documented Markdown subset | Predictable normalized storage |",
   "| Managed cursors | Better movement around tables and code blocks |",
   "| Compact API | Easy to wire into your app |",
   "",
@@ -46,6 +46,10 @@ export const docsNavigation = [
   {
     title: "Getting started",
     path: "/docs/getting-started",
+  },
+  {
+    title: "Markdown contract",
+    path: "/docs/markdown",
   },
   {
     title: "API overview",
@@ -81,7 +85,7 @@ export const devLabExamples = [
   },
   {
     slug: "table-with-inline-marks",
-    description: "Pipe table with emphasis, links, and code spans to verify markdown round-tripping.",
+    description: "Pipe table with emphasis, links, and code spans to verify semantic preservation and normalized serialization.",
     markdown: [
       "| Column | Value |",
       "| :--- | ---: |",

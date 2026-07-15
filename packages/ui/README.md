@@ -55,5 +55,6 @@ const editor = createEditor({
 ## Notes
 
 - `markora-ui` is optional; `markora` remains fully usable without it
+- `markora-ui` does not change parsing or serialization; those guarantees are defined by the [`markora` Markdown compatibility contract](https://github.com/KevinWang15/markora/blob/main/packages/core/MARKDOWN_COMPATIBILITY.md)
 - import `markora-ui/styles.css` whenever you use the default UI package
 - `markora-ui` declares `markora` as a peer dependency and is intended to track the same package version

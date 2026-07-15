@@ -5,8 +5,8 @@ import { DocPageNav } from "../components/DocPageNav";
 const apiRows = [
   ["createEditor({ element, markdown, onChange, onTransaction, onChangeMode, ui, codeBlockLanguages })", "Creates the editor view and returns the host API."],
   ["editor.view", "Exposes the underlying ProseMirror view for focus and DOM coordination."],
-  ["editor.getMarkdown()", "Returns the current Markdown string."],
-  ["editor.commands.setMarkdown(markdown, { emitChange })", "Replaces the document through the structured headless API."],
+  ["editor.getMarkdown()", "Returns the current normalized Markdown serialization."],
+  ["editor.commands.setMarkdown(markdown, { emitChange })", "Parses supported Markdown and replaces the document; original lexical source is not retained."],
   ["editor.flushChange()", "Flushes any pending animation-frame batched Markdown emission."],
   ["editor.state.can.* / editor.state.isActive.*", "Lets hosts derive toolbar and feature state without built-in UI."],
   ["editor.getToolbarState()", "Returns a compatibility snapshot for toolbar buttons."],
@@ -126,7 +126,7 @@ export function ApiPage() {
         <span className="card-kicker">API overview</span>
         <h2>Small surface area, enough control for real apps.</h2>
         <p>
-          <code>createEditor()</code> returns a tight host API: markdown in, markdown out, structured
+          <code>createEditor()</code> returns a tight host API: Markdown in, normalized Markdown out, structured
           {" "}commands and state, plus optional UI hooks when you attach <code>markora-ui</code>.
         </p>
       </section>
@@ -159,10 +159,10 @@ export function ApiPage() {
         </article>
         <article className="doc-card">
           <span className="card-kicker">Built-in languages</span>
-          <h3>Lazy-loaded code-block support</h3>
+          <h3>Lazy-loaded code-block editing</h3>
           <p>
-            The default registry covers the languages below and only loads them when a matching fenced
-            {" "}block is encountered.
+            The default registry provides CodeMirror editing and highlighting for the languages below,
+            {" "}loading a grammar only when a matching fenced block is encountered.
           </p>
           <ul className="check-list compact">
             {builtInLanguages.map((language) => (

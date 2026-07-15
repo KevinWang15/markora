@@ -599,7 +599,10 @@ export function EditorPlayground() {
         <section className="panel panel-source">
           <div className="panel-header">
             <h3>Markdown source</h3>
-            <p>Edit raw Markdown, then apply it through <code>editor.commands.setMarkdown()</code>.</p>
+            <p>
+              Applying source parses it immediately. Supported syntax is normalized and unsupported
+              {" "}constructs may change.
+            </p>
           </div>
           <textarea ref={sourceTextareaRef} id="source" spellCheck={false} defaultValue={initialMarkdown} />
           <div className="source-actions">
@@ -611,7 +614,7 @@ export function EditorPlayground() {
       <section className="panel panel-output">
         <div className="panel-header">
           <h3>Serialized output</h3>
-          <p>Inspect the <code>onChange</code> output and verify round-tripping behavior.</p>
+          <p>Compare the <code>onChange</code> output with the published Markdown compatibility contract.</p>
         </div>
         <pre id="output">{output}</pre>
       </section>

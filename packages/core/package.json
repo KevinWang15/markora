@@ -35,6 +35,7 @@
   "files": [
     "dist",
     "dist/styles.css",
+    "MARKDOWN_COMPATIBILITY.md",
     "README.md"
   ],
   "publishConfig": {

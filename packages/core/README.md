@@ -2,17 +2,23 @@
 
 Write Markdown at the speed of thought.
 
-`markora` is a Typora-style Markdown editor built with ProseMirror and CodeMirror. It gives you a clean editing surface, round-trip Markdown import/export, and a small host-facing API that is easy to wire into product codebases.
+`markora` is a Typora-style Markdown editor built with ProseMirror and CodeMirror. It parses a documented Markdown subset into an editable ProseMirror document and serializes supported content to a predictable canonical form.
 
 ## Features
 
-- Markdown import/export backed by ProseMirror documents
-- Headings, blockquotes, lists, task lists, images, code fences, and tables
+- Semantic import/edit/export for the documented Markdown dialect, with normalized serialization
+- Headings, blockquotes, lists, flat task items, images, code fences, and pipe tables
 - Inline marks for bold, italic, code, strike, and links
 - Embedded CodeMirror code blocks with language-aware editing
 - Lazy-loaded built-in code block languages with host-extensible loaders
 - Toolbar-friendly commands for formatting, links, images, and undo/redo
 - URL sanitization plus managed navigation around tables and code blocks
+
+## Markdown compatibility
+
+`markdown` and `editor.commands.setMarkdown()` are parsing boundaries. `editor.getMarkdown()` and `onChange` return normalized serialization, not the original source bytes. Unsupported extensions may be reinterpreted without an error; constrain or validate input until opaque preservation is available.
+
+Read the complete [Markdown dialect and fidelity contract](./MARKDOWN_COMPATIBILITY.md), which is also included in the published package.
 
 ## Install
 
@@ -82,8 +88,8 @@ A typical integration has four parts:
 Host-facing behavior to keep in mind:
 
 - `editor.view` gives you access to the underlying ProseMirror view for focus and DOM event wiring
-- `editor.commands.setMarkdown(markdown)` is the structured headless update path
-- `editor.commands.setMarkdown(markdown, { emitChange: true })` is the programmatic update path when you want `onChange` to re-fire
+- `editor.commands.setMarkdown(markdown)` parses supported Markdown and replaces the document
+- `editor.commands.setMarkdown(markdown, { emitChange: true })` also re-fires `onChange` with normalized output
 - `onTransaction` lets hosts observe editor activity without serializing Markdown on every transaction
 - `onChangeMode: "animationFrame"` smooths larger documents by batching Markdown emission once per frame
 - `editor.flushChange()` forces pending batched `onChange` work to run immediately
@@ -108,7 +114,7 @@ import type {
 
 ## Code block languages
 
-Built-in JavaScript, TypeScript, JSON, CSS, HTML, XML, Markdown, Python, C/C++, Java, Rust, and shell grammars load on demand. You can add or override support with `codeBlockLanguages`:
+Built-in CodeMirror highlighting and editing grammars for JavaScript, TypeScript, JSON, CSS, HTML, XML, Markdown, Python, C/C++, Java, Rust, and shell load on demand. You can add or override a grammar with `codeBlockLanguages`:
 
 ```ts
 import { createDefaultCodeBlockLanguageRegistry, createEditor } from "markora";
@@ -126,8 +132,8 @@ const editor = createEditor({
 
 ## API highlights
 
-- `editor.getMarkdown()` returns the latest Markdown string
-- `editor.commands.setMarkdown(markdown, { emitChange })` replaces the document through the structured headless API
+- `editor.getMarkdown()` returns the current normalized Markdown serialization
+- `editor.commands.setMarkdown(markdown, { emitChange })` parses according to the supported dialect and replaces the document
 - `editor.commands.toggleMark(...)`, `editor.commands.setLink(...)`, `editor.commands.insertImage(...)`, `editor.commands.undo()`, and `editor.commands.redo()` form the command surface
 - `editor.state.can.*` and `editor.state.isActive.*` expose host-friendly capability and activity checks
 - `editor.getToolbarState()` remains available for toolbar integrations that prefer a compatibility snapshot

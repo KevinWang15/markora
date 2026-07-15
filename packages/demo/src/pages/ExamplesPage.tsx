@@ -4,7 +4,7 @@ import { DocPageNav } from "../components/DocPageNav";
 const examples = [
   {
     title: "Product docs editor",
-    summary: "Use the editor for knowledge bases, release notes, and internal documentation where Markdown fidelity matters.",
+    summary: "Use the editor for documentation whose input conforms to Markora's published Markdown dialect.",
     snippet: `import { createEditor } from "markora";
 import { createDefaultUi } from "markora-ui";
 
@@ -18,7 +18,7 @@ const editor = createEditor({
   },
   {
     title: "AI draft review surface",
-    summary: "Let an LLM generate Markdown drafts, then hand them to users in a clean visual editor before publishing.",
+    summary: "Constrain or validate generated Markdown against the supported dialect before loading it for visual review.",
     snippet: `editor.commands.setMarkdown(aiDraft, { emitChange: true });
 editor.flushChange();`,
   },
@@ -57,8 +57,8 @@ const editor = createEditor({
 });`,
   },
   {
-    title: "Source-of-truth Markdown storage",
-    summary: "Persist the serialized Markdown output directly so your backend stays plain-text and portable.",
+    title: "Normalized Markdown storage",
+    summary: "Persist Markora's serialized output directly when documents stay within the supported dialect.",
     snippet: `onChange(markdown) {
   debouncedSave({ markdown });
 }`,

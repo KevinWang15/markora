@@ -14,12 +14,16 @@ Write Markdown at the speed of thought.
 
 ## Highlights
 
-- Typora-like editing with Markdown as the source of truth
-- Round-trip Markdown import/export for headings, quotes, lists, task lists, images, code fences, and tables
+- Typora-like visual editing with host-owned Markdown input and normalized Markdown output
+- Semantic import/edit/export for the documented dialect: a CommonMark-derived subset, pipe tables, strikethrough, and flat task items
 - Inline marks for bold, italic, code, strike, and links
 - Embedded CodeMirror code blocks with lazy-loaded built-in grammars
 - Headless command/state APIs plus optional overlays from `markora-ui`
 - Safer URL sanitization and managed navigation around tables and code blocks
+
+## Markdown compatibility
+
+Markora is not a byte-for-byte source editor. Supported syntax is serialized to a canonical form, and unsupported extensions are not yet safely preserved or rejected. Review the [Markdown dialect and fidelity contract](./packages/core/MARKDOWN_COMPATIBILITY.md) before importing existing or generated documents.
 
 ## Install
 

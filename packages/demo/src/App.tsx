@@ -7,6 +7,7 @@ import { ApiPage } from "./pages/ApiPage";
 import { ExamplesPage } from "./pages/ExamplesPage";
 import { DevLabPage } from "./pages/DevLabPage";
 import { GettingStartedPage } from "./pages/GettingStartedPage";
+import { MarkdownCompatibilityPage } from "./pages/MarkdownCompatibilityPage";
 
 export function App() {
   const location = useLocation();
@@ -51,7 +52,8 @@ export function App() {
             <h1>Build Markdown workflows your users actually enjoy.</h1>
             <p>
               Markora pairs a headless Markdown editor with optional built-in overlays, lazy-loaded
-              code-block languages, and faithful markdown round-tripping for product-grade editing flows.
+              code-block languages, and a documented semantic round-trip contract with predictable
+              normalized output for supported syntax.
             </p>
             <div className="hero-actions">
               <NavLink to="/demo" className="button button-primary">Open live demo</NavLink>
@@ -85,6 +87,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/docs/getting-started" replace />} />
             <Route path="/docs/getting-started" element={<GettingStartedPage />} />
+            <Route path="/docs/markdown" element={<MarkdownCompatibilityPage />} />
             <Route path="/docs/api" element={<ApiPage />} />
             <Route path="/docs/examples" element={<ExamplesPage />} />
             <Route path="/demo" element={<EditorPlayground />} />

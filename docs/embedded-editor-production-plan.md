@@ -84,8 +84,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | ID | Status | Size | Outcome |
 | --- | --- | --- | --- |
 | EE-001 | DONE | S | Fix destructive pipe-table import and add true round-trip coverage |
-| EE-002 | NEXT | S | Publish the supported Markdown dialect and normalization contract |
-| EE-003 | QUEUED | M | Build the conformance, golden-document, and property-test harness |
+| EE-002 | DONE | S | Publish the supported Markdown dialect and normalization contract |
+| EE-003 | NEXT | M | Build the conformance, golden-document, and property-test harness |
 | EE-004 | QUEUED | L | Preserve unsupported Markdown through opaque source nodes |
 | EE-005 | QUEUED | M | Check in a Chromium, Firefox, and WebKit browser regression suite |
 | EE-006 | QUEUED | M | Cover IME, clipboard, drop, touch, RTL, and accessibility behavior |
@@ -164,7 +164,7 @@ One focused commit containing the codec fix, fixtures, tests, and any necessary 
 
 ### EE-002 — Define the Markdown dialect and fidelity contract
 
-Status: `NEXT`
+Status: `DONE` (2026-07-15)
 
 #### Goal
 
@@ -173,14 +173,25 @@ Replace broad “round-trip Markdown” claims with a precise public contract.
 #### Acceptance criteria
 
 - Document the supported CommonMark/GFM features and Markora-specific extensions.
-- Classify each construct as semantic round-trip, lexical round-trip, normalized output, opaque preservation, or unsupported error.
+- Classify each construct as semantic round-trip, lexical round-trip, normalized output, opaque preservation, or unsupported, including its actual error/no-error behavior.
 - Document normalization of bullets, whitespace, reference links, escapes, and line endings.
 - Add explicit policy for YAML front matter, footnotes, math, callouts, raw HTML, directives, TOC, and diagrams.
 - Update README and package documentation to match the verified contract.
 
+#### Completion notes
+
+- The authoritative [Markdown dialect and fidelity contract](../packages/core/MARKDOWN_COMPATIBILITY.md) now ships inside the `markora` package. It defines a CommonMark-derived subset plus pipe tables, strikethrough, and flat task items without claiming full CommonMark/GFM conformance.
+- The contract classifies supported semantic/normalized output, records that lexical and opaque guarantees are currently empty, and introduces the evidence-based transitional state `Unsupported — unreported`. This corrects the original “unsupported error” assumption: the current API does not expose a validation or rejection path.
+- Normalization of line endings, terminal/blank whitespace, soft/hard breaks, list markers, task case, headings, fences, emphasis, references, entities, escapes, tables, and URLs is explicit and covered by focused characterization tests.
+- YAML front matter, footnotes, math, callouts, raw HTML, directives, TOC markers, and diagram semantics have explicit no-preservation policies. Mermaid fences remain generic code, and downstream HTML rendering remains the host's sanitization responsibility.
+- Known shape limits discovered during the audit—nested/multi-block tasks, adjacent marker-distinguished lists, ordered lists starting at zero, ragged/multi-block tables, escaped task prefixes, bare GFM autolinks, and data-image asymmetry—are published rather than hidden.
+- Root/package READMEs and demo copy now describe normalized output. The demo exposes a `/docs/markdown` compatibility page.
+- A CDP production-build check navigated through the new docs link, verified the warning, supported-shape limits, Mermaid policy, normalization matrix, and package-contract URL, with zero page console/network errors.
+- Final verification: `pnpm check` (92 tests), `pnpm build`, `pnpm pack:smoke`, and `git diff --check` pass. The pack manifest includes `MARKDOWN_COMPATIBILITY.md`.
+
 ### EE-003 — Build the conformance and corpus harness
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -512,6 +523,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## First iteration
 
-`EE-001 — Fix destructive pipe-table import` was completed on 2026-07-15.
+`EE-001 — Fix destructive pipe-table import` and `EE-002 — Define the Markdown dialect and fidelity contract` were completed on 2026-07-15.
 
-The next iteration is `EE-002 — Define the Markdown dialect and fidelity contract`.
+The next iteration is `EE-003 — Build the conformance and corpus harness`.
