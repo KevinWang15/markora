@@ -83,8 +83,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 
 | ID | Status | Size | Outcome |
 | --- | --- | --- | --- |
-| EE-001 | NEXT | S | Fix destructive pipe-table import and add true round-trip coverage |
-| EE-002 | QUEUED | S | Publish the supported Markdown dialect and normalization contract |
+| EE-001 | DONE | S | Fix destructive pipe-table import and add true round-trip coverage |
+| EE-002 | NEXT | S | Publish the supported Markdown dialect and normalization contract |
 | EE-003 | QUEUED | M | Build the conformance, golden-document, and property-test harness |
 | EE-004 | QUEUED | L | Preserve unsupported Markdown through opaque source nodes |
 | EE-005 | QUEUED | M | Check in a Chromium, Firefox, and WebKit browser regression suite |
@@ -111,7 +111,7 @@ Sizes are relative planning aids: `S` is a focused change, `M` spans several rel
 
 ### EE-001 — Fix destructive pipe-table import
 
-Status: `NEXT`
+Status: `DONE` (2026-07-15)
 
 #### Problem
 
@@ -153,9 +153,18 @@ The tokenizer/parser configuration around `thead` and `tbody` is the suspected s
 
 One focused commit containing the codec fix, fixtures, tests, and any necessary compatibility note.
 
+#### Completion notes
+
+- The tokenizer now wraps table-cell inline streams in paragraph tokens, matching the existing `block+` cell schema without changing the public API or weakening imported-URL sanitization.
+- Imported tables now retain header/body cell types, cell counts, cell text, default/left/center/right alignment, escaped pipes, code spans, bold, italic, strike, and links. The round-trip corpus includes these cases and the exact two-column reproduction.
+- Existing ragged pasted-HTML coverage remains green and verifies that the resulting ProseMirror document is structurally valid.
+- Compatibility decision: ordinary GFM pipe tables normalize to paragraph-backed cells and normalized pipe-table output. Broader multi-block table-cell fidelity belongs to the dialect and conformance work in `EE-002` and `EE-003`.
+- CDP verification against the production-built `/__dev#imported-table-edit` fixture loaded `Name/Status` and `Alpha/Draft`, edited the body cell to `Draft Ready` with browser input events, and read back `| Alpha | Draft Ready |` from the Markdown source dialog. The run reported zero page console errors and zero HTTP errors.
+- Final verification: `pnpm check`, `pnpm build`, `pnpm pack:smoke`, and `git diff --check` pass.
+
 ### EE-002 — Define the Markdown dialect and fidelity contract
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -503,6 +512,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## First iteration
 
-The next iteration is `EE-001 — Fix destructive pipe-table import`.
+`EE-001 — Fix destructive pipe-table import` was completed on 2026-07-15.
 
-No later parity or architecture work should start until the imported table reproduction is fixed and retained as a true Markdown round-trip regression.
+The next iteration is `EE-002 — Define the Markdown dialect and fidelity contract`.

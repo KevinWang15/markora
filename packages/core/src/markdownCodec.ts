@@ -220,6 +220,38 @@ export const schema: Schema = new Schema({
 });
 
 const markdownTokenizer = defaultMarkdownParser.tokenizer.enable("strikethrough").enable("table");
+
+// markdown-it emits cell contents as inline tokens, while table cells accept block content.
+markdownTokenizer.core.ruler.after("inline", "markora_table_cell_paragraphs", (state) => {
+  const tokens = state.tokens;
+  const nextTokens: typeof tokens = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const inlineToken = tokens[index];
+    const openType = tokens[index - 1]?.type;
+    const closeType = tokens[index + 1]?.type;
+    const isTableCell =
+      (openType === "th_open" && closeType === "th_close") ||
+      (openType === "td_open" && closeType === "td_close");
+
+    if (inlineToken?.type !== "inline" || !isTableCell) {
+      nextTokens.push(inlineToken);
+      continue;
+    }
+
+    const paragraphOpen = new state.Token("paragraph_open", "p", 1);
+    const paragraphClose = new state.Token("paragraph_close", "p", -1);
+    paragraphOpen.level = inlineToken.level;
+    paragraphOpen.map = inlineToken.map;
+    paragraphClose.level = inlineToken.level;
+    inlineToken.level += 1;
+
+    nextTokens.push(paragraphOpen, inlineToken, paragraphClose);
+  }
+
+  state.tokens = nextTokens;
+});
+
 const defaultMarkdownTokens = {
   ...defaultMarkdownParser.tokens,
   table: { block: "table" },

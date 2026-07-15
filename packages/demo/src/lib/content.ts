@@ -86,7 +86,16 @@ export const devLabExamples = [
       "| Column | Value |",
       "| :--- | ---: |",
       "| *Alpha* | [Docs](https://example.com) |",
-      "| `a\|b` | escaped \| pipe |",
+      "| `a\\|b` | escaped \\| pipe |",
+    ].join("\n"),
+  },
+  {
+    slug: "imported-table-edit",
+    description: "Imported pipe table to verify cell editing and Markdown serialization without data loss.",
+    markdown: [
+      "| Name | Status |",
+      "| --- | --- |",
+      "| Alpha | Draft |",
     ].join("\n"),
   },
   {

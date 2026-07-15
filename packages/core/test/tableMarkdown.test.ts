@@ -48,6 +48,73 @@ afterEach(() => {
 });
 
 describe('table markdown fidelity', () => {
+  it('round-trips an ordinary imported pipe table without data loss', () => {
+    const markdown = [
+      '| H | J |',
+      '| --- | --- |',
+      '| A | B |',
+    ].join('\n');
+    const editor = createEditor({
+      element: createHost(),
+      markdown,
+    });
+
+    const table = editor.view.state.doc.firstChild;
+    expect(table?.type.name).toBe('table');
+    expect(table?.childCount).toBe(2);
+    expect(table?.content.content.map((row) => row.childCount)).toEqual([2, 2]);
+    expect(table?.content.content.map((row) => row.content.content.map((cell) => cell.textContent))).toEqual([
+      ['H', 'J'],
+      ['A', 'B'],
+    ]);
+    expect(editor.getMarkdown()).toBe(markdown);
+  });
+
+  it('imports alignment, escaped pipes, code, and inline marks', () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: [
+        '| Default | Left | Center | Right | Rich |',
+        '| --- | :--- | :---: | ---: | --- |',
+        '| Plain | escaped \\| pipe | `code \\| pipe` | ~~strike~~ | **bold** and *italic* |',
+        '| Link | [Docs](/docs) | one | two | three |',
+      ].join('\n'),
+    });
+
+    const table = editor.view.state.doc.firstChild;
+    expect(table?.type.name).toBe('table');
+    expect(table?.childCount).toBe(3);
+    expect(table?.firstChild?.childCount).toBe(5);
+    expect(table?.firstChild?.content.content.map((cell) => cell.attrs.align)).toEqual([
+      null,
+      'left',
+      'center',
+      'right',
+      null,
+    ]);
+    expect(table?.child(1).content.content.map((cell) => cell.attrs.align)).toEqual([
+      null,
+      'left',
+      'center',
+      'right',
+      null,
+    ]);
+    expect(table?.content.content.map((row) => row.content.content.map((cell) => cell.type.name))).toEqual([
+      ['table_header', 'table_header', 'table_header', 'table_header', 'table_header'],
+      ['table_cell', 'table_cell', 'table_cell', 'table_cell', 'table_cell'],
+      ['table_cell', 'table_cell', 'table_cell', 'table_cell', 'table_cell'],
+    ]);
+    expect(table?.content.content.every((row) =>
+      row.content.content.every((cell) => cell.firstChild?.type.name === 'paragraph'))).toBe(true);
+    expect(table?.child(1).content.content.map((cell) => cell.textContent)).toEqual([
+      'Plain',
+      'escaped | pipe',
+      'code | pipe',
+      'strike',
+      'bold and italic',
+    ]);
+  });
+
   it('serializes inline markdown marks inside table cells', () => {
     const editor = createEditor({
       element: createHost(),
