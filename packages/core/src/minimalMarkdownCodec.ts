@@ -29,10 +29,10 @@ import {
   wrapMarkdownEditorExtensionRuntimeCallback,
 } from "./markdownContributionCompiler";
 import {
-  DEFAULT_IMAGE_PROTOCOLS,
-  DEFAULT_LINK_PROTOCOLS,
-  sanitizeStoredUrl,
-} from "./urlUtils";
+  normalizeMarkdownEditorResources,
+  sanitizeResourceUrl,
+  type NormalizedMarkdownEditorResources,
+} from "./resourcePolicy";
 import { createReadonlySet } from "./readonlySet";
 import {
   compileMarkdownEditorSchemaEntries,
@@ -87,12 +87,16 @@ function qualifyToken(owner: string, localId: string) {
   return `${owner}/${root}${suffix}`;
 }
 
-function sanitizeFragment(schema: Schema, fragment: Fragment): Fragment {
+function sanitizeFragment(
+  schema: Schema,
+  resources: NormalizedMarkdownEditorResources,
+  fragment: Fragment,
+): Fragment {
   let changed = false;
   const children: ProseMirrorNode[] = [];
 
   fragment.forEach((node) => {
-    const next = sanitizeNode(schema, node);
+    const next = sanitizeNode(schema, resources, node);
 
     if (!next) {
       changed = true;
@@ -106,7 +110,11 @@ function sanitizeFragment(schema: Schema, fragment: Fragment): Fragment {
   return changed ? Fragment.fromArray(children) : fragment;
 }
 
-function sanitizeMarks(schema: Schema, marks: readonly Mark[]) {
+function sanitizeMarks(
+  schema: Schema,
+  resources: NormalizedMarkdownEditorResources,
+  marks: readonly Mark[],
+) {
   const linkType = schema.marks.link;
   let changed = false;
   const next: Mark[] = [];
@@ -117,9 +125,10 @@ function sanitizeMarks(schema: Schema, marks: readonly Mark[]) {
       continue;
     }
 
-    const href = sanitizeStoredUrl(
+    const href = sanitizeResourceUrl(
+      resources,
+      "link",
       typeof mark.attrs.href === "string" ? mark.attrs.href : null,
-      DEFAULT_LINK_PROTOCOLS,
     );
 
     if (!href) {
@@ -135,13 +144,18 @@ function sanitizeMarks(schema: Schema, marks: readonly Mark[]) {
   return changed ? next : marks;
 }
 
-function sanitizeNode(schema: Schema, node: ProseMirrorNode): ProseMirrorNode | null {
-  const marks = sanitizeMarks(schema, node.marks);
+function sanitizeNode(
+  schema: Schema,
+  resources: NormalizedMarkdownEditorResources,
+  node: ProseMirrorNode,
+): ProseMirrorNode | null {
+  const marks = sanitizeMarks(schema, resources, node.marks);
 
   if (node.type === schema.nodes.image) {
-    const src = sanitizeStoredUrl(
+    const src = sanitizeResourceUrl(
+      resources,
+      "image",
       typeof node.attrs.src === "string" ? node.attrs.src : null,
-      DEFAULT_IMAGE_PROTOCOLS,
     );
     return src
       ? src === node.attrs.src && marks === node.marks
@@ -154,7 +168,7 @@ function sanitizeNode(schema: Schema, node: ProseMirrorNode): ProseMirrorNode | 
     return marks === node.marks ? node : node.mark(marks);
   }
 
-  const content = sanitizeFragment(schema, node.content);
+  const content = sanitizeFragment(schema, resources, node.content);
   let next = content === node.content ? node : node.copy(content);
   if (marks !== node.marks) next = next.mark(marks);
   return next;
@@ -162,6 +176,7 @@ function sanitizeNode(schema: Schema, node: ProseMirrorNode): ProseMirrorNode | 
 
 export function createMinimalMarkdownCodec(
   extensions: readonly ResolvedMarkdownEditorExtension[] = [],
+  resources: NormalizedMarkdownEditorResources = normalizeMarkdownEditorResources(undefined),
 ): MarkdownEditorCodec {
   const foundationNodes = commonMarkSchema.spec.nodes as MarkdownEditorOrderedSchemaMap<NodeSpec>;
   const foundationMarks = commonMarkSchema.spec.marks as MarkdownEditorOrderedSchemaMap<MarkSpec>;
@@ -247,6 +262,9 @@ export function createMinimalMarkdownCodec(
   }
 
   const tokenizer = new MarkdownIt("commonmark", { html: false });
+  // Defer scheme enforcement until after parsing so host-approved custom
+  // protocols are not discarded by markdown-it's fixed built-in allowlist.
+  tokenizer.validateLink = () => true;
   registerMarkdownEditorTokenizerRules(
     tokenizer,
     extensions,
@@ -350,7 +368,7 @@ export function createMinimalMarkdownCodec(
     }
 
     const parsed = parser.parse(markdown, {});
-    return sanitizeNode(schema, parsed) ?? schema.topNodeType.createAndFill();
+    return sanitizeNode(schema, resources, parsed) ?? schema.topNodeType.createAndFill();
   };
 
   return Object.freeze({
@@ -364,7 +382,7 @@ export function createMinimalMarkdownCodec(
       return new Plugin({
         props: {
           transformPasted(slice) {
-            const content = sanitizeFragment(schema, slice.content);
+            const content = sanitizeFragment(schema, resources, slice.content);
             return content === slice.content
               ? slice
               : new Slice(content, slice.openStart, slice.openEnd);

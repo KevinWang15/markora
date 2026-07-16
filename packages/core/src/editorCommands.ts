@@ -7,7 +7,11 @@ import {
 import type { EditorView } from "prosemirror-view";
 import { TextSelection, type EditorState } from "prosemirror-state";
 import type { Mark, MarkType, Node as ProseMirrorNode, NodeType, Schema } from "prosemirror-model";
-import { DEFAULT_IMAGE_PROTOCOLS, DEFAULT_LINK_PROTOCOLS, sanitizeStoredUrl } from "./urlUtils";
+import {
+  normalizeMarkdownEditorResources,
+  sanitizeResourceUrl,
+  type NormalizedMarkdownEditorResources,
+} from "./resourcePolicy";
 
 export type EditorCommand = (
   state: EditorState,
@@ -50,7 +54,7 @@ function createMarkInputRule(regexp: RegExp, markType: MarkType) {
   });
 }
 
-function createImageInputRule(schema: Schema) {
+function createImageInputRule(schema: Schema, resources: NormalizedMarkdownEditorResources) {
   return new InputRule(/!\[([^\]]*)\]\(([^\s)]+)(?:\s+"([^"]*)")?\)$/, (state, match, start, end) => {
     const alt = typeof match[1] === "string" ? match[1] : "";
     const rawSrc = match[2];
@@ -60,7 +64,7 @@ function createImageInputRule(schema: Schema) {
       return null;
     }
 
-    const src = sanitizeStoredUrl(rawSrc, DEFAULT_IMAGE_PROTOCOLS);
+    const src = sanitizeResourceUrl(resources, "image", rawSrc);
 
     if (!src) {
       return null;
@@ -71,7 +75,7 @@ function createImageInputRule(schema: Schema) {
   });
 }
 
-function createLinkInputRule(schema: Schema) {
+function createLinkInputRule(schema: Schema, resources: NormalizedMarkdownEditorResources) {
   return new InputRule(/\[([^\]]+)\]\(([^\s)]+)\)$/, (state, match, start, end) => {
     const text = match[1];
     const rawHref = match[2];
@@ -80,7 +84,7 @@ function createLinkInputRule(schema: Schema) {
       return null;
     }
 
-    const href = sanitizeStoredUrl(rawHref, DEFAULT_LINK_PROTOCOLS);
+    const href = sanitizeResourceUrl(resources, "link", rawHref);
 
     if (!href) {
       return null;
@@ -150,8 +154,13 @@ function createHeadingInputRule(level: number, nodeType: NodeType) {
 export function createTypingShortcuts(options: {
   schema: Schema;
   getAncestorInfo: (state: EditorState, nodeType: NodeType) => { node: ProseMirrorNode; pos: number } | null;
+  resources?: NormalizedMarkdownEditorResources;
 }) {
-  const { getAncestorInfo, schema } = options;
+  const {
+    getAncestorInfo,
+    resources = normalizeMarkdownEditorResources(undefined),
+    schema,
+  } = options;
 
   const createTaskListInputRule = () => new InputRule(/^\[( |x|X)\]\s$/, (state, match, start, end) => {
     const checked = typeof match[1] === "string" && match[1].toLowerCase() === "x";
@@ -201,8 +210,8 @@ export function createTypingShortcuts(options: {
         (match) => ({ order: Number(match[1]) }),
         (match, node) => node.childCount + node.attrs.order === Number(match[1]),
       ),
-      createImageInputRule(schema),
-      createLinkInputRule(schema),
+      createImageInputRule(schema, resources),
+      createLinkInputRule(schema, resources),
       createMarkInputRule(/(?<!`)`([^`]+)`$/, schema.marks.code),
       createMarkInputRule(/(?<!~)~~([^~]+)~~$/, schema.marks.strike),
       createMarkInputRule(/(?<!\*)\*\*([^*]+)\*\*$/, schema.marks.strong),

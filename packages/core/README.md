@@ -13,7 +13,7 @@ Write Markdown at the speed of thought.
 - Embedded CodeMirror code blocks with language-aware editing
 - Lazy-loaded built-in code block languages with host-extensible loaders
 - Toolbar-friendly commands for formatting, links, images, and undo/redo
-- URL sanitization plus managed navigation around tables and code blocks
+- Per-editor URL/image/navigation/upload policy plus managed navigation around tables and code blocks
 
 ## Markdown compatibility
 
@@ -110,6 +110,123 @@ const editor = createEditor({
 });
 ```
 
+## Resources, links, images, and asset uploads
+
+`CreateEditorOptions.resources` is a creation-only, per-editor policy boundary. It lets the embedding host decide which URLs may be stored in Markdown, how stored URLs resolve at use time, how modifier-click navigation works, how images are fetched, and whether pasted or dropped files may become Markdown. Storage, authentication, and upload transport remain host responsibilities.
+
+### Stored URL policy
+
+The same final sanitizer runs after Markdown parsing, rich paste (including extension clipboard and raw-plugin slice transforms), typing rules, built-in UI, public link/image commands, upload results, and runtime resolution. This prevents an earlier parser or paste transform from bypassing the configured policy.
+
+| Setting | Link default | Image default |
+| --- | --- | --- |
+| `allowedProtocols` | `http:`, `https:`, `mailto:`, `tel:` | `http:`, `https:`, `data:` |
+| `allowRelative` | `true` | `true` |
+| `allowCredentials` | `false` | `false` |
+| `allowedDataMimeTypes` | none | `image/avif`, `image/gif`, `image/jpeg`, `image/png`, `image/webp` |
+| `maxDataUrlBytes` | 1,048,576 | 1,048,576 |
+| `maxDataUrlCharacters` | 1,398,358 | 1,398,358 |
+| Image privacy | — | `crossOrigin: null`, `referrerPolicy: "no-referrer"` |
+
+`data:` must appear in `allowedProtocols` and its exact MIME type must appear in `allowedDataMimeTypes`; URL-policy MIME entries do not accept wildcards. A data URL accepts a bare MIME type and at most one `;base64` marker, so charset and other metadata parameters are rejected. `maxDataUrlBytes` counts the decoded base64 or percent-decoded UTF-8 payload, while `maxDataUrlCharacters` bounds work before decoding. Both are positive, independent, inclusive limits; a host that permits larger data must review and raise both.
+
+Protocol-relative URLs, backslashes, embedded whitespace or ASCII controls, malformed schemes, and disallowed protocols are rejected; surrounding whitespace is trimmed. `javascript:` and `vbscript:` cannot be enabled. URL userinfo requires the explicit `allowCredentials: true` opt-in; that flag does not control browser cookies or fetch credentials, which remain the host's responsibility through image presentation and loading policy. Other custom schemes are supported when named explicitly. Rejected imported links keep their label as unlinked text, while rejected images are removed; accepted absolute URLs may be canonicalized by the browser URL parser.
+
+The public default constants are `DEFAULT_LINK_PROTOCOLS`, `DEFAULT_IMAGE_PROTOCOLS`, `DEFAULT_IMAGE_DATA_MIME_TYPES`, `DEFAULT_MAX_DATA_URL_BYTES`, and `DEFAULT_MAX_DATA_URL_CHARACTERS`.
+
+This is the supported entry-path contract, not a sandbox around raw ProseMirror. `editor.view` and trusted extension plugins can construct arbitrary transactions outside the typed link/image APIs. Runtime open/load checks still deny an unsafe built-in destination, but hosts and extension authors must not use raw transactions to persist unvalidated URL attrs.
+
+### Resolve, open, and load hooks
+
+Stored Markdown remains stable when the host needs tenant-aware, signed, or authenticated display URLs:
+
+```ts
+const editor = createEditor({
+  element: hostElement,
+  markdown: "[Guide](docs/guide)\n\n![Diagram](asset:diagram-42)",
+  resources: {
+    links: {
+      allowedProtocols: ["https:", "docs:"],
+    },
+    images: {
+      allowedProtocols: ["https:", "asset:"],
+      allowRelative: false,
+      crossOrigin: "anonymous",
+      referrerPolicy: "same-origin",
+    },
+    resolveUrl({ kind, purpose, url }) {
+      return resolveStoredResource({ kind, purpose, storedUrl: url });
+    },
+    openUrl({ event, kind, storedUrl, url }) {
+      openHostResource({ event, kind, storedUrl, resolvedUrl: url });
+    },
+    async loadImage({ signal, storedUrl, url }) {
+      const response = await fetch(url, { signal, credentials: "include" });
+      if (!response.ok) return null;
+      return {
+        src: await response.blob(),
+        cleanup: () => releaseImageLease(storedUrl),
+      };
+    },
+  },
+});
+```
+
+`resolveUrl({ kind, purpose, url })` is synchronous. It receives the sanitized stored URL and a purpose of `"load"` or `"open"`, and returns a candidate runtime URL or `null` to deny the action. The returned string is sanitized again against the same kind-specific policy and is never written back to Markdown.
+
+Ctrl/Cmd-click on a link or image resolves it with purpose `"open"`. `openUrl` then runs synchronously with the original `MouseEvent`, resource kind, stored URL, and resolved URL, preserving the browser user-activation window. Without the hook, Markora uses `window.open(url, "_blank", "noopener,noreferrer")`. A denied or rejected URL is still consumed and is not passed to browser navigation.
+
+Every image resolves with purpose `"load"`. `loadImage` may return a result, `null`, or a promise of either. `null` is an intentional denial. A result supplies `src: string | Blob` and may override `crossOrigin` and `referrerPolicy` or provide `cleanup()`. String results are policy-checked again. Blob results use a Markora-owned object URL, which Markora revokes automatically. The request's `AbortSignal` aborts when the source becomes stale or the NodeView is destroyed; stale async results are ignored. Host cleanup and object-URL revocation each run once when the accepted result is replaced or destroyed, and a stale result's cleanup still runs once.
+
+During the active lifecycle, thrown/rejected resolver, opener, loader, and cleanup failures produce a recoverable `error` event with code `"resource-callback-failed"` and `context.phase` equal to `"resolve"`, `"open"`, `"load"`, or `"cleanup"`. A cleanup failure encountered inside `destroy()` instead joins the teardown error/aggregate while later cleanup still runs. Intentional `null` denial is not an error. Without an error subscriber, active callback failures reach the editor window's global error reporting path.
+
+### File upload contract
+
+File-bearing paste, dragover, and drop are consumed so the browser cannot navigate or insert a local file. They start uploads only when `resources.assets` is present:
+
+```ts
+const editor = createEditor({
+  element: hostElement,
+  resources: {
+    assets: {
+      allowedMimeTypes: ["image/*", "application/pdf"],
+      maxFileBytes: 20 * 1024 * 1024,
+      maxFiles: 5,
+      async upload({ file, id, reportProgress, signal, source }) {
+        const storedUrl = await uploadAsset(file, {
+          id,
+          onProgress: reportProgress,
+          signal,
+          source,
+        });
+
+        return file.type.startsWith("image/")
+          ? { kind: "image", url: storedUrl, alt: file.name }
+          : { kind: "link", url: storedUrl, label: file.name };
+      },
+    },
+  },
+});
+
+const stopAssets = editor.subscribe("asset", ({ reason, upload }) => {
+  updateAccessibleUploadUi(reason, upload);
+});
+```
+
+The default upload limits are the five raster image MIME types above, 10,485,760 bytes per file, and 10 files per transfer. `allowedMimeTypes` accepts exact values plus subtype and global wildcards such as `image/*` and `*/*`; an empty `File.type` is rejected. `maxFileBytes` and `maxFiles` are positive integers, `maxFiles` cannot exceed 100, and a batch exceeding the count is rejected as a whole before individual MIME/size checks. `DEFAULT_ASSET_MIME_TYPES`, `DEFAULT_MAX_ASSET_FILE_BYTES`, and `DEFAULT_MAX_ASSET_FILES` expose these defaults.
+
+The frozen upload request contains the `File`, stable upload `id`, transfer `source` (`"paste"` or `"drop"`), a per-attempt `AbortSignal`, and `reportProgress(number)`. Progress must be finite and inclusive from 0 through 1. Reporting progress emits an asset event but does not dispatch a ProseMirror transaction or serialize Markdown. The upload may complete synchronously or asynchronously and returns either an image result (`url`, optional `alt`/`title`) or a link result (`url`, optional `label`/`title`). URLs pass through the corresponding stored policy; omitted image alt text and link labels default to the file name, with `"Uploaded file"` used when a link has neither a label nor a non-empty file name.
+
+Subscribe to `"asset"` for reasons `"started"`, `"progress"`, `"failed"`, `"retried"`, `"completed"`, `"cancelled"`, and `"rejected"`. Each event contains an immutable file/upload snapshot and a status of `"uploading"`, `"failed"`, `"completed"`, `"cancelled"`, or `"rejected"`. Failure codes distinguish `file-too-large`, `insertion-blocked`, `invalid-result`, `too-many-files`, `unsupported-file-type`, and `upload-failed`.
+
+`editor.assets.getUploads()` returns current uploading and failed snapshots. `cancel(id)` aborts and removes a retained upload; `retry(id)` gives a failed upload a new signal while retaining its ID and mapped insertion anchor. Both return `false` when the requested transition is unavailable and throw on non-string IDs. These methods and `getUploads()` follow the normal destroyed-editor contract.
+
+A multi-file transfer waits until every remaining member succeeds, then inserts all results in original transfer order through one `"user"` transaction and one undo step. Async completion does not steal focus. The insertion anchor maps through intervening editor and reconciliation transactions. If one member fails, successful members remain pending; retry the failure, or cancel it to allow the remaining ready members to commit together. Invalid results and anchors that no longer accept the returned nodes fail without partially inserting the batch.
+
+Starting a transfer while read-only or during composition produces rejected snapshots and never calls the uploader. If completion is blocked because the editor became read-only or composing, uploads remain failed and can be retried after it becomes editable and non-composing; other insertion-blocked errors can require cancellation or host recovery. `resetMarkdown()` and its deprecated alias abort retained uploads and emit `"cancelled"`; `reconcileMarkdown()` preserves and maps them; `destroy()` aborts them silently before subscriptions are cleared. The outer ProseMirror surface owns this upload flow. Nested CodeMirror blocks always reject files and remain plain-text clipboard surfaces, even when assets are configured.
+
+Core is headless: it exposes no upload toast, live region, progress bar, retry button, or confirmation UI. A conforming host must announce meaningful failures/completion, expose labelled cancel/retry controls, avoid noisy announcements for every progress tick, and keep status available without relying on color alone. The host also owns authentication prompts, privacy consent, offline policy, and upload persistence.
+
 ## Extensions and the minimal entry
 
 The root entry uses Markora's compatibility preset, preserving tables, tasks,
@@ -133,7 +250,8 @@ storage unchanged inside a query remains the extension author's responsibility.
 Clipboard contributions can target the outer ProseMirror editor,
 `nested-code` CodeMirror editors, or `both`. Nested code is a plain-text
 surface: consumed paste/drop handlers run before ordered HTML-to-text and text
-transforms, while file rejection and read-only policy always run first. It has
+transforms, while read-only and file policy always run first. The configured
+asset hook owns files in the outer editor; nested code always rejects them. It has
 no ProseMirror `Slice` stage, so a `slice` transform cannot target only
 `nested-code`; with `surface: "both"`, that slice transform runs outer-only.
 
@@ -206,6 +324,8 @@ Host-facing behavior to keep in mind:
 - `editor.commands.reconcileMarkdown(markdown)` applies an authoritative host snapshot while mapping selection/history and preserving plugin state
 - `editor.commands.resetMarkdown(markdown)` explicitly rebuilds editor state; deprecated `setMarkdown()` remains its hard-reset alias
 - `editor.subscribe("state", ...)` refreshes host controls for every accepted state transition, including stored-mark-only changes; `update` remains the document-change-only signal and `onTransaction` the ProseMirror-aware compatibility hook
+- `resources` configures stored and runtime URL policy, image loading/privacy, link opening, and optional paste/drop upload; `editor.assets` controls retained upload attempts
+- `editor.subscribe("asset", ...)` drives host-owned progress, cancellation, retry, failure, and completion UI without polling Markdown
 - `onEditOpaqueMarkdown` lets a host provide explicit source editing for otherwise read-only opaque atoms
 - `onChangeMode: "animationFrame"` smooths larger documents by batching Markdown emission once per frame
 - `editor.flushChange()` forces pending batched `onChange` work to run immediately
@@ -317,6 +437,7 @@ The creation options cover common embedded-editor states:
 - `initialSelection?: "start" | "end" | "all" | { anchor: number; head?: number }` sets the initial model selection independently of focus.
 - `attributes?: Readonly<Record<string, string>>` applies host attributes to the inner editor DOM.
 - `ariaLabel?: string` and `ariaLabelledBy?: string` provide accessible naming. Prefer `ariaLabelledBy` when the host renders a visible label.
+- `resources?: MarkdownEditorResourceOptions` sets the immutable per-editor URL, image, navigation, and upload policy described above.
 
 Markora supplies textbox-role and multiline defaults. The inner editor's contenteditable/read-only and placeholder attributes are managed values and take precedence over conflicting entries in `attributes`.
 
@@ -344,11 +465,11 @@ editor.updateOptions({
 
 The method accepts `editable`, `placeholder`, `attributes`, `ariaLabel`, `ariaLabelledBy`, `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Nullable fields clear their current value. Changing `onChange` or `onChangeMode` first flushes pending output once through the previous listener, then installs the new listener/mode. Callback and presentation changes do not rebuild EditorState or emit an `update` event.
 
-`element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `codeBlockLanguages`, `extensionPreset`, and `extensions` are creation-only. Use `commands.reconcileMarkdown()` for ordinary host snapshots or `commands.resetMarkdown()` for an explicit state replacement.
+`element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `codeBlockLanguages`, `resources`, `extensionPreset`, and `extensions` are creation-only. Use `commands.reconcileMarkdown()` for ordinary host snapshots or `commands.resetMarkdown()` for an explicit state replacement.
 
 ## Typed events
 
-`subscribe()` accepts `"focus"`, `"blur"`, `"state"`, `"selection"`, `"update"`, or `"error"` and returns an idempotent unsubscribe function:
+`subscribe()` accepts `"focus"`, `"blur"`, `"state"`, `"selection"`, `"update"`, `"asset"`, or `"error"` and returns an idempotent unsubscribe function:
 
 ```ts
 const stopState = editor.subscribe(
@@ -366,6 +487,10 @@ const stopUpdates = editor.subscribe("update", ({ origin, selection }) => {
   schedulePersistence(selection, { origin });
 });
 
+const stopAssets = editor.subscribe("asset", ({ reason, upload }) => {
+  updateAccessibleUploadUi(reason, upload);
+});
+
 const stopErrors = editor.subscribe("error", ({ code, context, error, recoverable }) => {
   if (code === "code-block-language-load-failed") {
     reportLanguageFailure(context.language, error, recoverable);
@@ -377,7 +502,8 @@ const stopErrors = editor.subscribe("error", ({ code, context, error, recoverabl
 - State events fire synchronously for every accepted state transition, including stored-mark-only formatting and hard resets. They expose `origin`, the current `selection`, `docChanged`, and `selectionChanged`; subscribe to this event to keep host toolbars current.
 - Selection events provide `previousSelection`, `selection`, and `origin`. Each host snapshot contains `anchor`, `head`, `from`, `to`, `empty`, and `kind`.
 - State, selection, and update events are ordered state first, then selection when the selection changed, then update when the document changed. Update events contain the accepted change's `origin` and current selection, neither Markdown nor a ProseMirror transaction, and are not affected by `onChangeMode`; call `event.editor.getMarkdown()` only when that subscriber actually needs a snapshot.
-- Error events report recoverable code-language-load failures and attributed extension runtime failures. Extension events use an `EXTENSION_*` code plus `context.phase` and, when known, `context.extension`, `context.contribution`, or `context.participants`. Language loaders and extensions run after the current editor state update completes, so deferred failures use the same event path without re-entering that update.
+- Asset events report upload lifecycle independently of ProseMirror state; only successful batch insertion subsequently produces ordinary state/update/change activity.
+- Error events report recoverable code-language-load and resource-callback failures plus attributed extension runtime failures. Resource events use code `"resource-callback-failed"` with a resolve/open/load/cleanup phase. Extension events use an `EXTENSION_*` code plus `context.phase` and, when known, `context.extension`, `context.contribution`, or `context.participants`. Language loaders and extensions run after the current editor state update completes, so deferred failures use the same event path without re-entering that update.
 
 If a recoverable runtime failure has no error subscriber, Markora forwards it to the editor window's global error reporting path rather than silently swallowing it.
 
@@ -385,7 +511,7 @@ If a recoverable runtime failure has no error subscriber, Markora forwards it to
 
 ## Destruction and post-destroy behavior
 
-`destroy()` flushes one pending batched `onChange`, tears down the editor, nested code editors, optional UI, listeners, and subscriptions, and completes cleanup even when a teardown callback reports an error. It is idempotent.
+`destroy()` flushes one pending batched `onChange`, aborts image loads and uploads, runs accepted image-result cleanup, tears down the editor, nested code editors, optional UI, listeners, and subscriptions, and completes cleanup even when a teardown callback reports an error. Upload cancellation is silent during teardown. It is idempotent.
 
 After destruction:
 
@@ -403,10 +529,20 @@ After destruction:
 
 Existing one-argument `onChange` and two-argument `onTransaction` callbacks remain source-compatible because the new context parameters are trailing. `setMarkdown()` remains callable but is deprecated; replace it with `resetMarkdown()` when the hard reset was intentional, or with `reconcileMarkdown()` for ordinary controlled/external updates. Prefer `editor.focus()`, `editor.blur()`, `editor.updateOptions()`, and typed subscriptions over direct view mutation. Integrations that hand-build structural `MarkdownEditor` mocks must add the new commands and lifecycle members or type the mock as `Pick<MarkdownEditor, ...>`.
 
+The unified resource policy preserves the prior rejection of protocol-relative and unlisted schemes while intentionally tightening other URL behavior. Existing documents or commands that depend on embedded credentials, backslashes, embedded whitespace/control characters, unrestricted image `data:` forms, or data payloads above the published limits now lose the unsafe link mark or image at an import/insertion boundary. Configure explicit custom protocols, credential opt-in, MIME types, and limits only after reviewing the host threat model. `javascript:` and `vbscript:` remain impossible to enable. Integrations that structurally mock `MarkdownEditor` must also add `assets`, and event-name switches must handle `"asset"` plus resource callback errors.
+
 ## Exports
 
 ```ts
 import {
+  DEFAULT_ASSET_MIME_TYPES,
+  DEFAULT_IMAGE_DATA_MIME_TYPES,
+  DEFAULT_IMAGE_PROTOCOLS,
+  DEFAULT_LINK_PROTOCOLS,
+  DEFAULT_MAX_ASSET_FILE_BYTES,
+  DEFAULT_MAX_ASSET_FILES,
+  DEFAULT_MAX_DATA_URL_BYTES,
+  DEFAULT_MAX_DATA_URL_CHARACTERS,
   createDefaultCodeBlockLanguageRegistry,
   createDefaultMarkdownEditorPreset,
   createEditor,
@@ -427,6 +563,19 @@ import type {
   MarkdownEditor,
   MarkdownEditorActiveMark,
   MarkdownEditorActiveNode,
+  MarkdownEditorAssets,
+  MarkdownEditorAssetEvent,
+  MarkdownEditorAssetEventReason,
+  MarkdownEditorAssetFileSnapshot,
+  MarkdownEditorAssetInsertionKind,
+  MarkdownEditorAssetTransferKind,
+  MarkdownEditorAssetUploadError,
+  MarkdownEditorAssetUploadErrorCode,
+  MarkdownEditorAssetUploadOptions,
+  MarkdownEditorAssetUploadRequest,
+  MarkdownEditorAssetUploadResult,
+  MarkdownEditorAssetUploadSnapshot,
+  MarkdownEditorAssetUploadStatus,
   MarkdownEditorBlurEvent,
   MarkdownEditorBuiltinChangeOrigin,
   MarkdownEditorChangeContext,
@@ -444,6 +593,16 @@ import type {
   MarkdownEditorExtensionOrigin,
   MarkdownEditorMark,
   MarkdownEditorMarkdownUpdateOptions,
+  MarkdownEditorImageLoadRequest,
+  MarkdownEditorImageLoadResult,
+  MarkdownEditorImagePolicy,
+  MarkdownEditorOpenUrlRequest,
+  MarkdownEditorResolveUrlRequest,
+  MarkdownEditorResourceErrorEvent,
+  MarkdownEditorResourceErrorPhase,
+  MarkdownEditorResourceKind,
+  MarkdownEditorResourceOptions,
+  MarkdownEditorResourcePurpose,
   MarkdownEditorSelectionEvent,
   MarkdownEditorSelectionKind,
   MarkdownEditorSelectionSnapshot,
@@ -455,6 +614,7 @@ import type {
   MarkdownEditorUi,
   MarkdownEditorUnsubscribe,
   MarkdownEditorUpdateEvent,
+  MarkdownEditorUrlPolicy,
   OpaqueMarkdownEditRequest,
   OpaqueMarkdownKind,
   ToolbarButtonState,
@@ -495,7 +655,8 @@ Markora invokes language loaders and installs their CodeMirror extensions after 
 - `editor.state.can.*` and `editor.state.isActive.*` expose host-friendly capability and activity checks
 - `editor.getToolbarState()` remains available for toolbar integrations that prefer a compatibility snapshot
 - `editor.ui?.editLink()` and `editor.ui?.editImage()` are the optional namespaced UI entry points when overlays are attached
-- `editor.subscribe(...)` exposes typed focus, blur, state, selection, update, and recoverable error events
+- `CreateEditorOptions.resources` owns URL/image/navigation/upload policy and `editor.assets` exposes upload cancellation, retry, and snapshots
+- `editor.subscribe(...)` exposes typed focus, blur, state, selection, update, asset, and recoverable error events
 - `editor.updateOptions(...)` updates dynamic presentation, editable state, and callbacks without rebuilding EditorState
 - `editor.destroy()` performs idempotent teardown and exposes its state through `editor.isDestroyed`
 

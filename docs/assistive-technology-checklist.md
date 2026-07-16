@@ -32,7 +32,7 @@ Record exact versions. Add iOS Safari + VoiceOver and Android Chrome + TalkBack 
 
 - [ ] Use a production build, not a development bundle.
 - [ ] Give the editor a unique host-provided accessible name and verify it programmatically.
-- [ ] Load a fixture containing headings, paragraphs, mixed LTR/RTL text, nested lists, tasks, a link, an image with alt text, a table, a CodeMirror block, and preserved source with an Edit hook.
+- [ ] Load a fixture containing headings, paragraphs, mixed LTR/RTL text, nested lists, tasks, a link, an image with alt text, a table, a CodeMirror block, preserved source with an Edit hook, and—when the host enables uploads—its progress/failure controls.
 - [ ] Confirm the browser console has no errors before beginning.
 - [ ] Repeat the relevant overlay checks in the host's real portal mode and, if supported, an open Shadow DOM.
 
@@ -87,6 +87,15 @@ Record exact versions. Add iOS Safari + VoiceOver and Android Chrome + TalkBack 
 - [ ] From each side, test Enter, text insertion, inward arrow, and Backspace and confirm the documented boundary result.
 - [ ] Extend selection from CodeMirror into surrounding document text and back without trapping focus.
 - [ ] Reach each preserved-source Edit button, activate it, cancel/save in the host dialog, and confirm focus returns to the same logical block.
+
+## Host upload status
+
+- [ ] Paste and drop an accepted file; hear a concise start status and a meaningful completion without editor focus moving.
+- [ ] Confirm each active upload has a persistent file label and named progress indicator whose value remains available without relying on color.
+- [ ] Reach Cancel and Retry by keyboard, hear their purpose and associated file, and confirm each action runs once.
+- [ ] Trigger MIME, size, count, network, and invalid-result failures; hear actionable text without exposing a sensitive URL or local path.
+- [ ] Confirm frequent progress ticks do not flood an assertive live region, and that completed/cancelled rows leave focus in a predictable place.
+- [ ] Verify file paste/drop inside CodeMirror is rejected as code-surface input and does not create a misleading upload status.
 
 ## Bidirectional text
 

@@ -21,7 +21,8 @@ Write Markdown at the speed of thought.
 - Embedded CodeMirror code blocks with lazy-loaded built-in grammars
 - Headless command/state APIs plus optional overlays from `markora-ui`
 - A versioned creation-time extension kernel and an independently bundled minimal entry
-- Safer URL sanitization and managed navigation around tables and code blocks
+- Per-editor URL, image-loading, link-opening, and asynchronous asset-upload policy with secure defaults
+- Managed navigation around tables and code blocks
 
 ## Markdown compatibility
 
@@ -73,6 +74,44 @@ editor.destroy();
 ```
 
 `ariaLabel` or `ariaLabelledBy` gives the inner editor its host-specific accessible name. Use `editor.focus()`, `editor.blur()`, and `editor.subscribe(...)` for ordinary lifecycle integration; initial autofocus and selection are configured through `createEditor()` and are not replayed to subscriptions added after creation.
+
+## Host-controlled resources and uploads
+
+`CreateEditorOptions.resources` keeps storage, authentication, URL routing, and network policy in the embedding application. The option is creation-only and isolated per editor. For example, a host can resolve stored relative URLs at display time, load an image through an authenticated request, and turn pasted files into durable Markdown only after its uploader succeeds:
+
+```ts
+const editor = createEditor({
+  element: hostElement,
+  resources: {
+    resolveUrl({ url }) {
+      return new URL(url, documentBaseUrl).href;
+    },
+    loadImage: async ({ url, signal }) => {
+      const response = await fetch(url, { signal, credentials: "include" });
+      return response.ok ? { src: await response.blob() } : null;
+    },
+    openUrl({ url }) {
+      openTrustedRoute(url);
+    },
+    assets: {
+      async upload({ file, signal, reportProgress }) {
+        const url = await uploadAsset(file, { signal, reportProgress });
+        return { kind: "image", url };
+      },
+    },
+  },
+});
+
+const stopAssets = editor.subscribe("asset", ({ reason, upload }) => {
+  renderUploadStatus(upload.id, reason, upload.progress, upload.error);
+});
+```
+
+By default, links accept relative URLs and `http:`, `https:`, `mailto:`, and `tel:`; images accept relative URLs, `http:`, `https:`, and bounded raster `data:` URLs. Credentials, protocol-relative URLs, backslashes, controls, `javascript:`, and `vbscript:` are rejected. Image `data:` payloads are limited to 1,048,576 decoded bytes and 1,398,358 source characters, and their MIME type must be AVIF, GIF, JPEG, PNG, or WebP.
+
+File paste/drop remains blocked unless `resources.assets` is configured. Its defaults are the same five image MIME types, 10,485,760 bytes per file, and 10 files per transfer. Upload progress is event-only and does not mutate the document. A successful transfer batch is inserted in original order through one transaction and one undo step; failures remain available through `editor.assets.getUploads()`, `retry(id)`, and `cancel(id)`. Hosts must render accessible progress, failure, retry, and cancel controls. Nested CodeMirror blocks continue to reject files because their clipboard is a plain-text code surface.
+
+See the package [resource and asset contract](./packages/core/README.md#resources-links-images-and-asset-uploads) for callback, privacy, cleanup, read-only, reset, and teardown semantics.
 
 ## Host toolbars and command state
 
@@ -126,9 +165,9 @@ editor.updateOptions({
 });
 ```
 
-`updateOptions()` also accepts `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Replacing `onChange` or its batching mode first flushes pending output once through the previous listener, then installs the new configuration. `element`, `markdown`, `initialSelection`, the autofocus action, `ui`, and `codeBlockLanguages` are creation-only.
+`updateOptions()` also accepts `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Replacing `onChange` or its batching mode first flushes pending output once through the previous listener, then installs the new configuration. `element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `codeBlockLanguages`, `resources`, and extension configuration are creation-only.
 
-`focus`, `blur`, `state`, `selection`, `update`, and `error` subscriptions return idempotent unsubscribe functions. State, selection, and update events are synchronous and expose host-facing selection snapshots plus a change `origin`; `state` fires for every accepted state transition and adds `docChanged` and `selectionChanged`, while `selection` and `update` are limited to those respective changes. Focus and blur each cross one microtask boundary so host callbacks run outside nested editor focus internals and movement within the composite surface does not produce a false boundary. Update events do not serialize Markdown. Keep using `onChange(markdown, context)` when you need normalized Markdown, optionally batched with `onChangeMode`. `onTransaction(transaction, view, context)` remains available for advanced ProseMirror-aware integrations.
+`focus`, `blur`, `state`, `selection`, `update`, `asset`, and `error` subscriptions return idempotent unsubscribe functions. State, selection, and update events are synchronous and expose host-facing selection snapshots plus a change `origin`; `state` fires for every accepted state transition and adds `docChanged` and `selectionChanged`, while `selection` and `update` are limited to those respective changes. Focus and blur each cross one microtask boundary so host callbacks run outside nested editor focus internals and movement within the composite surface does not produce a false boundary. Asset events describe upload lifecycle without requiring Markdown serialization or a document transaction. Update events do not serialize Markdown. Keep using `onChange(markdown, context)` when you need normalized Markdown, optionally batched with `onChangeMode`. `onTransaction(transaction, view, context)` remains available for advanced ProseMirror-aware integrations.
 
 `editor.destroy()` flushes one pending `onChange`, releases all owned resources even if teardown reports an error, and is safe to call more than once. After destruction, `editor.isDestroyed` is `true`, `getMarkdown()` returns the cached final value, and `flushChange()`, `destroy()`, and previously returned unsubscribe functions are no-ops. Other high-level calls throw `MarkdownEditorDestroyedError`; `editor.view` is then a destroyed raw view and must not be used.
 
@@ -142,6 +181,7 @@ editor.updateOptions({
 - `onEditOpaqueMarkdown` lets the host open its own source editor for protected opaque atoms; its guarded update function rejects stale writes
 - `editor.flushChange()` forces any pending animation-frame batched Markdown emission to run immediately
 - `editor.view` is a version-coupled advanced escape hatch. Inspection and `dispatch()` are supported for advanced integrations; direct `setProps()`, `updateState()`, DOM mutation, or `destroy()` can bypass Markora invariants and events and are outside the public semver contract
+- `resources` configures per-editor stored-URL policy, runtime URL resolution/opening, async image loading, privacy attributes, and optional file upload; `editor.assets` controls retained uploads
 - `markora/extension-api` is the supported constructor/type boundary for external schema, Markdown, command, state, plugin, NodeView, clipboard, and UI-action contributions
 - `markora/minimal` keeps the extension kernel and basic CommonMark editing in a separate static graph without CodeMirror or default-only syntax modules
 
@@ -224,7 +264,7 @@ Notes:
 - `createEditor()` is headless by default; pass `ui: createDefaultUi()` from `markora-ui` for the built-in overlays
 - `createDefaultUi({ portalRoot })` helps when the editor lives inside a Shadow DOM host
 - `editor.updateOptions(...)` changes editable state, placeholder, attributes, and accessible naming without rebuilding editor state or emitting a document update
-- `editor.subscribe(...)` exposes typed focus, blur, state, selection, update, and recoverable runtime error events
+- `editor.subscribe(...)` exposes typed focus, blur, state, selection, update, asset-lifecycle, and recoverable runtime error events
 - `editor.commands.reconcileMarkdown(...)` applies ordinary authoritative host updates while mapping selection/history and preserving plugin state
 - `editor.commands.resetMarkdown(...)` performs an explicit state reset; `setMarkdown(...)` remains a deprecated alias
 - change callbacks and state/selection/update events expose `user`, `command`, `external`, `reset`, or namespaced extension origins

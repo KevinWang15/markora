@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createEditor } from '../src/createEditor';
+import { createImageViewClass } from '../src/imageView';
+import { schema } from '../src/markdownCodec';
+import type { MarkdownEditorImageLoadRequest } from '../src/resourceApi';
+import { normalizeMarkdownEditorResources } from '../src/resourcePolicy';
 
 function createHost() {
   const element = document.createElement('div');
@@ -96,5 +100,48 @@ describe('image node view', () => {
     expect(editor.view.dom.querySelector('.mdw-image')?.textContent).toContain('New fallback');
     expect(editor.view.dom.querySelector('.mdw-image')?.textContent).not.toContain('Old fallback');
     editor.destroy();
+  });
+
+  it('keeps a reentrant replacement request cancellable after aborting the stale request', () => {
+    const requests: MarkdownEditorImageLoadRequest[] = [];
+    let imageView!: InstanceType<ReturnType<typeof createImageViewClass>>;
+    const ImageView = createImageViewClass({
+      imageNodeType: schema.nodes.image,
+      resources: normalizeMarkdownEditorResources({
+        loadImage(request) {
+          requests.push(request);
+          if (request.storedUrl === '/first.png') {
+            request.signal.addEventListener('abort', () => {
+              imageView.update(schema.nodes.image.create({
+                alt: 'Winner',
+                src: '/winner.png',
+                title: null,
+              }));
+            }, { once: true });
+          }
+          return new Promise(() => undefined);
+        },
+      }),
+    });
+    imageView = new ImageView(schema.nodes.image.create({
+      alt: 'First',
+      src: '/first.png',
+      title: null,
+    }), document);
+
+    imageView.update(schema.nodes.image.create({
+      alt: 'Trigger',
+      src: '/trigger.png',
+      title: null,
+    }));
+
+    expect(requests.map((request) => request.storedUrl)).toEqual([
+      '/first.png',
+      '/winner.png',
+    ]);
+    expect(requests[1].signal.aborted).toBe(false);
+
+    imageView.destroy();
+    expect(requests[1].signal.aborted).toBe(true);
   });
 });

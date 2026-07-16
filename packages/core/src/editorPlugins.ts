@@ -2,8 +2,12 @@ import type { Node as ProseMirrorNode, Schema } from "prosemirror-model";
 import { NodeSelection, Plugin, Selection, TextSelection, type EditorState } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import type { ImageEditorOverlay, LinkEditorOverlay, TableToolbarOverlay } from "./uiTypes";
-import { DEFAULT_IMAGE_PROTOCOLS, sanitizeStoredUrl } from "./urlUtils";
 import type { MarkInfo, MarkName } from "./editorCommands";
+import {
+  normalizeMarkdownEditorResources,
+  sanitizeResourceUrl,
+  type NormalizedMarkdownEditorResources,
+} from "./resourcePolicy";
 
 export type RevealMarkConfig = {
   markName: MarkName;
@@ -135,8 +139,14 @@ function getImageMatch(text: string) {
   return text.match(/^!\[([^\]]*)\]\(([^\s)]+)(?:\s+"([^"]*)")?\)$/);
 }
 
-export function createImagePlugin(options: { schema: Schema }) {
-  const { schema } = options;
+export function createImagePlugin(options: {
+  schema: Schema;
+  resources?: NormalizedMarkdownEditorResources;
+}) {
+  const {
+    resources = normalizeMarkdownEditorResources(undefined),
+    schema,
+  } = options;
 
   return new Plugin({
     props: {
@@ -196,7 +206,7 @@ export function createImagePlugin(options: { schema: Schema }) {
         return null;
       }
 
-      const src = sanitizeStoredUrl(rawSrc, DEFAULT_IMAGE_PROTOCOLS);
+      const src = sanitizeResourceUrl(resources, "image", rawSrc);
 
       if (!src) {
         return null;
@@ -294,7 +304,7 @@ export function createMarkBoundaryPlugin(options: {
   maybeToggleTaskListItem: (view: EditorView, pos: number, event: MouseEvent | KeyboardEvent) => boolean;
   scheduleTaskControlFocusAfterHistoryShortcut: (view: EditorView, event: KeyboardEvent) => boolean;
   shouldUseNativeTaskControlTab: (view: EditorView, event: KeyboardEvent) => boolean;
-  maybeOpenImage: (event: MouseEvent) => boolean;
+  maybeOpenImage: (view: EditorView, event: MouseEvent) => boolean;
   maybeOpenLink: (view: EditorView, event: MouseEvent) => boolean;
   maybeEditActiveImage: (view: EditorView, event: MouseEvent, imageEditor: ImageEditorOverlay) => boolean;
   maybeEditActiveLink: (view: EditorView, event: MouseEvent, linkEditor: LinkEditorOverlay) => boolean;
@@ -352,7 +362,12 @@ export function createMarkBoundaryPlugin(options: {
           return maybeToggleTaskListItem(view, position, mouseEvent);
         },
         click(view, event) {
-          return maybeToggleTaskListItem(view, view.state.selection.from, event as MouseEvent);
+          const mouseEvent = event as MouseEvent;
+          return (
+            maybeOpenImage(view, mouseEvent)
+            || maybeOpenLink(view, mouseEvent)
+            || maybeToggleTaskListItem(view, view.state.selection.from, mouseEvent)
+          );
         },
       },
       handleKeyDown(view, event) {
@@ -388,8 +403,6 @@ export function createMarkBoundaryPlugin(options: {
       },
       handleClick(view, pos, event) {
         return (
-          maybeOpenImage(event) ||
-          maybeOpenLink(view, event) ||
           (view.editable && enableDefaultUi && maybeEditActiveImage(view, event, imageEditor)) ||
           (view.editable && enableDefaultUi && maybeEditActiveLink(view, event, linkEditor))
         );

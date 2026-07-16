@@ -303,6 +303,10 @@ export function mountCompatibilityEditor(element) {
   return createEditor({
     element,
     markdown: "# Packed compatibility editor",
+    resources: {
+      images: { referrerPolicy: "no-referrer" },
+      links: { allowedProtocols: ["https:"] },
+    },
     ui: createDefaultUi(),
   });
 }
@@ -564,6 +568,22 @@ const editor = createEditor({
     void origin;
   },
   placeholder: "Start writing",
+  resources: {
+    links: { allowedProtocols: ["https:", "acme:"] },
+    images: { maxDataUrlBytes: 4096, referrerPolicy: "no-referrer" },
+    resolveUrl: ({ url }) => url,
+    openUrl: ({ url }) => { void url; },
+    loadImage: ({ url }) => ({ src: url }),
+    assets: {
+      allowedMimeTypes: ["image/*"],
+      maxFileBytes: 4096,
+      maxFiles: 2,
+      upload: ({ file, reportProgress }) => {
+        reportProgress(1);
+        return { kind: "image", alt: file.name, url: "/packed.png" };
+      },
+    },
+  },
 });
 const externalExtensions: readonly AnyMarkdownEditorExtension[] = [
   packedCalloutExtension,
@@ -573,6 +593,7 @@ const minimalEditor = createMinimalEditor({
   element,
   extensions: externalExtensions,
   markdown: ":::note\\nPacked ==extension== consumer.\\n:::",
+  resources: { links: { allowRelative: false } },
 });
 const headingLevel: MarkdownEditorHeadingLevel = 3;
 const codeBlockOptions: MarkdownEditorCodeBlockOptions = { language: "ts" };
@@ -731,6 +752,11 @@ const unsubscribeMinimalState = minimalEditor.subscribe("state", (event: Minimal
   void docChanged;
   void selectionChanged;
 });
+const unsubscribeAsset = editor.subscribe("asset", (event: MarkdownEditorEventMap["asset"]) => {
+  const status = event.upload.status;
+  void status;
+});
+editor.assets.getUploads();
 const reconciled: boolean = editor.commands.reconcileMarkdown("# Reconciled");
 editor.commands.resetMarkdown("# Reset", { emitChange: true });
 editor.commands.setMarkdown("# Compatibility reset");
@@ -745,6 +771,7 @@ unsubscribe();
 unsubscribeUpdate();
 unsubscribeState();
 unsubscribeMinimalState();
+unsubscribeAsset();
 editor.focus("start");
 editor.blur();
 editor.destroy();

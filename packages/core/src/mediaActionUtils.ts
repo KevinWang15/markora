@@ -2,7 +2,12 @@ import type { Schema } from "prosemirror-model";
 import { NodeSelection, TextSelection, type EditorState, type Transaction } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import type { ActiveImageInfo, ImageEditorOverlay, LinkEditorOverlay } from "./uiTypes";
-import { DEFAULT_IMAGE_PROTOCOLS, DEFAULT_LINK_PROTOCOLS, getSafeOpenUrl, sanitizeStoredUrl } from "./urlUtils";
+import type { MarkdownEditorResourceErrorPhase } from "./resourceApi";
+import {
+  resolveResourceUrl,
+  sanitizeResourceUrl,
+  type NormalizedMarkdownEditorResources,
+} from "./resourcePolicy";
 
 type BrowserWindow = Window & typeof globalThis;
 type DispatchTransaction = (transaction: Transaction) => void;
@@ -53,8 +58,10 @@ function getTargetContext(target: EventTarget | null): TargetContext | null {
 export function createMediaActionHelpers(options: {
   schema: Schema;
   getMarkInfo: (state: EditorState, markName: "link") => { start: number; end: number; attrs?: Record<string, unknown> } | null;
+  onResourceError: (error: unknown, phase: MarkdownEditorResourceErrorPhase) => void;
+  resources: NormalizedMarkdownEditorResources;
 }) {
-  const { schema, getMarkInfo } = options;
+  const { schema, getMarkInfo, onResourceError, resources } = options;
 
   function canSetLink(state: EditorState) {
     const { selection } = state;
@@ -67,7 +74,7 @@ export function createMediaActionHelpers(options: {
   }
 
   function setLink(view: EditorView, href: string, dispatch?: DispatchTransaction) {
-    const normalizedHref = sanitizeStoredUrl(href, DEFAULT_LINK_PROTOCOLS);
+    const normalizedHref = sanitizeResourceUrl(resources, "link", href);
 
     if (!normalizedHref) {
       return false;
@@ -106,7 +113,7 @@ export function createMediaActionHelpers(options: {
     attrs: { src: string; alt?: string | null; title?: string | null },
     dispatch?: DispatchTransaction,
   ) {
-    const normalizedSrc = sanitizeStoredUrl(attrs.src, DEFAULT_IMAGE_PROTOCOLS);
+    const normalizedSrc = sanitizeResourceUrl(resources, "image", attrs.src);
 
     if (!normalizedSrc || !canInsertImage(view.state)) {
       return false;
@@ -137,7 +144,7 @@ export function createMediaActionHelpers(options: {
       return false;
     }
 
-    const normalizedHref = sanitizeStoredUrl(href, DEFAULT_LINK_PROTOCOLS);
+    const normalizedHref = sanitizeResourceUrl(resources, "link", href);
 
     if (!normalizedHref) {
       return false;
@@ -173,7 +180,7 @@ export function createMediaActionHelpers(options: {
       return false;
     }
 
-    const normalizedSrc = sanitizeStoredUrl(attrs.src, DEFAULT_IMAGE_PROTOCOLS);
+    const normalizedSrc = sanitizeResourceUrl(resources, "image", attrs.src);
 
     if (!normalizedSrc) {
       return false;
@@ -246,7 +253,7 @@ export function createMediaActionHelpers(options: {
     return true;
   }
 
-  function maybeOpenImage(event: MouseEvent) {
+  function maybeOpenImage(view: EditorView, event: MouseEvent) {
     const context = getTargetContext(event.target);
 
     if (!context) {
@@ -264,14 +271,30 @@ export function createMediaActionHelpers(options: {
       return false;
     }
 
-    const safeSrc = getSafeOpenUrl(src, DEFAULT_IMAGE_PROTOCOLS);
-
-    if (!safeSrc) {
-      return false;
-    }
-
     event.preventDefault();
-    win.open(safeSrc, "_blank", "noopener,noreferrer");
+    let safeSrc: string | null;
+    let phase: MarkdownEditorResourceErrorPhase = "resolve";
+    try {
+      const storedSrc = sanitizeResourceUrl(resources, "image", src);
+      safeSrc = storedSrc
+        ? resolveResourceUrl(resources, "image", "open", storedSrc)
+        : null;
+      if (safeSrc && !view.isDestroyed) {
+        phase = "open";
+        if (resources.openUrl) {
+          resources.openUrl(Object.freeze({
+            event,
+            kind: "image",
+            storedUrl: storedSrc!,
+            url: safeSrc,
+          }));
+        } else {
+          win.open(safeSrc, "_blank", "noopener,noreferrer");
+        }
+      }
+    } catch (error) {
+      onResourceError(error, phase);
+    }
     return true;
   }
 
@@ -301,14 +324,30 @@ export function createMediaActionHelpers(options: {
       return false;
     }
 
-    const safeHref = getSafeOpenUrl(href, DEFAULT_LINK_PROTOCOLS);
-
-    if (!safeHref) {
-      return false;
-    }
-
     event.preventDefault();
-    win.open(safeHref, "_blank", "noopener,noreferrer");
+    let phase: MarkdownEditorResourceErrorPhase = "resolve";
+    try {
+      const storedHref = sanitizeResourceUrl(resources, "link", href);
+      const safeHref = storedHref
+        ? resolveResourceUrl(resources, "link", "open", storedHref)
+        : null;
+
+      if (safeHref && !view.isDestroyed) {
+        phase = "open";
+        if (resources.openUrl) {
+          resources.openUrl(Object.freeze({
+            event,
+            kind: "link",
+            storedUrl: storedHref!,
+            url: safeHref,
+          }));
+        } else {
+          win.open(safeHref, "_blank", "noopener,noreferrer");
+        }
+      }
+    } catch (error) {
+      onResourceError(error, phase);
+    }
 
     if (!view.isDestroyed) {
       view.focus();

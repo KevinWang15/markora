@@ -32,6 +32,7 @@ export type {
 } from "./transactionOrigin";
 export { MarkdownEditorDestroyedError } from "./editorEvents";
 export type {
+  MarkdownEditorAssetEvent,
   MarkdownEditorBlurEvent,
   MarkdownEditorCodeBlockLanguageErrorEvent,
   MarkdownEditorErrorCode,
@@ -47,7 +48,19 @@ export type {
   MarkdownEditorStateEvent,
   MarkdownEditorUnsubscribe,
   MarkdownEditorUpdateEvent,
+  MarkdownEditorResourceErrorEvent,
 } from "./editorEvents";
+export type * from "./resourceApi";
+export {
+  DEFAULT_ASSET_MIME_TYPES,
+  DEFAULT_IMAGE_DATA_MIME_TYPES,
+  DEFAULT_IMAGE_PROTOCOLS,
+  DEFAULT_LINK_PROTOCOLS,
+  DEFAULT_MAX_ASSET_FILE_BYTES,
+  DEFAULT_MAX_ASSET_FILES,
+  DEFAULT_MAX_DATA_URL_BYTES,
+  DEFAULT_MAX_DATA_URL_CHARACTERS,
+} from "./resourcePolicy";
 export {
   MARKORA_EXTENSION_API_VERSION,
   MarkdownEditorExtensionError,

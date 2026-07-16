@@ -4,7 +4,7 @@ type BrowserLabSelectionTarget =
   | "start"
   | { anchor: number; head?: number };
 
-type BrowserLabEventName = "blur" | "error" | "focus" | "selection" | "state" | "update";
+type BrowserLabEventName = "asset" | "blur" | "error" | "focus" | "selection" | "state" | "update";
 
 type BrowserLabSelectionSnapshot = {
   anchor: number;
@@ -20,12 +20,16 @@ type BrowserLabEventRecord = {
   contribution?: string;
   docChanged?: boolean;
   extension?: string;
+  fileName?: string;
   language?: string;
   message?: string;
   phase?: string;
+  progress?: number | null;
+  reason?: string;
   previousSelection?: BrowserLabSelectionSnapshot;
   selection?: BrowserLabSelectionSnapshot;
   selectionChanged?: boolean;
+  status?: string;
   type: BrowserLabEventName;
 };
 
@@ -91,6 +95,14 @@ type BrowserLabTestSpec = {
   placeholder?: string;
   portal?: "body" | "default" | "local" | "positioned" | "transformed";
   root?: "document" | "shadow";
+  resourceMode?: "custom-protocol" | "deny-images" | "immediate-upload" | "proxy-images";
+};
+
+type BrowserLabResourceLog = {
+  loads: Array<{ storedUrl: string; url: string }>;
+  opens: Array<{ kind: "image" | "link"; storedUrl: string; url: string }>;
+  resolutions: Array<{ kind: "image" | "link"; purpose: "load" | "open"; url: string }>;
+  uploads: Array<{ fileName: string; source: "drop" | "paste" }>;
 };
 
 type BrowserLabTestSnapshot = {
@@ -159,6 +171,7 @@ interface Window {
       id: string,
       options?: Omit<BrowserLabTestSpec, "direction" | "id" | "placement" | "portal" | "root">,
     ): BrowserLabTestSnapshot;
+    resourceLog(id: string): BrowserLabResourceLog;
     reset(id: string, markdown: string): string;
     selectText(id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number): boolean;
     settle(id?: string): Promise<void>;

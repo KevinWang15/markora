@@ -5,7 +5,7 @@ import { DocPageNav } from "../components/DocPageNav";
 const apiRows = [
   ["createEditor(options: CreateEditorOptions)", "Creates the editor view and returns the host API."],
   ["editor.focus(target?) / editor.blur()", "Moves focus without reaching into the raw ProseMirror view."],
-  ["editor.subscribe(type, listener)", "Subscribes to typed focus, blur, state, selection, update, or error events and returns an idempotent unsubscribe function."],
+  ["editor.subscribe(type, listener)", "Subscribes to typed focus, blur, state, selection, update, asset, or error events and returns an idempotent unsubscribe function."],
   ["editor.updateOptions(options)", "Updates editable state, placeholder, attributes, accessible naming, and callbacks without rebuilding editor state."],
   ["editor.isDestroyed", "Reports whether the high-level editor is no longer active."],
   ["editor.view", "Exposes the version-coupled ProseMirror view for advanced inspection and dispatch."],
@@ -19,6 +19,7 @@ const apiRows = [
   [`editor.commands.toggleMark("strong" | "em" | "code" | "strike")`, "Applies inline formatting commands."],
   ["editor.commands.setLink(href) / removeLink()", "Creates or removes links without UI assumptions."],
   ["editor.commands.insertImage({ src, alt, title }) / removeImage()", "Creates or removes images without UI assumptions."],
+  ["editor.assets.getUploads() / cancel(id) / retry(id)", "Observes and controls host-owned pasted or dropped file uploads."],
   ["editor.commands.setParagraph() / setHeading(level) / toggleBlockquote()", "Changes the selected text blocks between paragraphs, heading levels, and blockquotes."],
   ["editor.commands.toggleBulletList() / toggleOrderedList() / sinkListItem() / liftListItem()", "Creates, switches, indents, or outdents list content."],
   ["editor.commands.toggleTaskList() / setTaskChecked(checked)", "Toggles selected task-list items or sets their completion state."],
@@ -72,6 +73,45 @@ const opaqueSourceEditorCode = `const editor = createEditor({
       },
     });
   },
+});`;
+
+const resourcePolicyCode = `const editor = createEditor({
+  element,
+  resources: {
+    links: { allowedProtocols: ["https:", "mailto:"] },
+    images: {
+      allowedProtocols: ["https:", "data:"],
+      allowedDataMimeTypes: ["image/png", "image/jpeg", "image/webp"],
+      maxDataUrlBytes: 1024 * 1024,
+      referrerPolicy: "no-referrer",
+    },
+    resolveUrl({ kind, purpose, url }) {
+      return kind === "image" && purpose === "load"
+        ? imageProxyUrl(url)
+        : url;
+    },
+    openUrl({ url }) {
+      appNavigation.openExternal(url);
+    },
+    async loadImage({ signal, storedUrl, url }) {
+      const blob = await fetch(url, { signal, credentials: "omit" })
+        .then((response) => response.blob());
+      return { src: blob }; // Markora creates and revokes the object URL.
+    },
+    assets: {
+      allowedMimeTypes: ["image/*"],
+      maxFileBytes: 10 * 1024 * 1024,
+      maxFiles: 10,
+      async upload({ file, reportProgress, signal }) {
+        const uploaded = await uploadAsset(file, { reportProgress, signal });
+        return { kind: "image", url: uploaded.url, alt: file.name };
+      },
+    },
+  },
+});
+
+const stopAssets = editor.subscribe("asset", ({ reason, upload }) => {
+  renderUploadStatus({ reason, upload }); // Provide accessible progress/Cancel/Retry UI.
 });`;
 
 const eventSubscriptionCode = `const stopSelection = editor.subscribe(
@@ -439,6 +479,7 @@ export function ApiPage() {
             <li><code>onTransaction</code> lets hosts observe transaction dispatch attempts and their origin without forcing serialization.</li>
             <li><code>onChangeMode</code> supports <code>"immediate"</code> and <code>"animationFrame"</code>.</li>
             <li><code>onEditOpaqueMarkdown</code> opens a host-owned source editor for inert unsupported syntax.</li>
+            <li><code>resources</code> configures stored URL policy, resolution/open/load hooks, image privacy, and optional file uploads. It is creation-only because it defines document validity.</li>
             <li><code>ui</code> and <code>codeBlockLanguages</code> are optional extension points.</li>
           </ul>
         </article>
@@ -455,6 +496,23 @@ export function ApiPage() {
             ))}
           </ul>
         </article>
+      </section>
+
+      <section className="panel doc-panel">
+        <span className="card-kicker">Resources and assets</span>
+        <h2>Keep navigation, network access, and storage host-owned.</h2>
+        <p>
+          Stored link and image URLs are validated at every built-in ingress. The resolver can deny or rewrite a URL
+          {" "}without changing Markdown; the opener retains synchronous user activation; and the image loader receives an
+          {" "}<code>AbortSignal</code> and may return a URL or <code>Blob</code>. File paste/drop remains rejected unless an
+          {" "}<code>assets.upload</code> hook is present. A transfer preserves file order and inserts in one undoable transaction
+          {" "}after every accepted file succeeds; failed jobs remain available through <code>editor.assets.retry()</code>.
+        </p>
+        <p>
+          Asset events are headless. The embedding app owns an accessible named progress indicator, failure announcement,
+          {" "}and keyboard-operable Cancel/Retry controls. Nested CodeMirror file transfers remain rejected.
+        </p>
+        <CodeBlock code={resourcePolicyCode} language="ts" title="Host resource policy and upload pipeline" />
       </section>
 
       <section className="docs-grid docs-grid-two">

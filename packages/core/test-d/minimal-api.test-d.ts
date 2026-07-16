@@ -48,6 +48,17 @@ const options: CreateEditorOptions = {
     void markdown;
     void origin;
   },
+  resources: {
+    links: { allowedProtocols: ["https:"] },
+    images: { referrerPolicy: "no-referrer" },
+    assets: {
+      upload: ({ file, reportProgress, signal }) => {
+        reportProgress(0.5);
+        void signal;
+        return Promise.resolve({ kind: "link", label: file.name, url: "/asset" });
+      },
+    },
+  },
 };
 const editor: MarkdownEditor = createEditor(options);
 const view: EditorView = editor.view;
@@ -57,6 +68,12 @@ const handle: MarkdownEditorExtensionHandle<
   { count: number }
 > = editor.extensions.get(extension);
 const toolbar: ToolbarState = editor.getToolbarState();
+editor.subscribe("asset", ({ reason, upload }) => {
+  const status = upload.status;
+  void reason;
+  void status;
+});
+editor.assets.getUploads();
 const update: UpdateEditorOptions = {
   ariaLabel: null,
   attributes: null,

@@ -57,8 +57,9 @@ import {
   resolveMarkdownEditorExtensions,
 } from "./extensionResolver";
 import { MARKORA_VERSION } from "./extensionVersion";
-import { createFileTransferGuardPlugin } from "./fileTransferGuard";
+import { createAssetUploadController } from "./assetUploads";
 import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
+import { createImageViewClass } from "./imageView";
 import { createMinimalMarkdownCodec } from "./minimalMarkdownCodec";
 import { createPlaceholderPlugin } from "./placeholderPlugin";
 import { createStructuralCommandSet } from "./structuralCommands";
@@ -72,11 +73,12 @@ import {
   type MarkdownEditorChangeContext,
   type MarkdownEditorChangeOrigin,
 } from "./transactionOrigin";
+import type { MarkdownEditorResourceErrorPhase } from "./resourceApi";
 import {
-  DEFAULT_IMAGE_PROTOCOLS,
-  DEFAULT_LINK_PROTOCOLS,
-  sanitizeStoredUrl,
-} from "./urlUtils";
+  normalizeMarkdownEditorResources,
+  sanitizeResourceUrl,
+} from "./resourcePolicy";
+import { createResourceOpenPlugin } from "./resourceInteractions";
 
 type BrowserWindow = Window & typeof globalThis;
 
@@ -472,6 +474,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   }
 
   assertEditorHostAvailable(element);
+  const resources = normalizeMarkdownEditorResources(options.resources);
 
   const runtimeOptions: EditorRuntimeOptions = {
     ariaLabel: normalizeAccessibleName(options.ariaLabel, "ariaLabel"),
@@ -489,7 +492,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     extensions: options.extensions,
   });
   assertMarkdownEditorCompatibilityAdaptersActive(extensionResolution, false);
-  const codec = createMinimalMarkdownCodec(extensionResolution.extensions);
+  const codec = createMinimalMarkdownCodec(extensionResolution.extensions, resources);
   const structuralCommandSet = createStructuralCommandSet(codec.schema);
   const doc = runInitialMarkdownParse(
     () => codec.parse(options.markdown ?? ""),
@@ -548,6 +551,41 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }, 0);
   };
   const eventDispatcher = createEditorEventDispatcher(reportUnhandled);
+  let resourceDestroyErrors: unknown[] | null = null;
+  let handleResourceError: (
+    error: unknown,
+    phase: MarkdownEditorResourceErrorPhase,
+  ) => void = (error) => reportUnhandled(error);
+  handleResourceError = (error, phase) => {
+    if (lifecycle === "destroying") {
+      resourceDestroyErrors?.push(error);
+      return;
+    }
+    if (lifecycle === "destroyed") {
+      return;
+    }
+    const deliver = () => {
+      if (!editor || lifecycle !== "active" || view.isDestroyed) {
+        return;
+      }
+      const delivered = eventDispatcher.emit("error", {
+        code: "resource-callback-failed",
+        context: { phase },
+        editor,
+        error,
+        recoverable: true,
+        type: "error",
+      });
+      if (delivered === 0) {
+        reportUnhandled(error);
+      }
+    };
+    if (creationComplete) {
+      deliver();
+    } else {
+      ownerWindow.queueMicrotask(deliver);
+    }
+  };
   const deliverExtensionError = (
     error: MarkdownEditorExtensionError,
     useGlobalFallback = true,
@@ -620,6 +658,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     resolution: extensionResolution,
     codec,
     ownerDocument: element.ownerDocument,
+    reservedNodeViews: ["image"],
     reportError: reportExtensionError,
   });
   const markCommands: Record<MarkdownEditorMark, Command> = {
@@ -637,6 +676,30 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       : () => false,
   };
   let plugins: readonly Plugin[];
+  const assertActive = (operation: string) => {
+    if (lifecycle !== "active" || view.isDestroyed) {
+      throw new MarkdownEditorDestroyedError(operation);
+    }
+  };
+  const assetController = createAssetUploadController({
+    assertActive,
+    emit(reason, upload) {
+      if (lifecycle === "active" && editor && !view.isDestroyed) {
+        eventDispatcher.emit("asset", { editor, reason, type: "asset", upload });
+      }
+    },
+    getView: () => view || null,
+    isActive: () => lifecycle === "active",
+    ownerWindow,
+    reportUnhandled,
+    resources,
+    schema: codec.schema,
+  });
+  const ImageView = createImageViewClass({
+    imageNodeType: codec.schema.nodes.image,
+    onError: handleResourceError,
+    resources,
+  });
 
   try {
     plugins = [
@@ -649,9 +712,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
           );
         },
       }),
-      createFileTransferGuardPlugin(),
+      assetController.plugin,
       codec.createImportedContentSanitizerPlugin(),
       createPlaceholderPlugin(() => runtimeOptions.placeholder),
+      createResourceOpenPlugin({ onError: handleResourceError, resources }),
       createManagedBlockBoundaryPlugin({
         isManagedBlockNode,
         getTableBoundaryEscapeInfo: managedBlockBoundaries.getTableBoundaryEscapeInfo,
@@ -718,11 +782,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   }
 
   const hostChildrenBeforeView = new Set(element.childNodes);
-  const assertActive = (operation: string) => {
-    if (lifecycle !== "active" || view.isDestroyed) {
-      throw new MarkdownEditorDestroyedError(operation);
-    }
-  };
   const emitSelectionChange = (
     previousSelection: Selection,
     selection: Selection,
@@ -825,6 +884,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const cleanupConstructionFailure = (primaryError: unknown): never => {
     const errors = [primaryError];
     lifecycle = "destroying";
+    resourceDestroyErrors = errors;
     pendingExtensionErrors.length = 0;
     extensionAssembly.beginDestroy();
     errors.push(...extensionAssembly.cleanupSetup());
@@ -848,6 +908,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
     releaseHostOwnership();
     lifecycle = "destroyed";
+    resourceDestroyErrors = null;
 
     if (errors.length === 1) {
       throw primaryError;
@@ -869,7 +930,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     view = new EditorView(element, {
       attributes: () => buildEditorDomAttributes(runtimeOptions),
       editable: () => runtimeOptions.editable,
-      nodeViews: extensionAssembly.contributions.nodeViews,
+      nodeViews: {
+        image(node, editorView) {
+          return new ImageView(node, editorView.dom.ownerDocument);
+        },
+        ...extensionAssembly.contributions.nodeViews,
+      },
       state: initialState,
       dispatchTransaction(this: EditorView, transaction: Transaction) {
         const activeView = this;
@@ -1003,6 +1069,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     const previousState = view.state;
     const nextState = EditorState.create({ doc: nextDoc, plugins });
     changeEmitter.cancel();
+    assetController.cancelAll();
+    assertActive("reset Markdown");
     view.updateState(nextState);
     changeEmitter.cache(nextDoc);
 
@@ -1025,7 +1093,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }
 
     const linkType = codec.schema.marks.link;
-    const normalizedHref = sanitizeStoredUrl(href, DEFAULT_LINK_PROTOCOLS);
+    const normalizedHref = sanitizeResourceUrl(resources, "link", href);
 
     if (!linkType || !normalizedHref) {
       return false;
@@ -1088,7 +1156,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }
 
     const imageType = codec.schema.nodes.image;
-    const normalizedSrc = sanitizeStoredUrl(attrs.src, DEFAULT_IMAGE_PROTOCOLS);
+    const normalizedSrc = sanitizeResourceUrl(resources, "image", attrs.src);
 
     if (!imageType || !normalizedSrc || !canInsertNode(view.state, imageType)) {
       return false;
@@ -1652,6 +1720,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     },
     view,
     extensions: extensionAssembly.registry,
+    assets: assetController.api,
     commands,
     state,
     ui: null,
@@ -1710,6 +1779,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       const cleanupErrors: unknown[] = [];
 
       lifecycle = "destroying";
+      resourceDestroyErrors = cleanupErrors;
       creationComplete = false;
       pendingExtensionErrors.length = 0;
       extensionAssembly.beginDestroy();
@@ -1727,6 +1797,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
       for (const cleanup of [
         () => changeEmitter.flush(),
+        () => assetController.cancelAll({ dispatch: false, emit: false }),
         () => { cleanupErrors.push(...extensionAssembly.cleanupSetup()); },
         () => view.destroy(),
         () => { cleanupErrors.push(...extensionAssembly.cleanupAssembly()); },
@@ -1741,6 +1812,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       eventDispatcher.clear();
       releaseHostOwnership();
       lifecycle = "destroyed";
+      resourceDestroyErrors = null;
       throwCollectedErrors(
         "One or more Markora cleanup operations failed.",
         cleanupErrors,

@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
 import { createEditor } from '../src/createEditor';
-import { hasTransferredFiles, rejectFileTransferEvent } from '../src/fileTransferGuard';
+import {
+  getTransferredFiles,
+  hasTransferredFiles,
+  rejectFileTransferEvent,
+} from '../src/fileTransferGuard';
 
 type TransferMock = {
   files?: { readonly length: number; readonly [index: number]: File };
@@ -135,6 +139,16 @@ describe('file transfer detection', () => {
     );
 
     expect(hasTransferredFiles(transfer)).toBe(true);
+  });
+
+  it('does not merge fresh item wrappers into a populated FileList', () => {
+    const listed = new File(['same'], 'same.png', { type: 'image/png' });
+    const rematerialized = new File(['same'], 'same.png', { type: 'image/png' });
+
+    expect(getTransferredFiles({
+      files: [listed],
+      items: [{ kind: 'file', getAsFile: () => rematerialized }],
+    })).toEqual([listed]);
   });
 });
 

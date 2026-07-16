@@ -1,6 +1,6 @@
 # Embedded input and accessibility contract
 
-This document defines the input behavior certified by `EE-006` and the typed host setup added by `EE-007` for Markora in an embedded host. It is a baseline contract, not a claim that a headless browser can replace testing with real input methods or assistive technology.
+This document defines the input behavior certified by `EE-006`, the typed host setup added by `EE-007`, and the headless resource/upload obligations added by `EE-012` for Markora in an embedded host. It is a baseline contract, not a claim that a headless browser can replace testing with real input methods or assistive technology.
 
 ## Host setup required for the baseline
 
@@ -53,10 +53,24 @@ Markora relies on ProseMirror and CodeMirror's native composition pipelines. Pro
 | `text/markdown` plus `text/plain` | The plain-text representation is used and remains literal. Markora does not yet opt into parsing Markdown from the clipboard. |
 | `text/markdown` only | No Markdown-specific behavior is promised. Deliberate MIME precedence, paste-as-Markdown, and Markdown copy output belong to `EE-017`. |
 | External text/HTML drop | The drop is schema-parsed at the browser-reported document position and is one undoable edit. |
-| File-bearing paste, dragover, or drop | Rejected in both the ProseMirror surface and CodeMirror, including mixed file-and-text transfers. Markora does not read file bytes, the document remains unchanged, and native file insertion or navigation is prevented. Unrelated host-page listeners remain under the host's control. |
+| File-bearing paste, dragover, or drop in ProseMirror | Native file insertion/navigation and mixed-transfer text insertion are always prevented. Without `resources.assets`, files are consumed without reading bytes. With the hook, policy-accepted files start host uploads and are inserted only after the complete remaining batch succeeds. Rejected/failed attempts do not change the document. Unrelated host-page listeners remain under the host's control. |
 | CodeMirror text paste | Consumes plain text only. Rich HTML formatting is not interpreted inside a code block. |
+| File-bearing paste, dragover, or drop in CodeMirror | Always rejected, even when `resources.assets` is configured. Nested code remains a plain-text surface and never uploads files. |
 
-File rejection is intentionally conservative. `EE-012` will add explicit host callbacks, MIME/size/count policy, asynchronous upload, cancellation, and transactional insertion. Until that API exists, local files are never treated as editor content.
+The outer upload contract is explicitly host-controlled. Its defaults accept AVIF, GIF, JPEG, PNG, and WebP, at most 10,485,760 bytes per file and 10 files per transfer. Upload progress does not mutate the document. Successful multi-file results enter in transfer order as one undoable transaction; a failure prevents partial insertion and remains available for retry or cancellation. Read-only and active-composition transfers are rejected before the host uploader runs. A hard reset aborts uploads with cancellation events, while destruction aborts silently during teardown.
+
+### Host-owned upload accessibility
+
+Core is headless and deliberately creates no upload progress widget. A host that enables `resources.assets` must subscribe to `"asset"` and provide an accessible status surface:
+
+- Announce upload start, meaningful failure, cancellation, and completion without moving editor focus. Do not send every high-frequency progress tick through an assertive live region.
+- Give each retained upload a persistent text label derived from user-visible file context, not only an internal ID, and expose progress in text or with a correctly named progress indicator. Status must not rely on color alone.
+- Expose keyboard-operable, visibly labelled cancel and retry controls when the corresponding `editor.assets` transition is available. Keep focus predictable when a control removes its upload row.
+- Render the documented rejection/failure code in product language and retain enough context for recovery. Do not announce a batch as inserted while another member is failed or pending.
+- Supply meaningful image alt text and link labels in upload results. Markora's file-name fallback preserves a usable string but is not a substitute for product-specific alternative text.
+- Place status UI and any authentication, consent, conflict, or retry dialog inside an appropriate host landmark/portal and include them in the product's axe and manual assistive-technology matrix.
+
+`editor.assets.getUploads()` is suitable for reconstructing current uploading/failed rows after host UI rerender. Asset events are lifecycle notifications rather than editor state events: progress causes no `state`/`update` event, while the final successful insertion does. Cancellation, reset, read-only transitions, and teardown should be tested with the same keyboard/focus discipline as other host controls.
 
 ## Editor-owned interaction expectations
 
@@ -76,6 +90,7 @@ File rejection is intentionally conservative. `EE-012` will add explicit host ca
 - Enter and Escape are ignored by the dialog while an IME composition is active.
 - Invalid URLs retain focus, set `aria-invalid`, and expose an associated alert message; entering a new value clears the error.
 - Outside-pointer dismissal does not steal focus from the element the user chose.
+- Host `openUrl` behavior must preserve an equivalent accessible navigation affordance; Ctrl/Cmd-click is an enhancement, not a replacement for an ordinary labelled link. Hosts that replace image loading should preserve meaningful `alt` text and expose a useful failure state without leaking authentication details.
 
 ### Table controls
 

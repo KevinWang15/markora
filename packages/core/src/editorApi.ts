@@ -13,6 +13,10 @@ import type {
 import type { OpaqueMarkdownEditRequest } from "./opaqueMarkdown";
 import type { MarkdownEditorChangeContext } from "./transactionOrigin";
 import type { EditorUiFactory } from "./uiTypes";
+import type {
+  MarkdownEditorAssets,
+  MarkdownEditorResourceOptions,
+} from "./resourceApi";
 
 export type MarkdownEditorDomAttributes = Readonly<Record<string, string>>;
 
@@ -50,6 +54,7 @@ export type CreateEditorOptions = {
   onChangeMode?: "immediate" | "animationFrame";
   onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
   placeholder?: string;
+  resources?: MarkdownEditorResourceOptions;
   ui?: EditorUiFactory;
 };
 
@@ -194,6 +199,7 @@ export type MarkdownEditor = {
   readonly isDestroyed: boolean;
   readonly view: EditorView;
   readonly extensions: MarkdownEditorExtensionRegistry;
+  readonly assets: MarkdownEditorAssets;
   commands: MarkdownEditorCommands;
   state: MarkdownEditorState;
   ui: MarkdownEditorUi | null;

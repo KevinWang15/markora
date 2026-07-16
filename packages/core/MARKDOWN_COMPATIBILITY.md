@@ -46,7 +46,7 @@ Syntax outside both the supported dialect and the recognized opaque shapes can s
 | Strikethrough | `~~text~~` | Markora/GFM-style extension with normalized `~~` markers. |
 | Hard breaks | Backslash or two-space line breaks | Normalized to a backslash followed by LF. A soft line break is not a hard break. |
 | Links | Inline links, CommonMark angle autolinks, and full/collapsed reference links, with optional titles | Normalized to inline links. Reference labels, definitions, and autolink spelling are not retained. Bare GFM URL/email autolinks are not enabled. |
-| Images | Inline and reference images with alt text and optional titles | Normalized to inline image syntax after URL sanitization. Markdown import supports the raster data-URL subset described below. |
+| Images | Inline and reference images with alt text and optional titles | Normalized to inline image syntax after the per-editor URL policy. The default `data:` subset and limits are described below. |
 | Pipe tables | Rectangular header/delimiter/body tables, optional outer pipes, alignment colons, and supported inline cell content | Normalized to outer pipes and `---` dividers. Default, left, center, and right alignment are retained. Literal pipes, including pipes in code spans, must be escaped. |
 
 Code-block language loading affects only the embedded CodeMirror experience. Any fenced info string is accepted as generic code metadata even when no language package or renderer exists.
@@ -123,17 +123,26 @@ Interior spaces in ordinary text are generally retained. Leading/trailing paragr
 
 ## URL and embedded-content policy
 
-Imported and pasted link/image attributes are sanitized after parsing:
+`CreateEditorOptions.resources` defines one per-editor stored-URL policy. Markora applies its final sanitizer after Markdown parsing, rich paste (including extension clipboard and raw-plugin slice transforms), input rules, built-in UI and commands, asset-upload results, and runtime URL resolution. A host-approved custom scheme therefore reaches the final policy instead of being discarded by Markdown-it's fixed allowlist, while an earlier paste contribution cannot bypass the clamp.
+
+The defaults are:
 
 - links allow relative URLs plus `http:`, `https:`, `mailto:`, and `tel:`;
-- images created through commands allow relative URLs plus `http:`, `https:`, and `data:`;
-- Markdown image import applies Markdown-it's narrower `data:image/(gif|png|jpeg|webp);...` rule, so other data-image forms have no round-trip guarantee;
-- protocol-relative URLs, malformed URLs, and other schemes are rejected;
-- a rejected parsed link loses the link mark but keeps its label text;
-- a rejected image node is removed;
-- absolute URLs can be canonicalized by the browser URL parser, for example `https://example.com` becomes `https://example.com/`.
+- images allow relative URLs plus `http:`, `https:`, and `data:`;
+- both reject URL userinfo unless `allowCredentials: true` is explicit; the flag does not control cookies or fetch credentials;
+- image `data:` URLs allow exactly AVIF, GIF, JPEG, PNG, and WebP;
+- a `data:` URL is limited to 1,048,576 decoded payload bytes and 1,398,358 source characters;
+- images load with `crossOrigin: null` and `referrerPolicy: "no-referrer"` unless configured otherwise.
 
-Syntax the Markdown tokenizer itself refuses as a link can remain escaped literal text rather than following the parsed-link behavior. Hosts must still validate URLs and sanitize any later HTML rendering according to their own security policy.
+Protocol-relative URLs, backslashes, embedded whitespace or ASCII controls, malformed URLs, and unlisted schemes are rejected; surrounding whitespace is trimmed. `javascript:` and `vbscript:` cannot be enabled. A custom protocol can be listed explicitly; relative URLs can be disabled; and `data:` requires both the protocol and an exact allowed MIME type. The byte limit counts decoded base64 or percent-decoded UTF-8 bytes. Absolute URLs can be canonicalized by the browser URL parser, for example `https://example.com` becomes `https://example.com/`.
+
+A rejected parsed link loses the link mark but keeps its label text. A rejected image node is removed. These outcomes also apply when `markdown`, `reconcileMarkdown()`, or `resetMarkdown()` imports a document under a stricter host policy, so hosts must configure the policy before loading content and must not assume that changing policy later can recover discarded structure.
+
+Runtime URL resolution does not change serialization. `resolveUrl` receives a sanitized stored destination and a `"load"` or `"open"` purpose; its return value is checked again and is used only for that action. Returning `null` denies the action. `loadImage` may then return a policy-checked string or an ephemeral `Blob`; Blob object URLs are display-only and never enter Markdown. Similarly, uploaded files enter the document only through the sanitized URL returned by the host's `resources.assets.upload` callback.
+
+This policy is an editor/import safety boundary, not a publishing boundary or sandbox around raw ProseMirror. Hosts must still validate destinations for their product, authorize resolver/loader/upload requests, and sanitize any later HTML rendering. Trusted extensions, raw `editor.view` transactions, and host callbacks execute with application authority; they must not construct unvalidated URL attrs, and downstream renderers must not treat accepted editor Markdown as pre-sanitized HTML.
+
+Migration from the earlier fixed sanitizer preserves the prior rejection of protocol-relative and unlisted schemes while intentionally tightening other paths. Embedded credentials, ambiguous backslash forms, embedded controls/whitespace, non-raster or unbounded image data, and oversized `data:` payloads that previously survived some insertion paths are now removed consistently. Configure explicit protocols, credential opt-in, data MIME types, and limits before importing a document only when the host has reviewed that broader policy; `javascript:` and `vbscript:` remain impossible to opt into.
 
 ## Unsupported syntax policy
 
@@ -174,6 +183,8 @@ These limitations are outside the semantic round-trip promise. They are candidat
 3. Do not use raw string equality as the only dirty-state check across initial import.
 4. If syntax outside the documented supported and opaque shapes is possible, retain the original separately and provide a recovery or broader source-editing path.
 5. Use `onEditOpaqueMarkdown` when users must edit protected source, and handle a stale `update()` result explicitly.
-6. Sanitize the final rendering surface independently; inert editor rendering is not an HTML-rendering security boundary.
+6. Configure `resources` before import when stored URLs need a non-default scheme or data policy; use runtime resolution instead of rewriting stable Markdown for signed/display URLs.
+7. If `resources.assets` is enabled, persist upload results in the host service and provide accessible progress, failure, cancel, and retry UI around the headless event/API surface.
+8. Sanitize the final rendering surface independently; inert editor rendering is not an HTML-rendering security boundary.
 
 The characterization tests are in [`markdownDialect.test.ts`](https://github.com/KevinWang15/markora/blob/main/packages/core/test/markdownDialect.test.ts), with representative [golden documents](https://github.com/KevinWang15/markora/tree/main/packages/core/test/fixtures/markdown-roundtrip) and reviewed [opaque-source cases](https://github.com/KevinWang15/markora/tree/main/packages/core/test/fixtures/opaque-markdown). Broader CommonMark/GFM conformance and corpus tests live alongside them in the core test suite.

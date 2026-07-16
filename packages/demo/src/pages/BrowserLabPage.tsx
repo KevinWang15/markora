@@ -39,6 +39,7 @@ export type BrowserLabEditorSpec = {
   placeholder?: string;
   portal?: BrowserLabPortal;
   root?: BrowserLabRoot;
+  resourceMode?: "custom-protocol" | "deny-images" | "immediate-upload" | "proxy-images";
 };
 
 export type BrowserLabUpdateOptions = Pick<
@@ -53,10 +54,14 @@ export type BrowserLabEventRecord = {
   extension?: string;
   language?: string;
   message?: string;
+  fileName?: string;
   phase?: string;
+  progress?: number | null;
+  reason?: string;
   previousSelection?: MarkdownEditorSelectionSnapshot;
   selection?: MarkdownEditorSelectionSnapshot;
   selectionChanged?: boolean;
+  status?: string;
   type: MarkdownEditorEventName;
 };
 
@@ -166,6 +171,13 @@ export type BrowserLabSnapshot = {
   transactionCount: number;
 };
 
+export type BrowserLabResourceLog = {
+  loads: Array<{ storedUrl: string; url: string }>;
+  opens: Array<{ kind: "image" | "link"; storedUrl: string; url: string }>;
+  resolutions: Array<{ kind: "image" | "link"; purpose: "load" | "open"; url: string }>;
+  uploads: Array<{ fileName: string; source: "drop" | "paste" }>;
+};
+
 export type BrowserLabApi = {
   blur: (id: string) => void;
   clearEvents: (id: string) => void;
@@ -198,6 +210,7 @@ export type BrowserLabApi = {
     id: string,
     options?: Omit<BrowserLabEditorSpec, "direction" | "id" | "placement" | "portal" | "root">,
   ) => BrowserLabSnapshot;
+  resourceLog: (id: string) => BrowserLabResourceLog;
   reset: (id: string, markdown: string) => string;
   selectText: (id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number) => boolean;
   settle: (id?: string) => Promise<void>;
@@ -229,21 +242,85 @@ type MountedEditor = {
   opaqueEditRequest: OpaqueMarkdownEditRequest | null;
   portalRoot: HTMLElement | ShadowRoot;
   root: Document | ShadowRoot;
+  resourceLog: BrowserLabResourceLog;
   section: HTMLElement;
   transactionCount: number;
 };
 
 const OVERLAY_SELECTOR = ".mdw-link-editor, .mdw-image-editor, .mdw-table-toolbar";
-const EVENT_NAMES: MarkdownEditorEventName[] = ["focus", "blur", "selection", "state", "update", "error"];
+const EVENT_NAMES: MarkdownEditorEventName[] = ["focus", "blur", "selection", "state", "update", "error", "asset"];
 
 function createEventCounts(): Record<MarkdownEditorEventName, number> {
   return {
+    asset: 0,
     blur: 0,
     error: 0,
     focus: 0,
     selection: 0,
     state: 0,
     update: 0,
+  };
+}
+
+function createResourceLog(): BrowserLabResourceLog {
+  return { loads: [], opens: [], resolutions: [], uploads: [] };
+}
+
+function createBrowserLabResources(
+  mounted: MountedEditor,
+  mode: BrowserLabEditorSpec["resourceMode"],
+) {
+  if (!mode) {
+    return undefined;
+  }
+
+  if (mode === "immediate-upload") {
+    return {
+      assets: {
+        allowedMimeTypes: ["*/*"],
+        upload({ file, reportProgress, source }: Parameters<NonNullable<NonNullable<Parameters<typeof createEditor>[0]["resources"]>["assets"]>["upload"]>[0]) {
+          mounted.resourceLog.uploads.push({ fileName: file.name, source });
+          reportProgress(0.5);
+          return Promise.resolve({
+            kind: "link" as const,
+            label: file.name,
+            url: `/uploads/${encodeURIComponent(file.name)}`,
+          });
+        },
+      },
+    };
+  }
+
+  return {
+    ...(mode === "custom-protocol" ? {
+      images: { allowedProtocols: ["asset:"] },
+      links: { allowedProtocols: ["acme:"] },
+    } : {}),
+    images: mode === "custom-protocol"
+      ? { allowedProtocols: ["asset:"] }
+      : { referrerPolicy: "no-referrer" as const },
+    links: mode === "custom-protocol"
+      ? { allowedProtocols: ["acme:"] }
+      : undefined,
+    loadImage: mode === "proxy-images"
+      ? ({ storedUrl, url }: { storedUrl: string; url: string }) => {
+          mounted.resourceLog.loads.push({ storedUrl, url });
+          return { src: url };
+        }
+      : undefined,
+    openUrl({ kind, storedUrl, url }: { kind: "image" | "link"; storedUrl: string; url: string }) {
+      mounted.resourceLog.opens.push({ kind, storedUrl, url });
+    },
+    resolveUrl({ kind, purpose, url }: { kind: "image" | "link"; purpose: "load" | "open"; url: string }) {
+      mounted.resourceLog.resolutions.push({ kind, purpose, url });
+      if (mode === "deny-images" && kind === "image") {
+        return null;
+      }
+      if (mode === "proxy-images" && kind === "image" && purpose === "load") {
+        return "/__markora_resource_proxy.png";
+      }
+      return url;
+    },
   };
 }
 
@@ -372,12 +449,21 @@ function subscribeToEditorEvents(mounted: MountedEditor) {
   mounted.eventUnsubscribes.set("error", mounted.editor.subscribe("error", (event) => {
     recordEvent(mounted, {
       code: event.code,
-      contribution: "phase" in event.context ? event.context.contribution : undefined,
-      extension: "phase" in event.context ? event.context.extension : undefined,
+      contribution: "contribution" in event.context ? event.context.contribution : undefined,
+      extension: "extension" in event.context ? event.context.extension : undefined,
       language: "language" in event.context ? event.context.language : undefined,
       message: event.error instanceof Error ? event.error.message : String(event.error),
       phase: "phase" in event.context ? event.context.phase : undefined,
       type: "error",
+    });
+  }));
+  mounted.eventUnsubscribes.set("asset", mounted.editor.subscribe("asset", (event) => {
+    recordEvent(mounted, {
+      fileName: event.upload.file.name,
+      progress: event.upload.progress,
+      reason: event.reason,
+      status: event.upload.status,
+      type: "asset",
     });
   }));
 }
@@ -581,6 +667,7 @@ export function BrowserLabPage() {
           mounted.section.dataset.pendingOpaqueKind = request.kind;
         },
         placeholder: spec.placeholder,
+        resources: createBrowserLabResources(mounted, spec.resourceMode),
         ui: mounted.explicitPortalRoot
           ? createDefaultUi({ portalRoot: mounted.explicitPortalRoot })
           : createDefaultUi(),
@@ -723,6 +810,7 @@ export function BrowserLabPage() {
           output,
           portalRoot: effectivePortalRoot,
           root: editorRoot,
+          resourceLog: createResourceLog(),
           section,
           transactionCount: 0,
         };
@@ -827,6 +915,7 @@ export function BrowserLabPage() {
         mounted.output.dataset.transactionCount = "0";
         delete mounted.section.dataset.pendingOpaqueKind;
         clearEventTracking(mounted);
+        mounted.resourceLog = createResourceLog();
         mountEditorInHost(mounted, options);
         return readSnapshot(mounted);
       },
@@ -838,6 +927,15 @@ export function BrowserLabPage() {
         mounted.editor.flushChange();
         mounted.output.textContent = mounted.editor.getMarkdown();
         return mounted.editor.getMarkdown();
+      },
+      resourceLog(id) {
+        const log = requireEditor(editors, id).resourceLog;
+        return {
+          loads: log.loads.map((entry) => ({ ...entry })),
+          opens: log.opens.map((entry) => ({ ...entry })),
+          resolutions: log.resolutions.map((entry) => ({ ...entry })),
+          uploads: log.uploads.map((entry) => ({ ...entry })),
+        };
       },
       reconcile(id, markdown, options) {
         const mounted = requireEditor(editors, id);

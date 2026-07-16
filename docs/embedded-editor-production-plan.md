@@ -94,8 +94,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-009 | DONE | S | Approve a versioned editor and Markdown extension RFC |
 | EE-010 | DONE | L | Implement the extension kernel and migrate built-ins onto it |
 | EE-011 | DONE | M | Complete the block, list, task, code, and table command surface |
-| EE-012 | NEXT | M | Add host-controlled URL, resource, and asset insertion hooks |
-| EE-013 | QUEUED | S | Establish document-size, latency, memory, and bundle budgets |
+| EE-012 | DONE | M | Add host-controlled URL, resource, and asset insertion hooks |
+| EE-013 | NEXT | S | Establish document-size, latency, memory, and bundle budgets |
 | EE-014 | QUEUED | M | Remove synchronous full-document serialization from hot typing paths |
 | EE-015 | QUEUED | L | Lazily activate CodeMirror blocks and reduce base bundle cost |
 | EE-016 | QUEUED | M | Make task and overlay interactions keyboard and screen-reader complete |
@@ -290,7 +290,7 @@ Cover interaction classes that jsdom and ordinary Latin keyboard tests miss.
 #### Completion notes
 
 - Composition-tagged transactions no longer atomize provisional image syntax, and composition at a managed-block boundary synchronously creates an editable paragraph in the editor's owner document. Retained browser cases exercise Chinese, Japanese, and Korean composition in ProseMirror and CodeMirror, including provisional image syntax, a managed table boundary, and a real Chromium CDP IME sequence.
-- Cross-engine cases cover dead-key events, combining text, astral emoji and surrogate-safe deletion, mixed Hebrew/Arabic/Latin selection, rich and plain paste, Markdown-looking text, rich/plain drops, undo, and sanitized imported URLs. File-bearing paste, dragover, and drop are conservatively rejected in ProseMirror and CodeMirror, including mixed transfers and protected-mode `Files` MIME detection; explicit host upload policy remains assigned to `EE-012`, and deliberate Markdown clipboard MIME behavior remains assigned to `EE-017`.
+- Cross-engine cases cover dead-key events, combining text, astral emoji and surrogate-safe deletion, mixed Hebrew/Arabic/Latin selection, rich and plain paste, Markdown-looking text, rich/plain drops, undo, and sanitized imported URLs. At this iteration, file-bearing paste, dragover, and drop were conservatively rejected in ProseMirror and CodeMirror, including mixed transfers and protected-mode `Files` MIME detection; explicit host upload policy was deferred to and is now delivered by `EE-012`, while deliberate Markdown clipboard MIME behavior remains assigned to `EE-017`.
 - Task list items retain list semantics while exposing separate named 44-pixel ARIA checkboxes. Pointer, touch, Space, Enter, native Tab order, and keyboard undo/redo are single-action and focus-safe. Link/image dialogs now preserve native button activation, ignore composition keys, restore focus on Escape, and associate URL validation alerts with their inputs. The table toolbar implements one-stop roving focus, pressed alignment state, predictable focus after mutation, stable coarse-pointer viewport layout, and correct row/column header scope during rich paste and editing; the contract records GFM's inability to serialize HTML-only row-header scope.
 - Responsive checks cover coarse pointers, a virtual-keyboard-sized visual viewport, local and transformed portals, and Chromium 200% page scaling. Axe reports no automatic violations in the complete production-built fixture. The host naming/portal obligations, behavior contract, limitations, and repeatable VoiceOver/NVDA/real-IME checklist are documented in `docs/input-accessibility-certification.md` and `docs/assistive-technology-checklist.md`.
 - Automated evidence deliberately does not claim real operating-system IME, mobile-keyboard, or assistive-technology certification. Those runs remain release-checklist work; richer managed-boundary announcements, mixed-bidi physical-arrow behavior, and localization/theming remain assigned to `EE-016` and `EE-020`.
@@ -429,7 +429,7 @@ Make every supported editing operation accessible to host toolbars and menus.
 
 ### EE-012 — Add host-controlled resource and asset hooks
 
-Status: `QUEUED`
+Status: `DONE` (2026-07-16)
 
 #### Goal
 
@@ -443,9 +443,22 @@ Support production image/media workflows without making storage a core responsib
 - Define MIME, size, count, and `data:` URL limits.
 - Keep document mutations transactional and undoable after asynchronous completion.
 
+#### Completion notes
+
+- Both `markora` and `markora/minimal` now accept one creation-time `resources` object and expose the same typed resource/asset API. Link and image policies are immutable and editor-local; parsing, rich paste including extension/plugin slice transforms, typing, UI/commands, runtime resolution, and upload results all converge on the final sanitizer.
+- Secure defaults allow relative links plus `http:`, `https:`, `mailto:`, and `tel:`, and relative images plus `http:`, `https:`, and bounded raster `data:` URLs. Credentials require opt-in; protocol-relative destinations, backslashes, embedded controls/whitespace, malformed schemes, `javascript:`, and `vbscript:` remain blocked. Default data policy is AVIF/GIF/JPEG/PNG/WebP, at most 1,048,576 decoded bytes and 1,398,358 source characters.
+- Synchronous `resolveUrl` and `openUrl` hooks preserve stored Markdown and modifier-click user activation while reapplying policy to resolved destinations. Async `loadImage` can deny, return a policy-checked string, or return a Blob. Image privacy defaults to no referrer, requests have stale/destroy cancellation, and accepted/stale cleanup plus generated object-URL revocation is exactly-once. Callback failures use the recoverable typed error channel with resolve/open/load/cleanup attribution.
+- `resources.assets` adds explicit MIME/size/count policy and a synchronous-or-async host upload callback with a stable ID, transfer source, per-attempt abort signal, and transaction-free progress reporting. Defaults accept the five raster image MIME types, at most 10,485,760 bytes each and 10 files per transfer; MIME wildcards and explicit limits are supported. Invalid, rejected, failed, cancelled, retried, and completed states are observable through immutable `asset` events and `editor.assets` snapshots/actions.
+- A transfer retains one mapped insertion anchor. All remaining successful results commit in original order through one `"user"` transaction and one undo step; partial results wait behind failures, and retry/cancel controls determine whether the batch can finish. Async completion does not refocus the editor, progress does not mutate it, and hostile upload results are sanitized before insertion.
+- Read-only/composition starts are rejected without invoking the uploader; completion blocked by those transient states remains retryable afterward. Reconciliation maps pending anchors, hard reset aborts with cancellation events, and destroy aborts silently. CodeMirror continues to reject files as a plain-text surface even when the outer editor has an uploader.
+- Core remains headless. The accessibility contract now assigns labelled status, restrained live announcements, progress, retry/cancel controls, meaningful alt/link text, and consent/authentication UI to the embedding host. The extension RFC records that core resource policy governs built-in links/images only: trusted custom NodeViews and media nodes retain host authority and require their own audited loading, privacy, cleanup, and accessibility contract.
+- Focused unit and declaration coverage spans policy validation, exact data limits, root/minimal isolation, resolve/open/load behavior, Blob cleanup, upload order/history, mapped anchors, rejection, progress, failure/retry/cancel, read-only, reset, destruction, public types, and packed exports. Retained required browser coverage exercises host upload events plus undo/redo, per-editor protocol isolation and host opening, and a Chromium CDP assertion that a private stored image URL is never requested when the host proxy loader is active.
+- Migration preserves the prior protocol-relative/unlisted-scheme rejection and intentionally tightens other paths: documents that relied on credentials, ambiguous backslash forms, embedded controls/whitespace, unbounded or non-raster image data, or oversized data URLs now lose the rejected link mark/image at import or insertion. Hosts can opt into reviewed protocols, credentials, MIME types, and limits, but cannot enable `javascript:` or `vbscript:`.
+- Final verification: `pnpm check` passes with 761 unit/declaration tests; the serial production-preview browser matrix passes 129 cases across Chromium, Firefox, and WebKit with six intentional engine-specific skips; `pnpm pack:smoke` passes at 2,375,887 root-entry bytes/154 static modules and 935,413 minimal-entry bytes/125 static modules; `git diff --check` passes.
+
 ### EE-013 — Establish performance and bundle budgets
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -615,6 +628,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-011` are complete. Gate A's content-safety requirements are satisfied, and the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, and headless command/state foundations for Gate B are established.
+`EE-001` through `EE-012` are complete. Gate A's content-safety requirements are satisfied, and the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, and host-controlled resource foundations for Gate B are established.
 
-The next iteration is `EE-012 — Add host-controlled resource and asset hooks`.
+The next iteration is `EE-013 — Establish performance and bundle budgets`.

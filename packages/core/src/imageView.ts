@@ -1,4 +1,11 @@
 import type { Node as ProseMirrorNode, NodeType } from "prosemirror-model";
+import type { MarkdownEditorResourceErrorPhase } from "./resourceApi";
+import {
+  normalizeImageLoadResult,
+  resolveResourceUrl,
+  sanitizeResourceUrl,
+  type NormalizedMarkdownEditorResources,
+} from "./resourcePolicy";
 
 type ImageViewInstance = {
   dom: HTMLSpanElement;
@@ -12,8 +19,12 @@ type ImageViewInstance = {
 
 type ImageViewClass = new (node: ProseMirrorNode, ownerDocument: Document) => ImageViewInstance;
 
-export function createImageViewClass(options: { imageNodeType: NodeType }): ImageViewClass {
-  const { imageNodeType } = options;
+export function createImageViewClass(options: {
+  imageNodeType: NodeType;
+  onError?: (error: unknown, phase: MarkdownEditorResourceErrorPhase) => void;
+  resources: NormalizedMarkdownEditorResources;
+}): ImageViewClass {
+  const { imageNodeType, onError, resources } = options;
 
   class ImageView {
     dom: HTMLSpanElement;
@@ -26,6 +37,9 @@ export function createImageViewClass(options: { imageNodeType: NodeType }): Imag
     private errorIcon: HTMLSpanElement;
     private statusText: HTMLSpanElement;
     private requestVersion = 0;
+    private requestController: AbortController | null = null;
+    private requestCleanup: (() => void) | null = null;
+    private destroyed = false;
     private loadState: "loading" | "loaded" | "error" = "loading";
     private errorUsesAltText = false;
 
@@ -162,8 +176,45 @@ export function createImageViewClass(options: { imageNodeType: NodeType }): Imag
     }
 
     destroy() {
+      if (this.destroyed) {
+        return;
+      }
+
+      this.destroyed = true;
       this.requestVersion += 1;
+      this.cancelRequest();
+      this.img.onload = null;
+      this.img.onerror = null;
       this.img.removeAttribute("src");
+    }
+
+    private report(error: unknown, phase: MarkdownEditorResourceErrorPhase) {
+      try {
+        onError?.(error, phase);
+      } catch {
+        // Error observers must not break the image lifecycle.
+      }
+    }
+
+    private runCleanup(cleanup: (() => void) | null) {
+      if (!cleanup) {
+        return;
+      }
+
+      try {
+        cleanup();
+      } catch (error) {
+        this.report(error, "cleanup");
+      }
+    }
+
+    private cancelRequest() {
+      const controller = this.requestController;
+      this.requestController = null;
+      const cleanup = this.requestCleanup;
+      this.requestCleanup = null;
+      controller?.abort();
+      this.runCleanup(cleanup);
     }
 
     private syncMeta() {
@@ -209,15 +260,23 @@ export function createImageViewClass(options: { imageNodeType: NodeType }): Imag
     }
 
     private load() {
-      const src = typeof this.node.attrs.src === "string" ? this.node.attrs.src.trim() : "";
+      const rawSrc = typeof this.node.attrs.src === "string" ? this.node.attrs.src : "";
       const getFallbackMessage = () =>
         typeof this.node.attrs.alt === "string" && this.node.attrs.alt
           ? this.node.attrs.alt
           : "Image failed to load";
       const requestVersion = ++this.requestVersion;
+      this.cancelRequest();
+      this.img.onload = null;
+      this.img.onerror = null;
+      this.img.removeAttribute("src");
 
-      if (!src) {
-        this.img.removeAttribute("src");
+      if (this.destroyed || requestVersion !== this.requestVersion) {
+        return;
+      }
+
+      const storedUrl = sanitizeResourceUrl(resources, "image", rawSrc);
+      if (!storedUrl) {
         this.errorUsesAltText = false;
         this.setState("error", "Missing image URL");
         return;
@@ -225,10 +284,98 @@ export function createImageViewClass(options: { imageNodeType: NodeType }): Imag
 
       this.setState("loading", "Loading image");
 
-      const startImageLoad = () => {
-        if (requestVersion !== this.requestVersion) {
+      let resolvedUrl: string | null;
+      try {
+        resolvedUrl = resolveResourceUrl(resources, "image", "load", storedUrl);
+      } catch (error) {
+        this.report(error, "resolve");
+        this.setState("error", "Image blocked by resource policy");
+        return;
+      }
+
+      if (this.destroyed || requestVersion !== this.requestVersion) {
+        return;
+      }
+
+      if (!resolvedUrl) {
+        this.setState("error", "Image blocked by resource policy");
+        return;
+      }
+
+      const win = this.ownerDocument.defaultView as (Window & typeof globalThis) | null;
+      if (!win) {
+        this.setState("error", getFallbackMessage());
+        return;
+      }
+
+      const controller = new win.AbortController();
+      this.requestController = controller;
+
+      const startImageLoad = (rawResult: unknown) => {
+        let result;
+        try {
+          result = normalizeImageLoadResult(
+            resources,
+            rawResult as Parameters<typeof normalizeImageLoadResult>[1],
+          );
+        } catch (error) {
+          const cleanup = typeof rawResult === "object"
+            && rawResult !== null
+            && "cleanup" in rawResult
+            && typeof rawResult.cleanup === "function"
+            ? rawResult.cleanup as () => void
+            : null;
+          this.runCleanup(cleanup);
+          if (requestVersion === this.requestVersion && !controller.signal.aborted) {
+            this.report(error, "load");
+            this.setState("error", getFallbackMessage());
+          }
           return;
         }
+
+        if (
+          this.destroyed
+          || requestVersion !== this.requestVersion
+          || controller.signal.aborted
+        ) {
+          this.runCleanup(result.cleanup ?? null);
+          return;
+        }
+
+        let displaySrc: string;
+        let revokeObjectUrl: (() => void) | null = null;
+        if (typeof result.src === "string") {
+          displaySrc = result.src;
+        } else {
+          try {
+            displaySrc = win.URL.createObjectURL(result.src);
+            revokeObjectUrl = () => win.URL.revokeObjectURL(displaySrc);
+          } catch (error) {
+            this.runCleanup(result.cleanup ?? null);
+            this.report(error, "load");
+            this.setState("error", getFallbackMessage());
+            return;
+          }
+        }
+
+        let cleaned = false;
+        this.requestCleanup = () => {
+          if (cleaned) {
+            return;
+          }
+          cleaned = true;
+          this.runCleanup(revokeObjectUrl);
+          this.runCleanup(result.cleanup ?? null);
+        };
+
+        const crossOrigin = result.crossOrigin ?? null;
+        if (crossOrigin === null) {
+          this.img.removeAttribute("crossorigin");
+        } else {
+          this.img.crossOrigin = crossOrigin;
+        }
+        this.img.referrerPolicy = result.referrerPolicy ?? "no-referrer";
+        this.img.decoding = "async";
 
         this.img.onload = () => {
           if (requestVersion !== this.requestVersion) {
@@ -253,14 +400,67 @@ export function createImageViewClass(options: { imageNodeType: NodeType }): Imag
           this.setState("error", getFallbackMessage());
         };
 
-        this.img.src = src;
+        this.img.src = displaySrc;
 
         if (this.img.complete && this.img.naturalWidth > 0) {
           this.setState("loaded");
         }
       };
 
-      startImageLoad();
+      let loadResult: unknown;
+      try {
+        loadResult = resources.loadImage
+          ? resources.loadImage(Object.freeze({
+              signal: controller.signal,
+              storedUrl,
+              url: resolvedUrl,
+            }))
+          : Object.freeze({ src: resolvedUrl });
+      } catch (error) {
+        if (requestVersion === this.requestVersion && !controller.signal.aborted) {
+          this.report(error, "load");
+          this.setState("error", getFallbackMessage());
+        }
+        return;
+      }
+
+      let isPromiseLike = false;
+      try {
+        isPromiseLike = Boolean(
+          loadResult
+          && typeof (loadResult as PromiseLike<unknown>).then === "function",
+        );
+      } catch (error) {
+        if (requestVersion === this.requestVersion && !controller.signal.aborted) {
+          this.report(error, "load");
+          this.setState("error", getFallbackMessage());
+        }
+        return;
+      }
+
+      if (isPromiseLike) {
+        Promise.resolve(loadResult).then(
+          (result) => {
+            if (result === null) {
+              if (requestVersion === this.requestVersion && !controller.signal.aborted) {
+                this.setState("error", "Image blocked by resource policy");
+              }
+              return;
+            }
+            startImageLoad(result);
+          },
+          (error) => {
+            if (requestVersion === this.requestVersion && !controller.signal.aborted) {
+              this.report(error, "load");
+              this.setState("error", getFallbackMessage());
+            }
+          },
+        );
+      } else if (loadResult === null) {
+        this.setState("error", "Image blocked by resource policy");
+      } else {
+        startImageLoad(loadResult);
+      }
     }
   }
 

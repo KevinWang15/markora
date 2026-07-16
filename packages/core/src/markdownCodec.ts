@@ -33,8 +33,12 @@ import {
   normalizeOpaqueMarkdownKind,
   type OpaqueMarkdownKind,
 } from "./opaqueMarkdown";
+import {
+  normalizeMarkdownEditorResources,
+  sanitizeResourceUrl,
+  type NormalizedMarkdownEditorResources,
+} from "./resourcePolicy";
 import type { TableAlignment } from "./tableNavigation";
-import { DEFAULT_IMAGE_PROTOCOLS, DEFAULT_LINK_PROTOCOLS, sanitizeStoredUrl } from "./urlUtils";
 
 type MarkdownSerializerStateWithInternals = MarkdownSerializerState & {
   closed: { type: ProseMirrorNode["type"] } | null;
@@ -447,6 +451,7 @@ export type MarkdownEditorCodec = Readonly<{
 /** Build the current Markora Markdown dialect as one isolated codec graph. */
 export function createCompatibilityMarkdownCodec(
   resolvedExtensions: readonly ResolvedMarkdownEditorExtension[] = [],
+  resources: NormalizedMarkdownEditorResources = normalizeMarkdownEditorResources(undefined),
 ): MarkdownEditorCodec {
   const foundationNodes = schemaNodes as MarkdownEditorOrderedSchemaMap<NodeSpec>;
   const foundationMarks = baseSchema.spec.marks.addToEnd(
@@ -538,6 +543,10 @@ export function createCompatibilityMarkdownCodec(
   }
 
 const markdownTokenizer = new MarkdownIt("commonmark", { html: true }).enable("strikethrough").enable("table");
+// Markdown-it's built-in allowlist would discard host-approved custom schemes
+// before the editor policy can inspect them. Preserve candidate destinations
+// here, then enforce the per-editor policy on the parsed ProseMirror document.
+markdownTokenizer.validateLink = () => true;
 configureOpaqueMarkdown(markdownTokenizer);
 
 // markdown-it emits cell contents as inline tokens, while table cells accept block content.
@@ -861,9 +870,10 @@ function sanitizeImportedMarks(marks: readonly Mark[]) {
       continue;
     }
 
-    const safeHref = sanitizeStoredUrl(
+    const safeHref = sanitizeResourceUrl(
+      resources,
+      "link",
       typeof mark.attrs.href === "string" ? mark.attrs.href : null,
-      DEFAULT_LINK_PROTOCOLS,
     );
 
     if (!safeHref) {
@@ -909,9 +919,10 @@ function sanitizeImportedNode(node: ProseMirrorNode): ProseMirrorNode | null {
   const nextMarks = sanitizeImportedMarks(node.marks);
 
   if (node.type === schema.nodes.image) {
-    const safeSrc = sanitizeStoredUrl(
+    const safeSrc = sanitizeResourceUrl(
+      resources,
+      "image",
       typeof node.attrs.src === "string" ? node.attrs.src : null,
-      DEFAULT_IMAGE_PROTOCOLS,
     );
 
     if (!safeSrc) {

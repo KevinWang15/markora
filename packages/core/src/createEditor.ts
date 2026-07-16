@@ -11,7 +11,7 @@ import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
 import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
 import { createCodeBlockViewClass } from "./codeBlockView";
 import { createChangeEmitter } from "./changeEmitter";
-import { createFileTransferGuardPlugin } from "./fileTransferGuard";
+import { createAssetUploadController } from "./assetUploads";
 import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
 import {
   createCompatibilityMarkdownCodec,
@@ -71,6 +71,11 @@ export type {
   UpdateEditorOptions,
 } from "./editorApi";
 import { createImageViewClass } from "./imageView";
+import type { MarkdownEditorResourceErrorPhase } from "./resourceApi";
+import {
+  normalizeMarkdownEditorResources,
+  type NormalizedMarkdownEditorResources,
+} from "./resourcePolicy";
 import { convertFenceToCodeBlock, createTypingShortcuts, getImageToolbarState, getLinkToolbarState, getMarkInfo, getToolbarMarkState, insertHardBreak, type EditorCommand } from "./editorCommands";
 import { createCodeBlockOuterSelectionPlugin, createHeadingEditingPlugin, createHorizontalRulePlugin, createImagePlugin, createMarkdownRevealPlugin, createMarkBoundaryPlugin, type RevealMarkConfig } from "./editorPlugins";
 import { createCodeBlockSelectionHelpers } from "./codeBlockSelection";
@@ -335,7 +340,11 @@ function createChangeContext(origin: MarkdownEditorChangeOrigin): MarkdownEditor
   return Object.freeze({ origin });
 }
 
-function createSchemaRuntimeHelpers(codec: MarkdownEditorCodec) {
+function createSchemaRuntimeHelpers(
+  codec: MarkdownEditorCodec,
+  resources: NormalizedMarkdownEditorResources,
+  onResourceError: (error: unknown, phase: MarkdownEditorResourceErrorPhase) => void,
+) {
 const { schema } = codec;
 const { createTableCellContentFromMarkdown } = codec;
 const {
@@ -357,7 +366,7 @@ const {
   maybeOpenImage,
   maybeOpenLink,
   maybeEditActiveLink,
-} = createMediaActionHelpers({ schema, getMarkInfo });
+} = createMediaActionHelpers({ schema, getMarkInfo, resources, onResourceError });
 const { isEscapedOutsideBoundary, escapeBoundaryMark, createEscapedBoundaryPlugin } = createMarkBoundaryHelpers({ getMarkInfo });
 
 const revealMarkConfigs: RevealMarkConfig[] = [
@@ -386,7 +395,11 @@ const revealMarkConfigs: RevealMarkConfig[] = [
   },
 ];
 
-const ImageView = createImageViewClass({ imageNodeType: schema.nodes.image });
+const ImageView = createImageViewClass({
+  imageNodeType: schema.nodes.image,
+  onError: onResourceError,
+  resources,
+});
 
 function getAncestorInfo(state: EditorState, nodeType: NodeType): AncestorInfo | null {
   const { selection } = state;
@@ -750,6 +763,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     throw new Error("Markora requires a window-backed document.");
   }
 
+  const resources = normalizeMarkdownEditorResources(options.resources);
+  let handleResourceError: (
+    error: unknown,
+    phase: MarkdownEditorResourceErrorPhase,
+  ) => void = () => undefined;
+
   const defaultExtensionPreset = createDefaultMarkdownEditorPreset();
   const selectedExtensionPreset = extensionPreset ?? defaultExtensionPreset;
   const usesCompatibilityPreset = selectedExtensionPreset === defaultExtensionPreset;
@@ -763,8 +782,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     usesCompatibilityPreset,
   );
   const codec = usesCompatibilityPreset
-    ? createCompatibilityMarkdownCodec(extensionResolution.extensions)
-    : createMinimalMarkdownCodec(extensionResolution.extensions);
+    ? createCompatibilityMarkdownCodec(extensionResolution.extensions, resources)
+    : createMinimalMarkdownCodec(extensionResolution.extensions, resources);
   const { schema } = codec;
   const {
     maybeToggleTaskListItem,
@@ -812,7 +831,11 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     moveTableCellVertical,
     moveTableCell,
     convertPipeTable,
-  } = createSchemaRuntimeHelpers(codec);
+  } = createSchemaRuntimeHelpers(
+    codec,
+    resources,
+    (error, phase) => handleResourceError(error, phase),
+  );
   const requestFrame = typeof ownerWindow.requestAnimationFrame === "function"
     ? ownerWindow.requestAnimationFrame.bind(ownerWindow)
     : ((callback: FrameRequestCallback) => ownerWindow.setTimeout(() => callback(Date.now()), 16));
@@ -861,6 +884,38 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }, 0);
   };
   const eventDispatcher = createEditorEventDispatcher(reportUnhandled);
+  handleResourceError = (error, phase) => {
+    if (lifecycle === "destroying") {
+      collectViewError(error);
+      return;
+    }
+    if (lifecycle === "destroyed") {
+      return;
+    }
+
+    const deliver = () => {
+      if (!editor || lifecycle !== "active" || view.isDestroyed) {
+        return;
+      }
+      const delivered = eventDispatcher.emit("error", {
+        code: "resource-callback-failed",
+        context: { phase },
+        editor,
+        error,
+        recoverable: true,
+        type: "error",
+      });
+      if (delivered === 0) {
+        reportUnhandled(error);
+      }
+    };
+
+    if (!creationComplete) {
+      ownerWindow.queueMicrotask(deliver);
+    } else {
+      deliver();
+    }
+  };
   const pendingExtensionErrors: Array<{
     error: MarkdownEditorExtensionError;
     useGlobalFallback: boolean;
@@ -1104,6 +1159,27 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     throw error;
   }
 
+  let view!: EditorView;
+  const assertActive = (operation: string) => {
+    if (lifecycle !== "active" || view.isDestroyed) {
+      throw new MarkdownEditorDestroyedError(operation);
+    }
+  };
+  const assetController = createAssetUploadController({
+    assertActive,
+    emit(reason, upload) {
+      if (lifecycle === "active" && editor && !view.isDestroyed) {
+        eventDispatcher.emit("asset", { editor, reason, type: "asset", upload });
+      }
+    },
+    getView: () => view || null,
+    isActive: () => lifecycle === "active",
+    ownerWindow,
+    reportUnhandled,
+    resources,
+    schema,
+  });
+
   const plugins = [
     new Plugin({
       filterTransaction(transaction) {
@@ -1115,12 +1191,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       },
     }),
     createPlaceholderPlugin(() => runtimeOptions.placeholder),
-    createFileTransferGuardPlugin(),
+    assetController.plugin,
     codec.createImportedContentSanitizerPlugin(),
     ...(extensionAssembly.contributions.clipboard
       ? [extensionAssembly.contributions.clipboard]
       : []),
-    createTypingShortcuts({ schema, getAncestorInfo }),
+    createTypingShortcuts({ schema, getAncestorInfo, resources }),
     ...(extensionAssembly.contributions.inputRules
       ? [extensionAssembly.contributions.inputRules]
       : []),
@@ -1130,7 +1206,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       createManagedBlockCursor: (doc, blockPos, side) => ManagedBlockCursor.create(doc, blockPos, side, isManagedBlockNode),
       isManagedBlockNode,
     }),
-    createImagePlugin({ schema }),
+    createImagePlugin({ schema, resources }),
     createEscapedBoundaryPlugin(),
     createManagedBlockBoundaryPlugin({
       isManagedBlockNode,
@@ -1203,7 +1279,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     keymap(baseKeymap),
   ];
 
-  let view!: EditorView;
   let finalMarkdown = "";
   let compositeFocused = false;
   let pendingBlurVersion = 0;
@@ -1219,12 +1294,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     ),
   });
   finalMarkdown = changeEmitter.getMarkdown(doc);
-
-  const assertActive = (operation: string) => {
-    if (lifecycle !== "active" || view.isDestroyed) {
-      throw new MarkdownEditorDestroyedError(operation);
-    }
-  };
 
   const emitSelectionChange = (
     previousSelection: Selection,
@@ -1386,6 +1455,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }
 
     changeEmitter.cancel();
+    assetController.cancelAll();
+    assertActive(operation);
 
     const previousState = view.state;
     const nextState = EditorState.create({
@@ -2360,6 +2431,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     },
     view,
     extensions: extensionAssembly.registry,
+    assets: assetController.api,
     commands: editorCommandApi,
     state: editorStateApi,
     ui: uiEnabled ? {
@@ -2447,6 +2519,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
       for (const cleanup of [
         () => changeEmitter.flush(),
+        () => assetController.cancelAll({ dispatch: false, emit: false }),
         () => uiControllers.clearSelectionAnchor(),
         () => { cleanupErrors.push(...extensionAssembly.cleanupSetup()); },
         () => runWithViewErrorCollector(cleanupErrors, () => view.destroy()),

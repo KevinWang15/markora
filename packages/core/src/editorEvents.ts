@@ -4,6 +4,11 @@ import type {
   MarkdownEditorExtensionErrorPhase,
 } from "./extensionApi";
 import type { MarkdownEditorChangeOrigin } from "./transactionOrigin";
+import type {
+  MarkdownEditorAssetEventReason,
+  MarkdownEditorAssetUploadSnapshot,
+  MarkdownEditorResourceErrorPhase,
+} from "./resourceApi";
 
 export type MarkdownEditorSelectionKind =
   | "all"
@@ -54,7 +59,22 @@ export type MarkdownEditorStateEvent = MarkdownEditorEventBase<"state"> & {
 
 export type MarkdownEditorErrorCode =
   | "code-block-language-load-failed"
+  | "resource-callback-failed"
   | `EXTENSION_${string}`;
+
+export type MarkdownEditorAssetEvent = MarkdownEditorEventBase<"asset"> & {
+  reason: MarkdownEditorAssetEventReason;
+  upload: MarkdownEditorAssetUploadSnapshot;
+};
+
+export type MarkdownEditorResourceErrorEvent = MarkdownEditorEventBase<"error"> & {
+  code: "resource-callback-failed";
+  context: {
+    phase: MarkdownEditorResourceErrorPhase;
+  };
+  error: unknown;
+  recoverable: true;
+};
 
 export type MarkdownEditorCodeBlockLanguageErrorEvent = MarkdownEditorEventBase<"error"> & {
   code: "code-block-language-load-failed";
@@ -79,9 +99,11 @@ export type MarkdownEditorExtensionErrorEvent = MarkdownEditorEventBase<"error">
 
 export type MarkdownEditorErrorEvent =
   | MarkdownEditorCodeBlockLanguageErrorEvent
+  | MarkdownEditorResourceErrorEvent
   | MarkdownEditorExtensionErrorEvent;
 
 export type MarkdownEditorEventMap = {
+  asset: MarkdownEditorAssetEvent;
   blur: MarkdownEditorBlurEvent;
   error: MarkdownEditorErrorEvent;
   focus: MarkdownEditorFocusEvent;

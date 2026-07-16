@@ -80,6 +80,29 @@ const editor = createEditor({
 });`,
   },
   {
+    title: "Host-owned image uploads",
+    summary: "Route pasted and dropped files through your storage service while Markora keeps completion ordered and undoable.",
+    snippet: `const editor = createEditor({
+  element,
+  resources: {
+    images: { referrerPolicy: "no-referrer" },
+    assets: {
+      allowedMimeTypes: ["image/*"],
+      maxFileBytes: 10 * 1024 * 1024,
+      maxFiles: 10,
+      async upload({ file, reportProgress, signal }) {
+        const asset = await mediaStore.upload(file, { reportProgress, signal });
+        return { kind: "image", url: asset.url, alt: file.name };
+      },
+    },
+  },
+});
+
+editor.subscribe("asset", ({ reason, upload }) => {
+  uploadPanel.update(reason, upload);
+});`,
+  },
+  {
     title: "Normalized Markdown storage",
     summary: "Persist Markora's serialized output directly when documents stay within the supported dialect.",
     snippet: `onChange(markdown) {

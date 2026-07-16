@@ -6,7 +6,7 @@ export type LabSelectionTarget =
   | "start"
   | { anchor: number; head?: number };
 
-export type LabEventName = "blur" | "error" | "focus" | "selection" | "state" | "update";
+export type LabEventName = "asset" | "blur" | "error" | "focus" | "selection" | "state" | "update";
 
 export type LabSelectionSnapshot = {
   anchor: number;
@@ -22,12 +22,16 @@ export type LabEventRecord = {
   contribution?: string;
   docChanged?: boolean;
   extension?: string;
+  fileName?: string;
   language?: string;
   message?: string;
   phase?: string;
+  progress?: number | null;
+  reason?: string;
   previousSelection?: LabSelectionSnapshot;
   selection?: LabSelectionSnapshot;
   selectionChanged?: boolean;
+  status?: string;
   type: LabEventName;
 };
 
@@ -59,6 +63,7 @@ export type LabEditorSpec = {
   placeholder?: string;
   portal?: "body" | "default" | "local" | "positioned" | "transformed";
   root?: "document" | "shadow";
+  resourceMode?: "custom-protocol" | "deny-images" | "immediate-upload" | "proxy-images";
 };
 
 export type LabSnapshot = {

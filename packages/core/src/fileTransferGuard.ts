@@ -1,11 +1,12 @@
 import { Plugin } from "prosemirror-state";
 
-type TransferItemLike = {
+export type TransferItemLike = {
   readonly kind?: string | null;
+  getAsFile?: () => File | null;
 };
 
-type TransferDataLike = {
-  readonly files?: { readonly length: number } | null;
+export type TransferDataLike = {
+  readonly files?: ArrayLike<File> | null;
   readonly items?: ArrayLike<TransferItemLike | null | undefined> | null;
   readonly types?: ArrayLike<string | null | undefined> | null;
   dropEffect?: string;
@@ -16,7 +17,7 @@ type TransferEventLike = Event & {
   readonly dataTransfer?: TransferDataLike | null;
 };
 
-function getTransferData(event: Event): TransferDataLike | null {
+export function getTransferData(event: Event): TransferDataLike | null {
   const transferEvent = event as TransferEventLike;
 
   try {
@@ -34,6 +35,62 @@ function getTransferData(event: Event): TransferDataLike | null {
   } catch {
     return null;
   }
+}
+
+export function getTransferredFiles(transfer: TransferDataLike | null | undefined) {
+  if (!transfer) {
+    return [];
+  }
+
+  const files: File[] = [];
+  const seen = new Set<File>();
+
+  try {
+    const fileList = transfer.files;
+
+    if (fileList) {
+      for (let index = 0; index < fileList.length; index += 1) {
+        const file = fileList[index];
+        if (file && !seen.has(file)) {
+          seen.add(file);
+          files.push(file);
+        }
+      }
+    }
+  } catch {
+    // Protected transfer data can still expose files through its item list.
+  }
+
+  // A DataTransferItem may materialize a fresh File wrapper for an entry that
+  // is already present in FileList, so merging the two representations can
+  // duplicate uploads. Treat the item list strictly as a fallback.
+  if (files.length > 0) {
+    return files;
+  }
+
+  try {
+    const items = transfer.items;
+
+    if (items) {
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index];
+
+        if (item?.kind !== "file" || typeof item.getAsFile !== "function") {
+          continue;
+        }
+
+        const file = item.getAsFile();
+        if (file && !seen.has(file)) {
+          seen.add(file);
+          files.push(file);
+        }
+      }
+    }
+  } catch {
+    // File-bearing events remain rejected when protected items cannot be read.
+  }
+
+  return files;
 }
 
 export function hasTransferredFiles(transfer: TransferDataLike | null | undefined): boolean {

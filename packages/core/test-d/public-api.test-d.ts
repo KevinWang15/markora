@@ -22,6 +22,8 @@ import {
   type MarkdownEditorHeadingLevel,
   type MarkdownEditorMark,
   type MarkdownEditorMarkdownUpdateOptions,
+  type MarkdownEditorAssetUploadRequest,
+  type MarkdownEditorAssetUploadResult,
   type MarkdownEditorSelectionSnapshot,
   type MarkdownEditorSelectionTarget,
   type MarkdownEditorState,
@@ -49,6 +51,42 @@ const options: CreateEditorOptions = {
   element: hostElement,
   initialSelection,
   placeholder: "Start writing",
+  resources: {
+    links: { allowedProtocols: ["https:", "acme:"], allowRelative: false },
+    images: {
+      allowedDataMimeTypes: ["image/png"],
+      allowedProtocols: ["https:", "data:"],
+      crossOrigin: "anonymous",
+      maxDataUrlBytes: 4096,
+      maxDataUrlCharacters: 6000,
+      referrerPolicy: "no-referrer",
+    },
+    resolveUrl({ kind, purpose, url }) {
+      void kind;
+      void purpose;
+      return url;
+    },
+    openUrl({ event, kind, storedUrl, url }) {
+      void event;
+      void kind;
+      void storedUrl;
+      void url;
+    },
+    loadImage({ signal, storedUrl, url }) {
+      void signal;
+      void storedUrl;
+      return { src: url, cleanup() {} };
+    },
+    assets: {
+      allowedMimeTypes: ["image/*", "application/pdf"],
+      maxFileBytes: 1024,
+      maxFiles: 2,
+      upload(request: MarkdownEditorAssetUploadRequest): MarkdownEditorAssetUploadResult {
+        request.reportProgress(1);
+        return { kind: "image", url: `/uploads/${request.file.name}` };
+      },
+    },
+  },
 };
 const editor = createEditor(options);
 const typedEditor: MarkdownEditor = editor;
@@ -129,6 +167,17 @@ const unsubscribeError = editor.subscribe("error", (event: MarkdownEditorErrorEv
     void recoverable;
   }
 });
+const unsubscribeAsset = editor.subscribe("asset", (event) => {
+  const reason = event.reason;
+  const status = event.upload.status;
+  const fileName: string = event.upload.file.name;
+  void reason;
+  void status;
+  void fileName;
+});
+const uploads = editor.assets.getUploads();
+editor.assets.cancel(uploads[0]?.id ?? "missing");
+editor.assets.retry(uploads[0]?.id ?? "missing");
 const eventMap: MarkdownEditorEventMap = null as never;
 unsubscribeUpdate();
 unsubscribeSelection();
@@ -136,6 +185,7 @@ unsubscribeState();
 unsubscribeFocus();
 unsubscribeBlur();
 unsubscribeError();
+unsubscribeAsset();
 
 const mark: MarkdownEditorMark = "strong";
 commands.toggleMark(mark);

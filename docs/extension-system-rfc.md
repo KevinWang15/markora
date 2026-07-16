@@ -3,7 +3,7 @@
 - Status: Accepted design for `EE-009`
 - Extension API version: `1.0.0`
 - Accepted: 2026-07-15
-- Implementation target: `EE-010`
+- Implemented: `EE-010`; host resource boundary integrated by `EE-012`
 
 ## Decision summary
 
@@ -31,7 +31,7 @@ This document approved the contract before implementation. The private prototype
 - Replacing the complete Markdown parser, serializer, schema, or top node.
 - Removing or silently overriding another extension's contribution.
 - Asynchronous parsing or serialization.
-- File upload, progress, retry, and cancellation workflows; those belong to `EE-012`.
+- Extension-defined file upload, progress, retry, and cancellation contributions. Hosts use the separate `CreateEditorOptions.resources` boundary delivered by `EE-012`.
 - Collaboration, comments, presence, or persistence of plugin/storage state.
 - Loading untrusted extension code in a sandbox.
 - Framework component renderers, theme tokens, localization catalogs, or an icon system.
@@ -493,7 +493,7 @@ Runtime factories receive an immutable context containing the final schema, code
 
 The compiler uses fixed lanes so extensions cannot precede kernel policy:
 
-1. Kernel read-only, file-transfer, and import-sanitization policy.
+1. Kernel read-only, configured asset-transfer, and import-sanitization policy.
 2. Ordered clipboard transforms and structured input rules.
 3. Ordered extension behavior plugins.
 4. History.
@@ -513,7 +513,9 @@ Clipboard contributions distinguish transformations from handlers:
 - every hook declares whether it applies to the outer ProseMirror surface, a nested code surface, or both;
 - hooks are synchronous in v1.
 
-Kernel file rejection, URL sanitization, and read-only checks run outside extension precedence. A structured extension cannot bypass those policies. Asynchronous file/asset handling is intentionally deferred to the host hooks in `EE-012`.
+Kernel file rejection/configured upload, URL sanitization, and read-only checks run outside extension precedence. A structured clipboard contribution cannot intercept a file before the configured asset hook or upload a file inside nested CodeMirror, and an extension slice transform runs before the final built-in link/image sanitizer. A trusted handler or raw plugin that dispatches its own arbitrary transaction is not rewritten by that import clamp and remains responsible for validated attrs. The host's asynchronous upload callback is outside the extension contribution graph: it is supplied once through `CreateEditorOptions.resources.assets`, and its successful URL is sanitized before one mapped, undoable insertion transaction.
+
+The host asset workflow intentionally does not make asynchronous clipboard contributions part of extension API v1. Extensions that define their own media node type may expose an extension-local command/UI action and a trusted host service, but they do not inherit the core asset state machine or policy automatically.
 
 ## UI contributions
 
@@ -678,12 +680,16 @@ Markdown plus the host's extension manifest is the stable persistence/interchang
 
 - Extensions execute trusted application code with the same authority as the embedding host; the API is not a sandbox.
 - Public contexts expose a frozen codec facade with the final schema and parse/serialize operations, not mutable tokenizer, parser, serializer, policy, or managed-block assembly internals.
-- Kernel read-only, file rejection, URL sanitization, and lifecycle checks cannot be reordered behind extension hooks.
+- Kernel read-only, configured file handling, final imported built-in link/image URL sanitization, and lifecycle checks cannot be reordered behind extension clipboard hooks.
 - NodeViews must create inert DOM by default and must not execute serialized HTML or scripts.
 - Executable or remote renderers require explicit host policy and belong in optional packages.
 - UI actions require accessible labels and keyboard-invokable commands.
 - NodeViews, keymaps, nested editors, and clipboard behavior require real-browser and accessibility coverage proportional to their surface.
 - An extension must document cleanup of observers, timers, global listeners, portals, and async resources.
+
+`CreateEditorOptions.resources` governs core-owned link marks, image nodes, modifier-click opening, image loading, and asset-upload results. It does not sandbox trusted extension code. An extension NodeView can create arbitrary DOM or initiate network requests with the embedding application's authority, and a custom media node is not implicitly routed through the built-in image loader. Hosts must audit such extensions, pass only trusted service callbacks, and require the extension to document URL validation, credentials/referrer behavior, cancellation, cleanup, and accessible loading/failure UI. The frozen public codec facade deliberately exposes no mutable resource policy object.
+
+Core-owned async image results follow their own lifecycle: stale loads receive an aborted signal, Blob display URLs are revoked, and host cleanup runs once. Core asset events remain headless; the embedding host, not an extension UI contribution, owns labelled progress, retry/cancel controls, failure announcements, and privacy/consent UI.
 
 ## Approved v1 surface
 
@@ -703,7 +709,7 @@ Markdown plus the host's extension manifest is the stable persistence/interchang
 
 - Dynamic install/uninstall or schema reconfiguration.
 - Public schema replacement, mutation, removal, or whole-codec replacement.
-- Async codecs and file/asset workflows.
+- Async codecs and extension-defined file/asset contribution workflows. The separate host `resources` workflow is supported.
 - Collaboration, presence, comments, and persistence of runtime state.
 - Automatic state or Markdown migrations.
 - Untrusted-code sandboxing and auto-discovery.
