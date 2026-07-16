@@ -12,6 +12,7 @@ import {
   type MarkdownEditorActiveNode,
   type MarkdownEditorBuiltinChangeOrigin,
   type MarkdownEditorChangeContext,
+  type MarkdownEditorChangeMode,
   type MarkdownEditorChangeOrigin,
   type MarkdownEditorCodeBlockOptions,
   type MarkdownEditorCommands,
@@ -100,6 +101,9 @@ const builtinOrigin: MarkdownEditorBuiltinChangeOrigin = "external";
 const extensionOrigin: MarkdownEditorExtensionOrigin = "extension:collaboration";
 const changeOrigin: MarkdownEditorChangeOrigin = extensionOrigin;
 const changeContext: MarkdownEditorChangeContext = { origin: builtinOrigin };
+const idleChangeMode: MarkdownEditorChangeMode = "idle";
+const animationFrameChangeMode: MarkdownEditorChangeMode = "animationFrame";
+const immediateChangeMode: MarkdownEditorChangeMode = "immediate";
 
 editor.focus("end");
 editor.focus({ anchor: 1 });
@@ -111,7 +115,7 @@ const updateOptions: UpdateEditorOptions = {
   attributes: null,
   editable: false,
   onChange: null,
-  onChangeMode: "animationFrame",
+  onChangeMode: idleChangeMode,
   onEditOpaqueMarkdown: null,
   onTransaction: null,
   placeholder: null,
@@ -394,6 +398,8 @@ void editorUi;
 void destroyed;
 void changeOrigin;
 void changeContext;
+void animationFrameChangeMode;
+void immediateChangeMode;
 void eventMap;
 void reconciled;
 void resetResult;
@@ -454,6 +460,9 @@ void invalidExtensionOrigin;
 
 // @ts-expect-error DOM attribute values must be strings
 editor.updateOptions({ attributes: { tabindex: 0 } });
+
+// @ts-expect-error change delivery modes are a closed public set
+editor.updateOptions({ onChangeMode: "debounce" });
 
 // @ts-expect-error flat aliases were removed from the public API
 editor.setMarkdown("next");

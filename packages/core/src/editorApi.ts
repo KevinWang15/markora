@@ -33,6 +33,8 @@ export type MarkdownEditorMarkdownUpdateOptions = {
   emitChange?: boolean;
 };
 
+export type MarkdownEditorChangeMode = "idle" | "immediate" | "animationFrame";
+
 export type CreateEditorOptions = {
   ariaLabel?: string;
   ariaLabelledBy?: string;
@@ -51,7 +53,7 @@ export type CreateEditorOptions = {
     context: MarkdownEditorChangeContext,
   ) => void;
   onChange?: (markdown: string, context: MarkdownEditorChangeContext) => void;
-  onChangeMode?: "immediate" | "animationFrame";
+  onChangeMode?: MarkdownEditorChangeMode;
   onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
   placeholder?: string;
   resources?: MarkdownEditorResourceOptions;
@@ -64,7 +66,7 @@ export type UpdateEditorOptions = {
   attributes?: MarkdownEditorDomAttributes | null;
   editable?: boolean;
   onChange?: CreateEditorOptions["onChange"] | null;
-  onChangeMode?: "immediate" | "animationFrame";
+  onChangeMode?: MarkdownEditorChangeMode;
   onEditOpaqueMarkdown?: ((request: OpaqueMarkdownEditRequest) => void) | null;
   onTransaction?: CreateEditorOptions["onTransaction"] | null;
   placeholder?: string | null;

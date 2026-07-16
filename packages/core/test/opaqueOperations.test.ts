@@ -276,6 +276,7 @@ describe("opaque Markdown editor operations", () => {
       onChange(markdown) {
         changes.push(markdown);
       },
+      onChangeMode: "immediate",
       onEditOpaqueMarkdown(nextRequest) {
         request = nextRequest;
       },

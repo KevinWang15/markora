@@ -629,4 +629,94 @@ describe.each(entries)("%s editor extension codec errors", (_entryName, createEd
     expect(fallback).not.toHaveBeenCalled();
     failures.markSerializer = false;
   });
+
+  it("reports an idle serializer failure once through the typed error event", async () => {
+    vi.useFakeTimers();
+    const { causes, extension, failures } = createFailingCodecExtension();
+    const onChange = vi.fn();
+
+    try {
+      const editor = track(createEditor({
+        element: createHost(),
+        extensions: [extension],
+        markdown: "safe",
+        onChange,
+      }));
+      const fallback = vi.fn();
+      (window as Window & { reportError?: (error: unknown) => void }).reportError = fallback;
+      const events: MarkdownEditorErrorEvent[] = [];
+      editor.subscribe("error", (event) => events.push(event));
+      failures.nodeSerializer = true;
+      const node = editor.view.state.schema.nodes[nodeName].create();
+
+      editor.view.dispatch(editor.view.state.tr.replaceWith(
+        0,
+        editor.view.state.doc.content.size,
+        node,
+      ));
+      expect(events).toEqual([]);
+
+      vi.advanceTimersByTime(500);
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        code: "EXTENSION_RUNTIME_FAILED",
+        context: {
+          contribution: `${extensionName}/${nodeName}`,
+          extension: extensionName,
+          phase: "serialize",
+        },
+        error: { cause: causes.nodeSerializer },
+      });
+      expect(onChange).not.toHaveBeenCalled();
+      await Promise.resolve();
+      expect(fallback).not.toHaveBeenCalled();
+
+      failures.nodeSerializer = false;
+      editor.flushChange();
+    } finally {
+      failures.nodeSerializer = false;
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports an unhandled idle serializer failure once through the host fallback", () => {
+    vi.useFakeTimers();
+    const { causes, extension, failures } = createFailingCodecExtension();
+
+    try {
+      const editor = track(createEditor({
+        element: createHost(),
+        extensions: [extension],
+        markdown: "safe",
+        onChange: vi.fn(),
+      }));
+      const fallback = vi.fn();
+      (window as Window & { reportError?: (error: unknown) => void }).reportError = fallback;
+      failures.nodeSerializer = true;
+      const node = editor.view.state.schema.nodes[nodeName].create();
+
+      editor.view.dispatch(editor.view.state.tr.replaceWith(
+        0,
+        editor.view.state.doc.content.size,
+        node,
+      ));
+      vi.advanceTimersByTime(500);
+
+      expect(fallback).toHaveBeenCalledOnce();
+      expect(fallback).toHaveBeenCalledWith(expect.objectContaining({
+        cause: causes.nodeSerializer,
+        code: "EXTENSION_RUNTIME_FAILED",
+        contribution: `${extensionName}/${nodeName}`,
+        extension: extensionName,
+        phase: "serialize",
+      }));
+
+      failures.nodeSerializer = false;
+      editor.flushChange();
+    } finally {
+      failures.nodeSerializer = false;
+      vi.useRealTimers();
+    }
+  });
 });

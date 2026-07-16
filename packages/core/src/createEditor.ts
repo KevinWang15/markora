@@ -11,6 +11,8 @@ import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
 import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
 import { createCodeBlockViewClass } from "./codeBlockView";
 import { createChangeEmitter } from "./changeEmitter";
+import { normalizeMarkdownEditorChangeMode } from "./changeMode";
+import { createHostIdleScheduler } from "./idleScheduler";
 import { createAssetUploadController } from "./assetUploads";
 import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
 import {
@@ -36,6 +38,7 @@ import type {
   MarkdownEditorActiveMark,
   MarkdownEditorActiveNode,
   MarkdownEditorCodeBlockOptions,
+  MarkdownEditorChangeMode,
   MarkdownEditorCommands,
   MarkdownEditorDomAttributes,
   MarkdownEditorHeadingLevel,
@@ -56,6 +59,7 @@ export type {
   MarkdownEditorActiveMark,
   MarkdownEditorActiveNode,
   MarkdownEditorCodeBlockOptions,
+  MarkdownEditorChangeMode,
   MarkdownEditorCommands,
   MarkdownEditorDomAttributes,
   MarkdownEditorHeadingLevel,
@@ -135,7 +139,7 @@ type EditorRuntimeOptions = {
   attributes: Record<string, string>;
   editable: boolean;
   onChange: ((markdown: string, context: MarkdownEditorChangeContext) => void) | undefined;
-  onChangeMode: "immediate" | "animationFrame";
+  onChangeMode: MarkdownEditorChangeMode;
   onEditOpaqueMarkdown: ((request: OpaqueMarkdownEditRequest) => void) | undefined;
   onTransaction: CreateEditorOptions["onTransaction"];
   placeholder: string | null;
@@ -842,6 +846,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const cancelFrame = typeof ownerWindow.cancelAnimationFrame === "function"
     ? ownerWindow.cancelAnimationFrame.bind(ownerWindow)
     : ((frameId: number) => ownerWindow.clearTimeout(frameId));
+  const idleScheduler = createHostIdleScheduler(ownerWindow);
   const doc = runInitialMarkdownParse(() => codec.parse(markdown));
 
   if (!doc) {
@@ -859,7 +864,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     attributes: copyEditorAttributes(options.attributes, element.ownerDocument),
     editable: options.editable ?? true,
     onChange: options.onChange,
-    onChangeMode: options.onChangeMode ?? "immediate",
+    onChangeMode: normalizeMarkdownEditorChangeMode(options.onChangeMode),
     onEditOpaqueMarkdown: options.onEditOpaqueMarkdown,
     onTransaction: options.onTransaction,
     placeholder: normalizePlaceholder(options.placeholder),
@@ -867,7 +872,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const resolvedInitialSelection = initialSelection
     ? resolveSelectionTarget(doc, initialSelection)
     : undefined;
-  let lifecycle: "active" | "destroyed" | "destroying" = "active";
+  let lifecycle: "active" | "constructing" | "destroyed" | "destroying" = "constructing";
   let editor: MarkdownEditor;
   let creationComplete = false;
 
@@ -925,12 +930,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     useGlobalFallback = true,
   ) => {
     if (lifecycle === "destroying" || lifecycle === "destroyed") {
-      return;
+      return false;
     }
 
     if (!creationComplete) {
       pendingExtensionErrors.push({ error, useGlobalFallback });
-      return;
+      return false;
     }
 
     const delivered = eventDispatcher.emit("error", {
@@ -950,13 +955,18 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     if (delivered === 0 && useGlobalFallback) {
       reportUnhandled(error);
     }
+    return delivered > 0;
   };
+  const synchronouslyReportedExtensionErrors = new WeakSet<MarkdownEditorExtensionError>();
   const runReportedExtensionOperation = <T>(operation: () => T): T => {
     try {
       return operation();
     } catch (error) {
       if (error instanceof MarkdownEditorExtensionError) {
-        reportExtensionError(error, false);
+        if (reportExtensionError(error, false)) {
+          synchronouslyReportedExtensionErrors.add(error);
+          ownerWindow.queueMicrotask(() => synchronouslyReportedExtensionErrors.delete(error));
+        }
       }
 
       throw error;
@@ -1286,9 +1296,24 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     cancelFrame,
     initialDoc: doc,
     initialMarkdown,
+    isDeliveryValid: (targetDoc) => (
+      lifecycle === "active"
+      && !view.isDestroyed
+      && view.state.doc === targetDoc
+    ),
     mode: runtimeOptions.onChangeMode,
     onChange: runtimeOptions.onChange,
+    reportAsyncError(error) {
+      if (
+        error instanceof MarkdownEditorExtensionError
+        && synchronouslyReportedExtensionErrors.delete(error)
+      ) {
+        return;
+      }
+      reportUnhandled(error);
+    },
     requestFrame,
+    scheduleIdle: idleScheduler.schedule,
     serialize: (targetDoc) => runReportedExtensionOperation(
       () => codec.serialize(targetDoc),
     ),
@@ -2065,6 +2090,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     extensionAssembly.beginDestroy();
 
     for (const cleanup of [
+      () => changeEmitter.cancel(),
       () => { errors.push(...extensionAssembly.cleanupSetup()); },
       () => {
         if (view && !view.isDestroyed) {
@@ -2309,8 +2335,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       runtimePatch.onChange = nextOnChange ?? undefined;
     }
 
-    if (nextOnChangeMode != null) {
-      runtimePatch.onChangeMode = nextOnChangeMode;
+    if (nextOnChangeMode !== undefined) {
+      runtimePatch.onChangeMode = normalizeMarkdownEditorChangeMode(nextOnChangeMode);
     }
 
     if (nextOnEditOpaqueMarkdown !== undefined) {
@@ -2518,7 +2544,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       view.dom.removeEventListener("focusout", handleFocusOut);
 
       for (const cleanup of [
-        () => changeEmitter.flush(),
+        () => changeEmitter.flushFinal(),
         () => assetController.cancelAll({ dispatch: false, emit: false }),
         () => uiControllers.clearSelectionAnchor(),
         () => { cleanupErrors.push(...extensionAssembly.cleanupSetup()); },
@@ -2550,6 +2576,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       }
     },
   };
+
+  lifecycle = "active";
 
   try {
     extensionAssembly.attachView({ view, editor });

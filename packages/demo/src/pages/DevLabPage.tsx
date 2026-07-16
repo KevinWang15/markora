@@ -44,7 +44,6 @@ export function DevLabPage() {
     const editor = createEditor({
       element: editorElement,
       markdown: activeExampleRef.current.markdown,
-      onChangeMode: "animationFrame",
       ui: createDefaultUi(),
       onChange(markdown) {
         setMarkdownSource(markdown);

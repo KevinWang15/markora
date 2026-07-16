@@ -1,5 +1,5 @@
 import { createEditor } from "markora";
-import { defineMarkdownEditorExtension } from "markora/extension-api";
+import { Plugin, defineMarkdownEditorExtension } from "markora/extension-api";
 import "markora/styles.css";
 
 const API_VERSION = "1.0.0";
@@ -63,9 +63,48 @@ const codecProbeExtension = defineMarkdownEditorExtension({
   },
 });
 
+const hotPathProbeExtension = defineMarkdownEditorExtension({
+  name: "@markora-benchmark/hot-path-probe",
+  version: "1.0.0",
+  compatibility: {
+    extensionApi: "^1.0.0",
+    markora: "^0.0.1",
+  },
+  createRuntime() {
+    return {
+      plugins: [{
+        id: "trusted-key-insert",
+        create: () => new Plugin({
+          props: {
+            handleKeyDown(view, event) {
+              if (event.code !== "F8") {
+                return false;
+              }
+              if (!activeMount?.hotPathProbe) {
+                throw new Error("The hot-path probe received a keydown without an active probe mount.");
+              }
+              activeMount.hotPathKeydowns.push(Object.freeze({
+                code: event.code,
+                eventStart: eventTimestamp(event),
+                key: event.key,
+                observedAt: performance.now(),
+                snapshotCountBeforeDispatch: activeMount.snapshots.length,
+                trusted: event.isTrusted,
+              }));
+              view.dispatch(view.state.tr.insertText("x"));
+              return true;
+            },
+          },
+        }),
+      }],
+    };
+  },
+});
+
 let activeMount = null;
 let codecRuntime = null;
 let lastParsedDocument = null;
+let capturedSnapshotVerification = null;
 let nextKeystrokeId = 1;
 let pendingKeystroke = null;
 let eventTimingObserver = null;
@@ -397,10 +436,29 @@ function releaseCodec() {
 
 function normalizeSnapshotMode(mode) {
   const normalized = mode ?? "none";
-  if (normalized !== "none" && normalized !== "immediate" && normalized !== "animationFrame") {
-    throw new TypeError('snapshotMode must be "none", "immediate", or "animationFrame".');
+  if (
+    normalized !== "none"
+    && normalized !== "default"
+    && normalized !== "immediate"
+    && normalized !== "animationFrame"
+  ) {
+    throw new TypeError(
+      'snapshotMode must be "none", "default", "immediate", or "animationFrame".',
+    );
   }
   return normalized;
+}
+
+function recordSnapshot(mountRecord, markdown, context) {
+  const snapshot = Object.freeze({
+    at: performance.now(),
+    characters: markdown.length,
+    markdown,
+    origin: context.origin,
+  });
+  mountRecord.snapshots.push(snapshot);
+  mountRecord.changedSinceSnapshot = false;
+  pendingKeystroke?.observeSnapshot?.(mountRecord, snapshot);
 }
 
 function mount(input) {
@@ -414,7 +472,13 @@ function mount(input) {
   }
   const fixture = requireFixture(input.fixtureId);
   const snapshotMode = normalizeSnapshotMode(input.snapshotMode);
+  const hotPathProbe = input.hotPathProbe ?? false;
+  if (typeof hotPathProbe !== "boolean") {
+    throw new TypeError("hotPathProbe must be boolean when provided.");
+  }
   editorHost.replaceChildren();
+
+  let mountRecord;
 
   const options = {
     ariaLabel: "Markora packed performance editor",
@@ -431,12 +495,17 @@ function mount(input) {
     initialSelection: "start",
     markdown: fixture.markdown,
     resources: deterministicResources,
+    ...(hotPathProbe ? { extensions: [hotPathProbeExtension] } : {}),
     ...(snapshotMode === "none" ? {} : {
-      onChange() {
-        // Receiving the snapshot is enough to include Markora serialization;
-        // benchmark instrumentation intentionally adds no host work here.
+      onChange(markdown, context) {
+        // Keep host work constant-time inside the measured callback. Snapshot
+        // parsing, UTF-8 sizing, and semantic verification happen after all
+        // latency boundaries have been captured.
+        recordSnapshot(mountRecord, markdown, context);
       },
-      onChangeMode: snapshotMode,
+      // "default" deliberately omits onChangeMode so the packed benchmark
+      // exercises the mode shipped to ordinary consumers.
+      ...(snapshotMode === "default" ? {} : { onChangeMode: snapshotMode }),
     }),
   };
 
@@ -449,17 +518,22 @@ function mount(input) {
     throw error;
   }
   const completedAt = performance.now();
-  activeMount = {
+  mountRecord = {
     changedSinceSnapshot: false,
     editor,
     fixtureId: fixture.id,
+    hotPathKeydowns: [],
+    hotPathProbe,
     mountStartedAt: startedAt,
     snapshotMode,
+    snapshots: [],
   };
+  activeMount = mountRecord;
 
   return {
     dom: assertDomState("mounted"),
     fixture: snapshotFixture(fixture),
+    hotPathProbe,
     model: readModelSnapshot(editor),
     snapshotMode,
     syncDurationMs: assertFiniteDuration(completedAt - startedAt, "Mount duration"),
@@ -533,8 +607,89 @@ function editorSnapshot() {
     dom: readDomCounts(),
     fixtureId: activeMount.fixtureId,
     focused: activeMount.editor.view.hasFocus(),
+    hotPathProbe: activeMount.hotPathProbe,
     model: readModelSnapshot(activeMount.editor),
+    snapshotCount: activeMount.snapshots.length,
     snapshotMode: activeMount.snapshotMode,
+  };
+}
+
+function hotPathTelemetry() {
+  if (!activeMount?.hotPathProbe) {
+    throw new Error("Mount the hot-path probe before reading its telemetry.");
+  }
+  return {
+    keydowns: activeMount.hotPathKeydowns.map((entry) => ({ ...entry })),
+    snapshotCount: activeMount.snapshots.length,
+  };
+}
+
+function captureSnapshotVerification() {
+  if (!activeMount) {
+    throw new Error("Mount an editor before capturing snapshot verification state.");
+  }
+  if (pendingKeystroke) {
+    throw new Error("Await the pending keystroke before capturing snapshot verification state.");
+  }
+  if (capturedSnapshotVerification) {
+    throw new Error("Verify or release the previous captured snapshot first.");
+  }
+  if (activeMount.snapshots.length === 0) {
+    throw new Error("No emitted Markdown snapshot is available for verification.");
+  }
+
+  const snapshot = activeMount.snapshots.at(-1);
+  const cachedMarkdown = activeMount.editor.getMarkdown();
+  capturedSnapshotVerification = {
+    expectedDocumentJson: JSON.stringify(activeMount.editor.view.state.doc.toJSON()),
+    markdown: snapshot.markdown,
+  };
+  return {
+    cachedMatchesEmitted: cachedMarkdown === snapshot.markdown,
+    characters: snapshot.characters,
+    origin: snapshot.origin,
+    snapshotCount: activeMount.snapshots.length,
+    utf8Bytes: textEncoder.encode(snapshot.markdown).byteLength,
+  };
+}
+
+function verifyCapturedSnapshot() {
+  if (activeMount) {
+    throw new Error("Destroy the measured editor before verifying its captured snapshot.");
+  }
+  if (!capturedSnapshotVerification) {
+    throw new Error("Capture an emitted Markdown snapshot before verifying it.");
+  }
+
+  prepareCodec();
+  const captured = capturedSnapshotVerification;
+  capturedSnapshotVerification = null;
+  const parsed = codecRuntime.codec.parse(captured.markdown);
+
+  if (!parsed) {
+    throw new Error("The public codec could not parse the emitted Markdown snapshot.");
+  }
+
+  const canonicalMarkdown = codecRuntime.codec.serialize(parsed);
+  const parsedDocumentJson = JSON.stringify(parsed.toJSON());
+  const canonicalDifferenceIndex = (() => {
+    const limit = Math.min(canonicalMarkdown.length, captured.markdown.length);
+    for (let index = 0; index < limit; index += 1) {
+      if (canonicalMarkdown[index] !== captured.markdown[index]) {
+        return index;
+      }
+    }
+    return canonicalMarkdown.length === captured.markdown.length ? -1 : limit;
+  })();
+  return {
+    canonicalMatchesEmitted: canonicalMarkdown === captured.markdown,
+    canonicalDifferenceIndex,
+    canonicalLength: canonicalMarkdown.length,
+    emittedLength: captured.markdown.length,
+    expectedDocumentJsonLength: captured.expectedDocumentJson.length,
+    parsedDocumentJsonLength: parsedDocumentJson.length,
+    parsedDocumentMatchesEditor:
+      parsedDocumentJson === captured.expectedDocumentJson,
   };
 }
 
@@ -689,14 +844,22 @@ function armKeystroke(options = {}) {
   }
 
   const id = nextKeystrokeId++;
+  const mountRecord = activeMount;
+  const snapshotStartIndex = mountRecord.snapshots.length;
+  const requiresSnapshot = mountRecord.snapshotMode !== "none";
   const entryStartIndex = eventTimingEntries.length;
   const record = {
     armedAt: performance.now(),
+    bubbledAt: null,
     capturedAt: null,
     code: null,
+    event: null,
     eventStart: null,
+    eventTimingReady: false,
     isTrusted: null,
     key: null,
+    microtaskAfterBubbleAt: null,
+    presentationAt: null,
     updateOrigins: [],
     updateTimes: [],
   };
@@ -714,13 +877,16 @@ function armKeystroke(options = {}) {
     }
   });
 
-  const cleanupAndResolve = (error = null, presentationAt = performance.now()) => {
+  const observedSnapshots = () => mountRecord.snapshots.slice(snapshotStartIndex);
+
+  const cleanupAndResolve = (error = null) => {
     if (finished) {
       return;
     }
     finished = true;
     clearTimeout(timeoutId);
-    document.removeEventListener("keydown", handleKeydown, true);
+    document.removeEventListener("keydown", handleKeydownCapture, true);
+    document.removeEventListener("keydown", handleKeydownBubble);
     unsubscribe();
 
     drainEventTimingObserver();
@@ -729,12 +895,33 @@ function armKeystroke(options = {}) {
       : summarizeEventTiming(entryStartIndex, record.eventStart);
     const keydownToPresentationProxyMs = record.eventStart === null
       ? null
-      : presentationAt - record.eventStart;
+      : record.presentationAt - record.eventStart;
     const updateCount = record.updateTimes.length;
+    const snapshots = observedSnapshots();
+    const snapshot = snapshots[0] ?? null;
+    const snapshotDelayedAfterKeydown = snapshot && record.microtaskAfterBubbleAt !== null
+      ? snapshot.at >= record.microtaskAfterBubbleAt
+      : null;
     const invariantError = error
       ?? (record.isTrusted !== true ? "The measured keydown was not trusted." : null)
+      ?? (record.bubbledAt === null ? "The measured keydown did not reach the document bubble boundary." : null)
       ?? (updateCount !== 1 ? `Expected one document update, observed ${updateCount}.` : null)
       ?? (record.updateOrigins[0] !== "user" ? `Expected user update origin, observed ${record.updateOrigins[0] ?? "none"}.` : null)
+      ?? (
+        requiresSnapshot && snapshots.length !== 1
+          ? `Expected one Markdown snapshot, observed ${snapshots.length}.`
+          : null
+      )
+      ?? (
+        mountRecord.snapshotMode === "default" && snapshot?.origin !== "user"
+          ? `Expected a user-origin default snapshot, observed ${snapshot?.origin ?? "none"}.`
+          : null
+      )
+      ?? (
+        mountRecord.snapshotMode === "default" && snapshotDelayedAfterKeydown !== true
+          ? "The shipped-default snapshot ran before the keydown returned."
+          : null
+      )
       ?? (
         eventTimingSupported
         && eventTiming === null
@@ -760,21 +947,55 @@ function armKeystroke(options = {}) {
       processingCaptureDelayMs: record.eventStart === null
         ? null
         : record.capturedAt - record.eventStart,
+      snapshot: snapshot ? {
+        beforeDocumentBubble: snapshot.at < record.bubbledAt,
+        beforePresentation: snapshot.at < record.presentationAt,
+        characters: snapshot.characters,
+        count: snapshots.length,
+        delayedAfterKeydown: snapshotDelayedAfterKeydown,
+        latencyMs: snapshot.at - record.eventStart,
+        origin: snapshot.origin,
+      } : null,
+      synchronousProcessingMs: record.bubbledAt === null || record.capturedAt === null
+        ? null
+        : record.bubbledAt - record.capturedAt,
       trusted: record.isTrusted,
       updateCount,
       updateOrigin: record.updateOrigins[0] ?? null,
       updateToPresentationProxyMs: updateCount === 1
-        ? presentationAt - record.updateTimes[0]
+        ? record.presentationAt - record.updateTimes[0]
         : null,
     });
   };
 
-  const handleKeydown = (event) => {
+  const maybeResolve = () => {
+    if (
+      finished
+      || !record.eventTimingReady
+      || record.bubbledAt === null
+      || record.microtaskAfterBubbleAt === null
+      || record.presentationAt === null
+      || (requiresSnapshot && observedSnapshots().length === 0)
+    ) {
+      return;
+    }
+
+    cleanupAndResolve();
+  };
+
+  const observeSnapshot = (observedMount) => {
+    if (observedMount === mountRecord) {
+      maybeResolve();
+    }
+  };
+
+  const handleKeydownCapture = (event) => {
     if (record.eventStart !== null || !event.composedPath().includes(activeMount.editor.view.dom)) {
       return;
     }
     record.capturedAt = performance.now();
     record.code = event.code;
+    record.event = event;
     record.eventStart = eventTimestamp(event);
     record.isTrusted = event.isTrusted;
     record.key = event.key;
@@ -786,23 +1007,36 @@ function armKeystroke(options = {}) {
 
     requestAnimationFrame(() => {
       setTimeout(() => {
-        const presentationAt = performance.now();
+        record.presentationAt = performance.now();
         // Event Timing is delivered after the presentation boundary. Keep that
         // observer delay outside the measured proxy while allowing Chromium to
         // distinguish a reported event from a threshold-censored one.
-        setTimeout(
-          () => cleanupAndResolve(null, presentationAt),
-          EVENT_TIMING_DELIVERY_WAIT_MS,
-        );
+        setTimeout(() => {
+          record.eventTimingReady = true;
+          maybeResolve();
+        }, EVENT_TIMING_DELIVERY_WAIT_MS);
       }, 0);
     });
   };
 
-  document.addEventListener("keydown", handleKeydown, true);
+  const handleKeydownBubble = (event) => {
+    if (event !== record.event || record.bubbledAt !== null) {
+      return;
+    }
+
+    record.bubbledAt = performance.now();
+    queueMicrotask(() => {
+      record.microtaskAfterBubbleAt = performance.now();
+      maybeResolve();
+    });
+  };
+
+  document.addEventListener("keydown", handleKeydownCapture, true);
+  document.addEventListener("keydown", handleKeydownBubble);
   const timeoutId = setTimeout(() => {
     cleanupAndResolve("Timed out waiting for a trusted editor keystroke.");
   }, timeoutMs);
-  pendingKeystroke = { id, promise };
+  pendingKeystroke = { id, observeSnapshot, promise };
 
   return {
     armedAt: record.armedAt,
@@ -870,9 +1104,11 @@ async function destroy(mode) {
     throw new Error("Await the pending keystroke before destroying the editor.");
   }
   const fixtureId = activeMount.fixtureId;
+  const mountRecord = activeMount;
   const priming = mode === "clean" ? primeClean() : primeDirty();
   await settlePage();
   const beforeDom = assertDomState("mounted");
+  const snapshotCountBeforeDestroy = mountRecord.snapshots.length;
   let editor = activeMount.editor;
   const startedAt = performance.now();
   let destroyError = null;
@@ -883,11 +1119,13 @@ async function destroy(mode) {
   }
   const completedAt = performance.now();
   const afterDestroyDom = readDomCounts();
+  const snapshotCountAfterDestroy = mountRecord.snapshots.length;
 
   activeMount = null;
   editor = null;
   editorHost.replaceChildren();
   const afterSettleDom = await settlePage();
+  const snapshotCountAfterSettle = mountRecord.snapshots.length;
   assertDomState("released");
 
   if (destroyError) {
@@ -901,6 +1139,11 @@ async function destroy(mode) {
     fixtureResident: fixtures.has(fixtureId),
     mode,
     priming,
+    snapshotCounts: {
+      afterDestroy: snapshotCountAfterDestroy,
+      afterSettle: snapshotCountAfterSettle,
+      beforeDestroy: snapshotCountBeforeDestroy,
+    },
     syncDurationMs: assertFiniteDuration(completedAt - startedAt, "Destroy duration"),
   };
 }
@@ -912,6 +1155,10 @@ const schema = deepFreeze({
     markdown: "string",
     stats: "JSON object",
   },
+  hotPathTelemetry: {
+    key: "F8",
+    records: ["eventStart", "observedAt", "trusted", "snapshotCountBeforeDispatch"],
+  },
   keystroke: {
     eventTimingDeliveryWaitMs: EVENT_TIMING_DELIVERY_WAIT_MS,
     eventTimingThresholdMs: EVENT_TIMING_THRESHOLD_MS,
@@ -919,7 +1166,8 @@ const schema = deepFreeze({
   },
   mountInput: {
     fixtureId: "string",
-    snapshotMode: ["none", "immediate", "animationFrame"],
+    hotPathProbe: "boolean",
+    snapshotMode: ["none", "default", "immediate", "animationFrame"],
   },
   name: "markora-packed-performance-consumer",
   teardownModes: ["clean", "dirty"],
@@ -930,6 +1178,7 @@ const api = Object.freeze({
   armKeystroke,
   assertDomState,
   awaitKeystroke,
+  captureSnapshotVerification,
   clearFixtures,
   codecSnapshot,
   destroy,
@@ -937,6 +1186,7 @@ const api = Object.freeze({
   editorSnapshot,
   fixtureSnapshot,
   focusTypingTarget,
+  hotPathTelemetry,
   installFixture,
   mount,
   mountAndSettle,
@@ -951,6 +1201,7 @@ const api = Object.freeze({
   schema,
   serializeParsed,
   settle,
+  verifyCapturedSnapshot,
   version: API_VERSION,
 });
 

@@ -8,6 +8,7 @@ import {
   setMarkdownEditorTransactionOrigin,
   type CreateEditorOptions,
   type MarkdownEditor,
+  type MarkdownEditorChangeMode,
   type MarkdownEditorChangeOrigin,
   type MarkdownEditorExtensionHandle,
   type ToolbarState,
@@ -43,6 +44,7 @@ const options: CreateEditorOptions = {
   extensionPreset: createMinimalMarkdownEditorPreset(),
   extensions: [extension],
   markdown: "minimal",
+  onChangeMode: "idle",
   onChange(markdown, context) {
     const origin: MarkdownEditorChangeOrigin = context.origin;
     void markdown;
@@ -61,6 +63,7 @@ const options: CreateEditorOptions = {
   },
 };
 const editor: MarkdownEditor = createEditor(options);
+const changeMode: MarkdownEditorChangeMode = "idle";
 const view: EditorView = editor.view;
 const handle: MarkdownEditorExtensionHandle<
   { increment: () => boolean },
@@ -116,6 +119,7 @@ const destroyedError: MarkdownEditorDestroyedError =
   new MarkdownEditorDestroyedError("test the editor");
 
 void count;
+void changeMode;
 void toolbar;
 void origin;
 void destroyedError;

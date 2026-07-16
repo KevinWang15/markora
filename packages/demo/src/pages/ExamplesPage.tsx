@@ -14,7 +14,6 @@ const editor = createEditor({
   ariaLabel: "Product document",
   ui: createDefaultUi(),
   onChange: saveDraft,
-  onChangeMode: "animationFrame",
 });`,
   },
   {
@@ -105,9 +104,20 @@ editor.subscribe("asset", ({ reason, upload }) => {
   {
     title: "Normalized Markdown storage",
     summary: "Persist Markora's serialized output directly when documents stay within the supported dialect.",
-    snippet: `onChange(markdown) {
-  debouncedSave({ markdown });
-}`,
+    snippet: `// Default idle delivery already coalesces rapid edits.
+const editor = createEditor({
+  element,
+  onChange(markdown) {
+    saveDraft({ markdown });
+  },
+});
+
+editor.subscribe("update", () => markDocumentDirty());
+
+saveButton.addEventListener("click", () => {
+  editor.flushChange();
+  exportMarkdown(editor.getMarkdown());
+});`,
   },
 ] as const;
 
@@ -118,7 +128,7 @@ const recipes = [
   },
   {
     heading: "Observe editor behavior",
-    body: "Subscribe to `state` to refresh command availability and active toolbar state after accepted editor-state transitions without serializing. Use `selection` and `update` for narrower signals, and keep `onTransaction` for integrations that deliberately depend on ProseMirror dispatch attempts.",
+    body: "Subscribe to `state` to refresh command availability and active toolbar state after accepted editor-state transitions without serializing. Use `update` as the cheap dirty signal, default idle `onChange` for coalesced persistence, and `getMarkdown()` only at an explicit synchronous save/export boundary.",
   },
   {
     heading: "Update runtime options",
@@ -133,17 +143,23 @@ const recipes = [
 const frameworkExamples = [
   {
     framework: "React",
-    summary: "Mount in a useEffect, destroy on cleanup. Store the editor ref for imperative access.",
+    summary: "Mount once, reconcile controlled values, use cheap update signals, and synchronously flush forms before teardown.",
     snippet: `import { createEditor, type MarkdownEditor } from "markora";
 import { createDefaultUi } from "markora-ui";
-import { useEffect, useRef } from "react";
+import { type FormEvent, useEffect, useRef } from "react";
 
-export function MarkdownField({ value, onChange }: {
+export function MarkdownField({ value, onChange, onDirty, onSubmit }: {
   value: string;
   onChange: (md: string) => void;
+  onDirty: () => void;
+  onSubmit: (md: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MarkdownEditor | null>(null);
+  const onChangeRef = useRef(onChange);
+  const onDirtyRef = useRef(onDirty);
+  onChangeRef.current = onChange;
+  onDirtyRef.current = onDirty;
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -153,31 +169,47 @@ export function MarkdownField({ value, onChange }: {
       markdown: value,
       ariaLabel: "Markdown field",
       ui: createDefaultUi(),
-      onChangeMode: "animationFrame",
-      onChange,
+      onChange: (markdown) => onChangeRef.current(markdown),
     });
+    const stopUpdates = editor.subscribe("update", () => onDirtyRef.current());
 
     editorRef.current = editor;
-    return () => { editor.destroy(); editorRef.current = null; };
+    return () => {
+      stopUpdates();
+      editor.destroy(); // Flushes the latest pending Markdown first.
+      editorRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
     editorRef.current?.commands.reconcileMarkdown(value);
   }, [value]);
 
-  return <div ref={hostRef} />;
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.flushChange();
+    onSubmit(editor.getMarkdown());
+  }
+
+  return <form onSubmit={submit}><div ref={hostRef} /></form>;
 }`,
   },
   {
     framework: "Vue",
-    summary: "Use onMounted / onBeforeUnmount to manage the editor lifecycle inside a component.",
+    summary: "Use onMounted / onBeforeUnmount, reconcile model updates, and snapshot synchronously on submit.",
     snippet: `<script setup lang="ts">
 import { createEditor, type MarkdownEditor } from "markora";
 import { createDefaultUi } from "markora-ui";
 import { onMounted, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 
 const props = defineProps<{ modelValue: string }>();
-const emit = defineEmits<{ "update:modelValue": [value: string] }>();
+const emit = defineEmits<{
+  dirty: [];
+  submit: [value: string];
+  "update:modelValue": [value: string];
+}>();
 
 const hostRef = ref<HTMLElement | null>(null);
 const editor = shallowRef<MarkdownEditor | null>(null);
@@ -190,25 +222,30 @@ onMounted(() => {
     markdown: props.modelValue,
     ariaLabel: "Markdown field",
     ui: createDefaultUi(),
-    onChangeMode: "animationFrame",
     onChange: (md) => emit("update:modelValue", md),
   });
+  editor.value.subscribe("update", () => emit("dirty"));
 });
 
 watch(() => props.modelValue, (value) => {
   editor.value?.commands.reconcileMarkdown(value);
 });
 
-onBeforeUnmount(() => { editor.value?.destroy(); });
+function submit() {
+  editor.value?.flushChange();
+  if (editor.value) emit("submit", editor.value.getMarkdown());
+}
+
+onBeforeUnmount(() => { editor.value?.destroy(); }); // Final flush is guaranteed.
 </script>
 
 <template>
-  <div ref="hostRef" />
+  <form @submit.prevent="submit"><div ref="hostRef" /></form>
 </template>`,
   },
   {
     framework: "Svelte",
-    summary: "Bind the host element with bind:this and use onMount / onDestroy for the editor lifecycle.",
+    summary: "Bind the host, observe cheap updates, reconcile props, and flush a lazy snapshot on submit.",
     snippet: `<script lang="ts">
   import { createEditor, type MarkdownEditor } from "markora";
   import { createDefaultUi } from "markora-ui";
@@ -216,6 +253,8 @@ onBeforeUnmount(() => { editor.value?.destroy(); });
 
   export let value = "";
   export let onChange: (md: string) => void = () => {};
+  export let onDirty: () => void = () => {};
+  export let onSubmit: (md: string) => void = () => {};
 
   let hostElement: HTMLElement;
   let editor: MarkdownEditor | null = null;
@@ -226,17 +265,24 @@ onBeforeUnmount(() => { editor.value?.destroy(); });
       markdown: value,
       ariaLabel: "Markdown field",
       ui: createDefaultUi(),
-      onChangeMode: "animationFrame",
-      onChange,
+      onChange: (markdown) => onChange(markdown),
     });
+    editor.subscribe("update", () => onDirty());
   });
 
   $: if (editor) editor.commands.reconcileMarkdown(value);
 
-  onDestroy(() => { editor?.destroy(); });
+  function submit() {
+    editor?.flushChange();
+    if (editor) onSubmit(editor.getMarkdown());
+  }
+
+  onDestroy(() => { editor?.destroy(); }); // Final flush is guaranteed.
 </script>
 
-<div bind:this={hostElement}></div>`,
+<form on:submit|preventDefault={submit}>
+  <div bind:this={hostElement}></div>
+</form>`,
   },
 ] as const;
 
@@ -268,7 +314,9 @@ export function ExamplesPage() {
         <h2>Mount the editor in any framework lifecycle.</h2>
         <p>
           Markora is framework-agnostic. These snippets show the idiomatic way to
-          {" "}create and destroy an editor instance in React, Vue, and Svelte.
+          {" "}create and destroy an editor instance in React, Vue, and Svelte. They leave
+          {" "}<code>onChangeMode</code> unset to use the coalesced idle default, keep dirty-state
+          {" "}notifications serialization-free, and flush a synchronous snapshot for form submission.
         </p>
       </section>
 

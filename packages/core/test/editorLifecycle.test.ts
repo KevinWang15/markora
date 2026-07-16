@@ -571,6 +571,7 @@ describe("typed editor subscriptions", () => {
     editor = track(createEditor({
       element: createHost(),
       markdown: "alpha",
+      onChangeMode: "immediate",
       onChange() {
         if (shouldReplace) {
           shouldReplace = false;
@@ -596,6 +597,7 @@ describe("typed editor subscriptions", () => {
     editor = track(createEditor({
       element: createHost(),
       markdown: "alpha",
+      onChangeMode: "immediate",
       onChange() {
         if (shouldReplace) {
           shouldReplace = false;
@@ -619,6 +621,7 @@ describe("typed editor subscriptions", () => {
     editor = track(createEditor({
       element: createHost(),
       markdown: "alpha",
+      onChangeMode: "immediate",
       onChange() {
         if (shouldMove) {
           shouldMove = false;
@@ -640,6 +643,7 @@ describe("typed editor subscriptions", () => {
     const editor = track(createEditor({
       element: createHost(),
       markdown: "alpha",
+      onChangeMode: "immediate",
       onChange() {
         calls.push("change");
         throw failure;
@@ -865,6 +869,7 @@ describe("typed editor subscriptions", () => {
       element: createHost(),
       markdown: "alpha",
       onChange: () => calls.push("change"),
+      onChangeMode: "immediate",
       onTransaction: () => calls.push("transaction"),
       ui: createUiFactory({
         imageClose,
@@ -894,6 +899,7 @@ describe("typed editor subscriptions", () => {
       element: createHost(),
       markdown: "alpha",
       onChange: () => calls.push("change"),
+      onChangeMode: "immediate",
       ui: createUiFactory({
         tableUpdate: vi.fn(() => {
           tableUpdates += 1;

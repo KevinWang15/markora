@@ -1,101 +1,196 @@
+import type { MarkdownEditorChangeMode } from "./editorApi";
+import type { HostIdleTask } from "./idleScheduler";
+
 export type ChangeEmitterOptions<TDoc, TContext> = {
   initialDoc: TDoc;
   initialMarkdown?: string;
-  mode: "immediate" | "animationFrame";
+  mode: MarkdownEditorChangeMode;
   onChange?: (markdown: string, context: TContext) => void;
   requestFrame: (callback: FrameRequestCallback) => number;
   cancelFrame: (frameId: number) => void;
+  isDeliveryValid: (doc: TDoc) => boolean;
+  scheduleIdle: (callback: () => void) => HostIdleTask;
+  reportAsyncError: (error: unknown) => void;
   serialize: (doc: TDoc) => string;
 };
 
 export type ChangeEmitterRuntimeOptions<TContext> = {
-  mode?: "immediate" | "animationFrame";
+  mode?: MarkdownEditorChangeMode;
   onChange?: ((markdown: string, context: TContext) => void) | null;
 };
 
+type PendingChange<TDoc, TContext> = {
+  context: TContext;
+  doc: TDoc;
+  epoch: number;
+  listener: (markdown: string, context: TContext) => void;
+};
+
 export function createChangeEmitter<TDoc, TContext>(options: ChangeEmitterOptions<TDoc, TContext>) {
-  const { cancelFrame, initialDoc, requestFrame, serialize } = options;
+  const {
+    cancelFrame,
+    initialDoc,
+    isDeliveryValid,
+    reportAsyncError,
+    requestFrame,
+    scheduleIdle,
+    serialize,
+  } = options;
   let mode = options.mode;
   let onChange = options.onChange;
   let lastSerializedDoc = initialDoc;
   let lastSerializedMarkdown = options.initialMarkdown ?? serialize(initialDoc);
+  let invalidationEpoch = 0;
+  let pending: PendingChange<TDoc, TContext> | null = null;
   let pendingFrame: number | null = null;
-  let pendingDoc: TDoc | null = null;
-  let pendingContext: TContext | null = null;
+  let pendingIdleTask: HostIdleTask | null = null;
 
   const getMarkdown = (targetDoc: TDoc) => {
     if (targetDoc === lastSerializedDoc) {
       return lastSerializedMarkdown;
     }
 
-    lastSerializedMarkdown = serialize(targetDoc);
+    const markdown = serialize(targetDoc);
+    lastSerializedMarkdown = markdown;
     lastSerializedDoc = targetDoc;
-    return lastSerializedMarkdown;
+    return markdown;
   };
 
-  const emit = (targetDoc: TDoc, context: TContext) => {
-    pendingDoc = null;
-    pendingContext = null;
-    onChange?.(getMarkdown(targetDoc), context);
+  const cancelScheduledWork = () => {
+    if (pendingFrame !== null) {
+      cancelFrame(pendingFrame);
+      pendingFrame = null;
+    }
+    if (pendingIdleTask) {
+      const idleTask = pendingIdleTask;
+      pendingIdleTask = null;
+      idleTask.cancel();
+    }
+  };
+
+  const deliver = (
+    delivery: PendingChange<TDoc, TContext>,
+    restoreAfterSerializerFailure: boolean,
+    force: boolean,
+  ) => {
+    const isCurrentDelivery = () => (
+      delivery.epoch === invalidationEpoch
+      && isDeliveryValid(delivery.doc)
+    );
+
+    if (!force && !isCurrentDelivery()) {
+      return;
+    }
+
+    let markdown: string;
+
+    try {
+      markdown = getMarkdown(delivery.doc);
+    } catch (error) {
+      if (
+        restoreAfterSerializerFailure
+        && delivery.epoch === invalidationEpoch
+        && pending === null
+        && isDeliveryValid(delivery.doc)
+      ) {
+        pending = delivery;
+      }
+      throw error;
+    }
+
+    if (!force && !isCurrentDelivery()) {
+      return;
+    }
+
+    // Listener failures count as delivered and must not retry host side effects.
+    delivery.listener(markdown, delivery.context);
+  };
+
+  const takePending = () => {
+    const delivery = pending;
+    pending = null;
+    cancelScheduledWork();
+    return delivery;
+  };
+
+  const drainAsync = () => {
+    const delivery = takePending();
+
+    if (!delivery) {
+      return;
+    }
+
+    try {
+      deliver(delivery, true, false);
+    } catch (error) {
+      reportAsyncError(error);
+    }
   };
 
   const cancel = () => {
-    if (pendingFrame !== null) {
-      cancelFrame(pendingFrame);
-      pendingFrame = null;
-    }
-
-    pendingDoc = null;
-    pendingContext = null;
+    cancelScheduledWork();
+    pending = null;
+    invalidationEpoch += 1;
   };
 
-  const flush = () => {
-    if (pendingFrame !== null) {
-      cancelFrame(pendingFrame);
-      pendingFrame = null;
-    }
+  const flushPending = (force: boolean) => {
+    const delivery = takePending();
 
-    if (pendingDoc && pendingContext) {
-      emit(pendingDoc, pendingContext);
+    if (delivery) {
+      deliver(delivery, !force, force);
     }
   };
+
+  const flush = () => flushPending(false);
 
   const schedule = (targetDoc: TDoc, context: TContext) => {
-    if (!onChange) {
+    const listener = onChange;
+
+    if (!listener) {
       return;
     }
+
+    const delivery: PendingChange<TDoc, TContext> = {
+      context,
+      doc: targetDoc,
+      epoch: invalidationEpoch,
+      listener,
+    };
 
     if (mode === "immediate") {
-      emit(targetDoc, context);
+      deliver(delivery, false, false);
       return;
     }
 
-    pendingDoc = targetDoc;
-    pendingContext = context;
+    pending = delivery;
 
-    if (pendingFrame !== null) {
-      return;
-    }
-
-    pendingFrame = requestFrame(() => {
-      pendingFrame = null;
-
-      if (pendingDoc && pendingContext) {
-        emit(pendingDoc, pendingContext);
+    if (mode === "animationFrame") {
+      if (pendingFrame !== null) {
+        return;
       }
-    });
-  };
 
-  const cache = (targetDoc: TDoc) => {
-    lastSerializedMarkdown = serialize(targetDoc);
-    lastSerializedDoc = targetDoc;
-    return lastSerializedMarkdown;
+      pendingFrame = requestFrame(() => {
+        pendingFrame = null;
+        drainAsync();
+      });
+      return;
+    }
+
+    if (pendingIdleTask) {
+      pendingIdleTask.postpone();
+    } else {
+      pendingIdleTask = scheduleIdle(() => {
+        pendingIdleTask = null;
+        drainAsync();
+      });
+    }
   };
 
   return {
-    cache,
+    cache: getMarkdown,
     cancel,
     flush,
+    flushFinal: () => flushPending(true),
     getMarkdown,
     schedule,
     update(nextOptions: ChangeEmitterRuntimeOptions<TContext>) {

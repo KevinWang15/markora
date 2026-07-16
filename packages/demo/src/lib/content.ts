@@ -17,9 +17,8 @@ const editor = createEditor({
   initialSelection: "end",
   placeholder: "Start writing…",
   ui: createDefaultUi(),
-  onChangeMode: "animationFrame",
   onChange(nextMarkdown) {
-    console.log(nextMarkdown);
+    saveDraft(nextMarkdown); // Idle and coalesced by default.
   },
 });`;
 

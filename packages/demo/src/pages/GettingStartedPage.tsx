@@ -7,17 +7,22 @@ const lifecycleCode = `const editor = createEditor({
   markdown: initialMarkdown,
   ariaLabel: "Document body",
   initialSelection: "end",
-  onChangeMode: "animationFrame",
   onChange(nextMarkdown) {
-    saveDraft(nextMarkdown);
+    saveDraft(nextMarkdown); // Coalesced idle delivery is the default.
   },
 });
 
-const unsubscribe = editor.subscribe("update", ({ selection }) => {
+const unsubscribe = editor.subscribe("update", ({ origin, selection }) => {
   renderToolbar(selection);
+  markDocumentDirty(origin); // Synchronous and serialization-free.
 });
 
 editor.focus();
+
+form.addEventListener("submit", () => {
+  editor.flushChange();
+  markdownField.value = editor.getMarkdown();
+});
 
 // When your host screen unmounts:
 unsubscribe();
@@ -67,7 +72,10 @@ export function GettingStartedPage() {
           <h3>Subscribe, focus, and destroy safely</h3>
           <p>
             Keep a stable host element, use the typed focus and event APIs, and call <code>editor.destroy()</code>
-            {" "}when the surrounding screen or component unmounts. Unsubscribe and destroy are both idempotent.
+            {" "}when the surrounding screen or component unmounts. Idle <code>onChange</code> delivery is the default, so
+            {" "}rapid edits coalesce without synchronous full-document serialization. Use <code>update</code> for cheap dirty
+            {" "}signals, and pair <code>flushChange()</code> with <code>getMarkdown()</code> when submission needs the latest
+            {" "}snapshot immediately. Unsubscribe and destroy are both idempotent; destroy performs a final flush.
           </p>
           <CodeBlock code={lifecycleCode} language="ts" title="Lifecycle" />
         </article>

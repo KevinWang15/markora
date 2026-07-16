@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "runtime": {
     "contract": {
-      "benchmarkVersion": "packed-embedded-v1",
+      "benchmarkVersion": "packed-embedded-v2",
       "documentVersion": "mixed-embedded-v1",
       "requiredTargets": [102400, 512000, 1048576],
       "profile": "ci",
@@ -14,6 +14,19 @@
       "reducedMotion": "reduce",
       "sampling": { "warmups": 1, "timingSamples": 5, "memorySamples": 3 },
       "timingIsolation": "fresh-page-shared-browser-process",
+      "hotPathIsolation": "fresh-page-per-scenario-shared-browser-process",
+      "defaultChangeMode": "idle",
+      "hotPath": {
+        "key": "F8",
+        "burstKeys": 4,
+        "burstIntervalMs": 80,
+        "burstIntervalMinimumMs": 75,
+        "burstIntervalMaximumMs": 120,
+        "burstSchedule": "absolute-page-deadlines",
+        "snapshotDeadlineMs": 8000,
+        "controlChangeMode": "immediate",
+        "candidateChangeMode": "omitted-default-idle"
+      },
       "memoryIsolation": "fresh-browser-process-per-sample"
     },
     "minimumTimingSamples": 5,
@@ -45,6 +58,25 @@
         "codecSerializeMs": { "statistic": "maximum", "warning": 1100, "failure": 1550 },
         "keydownToPresentationProxyMs": { "statistic": "maximum", "warning": 1150, "failure": 1650 },
         "dirtyTeardownMs": { "statistic": "maximum", "warning": 1300, "failure": 1900 }
+      }
+    },
+    "hotPath": {
+      "102400": {
+        "defaultIdleSynchronousProcessingMs": { "statistic": "maximum", "warning": 20, "failure": 35 },
+        "defaultIdleKeydownToPresentationProxyMs": { "statistic": "maximum", "warning": 45, "failure": 70 },
+        "defaultIdleSnapshotLatencyMs": { "statistic": "maximum", "warning": 750, "failure": 1500 }
+      },
+      "512000": {
+        "defaultIdleSynchronousProcessingMs": { "statistic": "maximum", "warning": 50, "failure": 100 },
+        "defaultIdleKeydownToPresentationProxyMs": { "statistic": "maximum", "warning": 120, "failure": 200 },
+        "defaultIdleSnapshotLatencyMs": { "statistic": "maximum", "warning": 1200, "failure": 2500 },
+        "synchronousProcessingRatio": { "statistic": "maximum", "warning": 0.35, "failure": 0.5 }
+      },
+      "1048576": {
+        "defaultIdleSynchronousProcessingMs": { "statistic": "maximum", "warning": 90, "failure": 180 },
+        "defaultIdleKeydownToPresentationProxyMs": { "statistic": "maximum", "warning": 200, "failure": 350 },
+        "defaultIdleSnapshotLatencyMs": { "statistic": "maximum", "warning": 2000, "failure": 4000 },
+        "synchronousProcessingRatio": { "statistic": "maximum", "warning": 0.35, "failure": 0.5 }
       }
     },
     "memory": {

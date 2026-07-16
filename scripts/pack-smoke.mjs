@@ -1067,6 +1067,7 @@ writeFileSync(join(smokeAppDir, "src/api.ts"), `import {
   setMarkdownEditorTransactionOrigin,
   type CreateEditorOptions,
   type MarkdownEditorActiveNode,
+  type MarkdownEditorChangeMode,
   type MarkdownEditorChangeOrigin,
   type MarkdownEditorCodeBlockOptions,
   type MarkdownEditorCommands,
@@ -1082,6 +1083,7 @@ writeFileSync(join(smokeAppDir, "src/api.ts"), `import {
 import {
   createEditor as createMinimalEditor,
   type MarkdownEditorActiveNode as MinimalMarkdownEditorActiveNode,
+  type MarkdownEditorChangeMode as MinimalMarkdownEditorChangeMode,
   type MarkdownEditorCodeBlockOptions as MinimalMarkdownEditorCodeBlockOptions,
   type MarkdownEditorCommands as MinimalMarkdownEditorCommands,
   type MarkdownEditorHeadingLevel as MinimalMarkdownEditorHeadingLevel,
@@ -1145,6 +1147,7 @@ const minimalEditor = createMinimalEditor({
   element,
   extensions: externalExtensions,
   markdown: ":::note\\nPacked ==extension== consumer.\\n:::",
+  onChangeMode: "idle",
   resources: { links: { allowRelative: false } },
 });
 const headingLevel: MarkdownEditorHeadingLevel = 3;
@@ -1152,6 +1155,8 @@ const codeBlockOptions: MarkdownEditorCodeBlockOptions = { language: "ts" };
 const tableAlignment: MarkdownEditorTableAlignment = null;
 const tableInsertOptions: MarkdownEditorTableInsertOptions = { columns: 3, rows: 2 };
 const activeNode: MarkdownEditorActiveNode = "paragraph";
+const idleChangeMode: MarkdownEditorChangeMode = "idle";
+const minimalIdleChangeMode: MinimalMarkdownEditorChangeMode = idleChangeMode;
 const minimalHeadingLevel: MinimalMarkdownEditorHeadingLevel = headingLevel;
 const minimalCodeBlockOptions: MinimalMarkdownEditorCodeBlockOptions = codeBlockOptions;
 const minimalTableAlignment: MinimalMarkdownEditorTableAlignment = tableAlignment;
@@ -1271,6 +1276,7 @@ const legacyCreateOptions: CreateEditorOptions = {
 };
 const options: UpdateEditorOptions = {
   editable: false,
+  onChangeMode: idleChangeMode,
   onChange(markdown) {
     void markdown;
   },
@@ -1332,6 +1338,7 @@ MARKORA_EXTENSION_API_VERSION satisfies "1.0.0";
 void new MarkdownEditorDestroyedError("focus the editor");
 void staticDefinition;
 void legacyCreateOptions;
+void minimalIdleChangeMode;
 void reconciled;
 void transactionOrigin;
 `);

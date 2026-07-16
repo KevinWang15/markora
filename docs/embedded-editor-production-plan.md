@@ -96,8 +96,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-011 | DONE | M | Complete the block, list, task, code, and table command surface |
 | EE-012 | DONE | M | Add host-controlled URL, resource, and asset insertion hooks |
 | EE-013 | DONE | S | Establish document-size, latency, memory, and bundle budgets |
-| EE-014 | NEXT | M | Remove synchronous full-document serialization from hot typing paths |
-| EE-015 | QUEUED | L | Lazily activate CodeMirror blocks and reduce base bundle cost |
+| EE-014 | DONE | M | Remove synchronous full-document serialization from hot typing paths |
+| EE-015 | NEXT | L | Lazily activate CodeMirror blocks and reduce base bundle cost |
 | EE-016 | QUEUED | M | Make task and overlay interactions keyboard and screen-reader complete |
 | EE-017 | QUEUED | M | Add deliberate Markdown, rich HTML, and plain-text clipboard behavior |
 | EE-018 | QUEUED | L | Add mature table resize, reorder, selection, and keyboard operations |
@@ -484,7 +484,7 @@ Create reproducible baselines before changing performance-sensitive architecture
 
 ### EE-014 — Remove full serialization from hot typing paths
 
-Status: `NEXT`
+Status: `DONE` (completed 2026-07-17)
 
 #### Goal
 
@@ -498,9 +498,20 @@ Keep editing responsive as documents grow.
 - Preserve a synchronous flush path for form submission and teardown.
 - Meet the budgets established in `EE-013`.
 
+#### Completion notes
+
+- The public `MarkdownEditorChangeMode` contract now defaults omitted `onChangeMode` to coalesced idle delivery. A 300 ms trailing quiet period keeps sustained typing responsive, while a 5 s absolute deadline prevents continuous input from postponing persistence forever. Scheduling uses the editor's host window, prefers `requestIdleCallback`, falls back through animation frame and task queues, and has a watchdog for throttled hosts. Explicit `"immediate"` and `"animationFrame"` modes remain available for compatibility and specialized integrations.
+- Document transactions synchronously update editor state and emit cheap update events without serializing the whole document. The change emitter retains only the latest document/context pair, lazily creates one canonical Markdown snapshot, and preserves identity through the `getMarkdown()` cache. `flushChange()` and teardown synchronously deliver the final dirty state for form submission and lifecycle safety.
+- Scheduling is safe across construction-time dispatches, reentrant listeners, serializer/listener failures, mode changes, stale scheduled callbacks, and destruction. Invalid JavaScript mode values throw atomically during creation or configuration updates; extension failures retain their typed recoverable error attribution without double-reporting through the global channel. Root and minimal entries share the same behavior and public type surface.
+- Documentation and the React, Vue, Svelte, and playground examples now distinguish cheap update signals from Markdown snapshots, use explicit modes where same-stack or frame delivery is intentional, and show synchronous flushing before form submission. Existing applications that depended on omitted-mode same-stack callbacks must select `"immediate"` explicitly.
+- The packed-consumer v2 benchmark pairs fresh explicit-immediate and omitted-default pages. A public extension converts five trusted F8 inputs into ordinary user `insertText("x")` transactions at a checked cadence; the harness requires zero default snapshots during every input task, exactly one delayed final callback, correct origin and byte/character growth, cache identity, canonical serialization, parsed-document equality, and no late teardown callback.
+- The full Apple M4 Max/Chromium 149 run retains 20 timing pairs and seven isolated memory samples at each exact fixture size. At 100 KiB, 500 KiB, and 1 MiB, default synchronous p95 is 3.0 ms, 9.7 ms, and 21.1 ms versus 5.4 ms, 121.4 ms, and 460.1 ms for immediate delivery; default presentation p95 is 4.4 ms, 14.0 ms, and 29.8 ms, and final snapshot p95 is 312.5 ms, 440.1 ms, and 738.2 ms. All 21 lifecycles retain zero DOM nodes, listeners, and documents. Raw paired evidence is retained in `performance/ee014-hot-path.json` and the measurement contract is documented in `docs/performance-budgets.md`.
+- `pnpm perf:ci` passes every runtime and byte budget. The two focused scheduler/validation modules raise the compatibility graph from 154 to 156 static modules and the minimal graph from 126 to 128, triggering reviewed warnings but remaining below the 157/129 failure ceilings; this visible bundle cost feeds directly into `EE-015`.
+- Final verification: `pnpm check` passes 802 unit/declaration tests and every build, type, and package ESM check; `pnpm test:browser:required` passes 86 cases with four expected non-Chromium CDP skips (90 total); `pnpm pack:smoke` and `pnpm perf:ci` pass; and `git diff --check` passes.
+
 ### EE-015 — Lazily activate CodeMirror and reduce bundle cost
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -638,6 +649,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-013` are complete. Gate A's content-safety requirements are satisfied, and the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, and performance-budget foundations for Gate B are established.
+`EE-001` through `EE-014` are complete. Gate A's content-safety requirements are satisfied, and the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, and responsive-snapshot foundations for Gate B are established.
 
-The next iteration is `EE-014 — Remove full serialization from hot typing paths`.
+The next iteration is `EE-015 — Lazily activate CodeMirror and reduce bundle cost`.

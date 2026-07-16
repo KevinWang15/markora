@@ -6,6 +6,7 @@ export type {
   MarkdownEditorActiveMark,
   MarkdownEditorActiveNode,
   MarkdownEditorCodeBlockOptions,
+  MarkdownEditorChangeMode,
   MarkdownEditorCommands,
   MarkdownEditorDomAttributes,
   MarkdownEditorHeadingLevel,

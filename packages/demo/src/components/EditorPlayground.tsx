@@ -514,7 +514,6 @@ export function EditorPlayground() {
     const editor = createEditor({
       element: editorElement,
       markdown: initialMarkdown,
-      onChangeMode: "animationFrame",
       ui: createDefaultUi(),
       onChange(markdown) {
         setOutput(markdown);
@@ -575,8 +574,8 @@ export function EditorPlayground() {
           <h1>Test the headless core in a realistic host shell.</h1>
           <p>
             This playground mounts <code>markora</code> with optional <code>markora-ui</code> overlays,
-            updates the host with <code>onChangeMode: "animationFrame"</code>, and shows both Markdown-in
-            and Markdown-out behavior side by side.
+            uses the default idle/coalesced Markdown output, and shows both Markdown-in and Markdown-out
+            behavior side by side without serializing in the synchronous typing path.
           </p>
         </div>
         <ul className="check-list">
@@ -615,7 +614,7 @@ export function EditorPlayground() {
       <section className="panel panel-output">
         <div className="panel-header">
           <h3>Serialized output</h3>
-          <p>Compare the <code>onChange</code> output with the published Markdown compatibility contract.</p>
+          <p>Compare the idle <code>onChange</code> output with the published Markdown compatibility contract.</p>
         </div>
         <pre id="output">{output}</pre>
       </section>

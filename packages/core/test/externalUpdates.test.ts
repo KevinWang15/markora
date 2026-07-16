@@ -185,6 +185,7 @@ describe("reconciled external Markdown updates", () => {
       onChange(_markdown, context) {
         changeOrigins.push(context.origin);
       },
+      onChangeMode: "immediate",
       onTransaction(_transaction, _view, context) {
         transactionOrigins.push(context.origin);
       },
@@ -240,6 +241,7 @@ describe("reconciled external Markdown updates", () => {
       onChange(markdown, context) {
         changes.push({ markdown, origin: context.origin });
       },
+      onChangeMode: "immediate",
       onTransaction(_transaction, _view, context) {
         transactionOrigins.push(context.origin);
       },
@@ -272,6 +274,7 @@ describe("reconciled external Markdown updates", () => {
       onChange(markdown, context) {
         changes.push({ markdown, origin: context.origin });
       },
+      onChangeMode: "immediate",
       onTransaction: transactions,
     }));
     const selectionOrigins: string[] = [];

@@ -19,6 +19,8 @@ import {
 } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { createChangeEmitter } from "./changeEmitter";
+import { normalizeMarkdownEditorChangeMode } from "./changeMode";
+import { createHostIdleScheduler } from "./idleScheduler";
 import { buildReconciledDocumentTransaction } from "./documentUpdate";
 import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
 import { ManagedBlockCursor } from "./managedBlockCursor";
@@ -29,6 +31,7 @@ import type {
   MarkdownEditorActiveMark,
   MarkdownEditorActiveNode,
   MarkdownEditorCodeBlockOptions,
+  MarkdownEditorChangeMode,
   MarkdownEditorCommands,
   MarkdownEditorDomAttributes,
   MarkdownEditorHeadingLevel,
@@ -88,7 +91,7 @@ type EditorRuntimeOptions = {
   attributes: Record<string, string>;
   editable: boolean;
   onChange: CreateEditorOptions["onChange"];
-  onChangeMode: "immediate" | "animationFrame";
+  onChangeMode: MarkdownEditorChangeMode;
   onTransaction: CreateEditorOptions["onTransaction"];
   placeholder: string | null;
 };
@@ -482,7 +485,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     attributes: copyEditorAttributes(options.attributes, element.ownerDocument),
     editable: options.editable ?? true,
     onChange: options.onChange,
-    onChangeMode: options.onChangeMode ?? "immediate",
+    onChangeMode: normalizeMarkdownEditorChangeMode(options.onChangeMode),
     onTransaction: options.onTransaction,
     placeholder: normalizePlaceholder(options.placeholder),
   };
@@ -527,6 +530,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const cancelFrame = typeof ownerWindow.cancelAnimationFrame === "function"
     ? ownerWindow.cancelAnimationFrame.bind(ownerWindow)
     : ((frameId: number) => ownerWindow.clearTimeout(frameId));
+  const idleScheduler = createHostIdleScheduler(ownerWindow);
   let lifecycle: "constructing" | "active" | "destroyed" | "destroying" = "constructing";
   let view!: EditorView;
   let editor!: MarkdownEditor;
@@ -591,7 +595,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     useGlobalFallback = true,
   ) => {
     if (!creationComplete || lifecycle !== "active" || view.isDestroyed) {
-      return;
+      return false;
     }
 
     const delivered = eventDispatcher.emit("error", {
@@ -611,32 +615,38 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     if (delivered === 0 && useGlobalFallback) {
       reportUnhandled(error);
     }
+    return delivered > 0;
   };
   const reportExtensionError = (
     error: MarkdownEditorExtensionError,
     useGlobalFallback = true,
   ) => {
     if (lifecycle === "destroying" || lifecycle === "destroyed") {
-      return;
+      return false;
     }
 
     if (!creationComplete) {
       pendingExtensionErrors.push({ error, useGlobalFallback });
-      return;
+      return false;
     }
 
     if (eventDispatcher.has("error")) {
-      deliverExtensionError(error, useGlobalFallback);
+      return deliverExtensionError(error, useGlobalFallback);
     } else if (useGlobalFallback) {
       ownerWindow.queueMicrotask(() => deliverExtensionError(error, true));
     }
+    return false;
   };
+  const synchronouslyReportedExtensionErrors = new WeakSet<MarkdownEditorExtensionError>();
   const runReportedExtensionOperation = <T>(operation: () => T): T => {
     try {
       return operation();
     } catch (error) {
       if (error instanceof MarkdownEditorExtensionError) {
-        reportExtensionError(error, false);
+        if (reportExtensionError(error, false)) {
+          synchronouslyReportedExtensionErrors.add(error);
+          ownerWindow.queueMicrotask(() => synchronouslyReportedExtensionErrors.delete(error));
+        }
       }
 
       throw error;
@@ -646,9 +656,24 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     cancelFrame,
     initialDoc: doc,
     initialMarkdown,
+    isDeliveryValid: (targetDoc) => (
+      lifecycle === "active"
+      && !view.isDestroyed
+      && view.state.doc === targetDoc
+    ),
     mode: runtimeOptions.onChangeMode,
     onChange: runtimeOptions.onChange,
+    reportAsyncError(error) {
+      if (
+        error instanceof MarkdownEditorExtensionError
+        && synchronouslyReportedExtensionErrors.delete(error)
+      ) {
+        return;
+      }
+      reportUnhandled(error);
+    },
     requestFrame,
+    scheduleIdle: idleScheduler.schedule,
     serialize: (targetDoc) => runReportedExtensionOperation(
       () => codec.serialize(targetDoc),
     ),
@@ -887,6 +912,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     resourceDestroyErrors = errors;
     pendingExtensionErrors.length = 0;
     extensionAssembly.beginDestroy();
+    changeEmitter.cancel();
     errors.push(...extensionAssembly.cleanupSetup());
 
     if (view && !view.isDestroyed) {
@@ -1648,8 +1674,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       runtimePatch.onChange = nextOptions.onChange ?? undefined;
     }
 
-    if (nextOptions.onChangeMode != null) {
-      runtimePatch.onChangeMode = nextOptions.onChangeMode;
+    if (nextOptions.onChangeMode !== undefined) {
+      runtimePatch.onChangeMode = normalizeMarkdownEditorChangeMode(nextOptions.onChangeMode);
     }
 
     if (nextOptions.onTransaction !== undefined) {
@@ -1796,7 +1822,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       view.dom.removeEventListener("focusout", handleFocusOut);
 
       for (const cleanup of [
-        () => changeEmitter.flush(),
+        () => changeEmitter.flushFinal(),
         () => assetController.cancelAll({ dispatch: false, emit: false }),
         () => { cleanupErrors.push(...extensionAssembly.cleanupSetup()); },
         () => view.destroy(),

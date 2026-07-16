@@ -9,11 +9,11 @@ const apiRows = [
   ["editor.updateOptions(options)", "Updates editable state, placeholder, attributes, accessible naming, and callbacks without rebuilding editor state."],
   ["editor.isDestroyed", "Reports whether the high-level editor is no longer active."],
   ["editor.view", "Exposes the version-coupled ProseMirror view for advanced inspection and dispatch."],
-  ["editor.getMarkdown()", "Returns the current normalized Markdown serialization."],
+  ["editor.getMarkdown()", "Synchronously returns the latest normalized Markdown, serializing lazily and caching it until the document changes."],
   ["editor.commands.reconcileMarkdown(markdown, { emitChange })", "Applies an authoritative host snapshot while mapping selection/history and preserving plugin state; returns whether the parsed document changed."],
   ["editor.commands.resetMarkdown(markdown, { emitChange })", "Explicitly replaces EditorState, resetting selection and clearing history/plugin state."],
   ["editor.commands.setMarkdown(...) (deprecated)", "Retains the historical hard-reset behavior as an alias of resetMarkdown()."],
-  ["editor.flushChange()", "Flushes any pending animation-frame batched Markdown emission."],
+  ["editor.flushChange()", "Synchronously delivers pending idle or animation-frame Markdown output."],
   ["editor.state.can.* / editor.state.isActive.*", "Lets hosts derive command availability and active structural/formatting state without built-in UI."],
   ["editor.getToolbarState()", "Returns a compatibility snapshot for toolbar buttons."],
   [`editor.commands.toggleMark("strong" | "em" | "code" | "strike")`, "Applies inline formatting commands."],
@@ -179,6 +179,19 @@ const dynamicOptionsCode = `editor.updateOptions({
   onChange: null,
 });`;
 
+const snapshotBoundaryCode = `const stopUpdates = editor.subscribe("update", ({ origin }) => {
+  markDocumentDirty(origin); // No Markdown serialization.
+});
+
+form.addEventListener("submit", () => {
+  editor.flushChange();
+  markdownField.value = editor.getMarkdown();
+});
+
+// destroy() also flushes pending output and caches the final snapshot.
+stopUpdates();
+editor.destroy();`;
+
 const createEditorOptionsType = `type MarkdownEditorDomAttributes = Readonly<Record<string, string>>;
 
 type MarkdownEditorSelectionTarget =
@@ -198,6 +211,8 @@ type MarkdownEditorChangeContext = {
   origin: MarkdownEditorChangeOrigin;
 };
 
+type MarkdownEditorChangeMode = "idle" | "animationFrame" | "immediate";
+
 type CreateEditorOptions = {
   element: HTMLElement;
   markdown?: string;
@@ -214,7 +229,7 @@ type CreateEditorOptions = {
     view: EditorView,
     context: MarkdownEditorChangeContext,
   ) => void;
-  onChangeMode?: "immediate" | "animationFrame";
+  onChangeMode?: MarkdownEditorChangeMode;
   onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
   ui?: EditorUiFactory;
   codeBlockLanguages?: CodeBlockLanguageRegistry;
@@ -228,7 +243,7 @@ const updateEditorOptionsType = `type UpdateEditorOptions = {
   ariaLabelledBy?: string | null;
   onChange?: ((markdown: string) => void) | null;
   onTransaction?: CreateEditorOptions["onTransaction"] | null;
-  onChangeMode?: "immediate" | "animationFrame";
+  onChangeMode?: MarkdownEditorChangeMode;
   onEditOpaqueMarkdown?: ((request: OpaqueMarkdownEditRequest) => void) | null;
 };`;
 
@@ -475,9 +490,9 @@ export function ApiPage() {
             <li><code>editable</code> defaults to <code>true</code>; read-only mode preserves selection, copy, and host reconciliation/reset while blocking user/UI/format/history mutations.</li>
             <li><code>placeholder</code>, <code>autofocus</code>, and <code>initialSelection</code> configure the initial surface. Object selection targets are in-range integer ProseMirror positions inside text blocks.</li>
             <li><code>attributes</code>, <code>ariaLabel</code>, and <code>ariaLabelledBy</code> configure the inner editor DOM and accessible name.</li>
-            <li><code>onChange</code> receives serialized Markdown output plus its change origin.</li>
+            <li><code>onChange</code> receives serialized Markdown output plus its change origin. Omitted <code>onChangeMode</code> defaults to coalesced idle delivery.</li>
             <li><code>onTransaction</code> lets hosts observe transaction dispatch attempts and their origin without forcing serialization.</li>
-            <li><code>onChangeMode</code> supports <code>"immediate"</code> and <code>"animationFrame"</code>.</li>
+            <li><code>onChangeMode</code> supports default <code>"idle"</code>, once-per-frame <code>"animationFrame"</code>, and same-stack <code>"immediate"</code> delivery.</li>
             <li><code>onEditOpaqueMarkdown</code> opens a host-owned source editor for inert unsupported syntax.</li>
             <li><code>resources</code> configures stored URL policy, resolution/open/load hooks, image privacy, and optional file uploads. It is creation-only because it defines document validity.</li>
             <li><code>ui</code> and <code>codeBlockLanguages</code> are optional extension points.</li>
@@ -528,7 +543,7 @@ export function ApiPage() {
             {" "}editor focus internals and movement within the composite surface does not create a false boundary. Error events report recoverable code-language-load failures;
             {" "}loaders and extensions run after the current editor update completes. Initial focus and selection actions are
             {" "}not replayed to subscriptions added after creation; call <code>event.editor.getMarkdown()</code> only
-            {" "}when a particular listener needs a serialized snapshot.
+            {" "}when a particular listener intentionally needs a synchronous serialized snapshot.
           </p>
           <CodeBlock code={eventSubscriptionCode} language="ts" title="Subscriptions" />
         </article>
@@ -537,13 +552,26 @@ export function ApiPage() {
           <h3>Change options without rebuilding state</h3>
           <p>
             <code>updateOptions()</code> changes editable state, presentation attributes, accessible naming, and callbacks.
-            {" "}It does not reconstruct EditorState or emit a document update. Changing <code>onChange</code> or its mode
+            {" "}It does not reconstruct EditorState or emit a document update. Idle is the default change mode; changing <code>onChange</code> or its mode
             {" "}first flushes pending output once through the previous listener. The mount element, initial Markdown,
             {" "}initial focus/selection actions, UI factory, and language registry remain creation-only. Use
             {" "}<code>reconcileMarkdown()</code> or <code>resetMarkdown()</code> for later document values.
           </p>
           <CodeBlock code={dynamicOptionsCode} language="ts" title="Runtime options" />
         </article>
+      </section>
+
+      <section className="panel doc-panel">
+        <span className="card-kicker">Markdown snapshots</span>
+        <h2>Keep typing cheap; serialize at an explicit boundary.</h2>
+        <p>
+          The default idle <code>onChange</code> coalesces rapid changes outside the synchronous editor update.
+          {" "}Use the synchronous <code>update</code> event for dirty state and other work that does not need Markdown.
+          {" "}<code>getMarkdown()</code> is the lazy synchronous save/export snapshot; <code>flushChange()</code> first
+          {" "}delivers any pending callback when a form submission or explicit Save action cannot wait. Destruction performs
+          {" "}the same final flush and keeps the final snapshot readable afterward.
+        </p>
+        <CodeBlock code={snapshotBoundaryCode} language="ts" title="Synchronous save boundary" />
       </section>
 
       <section className="docs-grid docs-grid-two">
@@ -554,7 +582,7 @@ export function ApiPage() {
             <code>reconcileMarkdown()</code> is silent by default and returns <code>false</code> for a strict semantic no-op.
             {" "}A changed update maps selection/history and preserves plugin state, including in read-only mode. Disjoint
             {" "}local history remains usable; overlapping entries may map to a no-op or be consumed. It also
-            {" "}cancels pending animation-frame output; a no-op leaves that output alone. <code>resetMarkdown()</code> rebuilds
+            {" "}cancels pending idle or animation-frame output; a no-op leaves that output alone. <code>resetMarkdown()</code> rebuilds
             {" "}EditorState and bypasses <code>onTransaction</code>. Deprecated <code>setMarkdown()</code> remains its alias.
           </p>
           <p>
@@ -579,7 +607,7 @@ export function ApiPage() {
         <span className="card-kicker">Lifecycle boundary</span>
         <h2>Teardown runs once; repeated calls are no-ops.</h2>
         <p>
-          Destruction flushes one pending <code>onChange</code> and releases every owned resource even when teardown
+          Destruction synchronously caches the latest Markdown, flushes one pending <code>onChange</code>, and releases every owned resource even when teardown
           {" "}reports an error. It also clears subscriptions. Afterward, <code>isDestroyed</code> is true,
           {" "}<code>getMarkdown()</code> returns the cached final value, and <code>flushChange()</code>, repeated destroy,
           {" "}and old unsubscribe functions are no-ops. Other high-level calls throw
