@@ -205,11 +205,62 @@ Host-facing behavior to keep in mind:
 - `editor.focus()` targets the outer ProseMirror surface; `editor.blur()` blurs whichever owned ProseMirror or CodeMirror surface is active
 - `editor.commands.reconcileMarkdown(markdown)` applies an authoritative host snapshot while mapping selection/history and preserving plugin state
 - `editor.commands.resetMarkdown(markdown)` explicitly rebuilds editor state; deprecated `setMarkdown()` remains its hard-reset alias
-- `editor.subscribe("update", ...)` observes document activity without serializing Markdown; `onTransaction` remains the ProseMirror-aware compatibility hook
+- `editor.subscribe("state", ...)` refreshes host controls for every accepted state transition, including stored-mark-only changes; `update` remains the document-change-only signal and `onTransaction` the ProseMirror-aware compatibility hook
 - `onEditOpaqueMarkdown` lets a host provide explicit source editing for otherwise read-only opaque atoms
 - `onChangeMode: "animationFrame"` smooths larger documents by batching Markdown emission once per frame
 - `editor.flushChange()` forces pending batched `onChange` work to run immediately
 - the package ships editor base styles, while surrounding layout and product UI remain the host app's responsibility
+
+## Commands and state
+
+The headless command surface operates on the current model selection; a host does not need to inspect or mutate ProseMirror state directly.
+
+| Area | Commands | Activity checks |
+| --- | --- | --- |
+| Host Markdown | `reconcileMarkdown`, `resetMarkdown`, deprecated `setMarkdown` | — |
+| Inline and media | `toggleMark`, `setLink`, `removeLink`, `insertImage`, `removeImage` | `mark`, generic `node` |
+| Text and blocks | `setParagraph`, `setHeading`, `toggleBlockquote`, `insertHardBreak`, `insertHorizontalRule`, `setCodeBlock` | `paragraph`, `heading`, `blockquote`, `hardBreak`, `horizontalRule`, `codeBlock`, generic `node` |
+| Lists and tasks | `toggleBulletList`, `toggleOrderedList`, `sinkListItem`, `liftListItem`, `toggleTaskList`, `setTaskChecked` | `bulletList`, `orderedList`, `taskList`, `taskChecked`, generic `node` |
+| Tables | `insertTable`, `addTableRow`, `addTableColumn`, `deleteTableRow`, `deleteTableColumn`, `setTableColumnAlignment`, `deleteTable` | `table`, `tableColumnAlignment`, generic `node` |
+| History | `undo`, `redo` | — |
+
+Every interactive Boolean command has a same-named `editor.state.can.*` check. Link and image capability checks take no payload because they test only whether the current selection can accept the operation. `editor.state.isActive.*` is observational: use the specialized checks in the table, `isActive.mark(mark)` for `"strong"`, `"em"`, `"code"`, `"strike"`, or `"link"`, and `isActive.node(node)` for a generic node query.
+
+Here is a compact host-toolbar pattern:
+
+```ts
+const quoteButton = document.querySelector<HTMLButtonElement>("#quote");
+const undoButton = document.querySelector<HTMLButtonElement>("#undo");
+
+if (!quoteButton || !undoButton) {
+  throw new Error("Toolbar buttons not found.");
+}
+
+function renderToolbar() {
+  quoteButton.setAttribute("aria-pressed", String(editor.state.isActive.blockquote()));
+  quoteButton.disabled = !editor.state.can.toggleBlockquote();
+  undoButton.disabled = !editor.state.can.undo();
+}
+
+quoteButton.addEventListener("click", () => editor.commands.toggleBlockquote());
+undoButton.addEventListener("click", () => editor.commands.undo());
+
+const stopToolbar = editor.subscribe("state", renderToolbar);
+renderToolbar();
+```
+
+The command contract is designed for toolbar and keyboard integrations:
+
+- `state.can.*` performs a pure dry run. It does not dispatch, focus, add history, or emit an event. It returns `false` in read-only mode, while an IME composition is active, when a feature is absent, when the selection is inapplicable, or when the operation would be a no-op.
+- `state.isActive.*` remains available and accurate in read-only mode and during composition.
+- A successful interactive command focuses the outer editor. A successful built-in interactive document-changing command other than undo/redo is one transaction with origin `"command"` and contributes one undoable history step. A successful stored-mark-only command emits `state` with `docChanged: false` and does not emit `update`.
+- A command that returns `false` does not focus the editor, mutate history, or emit state/update/change activity. Invalid programmer arguments still throw instead of returning `false`: heading levels are integers from 1 through 6; table dimensions are integers from 1 through 100; task values are Boolean; alignments are `"left"`, `"center"`, `"right"`, or `null`; and a code-block language is a string or `null`, trimmed on input, with a normalized limit of 128 characters and no line break or backtick.
+
+The root compatibility preset supports tasks and tables. Tasks are deliberately flat: task items are direct bullet-list children, new tasks are unchecked, and `sinkListItem()`/`liftListItem()` return `false` for them rather than creating unsupported nesting. `setTaskChecked(checked)` applies only to task items and returns `false` when the item is already in the requested state.
+
+`insertTable()` defaults to three columns and two total rows, including the header row. Its `rows` and `columns` options accept integers from 1 through 100; a one-row table contains only its header. Column alignment is `"left"`, `"center"`, `"right"`, or `null`, where `null` restores the default alignment.
+
+`markora/minimal` and the root entry with `createMinimalMarkdownEditorPreset()` expose the same typed methods, so shared host toolbar code does not need a different interface. Because tasks and tables are absent from that schema, their commands and matching `can`/`isActive` checks consistently return `false`. The minimal preset still supports paragraphs, headings, blockquotes, ordinary bullet and ordered lists (including indent/lift), hard breaks, horizontal rules, and plain code blocks.
 
 ## Reconciled updates and hard resets
 
@@ -219,11 +270,11 @@ Use reconciliation for ordinary controlled-component or server-driven updates:
 const changed = editor.commands.reconcileMarkdown(nextMarkdown);
 ```
 
-The incoming string is parsed before comparison. If its parsed document is semantically equal to the current document, `reconcileMarkdown()` returns `false`, dispatches no transaction, preserves any pending batched local output, and does not emit selection/update events. Otherwise it returns `true` and applies one non-history transaction. The current selection and history are mapped through the change, plugin state is preserved, and a pending animation-frame `onChange` is cancelled so stale local output cannot fire afterward. Disjoint local history remains usable; an entry overlapping replaced content can map to a no-op or be consumed. Reconciliation works while `editable` is `false` and is silent by default; pass `{ emitChange: true }` only when the host intentionally wants `onChange` to receive the authoritative value again.
+The incoming string is parsed before comparison. If its parsed document is semantically equal to the current document, `reconcileMarkdown()` returns `false`, dispatches no transaction, preserves any pending batched local output, and does not emit state/selection/update events. Otherwise it returns `true` and applies one non-history transaction. The current selection and history are mapped through the change, plugin state is preserved, and a pending animation-frame `onChange` is cancelled so stale local output cannot fire afterward. Disjoint local history remains usable; an entry overlapping replaced content can map to a no-op or be consumed. Reconciliation works while `editable` is `false` and is silent by default; pass `{ emitChange: true }` only when the host intentionally wants `onChange` to receive the authoritative value again.
 
 Reconciliations are synchronous and ordered by invocation. Each call is a complete, authoritative document snapshot, so the last changed call wins when updates overlap. Markora does not merge snapshots, track revisions, or reject stale responses. Hosts with asynchronous reads or writes must gate stale revisions before calling `reconcileMarkdown()`.
 
-`resetMarkdown(markdown, { emitChange? })` is intentionally stronger: it replaces EditorState, resets the selection to the new document default, clears undo/redo and plugin state, and cancels pending batched output. It bypasses `onTransaction` because state replacement does not create a ProseMirror transaction. Typed selection/update events still report origin `"reset"`, and `{ emitChange: true }` emits normalized Markdown with that origin. Use it for switching documents or deliberately discarding transient state. `setMarkdown()` is deprecated but remains an exact hard-reset alias.
+`resetMarkdown(markdown, { emitChange? })` is intentionally stronger: it replaces EditorState, resets the selection to the new document default, clears undo/redo and plugin state, and cancels pending batched output. It bypasses `onTransaction` because state replacement does not create a ProseMirror transaction. A `state` event and any applicable selection/update events report origin `"reset"`, and `{ emitChange: true }` emits normalized Markdown with that origin. Use it for switching documents or deliberately discarding transient state. `setMarkdown()` is deprecated but remains an exact hard-reset alias.
 
 ## Change origins
 
@@ -235,7 +286,7 @@ Markora identifies dispatched and accepted activity with a `MarkdownEditorChange
 - `"reset"` for state replacement through `resetMarkdown()` or its deprecated alias;
 - `` `extension:${string}` `` for a transaction deliberately tagged by a host extension.
 
-`onChange(markdown, context)` exposes the origin in its second argument. `onTransaction(transaction, view, context)` exposes it in its third argument and observes dispatch attempts after editor policy has run; inspect the resulting view state or typed events rather than treating the callback alone as proof of a document change. Selection and update subscription events have an `origin` field and describe accepted state changes. When `onChangeMode` is `"animationFrame"`, normal batched changes report the origin of the latest pending document change.
+`onChange(markdown, context)` exposes the origin in its second argument. `onTransaction(transaction, view, context)` exposes it in its third argument and observes dispatch attempts after editor policy has run; inspect the resulting view state or typed events rather than treating the callback alone as proof of a document change. State, selection, and update subscription events have an `origin` field and describe accepted state changes. When `onChangeMode` is `"animationFrame"`, normal batched changes report the origin of the latest pending document change.
 
 Advanced ProseMirror extensions can attach a namespaced origin before dispatch and read one later:
 
@@ -297,15 +348,22 @@ The method accepts `editable`, `placeholder`, `attributes`, `ariaLabel`, `ariaLa
 
 ## Typed events
 
-`subscribe()` accepts `"focus"`, `"blur"`, `"selection"`, `"update"`, or `"error"` and returns an idempotent unsubscribe function:
+`subscribe()` accepts `"focus"`, `"blur"`, `"state"`, `"selection"`, `"update"`, or `"error"` and returns an idempotent unsubscribe function:
 
 ```ts
+const stopState = editor.subscribe(
+  "state",
+  ({ docChanged, origin, selection, selectionChanged }) => {
+    syncHostControls(editor.state, { docChanged, origin, selection, selectionChanged });
+  },
+);
+
 const stopSelection = editor.subscribe("selection", ({ origin, previousSelection, selection }) => {
   console.log(origin, previousSelection.from, selection.from);
 });
 
 const stopUpdates = editor.subscribe("update", ({ origin, selection }) => {
-  renderToolbar(selection, { origin });
+  schedulePersistence(selection, { origin });
 });
 
 const stopErrors = editor.subscribe("error", ({ code, context, error, recoverable }) => {
@@ -316,13 +374,14 @@ const stopErrors = editor.subscribe("error", ({ code, context, error, recoverabl
 ```
 
 - Focus and blur events expose `nativeEvent`. The focus boundary includes the outer ProseMirror surface and nested CodeMirror editors, so moving between them does not create a false blur/focus pair. Both events cross one microtask boundary: focus waits for the browser and nested editor's focus stack to finish, while blur waits until the next focused element can be checked.
+- State events fire synchronously for every accepted state transition, including stored-mark-only formatting and hard resets. They expose `origin`, the current `selection`, `docChanged`, and `selectionChanged`; subscribe to this event to keep host toolbars current.
 - Selection events provide `previousSelection`, `selection`, and `origin`. Each host snapshot contains `anchor`, `head`, `from`, `to`, `empty`, and `kind`.
-- Selection and update events fire synchronously, with selection before update for the same accepted state change. Both expose the accepted change's `origin`. Update events contain the current selection, neither Markdown nor a ProseMirror transaction, and are not affected by `onChangeMode`; call `event.editor.getMarkdown()` only when that subscriber actually needs a snapshot.
+- State, selection, and update events are ordered state first, then selection when the selection changed, then update when the document changed. Update events contain the accepted change's `origin` and current selection, neither Markdown nor a ProseMirror transaction, and are not affected by `onChangeMode`; call `event.editor.getMarkdown()` only when that subscriber actually needs a snapshot.
 - Error events report recoverable code-language-load failures and attributed extension runtime failures. Extension events use an `EXTENSION_*` code plus `context.phase` and, when known, `context.extension`, `context.contribution`, or `context.participants`. Language loaders and extensions run after the current editor state update completes, so deferred failures use the same event path without re-entering that update.
 
 If a recoverable runtime failure has no error subscriber, Markora forwards it to the editor window's global error reporting path rather than silently swallowing it.
 
-`onChange` and `onTransaction` remain supported. Use `onChange(markdown, context)` for normalized Markdown output, `update` for a cheap host-facing document signal, and `onTransaction(transaction, view, context)` only when an advanced integration needs ProseMirror transaction details.
+`onChange` and `onTransaction` remain supported. Use `onChange(markdown, context)` for normalized Markdown output, `state` for host UI, `update` for a cheap document-only signal, and `onTransaction(transaction, view, context)` only when an advanced integration needs ProseMirror transaction details.
 
 ## Destruction and post-destroy behavior
 
@@ -372,6 +431,7 @@ import type {
   MarkdownEditorBuiltinChangeOrigin,
   MarkdownEditorChangeContext,
   MarkdownEditorChangeOrigin,
+  MarkdownEditorCodeBlockOptions,
   MarkdownEditorCommands,
   MarkdownEditorDomAttributes,
   MarkdownEditorErrorCode,
@@ -380,6 +440,7 @@ import type {
   MarkdownEditorEventMap,
   MarkdownEditorEventName,
   MarkdownEditorFocusEvent,
+  MarkdownEditorHeadingLevel,
   MarkdownEditorExtensionOrigin,
   MarkdownEditorMark,
   MarkdownEditorMarkdownUpdateOptions,
@@ -388,6 +449,9 @@ import type {
   MarkdownEditorSelectionSnapshot,
   MarkdownEditorSelectionTarget,
   MarkdownEditorState,
+  MarkdownEditorStateEvent,
+  MarkdownEditorTableAlignment,
+  MarkdownEditorTableInsertOptions,
   MarkdownEditorUi,
   MarkdownEditorUnsubscribe,
   MarkdownEditorUpdateEvent,
@@ -425,13 +489,13 @@ Markora invokes language loaders and installs their CodeMirror extensions after 
 - `editor.getMarkdown()` returns the current normalized Markdown serialization
 - `editor.commands.reconcileMarkdown(markdown, { emitChange })` applies an authoritative snapshot while mapping selection/history and preserving plugin state
 - `editor.commands.resetMarkdown(markdown, { emitChange })` explicitly rebuilds EditorState; `setMarkdown()` remains a deprecated hard-reset alias
-- change callbacks, transaction callbacks, and selection/update events expose a typed origin
+- change callbacks, transaction callbacks, and state/selection/update events expose a typed origin
 - `onEditOpaqueMarkdown` receives an opaque atom's `kind`, exact `source`, and guarded `update(nextSource)` function
-- `editor.commands.toggleMark(...)`, `editor.commands.setLink(...)`, `editor.commands.insertImage(...)`, `editor.commands.undo()`, and `editor.commands.redo()` form the command surface
+- `editor.commands` covers inline/media editing, paragraphs and headings, blockquotes, ordinary and task lists, breaks and rules, code blocks, tables, and undo/redo
 - `editor.state.can.*` and `editor.state.isActive.*` expose host-friendly capability and activity checks
 - `editor.getToolbarState()` remains available for toolbar integrations that prefer a compatibility snapshot
 - `editor.ui?.editLink()` and `editor.ui?.editImage()` are the optional namespaced UI entry points when overlays are attached
-- `editor.subscribe(...)` exposes typed focus, blur, selection, update, and recoverable error events
+- `editor.subscribe(...)` exposes typed focus, blur, state, selection, update, and recoverable error events
 - `editor.updateOptions(...)` updates dynamic presentation, editable state, and callbacks without rebuilding EditorState
 - `editor.destroy()` performs idempotent teardown and exposes its state through `editor.isDestroyed`
 

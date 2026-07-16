@@ -501,8 +501,8 @@ export function EditorPlayground() {
       setButtonState(imageButton, imageState);
       undoButton.disabled = !editor.state.can.undo();
       redoButton.disabled = !editor.state.can.redo();
-      unlinkButton.disabled = !linkState.active;
-      removeImageButton.disabled = !imageState.active;
+      unlinkButton.disabled = !editor.state.can.removeLink();
+      removeImageButton.disabled = !editor.state.can.removeImage();
       if (!linkState.enabled && linkPopover.isOpen()) {
         linkPopover.close(false);
       }
@@ -516,10 +516,6 @@ export function EditorPlayground() {
       markdown: initialMarkdown,
       onChangeMode: "animationFrame",
       ui: createDefaultUi(),
-      onTransaction() {
-        closeAllPopovers(false);
-        renderToolbar();
-      },
       onChange(markdown) {
         setOutput(markdown);
         if (sourceTextareaRef.current) {
@@ -529,6 +525,10 @@ export function EditorPlayground() {
     });
 
     editorRef.current = editor;
+    const stopState = editor.subscribe("state", () => {
+      closeAllPopovers(false);
+      renderToolbar();
+    });
     sourceTextarea.value = initialMarkdown;
     setOutput(editor.getMarkdown());
     renderToolbar();
@@ -539,7 +539,6 @@ export function EditorPlayground() {
       }
       editorRef.current.commands.reconcileMarkdown(sourceTextareaRef.current.value, { emitChange: true });
       editorRef.current.flushChange();
-      renderToolbar();
     };
 
     const closeFromMouse = () => closeAllPopovers(false);
@@ -558,6 +557,7 @@ export function EditorPlayground() {
       sourceTextarea.removeEventListener("focus", closeFromFocus);
       editorElement.removeEventListener("mousedown", closeFromMouse);
       toolbarElement.removeEventListener("mousedown", preserveEditorSelection);
+      stopState();
       editor.destroy();
       editorRef.current = null;
       toolbarElement.innerHTML = "";

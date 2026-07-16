@@ -67,7 +67,27 @@ export type UpdateEditorOptions = {
 
 export type MarkdownEditorMark = "strong" | "em" | "code" | "strike";
 export type MarkdownEditorActiveMark = MarkdownEditorMark | "link";
-export type MarkdownEditorActiveNode = "image" | "table" | "code_block";
+export type MarkdownEditorActiveNode =
+  | "blockquote"
+  | "bullet_list"
+  | "code_block"
+  | "hard_break"
+  | "heading"
+  | "horizontal_rule"
+  | "image"
+  | "list_item"
+  | "ordered_list"
+  | "paragraph"
+  | "table";
+export type MarkdownEditorHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+export type MarkdownEditorCodeBlockOptions = {
+  language?: string | null;
+};
+export type MarkdownEditorTableAlignment = "left" | "center" | "right" | null;
+export type MarkdownEditorTableInsertOptions = {
+  columns?: number;
+  rows?: number;
+};
 
 export type MarkdownEditorCommands = {
   reconcileMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => boolean;
@@ -79,6 +99,25 @@ export type MarkdownEditorCommands = {
   removeLink: () => boolean;
   insertImage: (attrs: { src: string; alt?: string | null; title?: string | null }) => boolean;
   removeImage: () => boolean;
+  setParagraph: () => boolean;
+  setHeading: (level: MarkdownEditorHeadingLevel) => boolean;
+  toggleBlockquote: () => boolean;
+  toggleBulletList: () => boolean;
+  toggleOrderedList: () => boolean;
+  sinkListItem: () => boolean;
+  liftListItem: () => boolean;
+  toggleTaskList: () => boolean;
+  setTaskChecked: (checked: boolean) => boolean;
+  insertHardBreak: () => boolean;
+  insertHorizontalRule: () => boolean;
+  setCodeBlock: (options?: MarkdownEditorCodeBlockOptions) => boolean;
+  insertTable: (options?: MarkdownEditorTableInsertOptions) => boolean;
+  addTableRow: () => boolean;
+  addTableColumn: () => boolean;
+  deleteTableRow: () => boolean;
+  deleteTableColumn: () => boolean;
+  setTableColumnAlignment: (alignment: MarkdownEditorTableAlignment) => boolean;
+  deleteTable: () => boolean;
   undo: () => boolean;
   redo: () => boolean;
 };
@@ -87,13 +126,46 @@ export type MarkdownEditorState = {
   can: {
     toggleMark: (mark: MarkdownEditorMark) => boolean;
     setLink: () => boolean;
+    removeLink: () => boolean;
     insertImage: () => boolean;
+    removeImage: () => boolean;
+    setParagraph: () => boolean;
+    setHeading: (level: MarkdownEditorHeadingLevel) => boolean;
+    toggleBlockquote: () => boolean;
+    toggleBulletList: () => boolean;
+    toggleOrderedList: () => boolean;
+    sinkListItem: () => boolean;
+    liftListItem: () => boolean;
+    toggleTaskList: () => boolean;
+    setTaskChecked: (checked: boolean) => boolean;
+    insertHardBreak: () => boolean;
+    insertHorizontalRule: () => boolean;
+    setCodeBlock: (options?: MarkdownEditorCodeBlockOptions) => boolean;
+    insertTable: (options?: MarkdownEditorTableInsertOptions) => boolean;
+    addTableRow: () => boolean;
+    addTableColumn: () => boolean;
+    deleteTableRow: () => boolean;
+    deleteTableColumn: () => boolean;
+    setTableColumnAlignment: (alignment: MarkdownEditorTableAlignment) => boolean;
+    deleteTable: () => boolean;
     undo: () => boolean;
     redo: () => boolean;
   };
   isActive: {
     mark: (mark: MarkdownEditorActiveMark) => boolean;
     node: (node: MarkdownEditorActiveNode) => boolean;
+    paragraph: () => boolean;
+    heading: (level?: MarkdownEditorHeadingLevel) => boolean;
+    blockquote: () => boolean;
+    bulletList: () => boolean;
+    orderedList: () => boolean;
+    taskList: () => boolean;
+    taskChecked: (checked?: boolean) => boolean;
+    hardBreak: () => boolean;
+    horizontalRule: () => boolean;
+    codeBlock: (options?: MarkdownEditorCodeBlockOptions) => boolean;
+    table: () => boolean;
+    tableColumnAlignment: (alignment: MarkdownEditorTableAlignment) => boolean;
   };
 };
 

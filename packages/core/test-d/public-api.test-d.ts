@@ -13,16 +13,21 @@ import {
   type MarkdownEditorBuiltinChangeOrigin,
   type MarkdownEditorChangeContext,
   type MarkdownEditorChangeOrigin,
+  type MarkdownEditorCodeBlockOptions,
   type MarkdownEditorCommands,
   type MarkdownEditorDomAttributes,
   type MarkdownEditorErrorEvent,
   type MarkdownEditorEventMap,
   type MarkdownEditorExtensionOrigin,
+  type MarkdownEditorHeadingLevel,
   type MarkdownEditorMark,
   type MarkdownEditorMarkdownUpdateOptions,
   type MarkdownEditorSelectionSnapshot,
   type MarkdownEditorSelectionTarget,
   type MarkdownEditorState,
+  type MarkdownEditorStateEvent,
+  type MarkdownEditorTableAlignment,
+  type MarkdownEditorTableInsertOptions,
   type MarkdownEditorUi,
   type MarkdownEditorUnsubscribe,
   type OpaqueMarkdownEditRequest,
@@ -93,6 +98,16 @@ const unsubscribeSelection = editor.subscribe("selection", (event) => {
   void previous;
   void current;
 });
+const unsubscribeState = editor.subscribe("state", (event: MarkdownEditorStateEvent) => {
+  const type: "state" = event.type;
+  const docChanged: boolean = event.docChanged;
+  const selectionChanged: boolean = event.selectionChanged;
+  const origin: MarkdownEditorChangeOrigin = event.origin;
+  void type;
+  void docChanged;
+  void selectionChanged;
+  void origin;
+});
 const unsubscribeFocus = editor.subscribe("focus", (event) => {
   const nativeEvent: FocusEvent = event.nativeEvent;
   void nativeEvent;
@@ -117,6 +132,7 @@ const unsubscribeError = editor.subscribe("error", (event: MarkdownEditorErrorEv
 const eventMap: MarkdownEditorEventMap = null as never;
 unsubscribeUpdate();
 unsubscribeSelection();
+unsubscribeState();
 unsubscribeFocus();
 unsubscribeBlur();
 unsubscribeError();
@@ -131,6 +147,29 @@ commands.setLink("https://example.com");
 commands.insertImage({ src: "/image.png", alt: "demo", title: null });
 commands.removeLink();
 commands.removeImage();
+const headingLevel: MarkdownEditorHeadingLevel = 3;
+const codeBlockOptions: MarkdownEditorCodeBlockOptions = { language: "ts" };
+const tableOptions: MarkdownEditorTableInsertOptions = { columns: 3, rows: 2 };
+const tableAlignment: MarkdownEditorTableAlignment = "center";
+commands.setParagraph();
+commands.setHeading(headingLevel);
+commands.toggleBlockquote();
+commands.toggleBulletList();
+commands.toggleOrderedList();
+commands.sinkListItem();
+commands.liftListItem();
+commands.toggleTaskList();
+commands.setTaskChecked(true);
+commands.insertHardBreak();
+commands.insertHorizontalRule();
+commands.setCodeBlock(codeBlockOptions);
+commands.insertTable(tableOptions);
+commands.addTableRow();
+commands.addTableColumn();
+commands.deleteTableRow();
+commands.deleteTableColumn();
+commands.setTableColumnAlignment(tableAlignment);
+commands.deleteTable();
 commands.undo();
 commands.redo();
 
@@ -145,7 +184,28 @@ const untaggedOrigin: MarkdownEditorChangeOrigin | undefined =
 
 stateApi.can.toggleMark("em");
 stateApi.can.setLink();
+stateApi.can.removeLink();
 stateApi.can.insertImage();
+stateApi.can.removeImage();
+stateApi.can.setParagraph();
+stateApi.can.setHeading(headingLevel);
+stateApi.can.toggleBlockquote();
+stateApi.can.toggleBulletList();
+stateApi.can.toggleOrderedList();
+stateApi.can.sinkListItem();
+stateApi.can.liftListItem();
+stateApi.can.toggleTaskList();
+stateApi.can.setTaskChecked(false);
+stateApi.can.insertHardBreak();
+stateApi.can.insertHorizontalRule();
+stateApi.can.setCodeBlock(codeBlockOptions);
+stateApi.can.insertTable(tableOptions);
+stateApi.can.addTableRow();
+stateApi.can.addTableColumn();
+stateApi.can.deleteTableRow();
+stateApi.can.deleteTableColumn();
+stateApi.can.setTableColumnAlignment(null);
+stateApi.can.deleteTable();
 stateApi.can.undo();
 stateApi.can.redo();
 
@@ -153,6 +213,18 @@ const activeMark: MarkdownEditorActiveMark = "link";
 stateApi.isActive.mark(activeMark);
 const activeNode: MarkdownEditorActiveNode = "code_block";
 stateApi.isActive.node(activeNode);
+stateApi.isActive.paragraph();
+stateApi.isActive.heading(headingLevel);
+stateApi.isActive.blockquote();
+stateApi.isActive.bulletList();
+stateApi.isActive.orderedList();
+stateApi.isActive.taskList();
+stateApi.isActive.taskChecked(false);
+stateApi.isActive.hardBreak();
+stateApi.isActive.horizontalRule();
+stateApi.isActive.codeBlock(codeBlockOptions);
+stateApi.isActive.table();
+stateApi.isActive.tableColumnAlignment(tableAlignment);
 
 editor.ui?.editLink();
 editor.ui?.editImage();
@@ -293,8 +365,17 @@ void destroyedOperation;
 // @ts-expect-error link is active-only, not toggleable
 commands.toggleMark("link");
 
-// @ts-expect-error paragraph is not part of the public active-node surface
-stateApi.isActive.node("paragraph");
+// @ts-expect-error video is not part of the public active-node surface
+stateApi.isActive.node("video");
+
+// @ts-expect-error heading levels are constrained to Markdown levels
+commands.setHeading(7);
+
+// @ts-expect-error table dimensions must be numeric
+commands.insertTable({ rows: "2" });
+
+// @ts-expect-error table alignment is a closed set
+stateApi.can.setTableColumnAlignment("justify");
 
 // @ts-expect-error underline is not part of the public active-mark surface
 stateApi.isActive.mark("underline");

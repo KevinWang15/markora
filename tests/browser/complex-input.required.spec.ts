@@ -110,7 +110,7 @@ test("@required CJK composition stays textual until commit", async ({ labPage })
     await settleEditor(labPage, id);
     expect(await getMarkdown(labPage, id)).toBe(text);
     expect(await labPage.evaluate(
-      (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, "undo"),
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
       id,
     )).toBe(true);
     await settleEditor(labPage, id);
@@ -165,9 +165,33 @@ test("@required Chromium CDP preserves active IME image syntax", async ({
     selectionEnd: "中文".length,
   });
   await expect(editor.locator("p")).toHaveText("中文");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.can(editorId, {
+      type: "setHeading",
+      level: 2,
+    }),
+    id,
+  )).toBe(false);
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, {
+      type: "setHeading",
+      level: 2,
+    }),
+    id,
+  )).toBe(false);
+  await expect(editor.locator("p")).toHaveText("中文");
   await cdp.send("Input.insertText", { text: "中文" });
   await settleEditor(labPage, id);
-  expect(await getMarkdown(labPage, id)).toBe("中文");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, {
+      type: "setHeading",
+      level: 2,
+    }),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  await expect(editor.locator("h2")).toContainText("中文");
+  expect(await getMarkdown(labPage, id)).toBe("## 中文");
 
   await resetEditor(labPage, id, "");
   await focusTextEnd(labPage, editor.locator("p"));

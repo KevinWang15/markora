@@ -6,7 +6,7 @@ export type LabSelectionTarget =
   | "start"
   | { anchor: number; head?: number };
 
-export type LabEventName = "blur" | "error" | "focus" | "selection" | "update";
+export type LabEventName = "blur" | "error" | "focus" | "selection" | "state" | "update";
 
 export type LabSelectionSnapshot = {
   anchor: number;
@@ -20,14 +20,20 @@ export type LabSelectionSnapshot = {
 export type LabEventRecord = {
   code?: string;
   contribution?: string;
+  docChanged?: boolean;
   extension?: string;
   language?: string;
   message?: string;
   phase?: string;
   previousSelection?: LabSelectionSnapshot;
   selection?: LabSelectionSnapshot;
+  selectionChanged?: boolean;
   type: LabEventName;
 };
+
+type BrowserLabWindowApi = NonNullable<Window["__MARKORA_BROWSER_LAB__"]>;
+export type LabCommandRequest = Parameters<BrowserLabWindowApi["command"]>[1];
+export type LabActiveRequest = Parameters<BrowserLabWindowApi["active"]>[1];
 
 export type LabUpdateOptions = {
   ariaLabel?: string | null;
@@ -208,6 +214,27 @@ export async function getEditorEvents(page: Page, id: string) {
     counts: Record<LabEventName, number>;
     log: LabEventRecord[];
   }>;
+}
+
+export async function runEditorCommand(page: Page, id: string, request: LabCommandRequest) {
+  return page.evaluate(
+    ({ editorId, command }) => window.__MARKORA_BROWSER_LAB__!.command(editorId, command),
+    { command: request, editorId: id },
+  );
+}
+
+export async function canRunEditorCommand(page: Page, id: string, request: LabCommandRequest) {
+  return page.evaluate(
+    ({ editorId, command }) => window.__MARKORA_BROWSER_LAB__!.can(editorId, command),
+    { command: request, editorId: id },
+  );
+}
+
+export async function getEditorActiveState(page: Page, id: string, request: LabActiveRequest) {
+  return page.evaluate(
+    ({ editorId, active }) => window.__MARKORA_BROWSER_LAB__!.active(editorId, active),
+    { active: request, editorId: id },
+  );
 }
 
 export async function unsubscribeEditorEvent(page: Page, id: string, type: LabEventName) {

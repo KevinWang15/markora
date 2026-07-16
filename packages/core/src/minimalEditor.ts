@@ -28,12 +28,16 @@ import type {
   MarkdownEditor,
   MarkdownEditorActiveMark,
   MarkdownEditorActiveNode,
+  MarkdownEditorCodeBlockOptions,
   MarkdownEditorCommands,
   MarkdownEditorDomAttributes,
+  MarkdownEditorHeadingLevel,
   MarkdownEditorMark,
   MarkdownEditorMarkdownUpdateOptions,
   MarkdownEditorSelectionTarget,
   MarkdownEditorState,
+  MarkdownEditorTableAlignment,
+  MarkdownEditorTableInsertOptions,
   ToolbarButtonState,
   ToolbarState,
   UpdateEditorOptions,
@@ -57,6 +61,7 @@ import { createFileTransferGuardPlugin } from "./fileTransferGuard";
 import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
 import { createMinimalMarkdownCodec } from "./minimalMarkdownCodec";
 import { createPlaceholderPlugin } from "./placeholderPlugin";
+import { createStructuralCommandSet } from "./structuralCommands";
 import {
   getMarkdownEditorTransactionEmitChange,
   getMarkdownEditorTransactionOrigin,
@@ -485,6 +490,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   });
   assertMarkdownEditorCompatibilityAdaptersActive(extensionResolution, false);
   const codec = createMinimalMarkdownCodec(extensionResolution.extensions);
+  const structuralCommandSet = createStructuralCommandSet(codec.schema);
   const doc = runInitialMarkdownParse(
     () => codec.parse(options.markdown ?? ""),
   );
@@ -767,6 +773,33 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       ),
     );
   };
+  const emitStateChange = (
+    previousState: EditorState,
+    nextState: EditorState,
+    documentChanged: boolean,
+    origin: MarkdownEditorChangeOrigin,
+  ) => {
+    if (lifecycle !== "active" || !eventDispatcher.has("state")) {
+      return;
+    }
+
+    eventDispatcher.emit(
+      "state",
+      {
+        docChanged: documentChanged,
+        editor,
+        origin,
+        selection: snapshotSelection(nextState.selection),
+        selectionChanged: !previousState.selection.eq(nextState.selection),
+        type: "state",
+      },
+      () => (
+        lifecycle === "active"
+        && !view.isDestroyed
+        && view.state === nextState
+      ),
+    );
+  };
   const emitStateEvents = (
     previousState: EditorState,
     nextState: EditorState,
@@ -778,6 +811,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }
 
     if (view.state === nextState) {
+      emitStateChange(previousState, nextState, documentChanged, origin);
+    }
+
+    if (lifecycle === "active" && !view.isDestroyed && view.state === nextState) {
       emitSelectionChange(previousState.selection, nextState.selection, nextState, origin);
     }
 
@@ -896,10 +933,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
   lifecycle = "active";
 
+  const canRunInteractiveCommand = () => runtimeOptions.editable && !view.composing;
+
   const runCommand = (command: Command) => {
     assertActive("run an editor command");
 
-    if (!runtimeOptions.editable) {
+    if (!canRunInteractiveCommand()) {
       return false;
     }
 
@@ -981,7 +1020,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const setLink = (href: string) => {
     assertActive("set a link");
 
-    if (!runtimeOptions.editable) {
+    if (!canRunInteractiveCommand()) {
       return false;
     }
 
@@ -1020,7 +1059,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const removeLink = () => {
     assertActive("remove a link");
 
-    if (!runtimeOptions.editable) {
+    if (!canRunInteractiveCommand()) {
       return false;
     }
 
@@ -1044,7 +1083,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   }) => {
     assertActive("insert an image");
 
-    if (!runtimeOptions.editable) {
+    if (!canRunInteractiveCommand()) {
       return false;
     }
 
@@ -1082,7 +1121,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     assertActive("remove an image");
 
     if (
-      !runtimeOptions.editable
+      !canRunInteractiveCommand()
       || !(view.state.selection instanceof NodeSelection)
       || view.state.selection.node.type !== codec.schema.nodes.image
     ) {
@@ -1103,14 +1142,23 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     };
   };
   const isNodeActive = (node: MarkdownEditorActiveNode) => {
-    switch (node) {
-      case "image":
-        return selectionTouchesNodeType(view.state, codec.schema.nodes.image);
-      case "table":
-        return selectionTouchesNodeType(view.state, codec.schema.nodes.table);
-      case "code_block":
-        return selectionTouchesNodeType(view.state, codec.schema.nodes.code_block);
+    return structuralCommandSet.isActive.node(view.state, node);
+  };
+  const runStateQuery = (operation: string, query: () => boolean) => {
+    assertActive(operation);
+    const result = query();
+    assertActive(operation);
+    return result;
+  };
+  const canRunCommand = (operation: string, command: Command) => (
+    runStateQuery(operation, () => canRunInteractiveCommand() && command(view.state))
+  );
+  const focusAfterViewCommand = (handled: boolean) => {
+    if (handled && lifecycle === "active" && !view.isDestroyed) {
+      view.focus();
     }
+
+    return handled;
   };
   const commands: MarkdownEditorCommands = {
     reconcileMarkdown,
@@ -1119,10 +1167,52 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     toggleMark(mark) {
       return runCommand(markCommands[mark]);
     },
-    setLink,
-    removeLink,
-    insertImage,
-    removeImage,
+    setLink(href) {
+      return focusAfterViewCommand(setLink(href));
+    },
+    removeLink() {
+      return focusAfterViewCommand(removeLink());
+    },
+    insertImage(attrs) {
+      return focusAfterViewCommand(insertImage(attrs));
+    },
+    removeImage() {
+      return focusAfterViewCommand(removeImage());
+    },
+    setParagraph: () => runCommand(structuralCommandSet.commands.setParagraph),
+    setHeading(level) {
+      assertActive("set a heading");
+      return runCommand(structuralCommandSet.commands.setHeading(level));
+    },
+    toggleBlockquote: () => runCommand(structuralCommandSet.commands.toggleBlockquote),
+    toggleBulletList: () => runCommand(structuralCommandSet.commands.toggleBulletList),
+    toggleOrderedList: () => runCommand(structuralCommandSet.commands.toggleOrderedList),
+    sinkListItem: () => runCommand(structuralCommandSet.commands.sinkListItem),
+    liftListItem: () => runCommand(structuralCommandSet.commands.liftListItem),
+    toggleTaskList: () => runCommand(structuralCommandSet.commands.toggleTaskList),
+    setTaskChecked(checked) {
+      assertActive("set task state");
+      return runCommand(structuralCommandSet.commands.setTaskChecked(checked));
+    },
+    insertHardBreak: () => runCommand(structuralCommandSet.commands.insertHardBreak),
+    insertHorizontalRule: () => runCommand(structuralCommandSet.commands.insertHorizontalRule),
+    setCodeBlock(options) {
+      assertActive("set a code block");
+      return runCommand(structuralCommandSet.commands.setCodeBlock(options));
+    },
+    insertTable(options) {
+      assertActive("insert a table");
+      return runCommand(structuralCommandSet.commands.insertTable(options));
+    },
+    addTableRow: () => runCommand(structuralCommandSet.commands.addTableRow),
+    addTableColumn: () => runCommand(structuralCommandSet.commands.addTableColumn),
+    deleteTableRow: () => runCommand(structuralCommandSet.commands.deleteTableRow),
+    deleteTableColumn: () => runCommand(structuralCommandSet.commands.deleteTableColumn),
+    setTableColumnAlignment(alignment) {
+      assertActive("set table column alignment");
+      return runCommand(structuralCommandSet.commands.setTableColumnAlignment(alignment));
+    },
+    deleteTable: () => runCommand(structuralCommandSet.commands.deleteTable),
     undo: () => runCommand(undo),
     redo: () => runCommand(redo),
   };
@@ -1130,13 +1220,13 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     can: {
       toggleMark(mark) {
         assertActive("query whether a mark can be toggled");
-        return runtimeOptions.editable && markCommands[mark](view.state);
+        return canRunInteractiveCommand() && markCommands[mark](view.state);
       },
       setLink() {
         assertActive("query whether a link can be set");
         const { selection } = view.state;
         return Boolean(
-          runtimeOptions.editable
+          canRunInteractiveCommand()
           && codec.schema.marks.link
           && (getMarkRange(view.state, codec.schema.marks.link) || (
             !selection.empty
@@ -1145,17 +1235,152 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
           )),
         );
       },
+      removeLink() {
+        return runStateQuery(
+          "query whether a link can be removed",
+          () => canRunInteractiveCommand() && Boolean(
+            getMarkRange(view.state, codec.schema.marks.link),
+          ),
+        );
+      },
       insertImage() {
         assertActive("query whether an image can be inserted");
-        return runtimeOptions.editable && canInsertNode(view.state, codec.schema.nodes.image);
+        return canRunInteractiveCommand() && canInsertNode(view.state, codec.schema.nodes.image);
+      },
+      removeImage() {
+        return runStateQuery(
+          "query whether an image can be removed",
+          () => canRunInteractiveCommand()
+            && view.state.selection instanceof NodeSelection
+            && view.state.selection.node.type === codec.schema.nodes.image,
+        );
+      },
+      setParagraph() {
+        return canRunCommand(
+          "query whether a paragraph can be set",
+          structuralCommandSet.commands.setParagraph,
+        );
+      },
+      setHeading(level) {
+        assertActive("query whether a heading can be set");
+        return canRunCommand(
+          "query whether a heading can be set",
+          structuralCommandSet.commands.setHeading(level),
+        );
+      },
+      toggleBlockquote() {
+        return canRunCommand(
+          "query whether a blockquote can be toggled",
+          structuralCommandSet.commands.toggleBlockquote,
+        );
+      },
+      toggleBulletList() {
+        return canRunCommand(
+          "query whether a bullet list can be toggled",
+          structuralCommandSet.commands.toggleBulletList,
+        );
+      },
+      toggleOrderedList() {
+        return canRunCommand(
+          "query whether an ordered list can be toggled",
+          structuralCommandSet.commands.toggleOrderedList,
+        );
+      },
+      sinkListItem() {
+        return canRunCommand(
+          "query whether a list item can be nested",
+          structuralCommandSet.commands.sinkListItem,
+        );
+      },
+      liftListItem() {
+        return canRunCommand(
+          "query whether a list item can be lifted",
+          structuralCommandSet.commands.liftListItem,
+        );
+      },
+      toggleTaskList() {
+        return canRunCommand(
+          "query whether a task list can be toggled",
+          structuralCommandSet.commands.toggleTaskList,
+        );
+      },
+      setTaskChecked(checked) {
+        assertActive("query whether task state can be set");
+        return canRunCommand(
+          "query whether task state can be set",
+          structuralCommandSet.commands.setTaskChecked(checked),
+        );
+      },
+      insertHardBreak() {
+        return canRunCommand(
+          "query whether a hard break can be inserted",
+          structuralCommandSet.commands.insertHardBreak,
+        );
+      },
+      insertHorizontalRule() {
+        return canRunCommand(
+          "query whether a horizontal rule can be inserted",
+          structuralCommandSet.commands.insertHorizontalRule,
+        );
+      },
+      setCodeBlock(options) {
+        assertActive("query whether a code block can be set");
+        return canRunCommand(
+          "query whether a code block can be set",
+          structuralCommandSet.commands.setCodeBlock(options),
+        );
+      },
+      insertTable(options) {
+        assertActive("query whether a table can be inserted");
+        return canRunCommand(
+          "query whether a table can be inserted",
+          structuralCommandSet.commands.insertTable(options),
+        );
+      },
+      addTableRow() {
+        return canRunCommand(
+          "query whether a table row can be added",
+          structuralCommandSet.commands.addTableRow,
+        );
+      },
+      addTableColumn() {
+        return canRunCommand(
+          "query whether a table column can be added",
+          structuralCommandSet.commands.addTableColumn,
+        );
+      },
+      deleteTableRow() {
+        return canRunCommand(
+          "query whether a table row can be deleted",
+          structuralCommandSet.commands.deleteTableRow,
+        );
+      },
+      deleteTableColumn() {
+        return canRunCommand(
+          "query whether a table column can be deleted",
+          structuralCommandSet.commands.deleteTableColumn,
+        );
+      },
+      setTableColumnAlignment(alignment) {
+        assertActive("query whether table column alignment can be set");
+        return canRunCommand(
+          "query whether table column alignment can be set",
+          structuralCommandSet.commands.setTableColumnAlignment(alignment),
+        );
+      },
+      deleteTable() {
+        return canRunCommand(
+          "query whether a table can be deleted",
+          structuralCommandSet.commands.deleteTable,
+        );
       },
       undo() {
         assertActive("query whether undo is available");
-        return runtimeOptions.editable && undo(view.state);
+        return canRunInteractiveCommand() && undo(view.state);
       },
       redo() {
         assertActive("query whether redo is available");
-        return runtimeOptions.editable && redo(view.state);
+        return canRunInteractiveCommand() && redo(view.state);
       },
     },
     isActive: {
@@ -1170,6 +1395,78 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       node(node) {
         assertActive("query an active node");
         return isNodeActive(node);
+      },
+      paragraph() {
+        return runStateQuery(
+          "query an active paragraph",
+          () => structuralCommandSet.isActive.paragraph(view.state),
+        );
+      },
+      heading(level) {
+        return runStateQuery(
+          "query an active heading",
+          () => structuralCommandSet.isActive.heading(view.state, level),
+        );
+      },
+      blockquote() {
+        return runStateQuery(
+          "query an active blockquote",
+          () => structuralCommandSet.isActive.blockquote(view.state),
+        );
+      },
+      bulletList() {
+        return runStateQuery(
+          "query an active bullet list",
+          () => structuralCommandSet.isActive.bulletList(view.state),
+        );
+      },
+      orderedList() {
+        return runStateQuery(
+          "query an active ordered list",
+          () => structuralCommandSet.isActive.orderedList(view.state),
+        );
+      },
+      taskList() {
+        return runStateQuery(
+          "query an active task list",
+          () => structuralCommandSet.isActive.taskList(view.state),
+        );
+      },
+      taskChecked(checked) {
+        return runStateQuery(
+          "query active task state",
+          () => structuralCommandSet.isActive.taskChecked(view.state, checked),
+        );
+      },
+      hardBreak() {
+        return runStateQuery(
+          "query an active hard break",
+          () => structuralCommandSet.isActive.hardBreak(view.state),
+        );
+      },
+      horizontalRule() {
+        return runStateQuery(
+          "query an active horizontal rule",
+          () => structuralCommandSet.isActive.horizontalRule(view.state),
+        );
+      },
+      codeBlock(options) {
+        return runStateQuery(
+          "query an active code block",
+          () => structuralCommandSet.isActive.codeBlock(view.state, options),
+        );
+      },
+      table() {
+        return runStateQuery(
+          "query an active table",
+          () => structuralCommandSet.isActive.table(view.state),
+        );
+      },
+      tableColumnAlignment(alignment) {
+        return runStateQuery(
+          "query active table column alignment",
+          () => structuralCommandSet.isActive.tableColumnAlignment(view.state, alignment),
+        );
       },
     },
   };

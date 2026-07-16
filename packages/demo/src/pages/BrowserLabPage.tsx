@@ -1,10 +1,14 @@
 import {
   createEditor,
   type MarkdownEditor,
+  type MarkdownEditorCodeBlockOptions,
   type MarkdownEditorEventName,
+  type MarkdownEditorHeadingLevel,
   type MarkdownEditorMark,
   type MarkdownEditorSelectionSnapshot,
   type MarkdownEditorSelectionTarget,
+  type MarkdownEditorTableAlignment,
+  type MarkdownEditorTableInsertOptions,
   type OpaqueMarkdownEditRequest,
   type UpdateEditorOptions,
 } from "markora";
@@ -45,14 +49,54 @@ export type BrowserLabUpdateOptions = Pick<
 export type BrowserLabEventRecord = {
   code?: string;
   contribution?: string;
+  docChanged?: boolean;
   extension?: string;
   language?: string;
   message?: string;
   phase?: string;
   previousSelection?: MarkdownEditorSelectionSnapshot;
   selection?: MarkdownEditorSelectionSnapshot;
+  selectionChanged?: boolean;
   type: MarkdownEditorEventName;
 };
+
+type BrowserLabNoArgumentCommand =
+  | "addTableColumn"
+  | "addTableRow"
+  | "deleteTable"
+  | "deleteTableColumn"
+  | "deleteTableRow"
+  | "insertHardBreak"
+  | "insertHorizontalRule"
+  | "liftListItem"
+  | "redo"
+  | "removeImage"
+  | "removeLink"
+  | "setParagraph"
+  | "sinkListItem"
+  | "toggleBlockquote"
+  | "toggleBulletList"
+  | "toggleOrderedList"
+  | "toggleTaskList"
+  | "undo";
+
+export type BrowserLabCommandRequest =
+  | { type: BrowserLabNoArgumentCommand }
+  | { type: "insertImage"; attrs: { alt?: string | null; src: string; title?: string | null } }
+  | { type: "insertTable"; options?: MarkdownEditorTableInsertOptions }
+  | { type: "setCodeBlock"; options?: MarkdownEditorCodeBlockOptions }
+  | { type: "setHeading"; level: MarkdownEditorHeadingLevel }
+  | { type: "setLink"; href: string }
+  | { type: "setTableColumnAlignment"; alignment: MarkdownEditorTableAlignment }
+  | { type: "setTaskChecked"; checked: boolean }
+  | { type: "toggleMark"; mark: MarkdownEditorMark };
+
+export type BrowserLabActiveRequest =
+  | { type: "blockquote" | "bulletList" | "hardBreak" | "horizontalRule" | "orderedList" | "paragraph" | "table" | "taskList" }
+  | { type: "codeBlock"; options?: MarkdownEditorCodeBlockOptions }
+  | { type: "heading"; level?: MarkdownEditorHeadingLevel }
+  | { type: "tableColumnAlignment"; alignment: MarkdownEditorTableAlignment }
+  | { type: "taskChecked"; checked?: boolean };
 
 export type BrowserLabEventSnapshot = {
   counts: Record<MarkdownEditorEventName, number>;
@@ -125,11 +169,9 @@ export type BrowserLabSnapshot = {
 export type BrowserLabApi = {
   blur: (id: string) => void;
   clearEvents: (id: string) => void;
-  command: (
-    id: string,
-    command: "insertImage" | "redo" | "setLink" | "toggleMark" | "undo",
-    value?: string | { alt?: string | null; src: string; title?: string | null } | MarkdownEditorMark,
-  ) => boolean;
+  active: (id: string, request: BrowserLabActiveRequest) => boolean;
+  can: (id: string, request: BrowserLabCommandRequest) => boolean;
+  command: (id: string, request: BrowserLabCommandRequest) => boolean;
   copySelection: (id: string) => BrowserLabCopyResult;
   destroy: (id: string) => boolean;
   destroyEditor: (id: string) => boolean;
@@ -192,7 +234,7 @@ type MountedEditor = {
 };
 
 const OVERLAY_SELECTOR = ".mdw-link-editor, .mdw-image-editor, .mdw-table-toolbar";
-const EVENT_NAMES: MarkdownEditorEventName[] = ["focus", "blur", "selection", "update", "error"];
+const EVENT_NAMES: MarkdownEditorEventName[] = ["focus", "blur", "selection", "state", "update", "error"];
 
 function createEventCounts(): Record<MarkdownEditorEventName, number> {
   return {
@@ -200,6 +242,7 @@ function createEventCounts(): Record<MarkdownEditorEventName, number> {
     error: 0,
     focus: 0,
     selection: 0,
+    state: 0,
     update: 0,
   };
 }
@@ -212,6 +255,85 @@ function clearEventTracking(mounted: MountedEditor) {
 function recordEvent(mounted: MountedEditor, event: BrowserLabEventRecord) {
   mounted.eventCounts[event.type] += 1;
   mounted.eventLog.push(event);
+}
+
+function runBrowserLabCommand(editor: MarkdownEditor, request: BrowserLabCommandRequest) {
+  switch (request.type) {
+    case "addTableColumn": return editor.commands.addTableColumn();
+    case "addTableRow": return editor.commands.addTableRow();
+    case "deleteTable": return editor.commands.deleteTable();
+    case "deleteTableColumn": return editor.commands.deleteTableColumn();
+    case "deleteTableRow": return editor.commands.deleteTableRow();
+    case "insertHardBreak": return editor.commands.insertHardBreak();
+    case "insertHorizontalRule": return editor.commands.insertHorizontalRule();
+    case "insertImage": return editor.commands.insertImage(request.attrs);
+    case "insertTable": return editor.commands.insertTable(request.options);
+    case "liftListItem": return editor.commands.liftListItem();
+    case "redo": return editor.commands.redo();
+    case "removeImage": return editor.commands.removeImage();
+    case "removeLink": return editor.commands.removeLink();
+    case "setCodeBlock": return editor.commands.setCodeBlock(request.options);
+    case "setHeading": return editor.commands.setHeading(request.level);
+    case "setLink": return editor.commands.setLink(request.href);
+    case "setParagraph": return editor.commands.setParagraph();
+    case "setTableColumnAlignment": return editor.commands.setTableColumnAlignment(request.alignment);
+    case "setTaskChecked": return editor.commands.setTaskChecked(request.checked);
+    case "sinkListItem": return editor.commands.sinkListItem();
+    case "toggleBlockquote": return editor.commands.toggleBlockquote();
+    case "toggleBulletList": return editor.commands.toggleBulletList();
+    case "toggleMark": return editor.commands.toggleMark(request.mark);
+    case "toggleOrderedList": return editor.commands.toggleOrderedList();
+    case "toggleTaskList": return editor.commands.toggleTaskList();
+    case "undo": return editor.commands.undo();
+  }
+}
+
+function canRunBrowserLabCommand(editor: MarkdownEditor, request: BrowserLabCommandRequest) {
+  switch (request.type) {
+    case "addTableColumn": return editor.state.can.addTableColumn();
+    case "addTableRow": return editor.state.can.addTableRow();
+    case "deleteTable": return editor.state.can.deleteTable();
+    case "deleteTableColumn": return editor.state.can.deleteTableColumn();
+    case "deleteTableRow": return editor.state.can.deleteTableRow();
+    case "insertHardBreak": return editor.state.can.insertHardBreak();
+    case "insertHorizontalRule": return editor.state.can.insertHorizontalRule();
+    case "insertImage": return editor.state.can.insertImage();
+    case "insertTable": return editor.state.can.insertTable(request.options);
+    case "liftListItem": return editor.state.can.liftListItem();
+    case "redo": return editor.state.can.redo();
+    case "removeImage": return editor.state.can.removeImage();
+    case "removeLink": return editor.state.can.removeLink();
+    case "setCodeBlock": return editor.state.can.setCodeBlock(request.options);
+    case "setHeading": return editor.state.can.setHeading(request.level);
+    case "setLink": return editor.state.can.setLink();
+    case "setParagraph": return editor.state.can.setParagraph();
+    case "setTableColumnAlignment": return editor.state.can.setTableColumnAlignment(request.alignment);
+    case "setTaskChecked": return editor.state.can.setTaskChecked(request.checked);
+    case "sinkListItem": return editor.state.can.sinkListItem();
+    case "toggleBlockquote": return editor.state.can.toggleBlockquote();
+    case "toggleBulletList": return editor.state.can.toggleBulletList();
+    case "toggleMark": return editor.state.can.toggleMark(request.mark);
+    case "toggleOrderedList": return editor.state.can.toggleOrderedList();
+    case "toggleTaskList": return editor.state.can.toggleTaskList();
+    case "undo": return editor.state.can.undo();
+  }
+}
+
+function readBrowserLabActiveState(editor: MarkdownEditor, request: BrowserLabActiveRequest) {
+  switch (request.type) {
+    case "blockquote": return editor.state.isActive.blockquote();
+    case "bulletList": return editor.state.isActive.bulletList();
+    case "codeBlock": return editor.state.isActive.codeBlock(request.options);
+    case "hardBreak": return editor.state.isActive.hardBreak();
+    case "heading": return editor.state.isActive.heading(request.level);
+    case "horizontalRule": return editor.state.isActive.horizontalRule();
+    case "orderedList": return editor.state.isActive.orderedList();
+    case "paragraph": return editor.state.isActive.paragraph();
+    case "table": return editor.state.isActive.table();
+    case "tableColumnAlignment": return editor.state.isActive.tableColumnAlignment(request.alignment);
+    case "taskChecked": return editor.state.isActive.taskChecked(request.checked);
+    case "taskList": return editor.state.isActive.taskList();
+  }
 }
 
 function subscribeToEditorEvents(mounted: MountedEditor) {
@@ -231,6 +353,14 @@ function subscribeToEditorEvents(mounted: MountedEditor) {
       previousSelection: event.previousSelection,
       selection: event.selection,
       type: "selection",
+    });
+  }));
+  mounted.eventUnsubscribes.set("state", mounted.editor.subscribe("state", (event) => {
+    recordEvent(mounted, {
+      docChanged: event.docChanged,
+      selection: event.selection,
+      selectionChanged: event.selectionChanged,
+      type: "state",
     });
   }));
   mounted.eventUnsubscribes.set("update", mounted.editor.subscribe("update", (event) => {
@@ -771,25 +901,14 @@ export function BrowserLabPage() {
       snapshot(id) {
         return readSnapshot(requireEditor(editors, id));
       },
-      command(id, command, value) {
-        const editor = requireEditor(editors, id).editor;
-
-        switch (command) {
-          case "insertImage":
-            return typeof value === "object" && value !== null
-              ? editor.commands.insertImage(value)
-              : false;
-          case "redo":
-            return editor.commands.redo();
-          case "setLink":
-            return typeof value === "string" ? editor.commands.setLink(value) : false;
-          case "toggleMark":
-            return value === "strong" || value === "em" || value === "code" || value === "strike"
-              ? editor.commands.toggleMark(value)
-              : false;
-          case "undo":
-            return editor.commands.undo();
-        }
+      active(id, request) {
+        return readBrowserLabActiveState(requireEditor(editors, id).editor, request);
+      },
+      can(id, request) {
+        return canRunBrowserLabCommand(requireEditor(editors, id).editor, request);
+      },
+      command(id, request) {
+        return runBrowserLabCommand(requireEditor(editors, id).editor, request);
       },
       openUi(id, kind) {
         const ui = requireEditor(editors, id).editor.ui;

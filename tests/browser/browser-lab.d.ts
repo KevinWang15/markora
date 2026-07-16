@@ -4,7 +4,7 @@ type BrowserLabSelectionTarget =
   | "start"
   | { anchor: number; head?: number };
 
-type BrowserLabEventName = "blur" | "error" | "focus" | "selection" | "update";
+type BrowserLabEventName = "blur" | "error" | "focus" | "selection" | "state" | "update";
 
 type BrowserLabSelectionSnapshot = {
   anchor: number;
@@ -18,14 +18,54 @@ type BrowserLabSelectionSnapshot = {
 type BrowserLabEventRecord = {
   code?: string;
   contribution?: string;
+  docChanged?: boolean;
   extension?: string;
   language?: string;
   message?: string;
   phase?: string;
   previousSelection?: BrowserLabSelectionSnapshot;
   selection?: BrowserLabSelectionSnapshot;
+  selectionChanged?: boolean;
   type: BrowserLabEventName;
 };
+
+type BrowserLabNoArgumentCommand =
+  | "addTableColumn"
+  | "addTableRow"
+  | "deleteTable"
+  | "deleteTableColumn"
+  | "deleteTableRow"
+  | "insertHardBreak"
+  | "insertHorizontalRule"
+  | "liftListItem"
+  | "redo"
+  | "removeImage"
+  | "removeLink"
+  | "setParagraph"
+  | "sinkListItem"
+  | "toggleBlockquote"
+  | "toggleBulletList"
+  | "toggleOrderedList"
+  | "toggleTaskList"
+  | "undo";
+
+type BrowserLabCommandRequest =
+  | { type: BrowserLabNoArgumentCommand }
+  | { type: "insertImage"; attrs: { alt?: string | null; src: string; title?: string | null } }
+  | { type: "insertTable"; options?: { columns?: number; rows?: number } }
+  | { type: "setCodeBlock"; options?: { language?: string | null } }
+  | { type: "setHeading"; level: 1 | 2 | 3 | 4 | 5 | 6 }
+  | { type: "setLink"; href: string }
+  | { type: "setTableColumnAlignment"; alignment: "center" | "left" | "right" | null }
+  | { type: "setTaskChecked"; checked: boolean }
+  | { type: "toggleMark"; mark: "code" | "em" | "strike" | "strong" };
+
+type BrowserLabActiveRequest =
+  | { type: "blockquote" | "bulletList" | "hardBreak" | "horizontalRule" | "orderedList" | "paragraph" | "table" | "taskList" }
+  | { type: "codeBlock"; options?: { language?: string | null } }
+  | { type: "heading"; level?: 1 | 2 | 3 | 4 | 5 | 6 }
+  | { type: "tableColumnAlignment"; alignment: "center" | "left" | "right" | null }
+  | { type: "taskChecked"; checked?: boolean };
 
 type BrowserLabUpdateOptions = {
   ariaLabel?: string | null;
@@ -78,13 +118,11 @@ type BrowserLabExtensionSnapshot = {
 
 interface Window {
   __MARKORA_BROWSER_LAB__?: {
+    active(id: string, request: BrowserLabActiveRequest): boolean;
     blur(id: string): void;
+    can(id: string, request: BrowserLabCommandRequest): boolean;
     clearEvents(id: string): void;
-    command(
-      id: string,
-      command: "insertImage" | "redo" | "setLink" | "toggleMark" | "undo",
-      value?: string | { alt?: string | null; src: string; title?: string | null },
-    ): boolean;
+    command(id: string, request: BrowserLabCommandRequest): boolean;
     copySelection(id: string): { defaultPrevented: boolean; html: string; plain: string };
     destroy(id: string): boolean;
     destroyEditor(id: string): boolean;

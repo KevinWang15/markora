@@ -5,7 +5,7 @@ import { DocPageNav } from "../components/DocPageNav";
 const apiRows = [
   ["createEditor(options: CreateEditorOptions)", "Creates the editor view and returns the host API."],
   ["editor.focus(target?) / editor.blur()", "Moves focus without reaching into the raw ProseMirror view."],
-  ["editor.subscribe(type, listener)", "Subscribes to typed focus, blur, selection, update, or error events and returns an idempotent unsubscribe function."],
+  ["editor.subscribe(type, listener)", "Subscribes to typed focus, blur, state, selection, update, or error events and returns an idempotent unsubscribe function."],
   ["editor.updateOptions(options)", "Updates editable state, placeholder, attributes, accessible naming, and callbacks without rebuilding editor state."],
   ["editor.isDestroyed", "Reports whether the high-level editor is no longer active."],
   ["editor.view", "Exposes the version-coupled ProseMirror view for advanced inspection and dispatch."],
@@ -14,11 +14,17 @@ const apiRows = [
   ["editor.commands.resetMarkdown(markdown, { emitChange })", "Explicitly replaces EditorState, resetting selection and clearing history/plugin state."],
   ["editor.commands.setMarkdown(...) (deprecated)", "Retains the historical hard-reset behavior as an alias of resetMarkdown()."],
   ["editor.flushChange()", "Flushes any pending animation-frame batched Markdown emission."],
-  ["editor.state.can.* / editor.state.isActive.*", "Lets hosts derive toolbar and feature state without built-in UI."],
+  ["editor.state.can.* / editor.state.isActive.*", "Lets hosts derive command availability and active structural/formatting state without built-in UI."],
   ["editor.getToolbarState()", "Returns a compatibility snapshot for toolbar buttons."],
   [`editor.commands.toggleMark("strong" | "em" | "code" | "strike")`, "Applies inline formatting commands."],
   ["editor.commands.setLink(href) / removeLink()", "Creates or removes links without UI assumptions."],
   ["editor.commands.insertImage({ src, alt, title }) / removeImage()", "Creates or removes images without UI assumptions."],
+  ["editor.commands.setParagraph() / setHeading(level) / toggleBlockquote()", "Changes the selected text blocks between paragraphs, heading levels, and blockquotes."],
+  ["editor.commands.toggleBulletList() / toggleOrderedList() / sinkListItem() / liftListItem()", "Creates, switches, indents, or outdents list content."],
+  ["editor.commands.toggleTaskList() / setTaskChecked(checked)", "Toggles selected task-list items or sets their completion state."],
+  ["editor.commands.insertHardBreak() / insertHorizontalRule() / setCodeBlock(options)", "Inserts structural breaks or converts selected text blocks to fenced code."],
+  ["editor.commands.insertTable(options) / addTableRow() / addTableColumn()", "Inserts a basic table or adds a row or column after the active cell."],
+  ["editor.commands.deleteTableRow() / deleteTableColumn() / setTableColumnAlignment() / deleteTable()", "Deletes or aligns the active table structure without requiring the optional UI."],
   ["editor.ui?.editLink() / editor.ui?.editImage()", "Optional namespaced UI entry points when overlays are attached."],
   ["editor.commands.undo() / editor.commands.redo()", "Runs history commands."],
   ["editor.destroy()", "Idempotently flushes pending output and releases the editor, nested code views, optional UI, listeners, and subscriptions."],
@@ -75,8 +81,15 @@ const eventSubscriptionCode = `const stopSelection = editor.subscribe(
   },
 );
 
-const stopUpdates = editor.subscribe("update", ({ origin, selection }) => {
-  renderToolbar(selection, origin);
+const stopState = editor.subscribe(
+  "state",
+  ({ docChanged, origin, selection, selectionChanged }) => {
+    renderToolbar({ docChanged, origin, selection, selectionChanged });
+  },
+);
+
+const stopUpdates = editor.subscribe("update", ({ origin }) => {
+  scheduleDocumentIndexRefresh(origin);
 });
 
 const stopErrors = editor.subscribe("error", ({ code, context, error }) => {
@@ -88,6 +101,7 @@ const stopErrors = editor.subscribe("error", ({ code, context, error }) => {
 // Later, during host teardown. Each function is safe to call more than once.
 function disposeSubscriptions() {
   stopSelection();
+  stopState();
   stopUpdates();
   stopErrors();
 }`;
@@ -216,6 +230,14 @@ type MarkdownEditorEventMap = {
     previousSelection: MarkdownEditorSelectionSnapshot;
     selection: MarkdownEditorSelectionSnapshot;
   };
+  state: {
+    editor: MarkdownEditor;
+    type: "state";
+    docChanged: boolean;
+    origin: MarkdownEditorChangeOrigin;
+    selection: MarkdownEditorSelectionSnapshot;
+    selectionChanged: boolean;
+  };
   update: {
     editor: MarkdownEditor;
     type: "update";
@@ -242,6 +264,11 @@ const markdownEditorCommandsType = `type MarkdownEditorMarkdownUpdateOptions = {
   emitChange?: boolean;
 };
 
+type MarkdownEditorHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+type MarkdownEditorCodeBlockOptions = { language?: string | null };
+type MarkdownEditorTableAlignment = "left" | "center" | "right" | null;
+type MarkdownEditorTableInsertOptions = { columns?: number; rows?: number };
+
 type MarkdownEditorCommands = {
   reconcileMarkdown: (
     markdown: string,
@@ -261,21 +288,86 @@ type MarkdownEditorCommands = {
   removeLink: () => boolean;
   insertImage: (attrs: { src: string; alt?: string | null; title?: string | null }) => boolean;
   removeImage: () => boolean;
+  setParagraph: () => boolean;
+  setHeading: (level: MarkdownEditorHeadingLevel) => boolean;
+  toggleBlockquote: () => boolean;
+  toggleBulletList: () => boolean;
+  toggleOrderedList: () => boolean;
+  sinkListItem: () => boolean;
+  liftListItem: () => boolean;
+  toggleTaskList: () => boolean;
+  setTaskChecked: (checked: boolean) => boolean;
+  insertHardBreak: () => boolean;
+  insertHorizontalRule: () => boolean;
+  setCodeBlock: (options?: MarkdownEditorCodeBlockOptions) => boolean;
+  insertTable: (options?: MarkdownEditorTableInsertOptions) => boolean;
+  addTableRow: () => boolean;
+  addTableColumn: () => boolean;
+  deleteTableRow: () => boolean;
+  deleteTableColumn: () => boolean;
+  setTableColumnAlignment: (alignment: MarkdownEditorTableAlignment) => boolean;
+  deleteTable: () => boolean;
   undo: () => boolean;
   redo: () => boolean;
 };`;
 
-const markdownEditorStateType = `type MarkdownEditorState = {
+const markdownEditorStateType = `type MarkdownEditorActiveNode =
+  | "blockquote"
+  | "bullet_list"
+  | "code_block"
+  | "hard_break"
+  | "heading"
+  | "horizontal_rule"
+  | "image"
+  | "list_item"
+  | "ordered_list"
+  | "paragraph"
+  | "table";
+
+type MarkdownEditorState = {
   can: {
     toggleMark: (mark: "strong" | "em" | "code" | "strike") => boolean;
     setLink: () => boolean;
+    removeLink: () => boolean;
     insertImage: () => boolean;
+    removeImage: () => boolean;
+    setParagraph: () => boolean;
+    setHeading: (level: MarkdownEditorHeadingLevel) => boolean;
+    toggleBlockquote: () => boolean;
+    toggleBulletList: () => boolean;
+    toggleOrderedList: () => boolean;
+    sinkListItem: () => boolean;
+    liftListItem: () => boolean;
+    toggleTaskList: () => boolean;
+    setTaskChecked: (checked: boolean) => boolean;
+    insertHardBreak: () => boolean;
+    insertHorizontalRule: () => boolean;
+    setCodeBlock: (options?: MarkdownEditorCodeBlockOptions) => boolean;
+    insertTable: (options?: MarkdownEditorTableInsertOptions) => boolean;
+    addTableRow: () => boolean;
+    addTableColumn: () => boolean;
+    deleteTableRow: () => boolean;
+    deleteTableColumn: () => boolean;
+    setTableColumnAlignment: (alignment: MarkdownEditorTableAlignment) => boolean;
+    deleteTable: () => boolean;
     undo: () => boolean;
     redo: () => boolean;
   };
   isActive: {
     mark: (mark: "strong" | "em" | "code" | "strike" | "link") => boolean;
-    node: (node: "image" | "table" | "code_block") => boolean;
+    node: (node: MarkdownEditorActiveNode) => boolean;
+    paragraph: () => boolean;
+    heading: (level?: MarkdownEditorHeadingLevel) => boolean;
+    blockquote: () => boolean;
+    bulletList: () => boolean;
+    orderedList: () => boolean;
+    taskList: () => boolean;
+    taskChecked: (checked?: boolean) => boolean;
+    hardBreak: () => boolean;
+    horizontalRule: () => boolean;
+    codeBlock: (options?: MarkdownEditorCodeBlockOptions) => boolean;
+    table: () => boolean;
+    tableColumnAlignment: (alignment: MarkdownEditorTableAlignment) => boolean;
   };
 };`;
 
@@ -370,9 +462,11 @@ export function ApiPage() {
           <span className="card-kicker">Typed subscriptions</span>
           <h3>Observe the editor without serializing</h3>
           <p>
-            Focus, blur, selection, and update events expose host-facing state. Selection and update events are synchronous,
-            {" "}with selection first for the same change; both carry its origin, while update events contain neither Markdown
-            {" "}nor a ProseMirror transaction. Focus and blur each cross one microtask boundary so callbacks run outside nested
+            Focus, blur, state, selection, and update events expose host-facing activity. The synchronous <code>state</code>
+            {" "}event runs first for an accepted editor-state transition and is the preferred toolbar refresh signal; it carries
+            {" "}<code>docChanged</code>, <code>selectionChanged</code>, the current selection, and its origin without Markdown or
+            {" "}a ProseMirror transaction. A specialized selection event follows when the selection changed, and an update event
+            {" "}follows when the document changed. Focus and blur each cross one microtask boundary so callbacks run outside nested
             {" "}editor focus internals and movement within the composite surface does not create a false boundary. Error events report recoverable code-language-load failures;
             {" "}loaders and extensions run after the current editor update completes. Initial focus and selection actions are
             {" "}not replayed to subscriptions added after creation; call <code>event.editor.getMarkdown()</code> only
@@ -415,7 +509,7 @@ export function ApiPage() {
           <span className="card-kicker">Change origins</span>
           <h3>Trace where accepted activity entered</h3>
           <p>
-            Change callbacks and selection/update events report <code>user</code>, <code>command</code>, <code>external</code>,
+            Change callbacks and state/selection/update events report <code>user</code>, <code>command</code>, <code>external</code>,
             {" "}<code>reset</code>, or a namespaced extension origin. <code>onTransaction</code> also reports origins for dispatch
             {" "}attempts, so it is not proof that policy accepted a state change. Origins are not revision IDs or authorization checks.
           </p>

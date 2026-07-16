@@ -28,24 +28,29 @@ editor.updateOptions({ editable: false, ariaLabel: "AI draft preview" });`,
   {
     title: "Toolbar-driven CMS field",
     summary: "Bind editor state into your app shell and expose only the controls your product wants to support.",
-    snippet: `const applyLink = () => {
-  if (editor.state.can.setLink()) {
-    editor.commands.setLink("https://example.com");
-  }
+    snippet: `const makeSectionHeading = () => {
+  if (editor.state.can.setHeading(2)) editor.commands.setHeading(2);
 };
 
 const render = () => {
-  const isLinkActive = editor.state.isActive.mark("link");
-  renderToolbar({ isLinkActive });
+  renderToolbar({
+    heading2: {
+      active: editor.state.isActive.heading(2),
+      enabled: editor.state.can.setHeading(2),
+    },
+    bulletList: {
+      active: editor.state.isActive.bulletList(),
+      enabled: editor.state.can.toggleBulletList(),
+    },
+  });
 };
 
-const stopSelection = editor.subscribe("selection", render);
-const stopUpdates = editor.subscribe("update", render);
+// Covers document, selection, stored-mark, and history state changes.
+const stopState = editor.subscribe("state", render);
 render();
 
 // During host teardown:
-stopSelection();
-stopUpdates();`,
+stopState();`,
   },
   {
     title: "Shadow DOM host",
@@ -90,7 +95,7 @@ const recipes = [
   },
   {
     heading: "Observe editor behavior",
-    body: "Subscribe to `selection` and `update` for typed host snapshots and their origins without serialization. Keep `onTransaction` for integrations that deliberately depend on ProseMirror transactions.",
+    body: "Subscribe to `state` to refresh command availability and active toolbar state after accepted editor-state transitions without serializing. Use `selection` and `update` for narrower signals, and keep `onTransaction` for integrations that deliberately depend on ProseMirror dispatch attempts.",
   },
   {
     heading: "Update runtime options",

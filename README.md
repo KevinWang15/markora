@@ -74,6 +74,35 @@ editor.destroy();
 
 `ariaLabel` or `ariaLabelledBy` gives the inner editor its host-specific accessible name. Use `editor.focus()`, `editor.blur()`, and `editor.subscribe(...)` for ordinary lifecycle integration; initial autofocus and selection are configured through `createEditor()` and are not replayed to subscriptions added after creation.
 
+## Host toolbars and command state
+
+The headless API covers inline marks, links and images, paragraphs and headings, blockquotes, bullet/ordered/task lists, list indentation, hard breaks and rules, fenced code blocks, tables, and undo/redo. Build host UI from `editor.state` and refresh it from the `state` event, which also catches stored-mark changes that do not modify the document:
+
+```ts
+const quoteButton = document.querySelector<HTMLButtonElement>("#quote");
+const undoButton = document.querySelector<HTMLButtonElement>("#undo");
+
+if (!quoteButton || !undoButton) {
+  throw new Error("Toolbar buttons not found.");
+}
+
+function renderToolbar() {
+  quoteButton.setAttribute("aria-pressed", String(editor.state.isActive.blockquote()));
+  quoteButton.disabled = !editor.state.can.toggleBlockquote();
+  undoButton.disabled = !editor.state.can.undo();
+}
+
+quoteButton.addEventListener("click", () => editor.commands.toggleBlockquote());
+undoButton.addEventListener("click", () => editor.commands.undo());
+
+const stopToolbar = editor.subscribe("state", renderToolbar);
+renderToolbar();
+```
+
+`state.can.*` is a pure dry run: it does not dispatch, focus, add history, or emit events. Interactive commands and their `can` checks return `false` while read-only, during active IME composition, when the operation is unavailable, or when it would be a no-op; `state.isActive.*` remains observational in those modes. A successful interactive command focuses the editor. A successful document-changing command other than undo/redo is tagged with origin `"command"` and contributes one undoable history step, while a failed command leaves focus, history, and events untouched.
+
+The root entry supports flat task items and tables. Tasks cannot be indented or nested. Tables default to three columns and two total rows (the first is the header), and explicit row/column counts must be integers from 1 through 100. `markora/minimal` exposes the same typed task/table methods for portable host code, but those commands and related `can`/`isActive` checks return `false` because the syntax is absent.
+
 ## Embed configuration and lifecycle
 
 `createEditor()` accepts host-facing configuration without requiring ProseMirror access:
@@ -99,7 +128,7 @@ editor.updateOptions({
 
 `updateOptions()` also accepts `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Replacing `onChange` or its batching mode first flushes pending output once through the previous listener, then installs the new configuration. `element`, `markdown`, `initialSelection`, the autofocus action, `ui`, and `codeBlockLanguages` are creation-only.
 
-`focus`, `blur`, `selection`, `update`, and `error` subscriptions return idempotent unsubscribe functions. Selection and update events are synchronous and expose host-facing selection snapshots plus a change `origin`; focus and blur each cross one microtask boundary so host callbacks run outside nested editor focus internals and movement within the composite surface does not produce a false boundary. Update events do not serialize Markdown. Keep using `onChange(markdown, context)` when you need normalized Markdown, optionally batched with `onChangeMode`. `onTransaction(transaction, view, context)` remains available for advanced ProseMirror-aware integrations.
+`focus`, `blur`, `state`, `selection`, `update`, and `error` subscriptions return idempotent unsubscribe functions. State, selection, and update events are synchronous and expose host-facing selection snapshots plus a change `origin`; `state` fires for every accepted state transition and adds `docChanged` and `selectionChanged`, while `selection` and `update` are limited to those respective changes. Focus and blur each cross one microtask boundary so host callbacks run outside nested editor focus internals and movement within the composite surface does not produce a false boundary. Update events do not serialize Markdown. Keep using `onChange(markdown, context)` when you need normalized Markdown, optionally batched with `onChangeMode`. `onTransaction(transaction, view, context)` remains available for advanced ProseMirror-aware integrations.
 
 `editor.destroy()` flushes one pending `onChange`, releases all owned resources even if teardown reports an error, and is safe to call more than once. After destruction, `editor.isDestroyed` is `true`, `getMarkdown()` returns the cached final value, and `flushChange()`, `destroy()`, and previously returned unsubscribe functions are no-ops. Other high-level calls throw `MarkdownEditorDestroyedError`; `editor.view` is then a destroyed raw view and must not be used.
 
@@ -130,9 +159,9 @@ if (changed) {
 
 A changed reconciliation cancels any pending animation-frame `onChange`, so stale local output cannot fire after the authoritative snapshot. A semantic no-op does not cancel that pending output. Calls are synchronous and resolve in invocation order: every incoming string is a complete authoritative snapshot, so the last changed call wins. Markora does not merge snapshots or compare revisions; a host receiving out-of-order responses must reject stale revisions before calling the editor.
 
-Use `resetMarkdown()` only when switching documents or deliberately discarding transient editor state. A reset rebuilds EditorState, clears undo/redo and plugin state, moves selection to the new document default, and bypasses `onTransaction` because no ProseMirror transaction exists. Selection/update events and an explicitly requested `onChange` carry origin `"reset"`. `setMarkdown()` is retained as a deprecated hard-reset alias for compatibility.
+Use `resetMarkdown()` only when switching documents or deliberately discarding transient editor state. A reset rebuilds EditorState, clears undo/redo and plugin state, moves selection to the new document default, and bypasses `onTransaction` because no ProseMirror transaction exists. State and any applicable selection/update events, plus an explicitly requested `onChange`, carry origin `"reset"`. `setMarkdown()` is retained as a deprecated hard-reset alias for compatibility.
 
-Document activity is classified as `"user"`, `"command"`, `"external"`, `"reset"`, or an extension-owned `"extension:name"`. `onChange` receives the context as its second argument, `onTransaction` as its third, and selection/update subscriptions expose `origin`. `onTransaction` observes dispatch attempts; `onChange` and typed state events reflect accepted state changes. Advanced extensions can tag a transaction with `setMarkdownEditorTransactionOrigin(transaction, "extension:my-plugin")` and inspect it with `getMarkdownEditorTransactionOrigin(transaction)`.
+Document activity is classified as `"user"`, `"command"`, `"external"`, `"reset"`, or an extension-owned `"extension:name"`. `onChange` receives the context as its second argument, `onTransaction` as its third, and state/selection/update subscriptions expose `origin`. `onTransaction` observes dispatch attempts; `onChange` and typed state events reflect accepted state changes. Advanced extensions can tag a transaction with `setMarkdownEditorTransactionOrigin(transaction, "extension:my-plugin")` and inspect it with `getMarkdownEditorTransactionOrigin(transaction)`.
 
 ## Roadmap
 
@@ -195,10 +224,10 @@ Notes:
 - `createEditor()` is headless by default; pass `ui: createDefaultUi()` from `markora-ui` for the built-in overlays
 - `createDefaultUi({ portalRoot })` helps when the editor lives inside a Shadow DOM host
 - `editor.updateOptions(...)` changes editable state, placeholder, attributes, and accessible naming without rebuilding editor state or emitting a document update
-- `editor.subscribe(...)` exposes typed focus, blur, selection, update, and recoverable runtime error events
+- `editor.subscribe(...)` exposes typed focus, blur, state, selection, update, and recoverable runtime error events
 - `editor.commands.reconcileMarkdown(...)` applies ordinary authoritative host updates while mapping selection/history and preserving plugin state
 - `editor.commands.resetMarkdown(...)` performs an explicit state reset; `setMarkdown(...)` remains a deprecated alias
-- change callbacks and selection/update events expose `user`, `command`, `external`, `reset`, or namespaced extension origins
+- change callbacks and state/selection/update events expose `user`, `command`, `external`, `reset`, or namespaced extension origins
 - built-in code block languages cover JavaScript, TypeScript, JSON, CSS, HTML, XML, Markdown, Python, C/C++, Java, Rust, and shell
 - `editor.state.can.*` and `editor.state.isActive.*` expose host-friendly capability and activity checks
 - `editor.getToolbarState()` remains available for toolbar integrations that prefer a compatibility snapshot

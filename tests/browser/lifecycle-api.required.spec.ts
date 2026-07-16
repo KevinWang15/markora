@@ -43,7 +43,12 @@ async function runCommand(
 ) {
   return page.evaluate(
     ({ editorId, commandName, commandValue }) => (
-      window.__MARKORA_BROWSER_LAB__!.command(editorId, commandName, commandValue)
+      window.__MARKORA_BROWSER_LAB__!.command(
+        editorId,
+        commandName === "toggleMark"
+          ? { type: "toggleMark", mark: commandValue! }
+          : { type: commandName },
+      )
     ),
     { commandName: command, commandValue: value, editorId: id },
   );

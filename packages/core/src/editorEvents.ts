@@ -45,6 +45,13 @@ export type MarkdownEditorUpdateEvent = MarkdownEditorEventBase<"update"> & {
   selection: MarkdownEditorSelectionSnapshot;
 };
 
+export type MarkdownEditorStateEvent = MarkdownEditorEventBase<"state"> & {
+  docChanged: boolean;
+  origin: MarkdownEditorChangeOrigin;
+  selection: MarkdownEditorSelectionSnapshot;
+  selectionChanged: boolean;
+};
+
 export type MarkdownEditorErrorCode =
   | "code-block-language-load-failed"
   | `EXTENSION_${string}`;
@@ -79,6 +86,7 @@ export type MarkdownEditorEventMap = {
   error: MarkdownEditorErrorEvent;
   focus: MarkdownEditorFocusEvent;
   selection: MarkdownEditorSelectionEvent;
+  state: MarkdownEditorStateEvent;
   update: MarkdownEditorUpdateEvent;
 };
 

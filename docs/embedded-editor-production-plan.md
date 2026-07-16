@@ -93,8 +93,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-008 | DONE | M | Separate reconciled external updates from hard document resets |
 | EE-009 | DONE | S | Approve a versioned editor and Markdown extension RFC |
 | EE-010 | DONE | L | Implement the extension kernel and migrate built-ins onto it |
-| EE-011 | NEXT | M | Complete the block, list, task, code, and table command surface |
-| EE-012 | QUEUED | M | Add host-controlled URL, resource, and asset insertion hooks |
+| EE-011 | DONE | M | Complete the block, list, task, code, and table command surface |
+| EE-012 | NEXT | M | Add host-controlled URL, resource, and asset insertion hooks |
 | EE-013 | QUEUED | S | Establish document-size, latency, memory, and bundle budgets |
 | EE-014 | QUEUED | M | Remove synchronous full-document serialization from hot typing paths |
 | EE-015 | QUEUED | L | Lazily activate CodeMirror blocks and reduce base bundle cost |
@@ -402,7 +402,7 @@ Move from a fixed editor assembly to the approved composable architecture.
 
 ### EE-011 — Complete the command and state surface
 
-Status: `NEXT`
+Status: `DONE` (2026-07-16)
 
 #### Goal
 
@@ -415,6 +415,17 @@ Make every supported editing operation accessible to host toolbars and menus.
 - Define consistent focus, selection, history, and boolean-return behavior.
 - Add command-level tests independent of the default UI.
 - Update API type tests and integration documentation.
+
+#### Completion notes
+
+- The root and minimal entries now expose one typed structural surface for paragraphs, heading levels, blockquotes, bullet and ordered lists, list nesting/lifting, tasks, hard breaks, horizontal rules, fenced code blocks, table insertion and mutation, and history. Existing link/image removal gained matching capability checks, and specialized activity queries cover each durable block, list, task, code, and table state while retaining the generic mark/node queries.
+- Schema-bound structural commands are shared by both editor runtimes, and table mutations are shared by public commands and the optional table UI. Public commands use the host-facing focus/origin/history contract, while the built-in table toolbar retains its intentional focus-preserving behavior. The minimal schema supports CommonMark structures and safely reports task/table operations unavailable without importing those optional runtimes.
+- Boolean behavior is now consistent: `can` is a dispatch-free dry run; unsupported, read-only, composing, inapplicable, and no-op commands return `false`; successful public editing commands refocus the outer editor; and document changes use one transaction, origin `"command"`, and one ordinary undo step. Activity queries remain observational in read-only and composition states, invalid programmer arguments throw, and destroyed editors preserve the existing lifecycle error contract.
+- Task commands preserve the published flat-task dialect by rejecting task nesting/lifting, clearing hidden checked attributes when converting an entire task list, and changing checked state only where task attributes are durable. Table commands validate 1–100 row/column bounds, create a GFM header row, preserve column alignment, promote a remaining row when deleting the header, retain a valid selection, and serialize back into a reparsable table.
+- A typed synchronous `state` event now precedes specialized selection/update events for every accepted state transition, including stored-mark-only transactions and hard resets. It carries origin, the current selection, `docChanged`, and `selectionChanged`, giving host toolbars a complete signal without raw ProseMirror transactions or eager Markdown serialization. The demo playground, examples, API page, root README, and package README use and document this integration.
+- Headless unit coverage exercises every command family, capability/activity purity, focus, origin, history, round-trip, read-only, minimal-schema, validation, and destruction behavior without `markora-ui`. Declaration tests and the packed consumer cover the new supporting types and both package entries. Retained browser cases exercise external-toolbar focus, tasks/history/events, CodeMirror conversion, accessible round-trippable tables without built-in UI, and Chromium CDP rejection during active IME composition.
+- Security policy is unchanged: URL commands still pass through the existing sanitizer, and the structural surface introduces no resource loading. Table header scope and existing keyboard/axe coverage remain green. Packed-consumer analysis measures the root at 2,338,053 bytes/152 static modules and minimal at 889,043 bytes/121 static modules; formal budgets and optimization remain `EE-013` through `EE-015` work.
+- Final verification: `pnpm check` passes 709 unit/conformance tests and all build, declaration, browser-type, and package ESM checks; the retained serial all-engine browser run passes 79 cases with two expected non-Chromium CDP skips (81 total); `pnpm pack:smoke` passes the independent root/minimal package graphs; and `git diff --check` passes.
 
 ### EE-012 — Add host-controlled resource and asset hooks
 
@@ -604,6 +615,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-010` are complete. Gate A's content-safety requirements are satisfied, and the browser, complex-input, accessibility, host-lifecycle, external-update, and extension-kernel foundations for Gate B are established.
+`EE-001` through `EE-011` are complete. Gate A's content-safety requirements are satisfied, and the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, and headless command/state foundations for Gate B are established.
 
-The next iteration is `EE-011 — Complete the command and state surface`.
+The next iteration is `EE-012 — Add host-controlled resource and asset hooks`.

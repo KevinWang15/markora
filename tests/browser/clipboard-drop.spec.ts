@@ -76,7 +76,7 @@ test("rich HTML wins over plain fallback and unsafe URLs are removed", async ({ 
   await expect(editorLocator(labPage, id).locator("strong")).toHaveText("Rich");
   await expect(editorLocator(labPage, id).locator("a")).toHaveCount(0);
 
-  expect(await labPage.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, "undo"), id))
+  expect(await labPage.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }), id))
     .toBe(true);
   await settleEditor(labPage, id);
   expect(await getMarkdown(labPage, id)).toBe("");
@@ -170,7 +170,7 @@ test("external rich and plain drops insert undoable content", async ({ labPage }
   await settleEditor(labPage, id);
   expect(await getMarkdown(labPage, id)).toBe("*Dropped rich*");
 
-  expect(await labPage.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, "undo"), id))
+  expect(await labPage.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }), id))
     .toBe(true);
   await settleEditor(labPage, id);
   expect(await getMarkdown(labPage, id)).toBe("");

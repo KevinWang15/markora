@@ -1,9 +1,14 @@
-import type { Node as ProseMirrorNode, NodeType, Schema } from "prosemirror-model";
+import type { Node as ProseMirrorNode, Schema } from "prosemirror-model";
 import { Selection, TextSelection, type EditorState } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
+import {
+  createEmptyTableRow as createSharedEmptyTableRow,
+  createTableCommandSet,
+  type TableAlignment,
+} from "./tableCommands";
 import type { TableCellInfo } from "./tableTypes";
 
-export type TableAlignment = "left" | "center" | "right";
+export type { TableAlignment } from "./tableCommands";
 
 export type CreateTableNavigationOptions = {
   schema: Schema;
@@ -15,232 +20,48 @@ export type CreateTableNavigationOptions = {
 
 export function createTableNavigation(options: CreateTableNavigationOptions) {
   const { schema, getTableCellContext, normalizeTableAlignment, moveBeforeManagedBlock, moveAfterManagedBlock } = options;
+  const tableCommands = createTableCommandSet(schema);
 
   function getTableCellSelection(doc: ProseMirrorNode, cellPos: number) {
     return Selection.near(doc.resolve(cellPos + 2), 1);
   }
 
-  function getTableColumnAlignments(table: ProseMirrorNode) {
-    const firstRow = table.firstChild;
-
-    return Array.from({ length: firstRow?.childCount ?? 0 }, (_, index) =>
-      normalizeTableAlignment(firstRow?.child(index).attrs.align),
-    );
-  }
-
-  function updateTableWithSelection(
-    view: EditorView,
-    info: TableCellInfo,
-    rows: ProseMirrorNode[],
-    targetRowIndex: number,
-    targetCellIndex: number,
-  ) {
-    const nextTable = schema.nodes.table.create(info.table.attrs, rows, info.table.marks);
-    const tr = view.state.tr.replaceWith(info.tablePos, info.tablePos + info.table.nodeSize, nextTable);
-
-    let cellPos = info.tablePos + 1;
-
-    for (let rowIndex = 0; rowIndex < targetRowIndex; rowIndex += 1) {
-      cellPos += rows[rowIndex].nodeSize;
-    }
-
-    cellPos += 1;
-
-    for (let cellIndex = 0; cellIndex < targetCellIndex; cellIndex += 1) {
-      cellPos += rows[targetRowIndex].child(cellIndex).nodeSize;
-    }
-
-    tr.setSelection(getTableCellSelection(tr.doc, cellPos));
-    view.dispatch(tr.scrollIntoView());
-    return true;
-  }
-
-  function createParagraphCell(
-    cellType: NodeType,
-    align: TableAlignment | null,
-    headerScope: "col" | "row" | null = null,
-  ) {
-    const attrs = cellType === schema.nodes.table_header
-      ? { align, scope: headerScope ?? "col" }
-      : { align };
-    return cellType.create(attrs, schema.nodes.paragraph.create());
-  }
-
-  function isColumnHeaderRow(row: ProseMirrorNode) {
-    if (row.childCount === 0) {
-      return false;
-    }
-
-    let isHeaderRow = true;
-    row.forEach((cell) => {
-      if (cell.type !== schema.nodes.table_header || cell.attrs.scope === "row") {
-        isHeaderRow = false;
-      }
-    });
-    return isHeaderRow;
-  }
-
   function createEmptyTableRow(columnCount: number, alignments?: (TableAlignment | null)[]) {
-    return schema.nodes.table_row.create(
-      null,
-      Array.from({ length: columnCount }, (_, index) => createParagraphCell(schema.nodes.table_cell, alignments?.[index] ?? null)),
-    );
+    const row = createSharedEmptyTableRow(schema, columnCount, alignments);
+
+    if (!row) {
+      throw new Error("The active schema does not support table rows.");
+    }
+
+    return row;
   }
 
   function appendTableRow(view: EditorView) {
-    const info = getTableCellContext(view.state);
-
-    if (!info) {
-      return false;
-    }
-
-    const alignments = getTableColumnAlignments(info.table);
-    const rows: ProseMirrorNode[] = [];
-
-    info.table.forEach((row, _offset, index) => {
-      rows.push(row);
-
-      if (index === info.rowIndex) {
-        rows.push(createEmptyTableRow(row.childCount, alignments));
-      }
-    });
-
-    return updateTableWithSelection(view, info, rows, info.rowIndex + 1, 0);
+    return tableCommands.addTableRow(view.state, (transaction) => view.dispatch(transaction), view);
   }
 
   function appendTableColumn(view: EditorView) {
-    const info = getTableCellContext(view.state);
-
-    if (!info) {
-      return false;
-    }
-
-    const rows: ProseMirrorNode[] = [];
-
-    info.table.forEach((row) => {
-      const cells: ProseMirrorNode[] = [];
-
-      row.forEach((cell, _offset, cellIndex) => {
-        cells.push(cell);
-
-        if (cellIndex === info.cellIndex) {
-          const cellType = isColumnHeaderRow(row) ? schema.nodes.table_header : schema.nodes.table_cell;
-          const align = normalizeTableAlignment(cell.attrs.align);
-          cells.push(createParagraphCell(cellType, align));
-        }
-      });
-
-      rows.push(row.type.create(row.attrs, cells, row.marks));
-    });
-
-    return updateTableWithSelection(view, info, rows, info.rowIndex, info.cellIndex + 1);
+    return tableCommands.addTableColumn(view.state, (transaction) => view.dispatch(transaction), view);
   }
 
   function setTableColumnAlignment(view: EditorView, align: TableAlignment) {
-    const info = getTableCellContext(view.state);
-
-    if (!info) {
-      return false;
-    }
-
-    const rows: ProseMirrorNode[] = [];
-
-    info.table.forEach((row) => {
-      const cells: ProseMirrorNode[] = [];
-
-      row.forEach((cell, _offset, cellIndex) => {
-        if (cellIndex === info.cellIndex) {
-          cells.push(cell.type.create({ ...cell.attrs, align }, cell.content, cell.marks));
-          return;
-        }
-
-        cells.push(cell);
-      });
-
-      rows.push(row.type.create(row.attrs, cells, row.marks));
-    });
-
-    return updateTableWithSelection(view, info, rows, info.rowIndex, info.cellIndex);
+    return tableCommands.setTableColumnAlignment(align)(
+      view.state,
+      (transaction) => view.dispatch(transaction),
+      view,
+    );
   }
 
   function removeTableRow(view: EditorView) {
-    const info = getTableCellContext(view.state);
-
-    if (!info) {
-      return false;
-    }
-
-    if (info.table.childCount <= 1) {
-      return removeActiveTable(view);
-    }
-
-    const rows: ProseMirrorNode[] = [];
-    info.table.forEach((row, _offset, rowIndex) => {
-      if (rowIndex !== info.rowIndex) {
-        rows.push(row);
-      }
-    });
-
-    const targetRowIndex = Math.min(info.rowIndex, rows.length - 1);
-    const targetCellIndex = Math.min(info.cellIndex, rows[targetRowIndex].childCount - 1);
-    return updateTableWithSelection(view, info, rows, targetRowIndex, targetCellIndex);
+    return tableCommands.deleteTableRow(view.state, (transaction) => view.dispatch(transaction), view);
   }
 
   function removeTableColumn(view: EditorView) {
-    const info = getTableCellContext(view.state);
-
-    if (!info) {
-      return false;
-    }
-
-    let columnCount = 0;
-    info.table.forEach((row) => {
-      columnCount = Math.max(columnCount, row.childCount);
-    });
-
-    if (columnCount <= 1) {
-      return removeActiveTable(view);
-    }
-
-    const remainingAlignments = getTableColumnAlignments(info.table).filter((_align, index) => index !== info.cellIndex);
-    const fallbackAlignment = remainingAlignments[0] ?? null;
-    const rows: ProseMirrorNode[] = [];
-
-    info.table.forEach((row) => {
-      const cells: ProseMirrorNode[] = [];
-
-      row.forEach((cell, _offset, cellIndex) => {
-        if (cellIndex !== info.cellIndex) {
-          cells.push(cell);
-        }
-      });
-
-      if (cells.length === 0) {
-        const cellType = isColumnHeaderRow(row)
-          ? schema.nodes.table_header
-          : schema.nodes.table_cell;
-        cells.push(createParagraphCell(cellType, fallbackAlignment));
-      }
-
-      rows.push(row.type.create(row.attrs, cells, row.marks));
-    });
-
-    const targetCellIndex = Math.min(info.cellIndex, rows[info.rowIndex].childCount - 1);
-    return updateTableWithSelection(view, info, rows, info.rowIndex, targetCellIndex);
+    return tableCommands.deleteTableColumn(view.state, (transaction) => view.dispatch(transaction), view);
   }
 
   function removeActiveTable(view: EditorView) {
-    const info = getTableCellContext(view.state);
-
-    if (!info) {
-      return false;
-    }
-
-    const paragraph = schema.nodes.paragraph.create();
-    const tr = view.state.tr.replaceWith(info.tablePos, info.tablePos + info.table.nodeSize, paragraph);
-    tr.setSelection(TextSelection.create(tr.doc, info.tablePos + 1));
-    view.dispatch(tr.scrollIntoView());
-    return true;
+    return tableCommands.deleteTable(view.state, (transaction) => view.dispatch(transaction), view);
   }
 
   function isAtVerticalTableBoundary(view: EditorView, direction: -1 | 1) {

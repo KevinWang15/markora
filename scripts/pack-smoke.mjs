@@ -510,12 +510,30 @@ writeFileSync(join(smokeAppDir, "src/api.ts"), `import {
   getMarkdownEditorTransactionOrigin,
   setMarkdownEditorTransactionOrigin,
   type CreateEditorOptions,
+  type MarkdownEditorActiveNode,
   type MarkdownEditorChangeOrigin,
+  type MarkdownEditorCodeBlockOptions,
+  type MarkdownEditorCommands,
   type MarkdownEditorEventMap,
   type MarkdownEditorExtensionOrigin,
+  type MarkdownEditorHeadingLevel,
+  type MarkdownEditorState,
+  type MarkdownEditorStateEvent,
+  type MarkdownEditorTableAlignment,
+  type MarkdownEditorTableInsertOptions,
   type UpdateEditorOptions,
 } from "markora";
-import { createEditor as createMinimalEditor } from "markora/minimal";
+import {
+  createEditor as createMinimalEditor,
+  type MarkdownEditorActiveNode as MinimalMarkdownEditorActiveNode,
+  type MarkdownEditorCodeBlockOptions as MinimalMarkdownEditorCodeBlockOptions,
+  type MarkdownEditorCommands as MinimalMarkdownEditorCommands,
+  type MarkdownEditorHeadingLevel as MinimalMarkdownEditorHeadingLevel,
+  type MarkdownEditorState as MinimalMarkdownEditorState,
+  type MarkdownEditorStateEvent as MinimalMarkdownEditorStateEvent,
+  type MarkdownEditorTableAlignment as MinimalMarkdownEditorTableAlignment,
+  type MarkdownEditorTableInsertOptions as MinimalMarkdownEditorTableInsertOptions,
+} from "markora/minimal";
 import {
   MARKORA_EXTENSION_API_VERSION,
   defineMarkdownEditorExtension,
@@ -556,6 +574,113 @@ const minimalEditor = createMinimalEditor({
   extensions: externalExtensions,
   markdown: ":::note\\nPacked ==extension== consumer.\\n:::",
 });
+const headingLevel: MarkdownEditorHeadingLevel = 3;
+const codeBlockOptions: MarkdownEditorCodeBlockOptions = { language: "ts" };
+const tableAlignment: MarkdownEditorTableAlignment = null;
+const tableInsertOptions: MarkdownEditorTableInsertOptions = { columns: 3, rows: 2 };
+const activeNode: MarkdownEditorActiveNode = "paragraph";
+const minimalHeadingLevel: MinimalMarkdownEditorHeadingLevel = headingLevel;
+const minimalCodeBlockOptions: MinimalMarkdownEditorCodeBlockOptions = codeBlockOptions;
+const minimalTableAlignment: MinimalMarkdownEditorTableAlignment = tableAlignment;
+const minimalTableInsertOptions: MinimalMarkdownEditorTableInsertOptions = tableInsertOptions;
+const minimalActiveNode: MinimalMarkdownEditorActiveNode = activeNode;
+const rootCommands: MarkdownEditorCommands = editor.commands;
+const rootState: MarkdownEditorState = editor.state;
+const minimalCommands: MinimalMarkdownEditorCommands = minimalEditor.commands;
+const minimalState: MinimalMarkdownEditorState = minimalEditor.state;
+
+function exerciseStructuralSurface(
+  commands: MarkdownEditorCommands,
+  state: MarkdownEditorState,
+  values: {
+    activeNode: MarkdownEditorActiveNode;
+    codeBlockOptions: MarkdownEditorCodeBlockOptions;
+    headingLevel: MarkdownEditorHeadingLevel;
+    tableAlignment: MarkdownEditorTableAlignment;
+    tableInsertOptions: MarkdownEditorTableInsertOptions;
+  },
+) {
+  const commandResults: boolean[] = [
+    commands.setParagraph(),
+    commands.setHeading(values.headingLevel),
+    commands.toggleBlockquote(),
+    commands.toggleBulletList(),
+    commands.toggleOrderedList(),
+    commands.sinkListItem(),
+    commands.liftListItem(),
+    commands.toggleTaskList(),
+    commands.setTaskChecked(true),
+    commands.insertHardBreak(),
+    commands.insertHorizontalRule(),
+    commands.setCodeBlock(values.codeBlockOptions),
+    commands.insertTable(values.tableInsertOptions),
+    commands.addTableRow(),
+    commands.addTableColumn(),
+    commands.deleteTableRow(),
+    commands.deleteTableColumn(),
+    commands.setTableColumnAlignment(values.tableAlignment),
+    commands.deleteTable(),
+  ];
+  const canResults: boolean[] = [
+    state.can.removeLink(),
+    state.can.removeImage(),
+    state.can.setParagraph(),
+    state.can.setHeading(values.headingLevel),
+    state.can.toggleBlockquote(),
+    state.can.toggleBulletList(),
+    state.can.toggleOrderedList(),
+    state.can.sinkListItem(),
+    state.can.liftListItem(),
+    state.can.toggleTaskList(),
+    state.can.setTaskChecked(false),
+    state.can.insertHardBreak(),
+    state.can.insertHorizontalRule(),
+    state.can.setCodeBlock(values.codeBlockOptions),
+    state.can.insertTable(values.tableInsertOptions),
+    state.can.addTableRow(),
+    state.can.addTableColumn(),
+    state.can.deleteTableRow(),
+    state.can.deleteTableColumn(),
+    state.can.setTableColumnAlignment(values.tableAlignment),
+    state.can.deleteTable(),
+  ];
+  const activeResults: boolean[] = [
+    state.isActive.node(values.activeNode),
+    state.isActive.paragraph(),
+    state.isActive.heading(),
+    state.isActive.heading(values.headingLevel),
+    state.isActive.blockquote(),
+    state.isActive.bulletList(),
+    state.isActive.orderedList(),
+    state.isActive.taskList(),
+    state.isActive.taskChecked(),
+    state.isActive.taskChecked(false),
+    state.isActive.hardBreak(),
+    state.isActive.horizontalRule(),
+    state.isActive.codeBlock(),
+    state.isActive.codeBlock(values.codeBlockOptions),
+    state.isActive.table(),
+    state.isActive.tableColumnAlignment(values.tableAlignment),
+  ];
+  void commandResults;
+  void canResults;
+  void activeResults;
+}
+
+exerciseStructuralSurface(rootCommands, rootState, {
+  activeNode,
+  codeBlockOptions,
+  headingLevel,
+  tableAlignment,
+  tableInsertOptions,
+});
+exerciseStructuralSurface(minimalCommands, minimalState, {
+  activeNode: minimalActiveNode,
+  codeBlockOptions: minimalCodeBlockOptions,
+  headingLevel: minimalHeadingLevel,
+  tableAlignment: minimalTableAlignment,
+  tableInsertOptions: minimalTableInsertOptions,
+});
 const staticDefinition = defineMarkdownEditorExtension({
   name: "@pack-smoke/static",
   version: "1.0.0",
@@ -592,6 +717,20 @@ const unsubscribeUpdate = editor.subscribe("update", (event: MarkdownEditorEvent
   const origin: MarkdownEditorChangeOrigin = event.origin;
   void origin;
 });
+const unsubscribeState = editor.subscribe("state", (event: MarkdownEditorStateEvent) => {
+  const docChanged: boolean = event.docChanged;
+  const selectionChanged: boolean = event.selectionChanged;
+  const origin: MarkdownEditorChangeOrigin = event.origin;
+  void docChanged;
+  void selectionChanged;
+  void origin;
+});
+const unsubscribeMinimalState = minimalEditor.subscribe("state", (event: MinimalMarkdownEditorStateEvent) => {
+  const docChanged: boolean = event.docChanged;
+  const selectionChanged: boolean = event.selectionChanged;
+  void docChanged;
+  void selectionChanged;
+});
 const reconciled: boolean = editor.commands.reconcileMarkdown("# Reconciled");
 editor.commands.resetMarkdown("# Reset", { emitChange: true });
 editor.commands.setMarkdown("# Compatibility reset");
@@ -604,6 +743,8 @@ const transactionOrigin: MarkdownEditorChangeOrigin | undefined =
   getMarkdownEditorTransactionOrigin(taggedTransaction);
 unsubscribe();
 unsubscribeUpdate();
+unsubscribeState();
+unsubscribeMinimalState();
 editor.focus("start");
 editor.blur();
 editor.destroy();
