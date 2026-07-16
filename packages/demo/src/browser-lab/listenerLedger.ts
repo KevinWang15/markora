@@ -27,6 +27,23 @@ type MutableEventTarget = {
   ) => void;
 };
 
+const UNSCOPED_OWNER = "__browser-lab-unscoped__";
+
+const PLAYWRIGHT_GLOBAL_LISTENER_TYPES = [
+  "auxclick",
+  "click",
+  "contextmenu",
+  "dblclick",
+  "mousedown",
+  "mousemove",
+  "mouseup",
+  "pointerdown",
+  "pointerup",
+  "touchcancel",
+  "touchend",
+  "touchstart",
+] as const;
+
 function getCapture(options?: boolean | EventListenerOptions) {
   return typeof options === "boolean" ? options : Boolean(options?.capture);
 }
@@ -35,6 +52,9 @@ export function createGlobalListenerLedger(win: Window) {
   const records: ListenerRecord[] = [];
   const restorers: Array<() => void> = [];
   let activeOwner: string | null = null;
+  let axeCoreBaselineAccepted = false;
+  let firefoxCodeMirrorBaselineAccepted = false;
+  let playwrightHarnessBaselineAccepted = false;
 
   const removeRecord = (
     target: EventTarget,
@@ -64,14 +84,17 @@ export function createGlobalListenerLedger(win: Window) {
     mutableTarget.addEventListener = (type, listener, options) => {
       originalAdd.call(target, type, listener, options);
 
-      if (!listener || !activeOwner || (typeof options === "object" && (options.once || options.signal?.aborted))) {
+      if (!listener || (typeof options === "object" && (options.once || options.signal?.aborted))) {
         return;
       }
 
       const record: ListenerRecord = {
         capture: getCapture(options),
         listener,
-        owner: activeOwner,
+        // Dynamic imports and browser callbacks run after the synchronous
+        // editor scope closes. Keep them in the aggregate ledger so teardown
+        // cannot silently miss lazy-runtime leaks.
+        owner: activeOwner ?? UNSCOPED_OWNER,
         target,
         targetName,
         type,
@@ -124,6 +147,110 @@ export function createGlobalListenerLedger(win: Window) {
         }
       }
     },
+    acceptPlaywrightHarnessBaseline() {
+      if (playwrightHarnessBaselineAccepted) {
+        return false;
+      }
+
+      const sentinel = records.filter((record) => (
+        record.owner === UNSCOPED_OWNER
+        && record.target === win
+        && record.type === "__playwright_global_listeners_check__"
+      ));
+
+      if (sentinel.length !== 1) {
+        return false;
+      }
+
+      const baseline: ListenerRecord[] = [sentinel[0]!];
+
+      for (const type of PLAYWRIGHT_GLOBAL_LISTENER_TYPES) {
+        const matching = records.filter((record) => (
+          record.owner === UNSCOPED_OWNER
+          && record.target === win
+          && record.type === type
+        ));
+
+        // Playwright installs one listener of each type with its private
+        // sentinel. If product code adds the same global listener, accepting
+        // one still leaves the extra record visible to teardown assertions.
+        if (matching.length < 1) {
+          return false;
+        }
+
+        baseline.push(matching[0]!);
+      }
+
+      for (const record of baseline) {
+        const index = records.indexOf(record);
+
+        if (index >= 0) {
+          records.splice(index, 1);
+        }
+      }
+
+      playwrightHarnessBaselineAccepted = true;
+      return true;
+    },
+    acceptAxeCoreBaseline() {
+      const axeVersion = (win as Window & { axe?: { version?: unknown } }).axe?.version;
+
+      if (axeCoreBaselineAccepted || axeVersion !== "4.12.1") {
+        return false;
+      }
+
+      const matching = records.filter((record) => (
+        record.owner === UNSCOPED_OWNER
+        && record.target === win
+        && record.type === "message"
+        && !record.capture
+        && typeof record.listener === "function"
+        && Function.prototype.toString.call(record.listener).includes("messageHandler")
+      ));
+
+      // axe-core 4.12.1 opens one frame messenger when its source is injected
+      // by the Playwright accessibility harness and does not expose a matching
+      // close operation. Accept only that identifiable function; an unrelated
+      // product message listener remains in the ledger.
+      if (matching.length !== 1) {
+        return false;
+      }
+
+      records.splice(records.indexOf(matching[0]!), 1);
+      axeCoreBaselineAccepted = true;
+      return true;
+    },
+    acceptFirefoxCodeMirrorCopyCutBaseline() {
+      if (firefoxCodeMirrorBaselineAccepted || !/Firefox\//i.test(win.navigator.userAgent)) {
+        return false;
+      }
+
+      const matching = records.filter((record) => (
+        record.owner === UNSCOPED_OWNER
+        && record.target === win.document
+        && !record.capture
+        && (record.type === "copy" || record.type === "cut")
+      ));
+      const copy = matching.filter((record) => record.type === "copy");
+      const cut = matching.filter((record) => record.type === "cut");
+
+      // CodeMirror installs exactly one permanent no-op pair per document in
+      // Firefox. Anything broader remains visible to teardown assertions.
+      if (matching.length !== 2 || copy.length !== 1 || cut.length !== 1) {
+        return false;
+      }
+
+      for (const record of matching) {
+        const index = records.indexOf(record);
+
+        if (index >= 0) {
+          records.splice(index, 1);
+        }
+      }
+
+      firefoxCodeMirrorBaselineAccepted = true;
+      return true;
+    },
     scope<T>(owner: string, callback: () => T) {
       const previousOwner = activeOwner;
       activeOwner = owner;
@@ -157,6 +284,9 @@ export function createGlobalListenerLedger(win: Window) {
 
       records.splice(0);
       activeOwner = null;
+      axeCoreBaselineAccepted = false;
+      firefoxCodeMirrorBaselineAccepted = false;
+      playwrightHarnessBaselineAccepted = false;
     },
   };
 }

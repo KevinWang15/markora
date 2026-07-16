@@ -1,13 +1,43 @@
 import type { Extension } from "@codemirror/state";
-import { StreamLanguage } from "@codemirror/language";
 
 export type CodeBlockLanguageSupport = Extension | (() => Extension | Promise<Extension>);
 export type CodeBlockLanguageRegistry = Record<string, CodeBlockLanguageSupport>;
 
-type CachedLanguageSupport = Extension | Promise<Extension>;
+type PendingLanguageSubscriber = {
+  onResolved: (extension: Extension) => void;
+  // Return true when this subscriber is still live and can claim the shared
+  // failure. Every live subscriber is notified, but only one reports it.
+  onRejected: (error: unknown, reportSharedFailure: boolean) => boolean;
+};
+
+type PendingLanguageSupport = {
+  status: "pending";
+  subscribers: Map<number, PendingLanguageSubscriber>;
+};
+
+type ResolvedLanguageSupport = {
+  extension: Extension;
+  status: "resolved";
+};
+
+type CachedLanguageSupport = PendingLanguageSupport | ResolvedLanguageSupport;
+
+export type CodeBlockLanguageSubscription =
+  | { status: "missing" }
+  | ResolvedLanguageSupport
+  | { status: "pending"; unsubscribe: () => void };
+
+export type CodeBlockLanguageSubscriber = PendingLanguageSubscriber;
 
 function lazyModuleLanguage<TModule>(loadModule: () => Promise<TModule>, createExtension: (module: TModule) => Extension) {
   return () => loadModule().then((module) => createExtension(module));
+}
+
+function lazyShellLanguage() {
+  return () => Promise.all([
+    import("@codemirror/language"),
+    import("@codemirror/legacy-modes/mode/shell"),
+  ]).then(([{ StreamLanguage }, module]) => StreamLanguage.define(module.shell));
 }
 
 export function normalizeCodeBlockLanguage(language: string) {
@@ -40,18 +70,9 @@ export function createDefaultCodeBlockLanguageRegistry(): CodeBlockLanguageRegis
     java: lazyModuleLanguage(() => import("@codemirror/lang-java"), (module) => module.java()),
     rust: lazyModuleLanguage(() => import("@codemirror/lang-rust"), (module) => module.rust()),
     rs: lazyModuleLanguage(() => import("@codemirror/lang-rust"), (module) => module.rust()),
-    bash: lazyModuleLanguage(
-      () => import("@codemirror/legacy-modes/mode/shell"),
-      (module) => StreamLanguage.define(module.shell),
-    ),
-    sh: lazyModuleLanguage(
-      () => import("@codemirror/legacy-modes/mode/shell"),
-      (module) => StreamLanguage.define(module.shell),
-    ),
-    shell: lazyModuleLanguage(
-      () => import("@codemirror/legacy-modes/mode/shell"),
-      (module) => StreamLanguage.define(module.shell),
-    ),
+    bash: lazyShellLanguage(),
+    sh: lazyShellLanguage(),
+    shell: lazyShellLanguage(),
   };
 }
 
@@ -61,48 +82,154 @@ export function createCodeBlockLanguageResolver(languageRegistry?: CodeBlockLang
     ...languageRegistry,
   };
   const cache = new Map<string, CachedLanguageSupport>();
+  let nextSubscriberId = 1;
 
-  function resolve(language: string): CachedLanguageSupport | null {
+  function subscribe(
+    language: string,
+    subscriber: CodeBlockLanguageSubscriber,
+  ): CodeBlockLanguageSubscription {
     const normalized = normalizeCodeBlockLanguage(language);
 
     if (!normalized) {
-      return null;
+      return { status: "missing" };
     }
 
     const cached = cache.get(normalized);
 
     if (cached) {
-      return cached;
+      if (cached.status === "resolved") {
+        return cached;
+      }
+
+      return addPendingSubscriber(cached, subscriber);
     }
 
     const support = registry[normalized];
 
     if (!support) {
-      return null;
+      return { status: "missing" };
     }
 
     if (typeof support !== "function") {
-      cache.set(normalized, support);
-      return support;
+      const resolved = { extension: support, status: "resolved" } as const;
+      cache.set(normalized, resolved);
+      return resolved;
     }
 
     const loadedSupport = support();
 
-    if (loadedSupport instanceof Promise) {
-      const cachedPromise = loadedSupport.then((extension) => {
-        cache.set(normalized, extension);
-        return extension;
-      }).catch((error) => {
-        cache.delete(normalized);
-        throw error;
-      });
-      cache.set(normalized, cachedPromise);
-      return cachedPromise;
+    if (isPromiseLike(loadedSupport)) {
+      const pending: PendingLanguageSupport = {
+        status: "pending",
+        subscribers: new Map(),
+      };
+      cache.set(normalized, pending);
+      const subscription = addPendingSubscriber(pending, subscriber);
+
+      // Observe each shared host promise exactly once. Individual active code
+      // blocks live only in the subscriber map and can remove themselves while
+      // a loader remains pending, so a host promise cannot retain every editor
+      // created by repeated viewport activation.
+      void Promise.resolve(loadedSupport).then(
+        (extension) => settleResolved(normalized, pending, extension),
+        (error: unknown) => settleRejected(normalized, pending, error),
+      );
+      return subscription;
     }
 
-    cache.set(normalized, loadedSupport);
-    return loadedSupport;
+    const resolved = { extension: loadedSupport, status: "resolved" } as const;
+    cache.set(normalized, resolved);
+    return resolved;
   }
 
-  return { resolve };
+  function addPendingSubscriber(
+    pending: PendingLanguageSupport,
+    subscriber: CodeBlockLanguageSubscriber,
+  ): Extract<CodeBlockLanguageSubscription, { status: "pending" }> {
+    const subscriberId = nextSubscriberId;
+    nextSubscriberId += 1;
+    pending.subscribers.set(subscriberId, subscriber);
+    let subscribed = true;
+
+    return {
+      status: "pending",
+      unsubscribe() {
+        if (!subscribed) {
+          return;
+        }
+
+        subscribed = false;
+        pending.subscribers.delete(subscriberId);
+      },
+    };
+  }
+
+  function settleResolved(
+    normalized: string,
+    pending: PendingLanguageSupport,
+    extension: Extension,
+  ) {
+    if (cache.get(normalized) !== pending) {
+      return;
+    }
+
+    cache.set(normalized, { extension, status: "resolved" });
+    const subscribers = [...pending.subscribers.values()];
+    pending.subscribers.clear();
+
+    for (const subscriber of subscribers) {
+      subscriber.onResolved(extension);
+    }
+  }
+
+  function settleRejected(
+    normalized: string,
+    pending: PendingLanguageSupport,
+    error: unknown,
+  ) {
+    if (cache.get(normalized) !== pending) {
+      return;
+    }
+
+    cache.delete(normalized);
+    const subscribers = [...pending.subscribers.values()];
+    pending.subscribers.clear();
+    let sharedFailureReported = false;
+
+    for (const subscriber of subscribers) {
+      const current = subscriber.onRejected(error, !sharedFailureReported);
+
+      if (!sharedFailureReported && current) {
+        sharedFailureReported = true;
+      }
+    }
+  }
+
+  function getPendingSubscriberCount(language?: string) {
+    if (language !== undefined) {
+      const cached = cache.get(normalizeCodeBlockLanguage(language));
+      return cached?.status === "pending" ? cached.subscribers.size : 0;
+    }
+
+    let count = 0;
+
+    for (const cached of cache.values()) {
+      if (cached.status === "pending") {
+        count += cached.subscribers.size;
+      }
+    }
+
+    return count;
+  }
+
+  return { getPendingSubscriberCount, subscribe };
+}
+
+function isPromiseLike(value: Extension | Promise<Extension>): value is Promise<Extension> {
+  return (
+    typeof value === "object"
+    && value !== null
+    && "then" in value
+    && typeof value.then === "function"
+  );
 }

@@ -1,6 +1,6 @@
 # Embedded input and accessibility contract
 
-This document defines the input behavior certified by `EE-006`, the typed host setup added by `EE-007`, and the headless resource/upload obligations added by `EE-012` for Markora in an embedded host. It is a baseline contract, not a claim that a headless browser can replace testing with real input methods or assistive technology.
+This document defines the input behavior certified by `EE-006`, the typed host setup added by `EE-007`, the headless resource/upload obligations added by `EE-012`, and the passive/lazy code-block behavior added by `EE-015` for Markora in an embedded host. It is a baseline contract, not a claim that a headless browser can replace testing with real input methods or assistive technology.
 
 ## Host setup required for the baseline
 
@@ -26,7 +26,7 @@ const editor = createEditor({
 
 The label must describe the editor's purpose in the host product; a fixed library-provided English label would be wrong for pages with multiple editors and for localized products. Markora supplies textbox-role and multiline defaults; hosts claiming this baseline must not replace them without equivalent assistive-technology validation. Its contenteditable/read-only state and placeholder metadata take precedence over conflicts in the general `attributes` option. The `/__browser` fixture applies this host obligation before running axe.
 
-Use `editor.focus()` and `editor.blur()` for ordinary focus management. Typed focus and blur subscriptions treat the outer editing surface and nested CodeMirror editors as one focus boundary; movement between them does not produce a false blur/focus pair. Portaled optional UI remains outside that core boundary and follows the dialog/toolbar focus behavior below.
+Use `editor.focus()` and `editor.blur()` for ordinary focus management. Inactive code fences remain exact source text inside the outer editing surface. Placing a caret or starting an edit activates CodeMirror and transfers the same logical selection; a native range selection can remain on the passive shell so drag selection and copy are not disrupted. Typed focus and blur subscriptions treat the outer editing surface and active nested CodeMirror editors as one focus boundary, so activation does not produce a false blur/focus pair. Delayed activation and boundary-exit work must not reclaim focus after `editor.blur()` or a host control takes it. Portaled optional UI remains outside that core boundary and follows the dialog/toolbar focus behavior below.
 
 Hosts that require all interactive content to sit inside a page landmark should pass `createDefaultUi({ portalRoot })` a portal within the appropriate host landmark. The axe fixture uses an editor-local portal so the toolbar and dialogs are assessed in their real host context.
 
@@ -54,8 +54,16 @@ Markora relies on ProseMirror and CodeMirror's native composition pipelines. Pro
 | `text/markdown` only | No Markdown-specific behavior is promised. Deliberate MIME precedence, paste-as-Markdown, and Markdown copy output belong to `EE-017`. |
 | External text/HTML drop | The drop is schema-parsed at the browser-reported document position and is one undoable edit. |
 | File-bearing paste, dragover, or drop in ProseMirror | Native file insertion/navigation and mixed-transfer text insertion are always prevented. Without `resources.assets`, files are consumed without reading bytes. With the hook, policy-accepted files start host uploads and are inserted only after the complete remaining batch succeeds. Rejected/failed attempts do not change the document. Unrelated host-page listeners remain under the host's control. |
-| CodeMirror text paste | Consumes plain text only. Rich HTML formatting is not interpreted inside a code block. |
-| File-bearing paste, dragover, or drop in CodeMirror | Always rejected, even when `resources.assets` is configured. Nested code remains a plain-text surface and never uploads files. |
+| Nested-code text paste/drop, in the passive shell or active CodeMirror | Consumes text only. Rich HTML formatting is not interpreted inside a code block; configured nested-code transforms may derive replacement text. |
+| File-bearing paste, dragover, or drop in nested code | Always rejected, even when `resources.assets` is configured. Nested code remains a plain-text surface and never uploads files. |
+
+Before CodeMirror activates, the permanent code-fence shell is a native
+`<code>` element within the named outer textbox, not a second interactive
+textbox. Paste/drop applies the same nested-code text transforms and file
+rejection policy through an outer-document transaction. Native selection,
+copy, and page search operate on its exact text without forcing activation;
+activation mounts the advanced editor from the same ProseMirror document text
+rather than parsing copied HTML.
 
 The outer upload contract is explicitly host-controlled. Its defaults accept AVIF, GIF, JPEG, PNG, and WebP, at most 10,485,760 bytes per file and 10 files per transfer. Upload progress does not mutate the document. Successful multi-file results enter in transfer order as one undoable transaction; a failure prevents partial insertion and remains available for retry or cancellation. Read-only and active-composition transfers are rejected before the host uploader runs. A hard reset aborts uploads with cancellation events, while destruction aborts silently during teardown.
 
@@ -101,9 +109,9 @@ Core is headless and deliberately creates no upload progress widget. A host that
 
 ### Managed blocks
 
-- Tables, CodeMirror code blocks, and preserved-source blocks have keyboard-reachable before/after boundaries.
+- Tables, lazily activated CodeMirror code blocks, and preserved-source blocks have keyboard-reachable before/after boundaries.
 - From a boundary, Enter inserts an adjacent paragraph, text input inserts a paragraph containing that text, Backspace follows the documented remove/insert behavior, and the inward arrow re-enters the managed block.
-- CodeMirror owns editing and selection while focused; boundary exit returns focus to the outer ProseMirror surface.
+- CodeMirror owns editing and selection while focused; boundary exit returns focus to the outer ProseMirror surface only while focus remains inside the composite editor, and preserves an intervening host focus or blur handoff.
 - Preserved-source Edit buttons are real buttons and invoke only the host source-edit hook.
 - Visual boundary position is currently stronger than screen-reader announcement. Rich live announcements and complete mixed-bidi physical-arrow behavior remain tracked in `EE-016` and `EE-020`; the manual checklist records current AT output rather than assuming it.
 
@@ -116,4 +124,4 @@ Core is headless and deliberately creates no upload progress widget. A host that
 
 ## Automated accessibility gate
 
-The Playwright matrix runs axe against a production-built fixture containing headings, a task, link, image, table and toolbar, CodeMirror, and preserved source. Axe is supplemented by explicit keyboard, focus, accessible-name/state, target-size, composition, selection, and teardown assertions. Automatic results do not waive the VoiceOver and NVDA checklist in [assistive-technology-checklist.md](./assistive-technology-checklist.md).
+The Playwright matrix runs axe against production-built fixtures covering headings, a task, link, image, table and toolbar, a passive code-fence shell, active CodeMirror, and preserved source. Axe is supplemented by explicit keyboard, focus, accessible-name/state, target-size, composition, selection, and teardown assertions. Automatic results do not waive the VoiceOver and NVDA checklist in [assistive-technology-checklist.md](./assistive-technology-checklist.md).

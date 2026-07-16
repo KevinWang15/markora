@@ -113,6 +113,25 @@ import {
   type MarkdownEditorSelectionSnapshot,
 } from "./editorEvents";
 
+function destroyProseMirrorView(view: EditorView) {
+  const input = (view as EditorView & {
+    input?: { hideSelectionGuard: (() => void) | null };
+  }).input;
+  const selectionGuard = input?.hideSelectionGuard;
+
+  // prosemirror-view 1.41 removes its main DOM observer on destroy, but not
+  // the one-shot guard installed for an invisible selection. That document
+  // listener retains the destroyed view until another selectionchange. An
+  // embedded editor must release it synchronously because the host may keep
+  // the document alive indefinitely.
+  if (selectionGuard) {
+    view.dom.ownerDocument.removeEventListener("selectionchange", selectionGuard);
+    input.hideSelectionGuard = null;
+  }
+
+  view.destroy();
+}
+
 type ActiveLineMarker = {
   pos: number;
   marker: string;
@@ -308,10 +327,26 @@ function getEditorRootActiveElement(view: EditorView) {
   const ownerWindow = view.dom.ownerDocument.defaultView;
 
   if (ownerWindow?.ShadowRoot && root instanceof ownerWindow.ShadowRoot) {
-    return root.activeElement;
+    return root.activeElement ?? view.dom.ownerDocument.activeElement;
   }
 
   return view.dom.ownerDocument.activeElement;
+}
+
+function isActiveElementInsideEditor(view: EditorView, activeElement: Element | null) {
+  return activeElement !== null && view.dom.contains(activeElement);
+}
+
+function blurElement(element: Element | null) {
+  if (!element) {
+    return;
+  }
+
+  const blur = (element as Element & { blur?: unknown }).blur;
+
+  if (typeof blur === "function") {
+    blur.call(element);
+  }
 }
 
 function syncReadonlyControls(view: EditorView) {
@@ -1021,6 +1056,37 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const CodeBlockView = createCodeBlockViewClass({
     languageRegistry: codeBlockLanguages,
     nestedClipboard: extensionAssembly.contributions.nestedClipboard,
+    onActivationError(error, language, delivery) {
+      const deliver = () => {
+        if (
+          lifecycle !== "active"
+          || !editor
+          || view.isDestroyed
+          || !delivery.isCurrent()
+        ) {
+          return;
+        }
+
+        const delivered = eventDispatcher.emit("error", {
+          code: "code-block-runtime-load-failed",
+          context: { language, phase: "runtime" },
+          editor,
+          error,
+          recoverable: true,
+          type: "error",
+        });
+
+        if (delivered === 0) {
+          reportUnhandled(error);
+        }
+      };
+
+      if (delivery.defer || !editor) {
+        ownerWindow.queueMicrotask(deliver);
+      } else {
+        deliver();
+      }
+    },
     onLanguageLoadError(error, language, delivery) {
       if (lifecycle !== "active") {
         return;
@@ -2094,7 +2160,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       () => { errors.push(...extensionAssembly.cleanupSetup()); },
       () => {
         if (view && !view.isDestroyed) {
-          runWithViewErrorCollector(errors, () => view.destroy());
+          runWithViewErrorCollector(errors, () => destroyProseMirrorView(view));
         }
       },
       () => linkEditor.destroy(),
@@ -2272,7 +2338,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
       const activeElement = getEditorRootActiveElement(view);
 
-      if (activeElement instanceof ownerWindow.Node && view.dom.contains(activeElement)) {
+      if (isActiveElementInsideEditor(view, activeElement)) {
         return;
       }
 
@@ -2468,8 +2534,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       assertActive("blur the editor");
       const activeElement = getEditorRootActiveElement(view);
 
-      if (activeElement instanceof ownerWindow.HTMLElement && view.dom.contains(activeElement)) {
-        activeElement.blur();
+      if (isActiveElementInsideEditor(view, activeElement)) {
+        blurElement(activeElement);
       }
     },
     focus(selection) {
@@ -2548,7 +2614,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         () => assetController.cancelAll({ dispatch: false, emit: false }),
         () => uiControllers.clearSelectionAnchor(),
         () => { cleanupErrors.push(...extensionAssembly.cleanupSetup()); },
-        () => runWithViewErrorCollector(cleanupErrors, () => view.destroy()),
+        () => runWithViewErrorCollector(cleanupErrors, () => destroyProseMirrorView(view)),
         () => linkEditor.destroy(),
         () => imageEditor.destroy(),
         () => tableToolbar.destroy(),

@@ -59,6 +59,7 @@ export type MarkdownEditorStateEvent = MarkdownEditorEventBase<"state"> & {
 
 export type MarkdownEditorErrorCode =
   | "code-block-language-load-failed"
+  | "code-block-runtime-load-failed"
   | "resource-callback-failed"
   | `EXTENSION_${string}`;
 
@@ -85,6 +86,16 @@ export type MarkdownEditorCodeBlockLanguageErrorEvent = MarkdownEditorEventBase<
   recoverable: true;
 };
 
+export type MarkdownEditorCodeBlockRuntimeErrorEvent = MarkdownEditorEventBase<"error"> & {
+  code: "code-block-runtime-load-failed";
+  context: {
+    language: string;
+    phase: "runtime";
+  };
+  error: unknown;
+  recoverable: true;
+};
+
 export type MarkdownEditorExtensionErrorEvent = MarkdownEditorEventBase<"error"> & {
   code: `EXTENSION_${string}`;
   context: {
@@ -99,6 +110,7 @@ export type MarkdownEditorExtensionErrorEvent = MarkdownEditorEventBase<"error">
 
 export type MarkdownEditorErrorEvent =
   | MarkdownEditorCodeBlockLanguageErrorEvent
+  | MarkdownEditorCodeBlockRuntimeErrorEvent
   | MarkdownEditorResourceErrorEvent
   | MarkdownEditorExtensionErrorEvent;
 

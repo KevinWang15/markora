@@ -18,7 +18,7 @@ Write Markdown at the speed of thought.
 - Semantic import/edit/export for the documented dialect: a CommonMark-derived subset, pipe tables, strikethrough, and flat task items
 - Inert, exact-source atoms for conservatively recognized front matter, display math, HTML, comments, and directives
 - Inline marks for bold, italic, code, strike, and links
-- Embedded CodeMirror code blocks with lazy-loaded built-in grammars
+- Exact source-text code-fence shells with viewport-lazy CodeMirror editing and lazy-loaded built-in grammars
 - Headless command/state APIs plus optional overlays from `markora-ui`
 - A versioned creation-time extension kernel and an independently bundled minimal entry
 - Per-editor URL, image-loading, link-opening, and asynchronous asset-upload policy with secure defaults
@@ -179,7 +179,7 @@ editor.updateOptions({
 
 - `markora` is headless by default: it owns parsing, serialization, commands, state, and embedded code-block editing
 - `markora-ui` adds the repo's default link editor, image editor, and table toolbar overlays
-- `codeBlockLanguages` lets hosts add or override lazy CodeMirror language loaders
+- Code fences keep an exact selectable/searchable source shell in the document; CodeMirror activates near the viewport or for caret/edit interactions, while native range selection can remain on the shell and host-extensible `codeBlockLanguages` loaders run only after activation
 - `editor.commands.reconcileMarkdown(markdown)` is the ordinary authoritative host-update path; it preserves editor state and is silent by default
 - `editor.commands.resetMarkdown(markdown)` is an explicit hard reset that resets selection and clears history/plugin state; deprecated `setMarkdown()` remains a hard-reset alias
 - `onEditOpaqueMarkdown` lets the host open its own source editor for protected opaque atoms; its guarded update function rejects stale writes
@@ -188,7 +188,7 @@ editor.updateOptions({
 - `editor.view` is a version-coupled advanced escape hatch. Inspection and `dispatch()` are supported for advanced integrations; direct `setProps()`, `updateState()`, DOM mutation, or `destroy()` can bypass Markora invariants and events and are outside the public semver contract
 - `resources` configures per-editor stored-URL policy, runtime URL resolution/opening, async image loading, privacy attributes, and optional file upload; `editor.assets` controls retained uploads
 - `markora/extension-api` is the supported constructor/type boundary for external schema, Markdown, command, state, plugin, NodeView, clipboard, and UI-action contributions
-- `markora/minimal` keeps the extension kernel and basic CommonMark editing in a separate static graph without CodeMirror or default-only syntax modules
+- `markora/minimal` plus `markora/minimal.css` keeps the extension kernel and basic CommonMark editing in a separate static graph and stylesheet without CodeMirror or default-only syntax modules
 
 ## External Markdown updates
 

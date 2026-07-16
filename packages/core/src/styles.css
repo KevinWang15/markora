@@ -439,6 +439,56 @@
   background: #ffffff;
 }
 
+.mdw-host .mdw-code-block-static {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  overflow: auto;
+  background: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  line-height: 1.65;
+}
+
+.mdw-host .mdw-code-block-static[hidden],
+.mdw-host .mdw-code-block-active[hidden] {
+  display: none;
+}
+
+.mdw-host .mdw-code-block-static-gutter {
+  min-width: 2.5rem;
+  padding: 0.875rem 0.625rem 0.875rem 0.75rem;
+  box-sizing: border-box;
+  border-right: 1px solid #d8dee4;
+  background: #f6f8fa;
+  color: #626c76;
+  text-align: right;
+  white-space: pre;
+  user-select: none;
+}
+
+.mdw-host .mdw-code-block-static-pre {
+  min-width: max-content;
+  min-height: 1.65em;
+  margin: 0;
+  padding: 0.875rem 0 0.875rem 0.875rem;
+  box-sizing: border-box;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+}
+
+.mdw-host .mdw-code-block-static-code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre;
+}
+
+.mdw-host .mdw-code-block-active {
+  min-width: 0;
+}
+
 .mdw-host .mdw-code-block.mdw-code-block-outer-selection {
   border-color: #96c0ff;
   box-shadow: 0 0 0 1px rgba(9, 105, 218, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.5);
@@ -455,6 +505,8 @@
 
 .mdw-host .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-language,
 .mdw-host .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-editor,
+.mdw-host .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-static,
+.mdw-host .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-static-gutter,
 .mdw-host .mdw-code-block.mdw-code-block-outer-selection .cm-gutters,
 .mdw-host .mdw-code-block.mdw-code-block-outer-selection .cm-activeLine,
 .mdw-host .mdw-code-block.mdw-code-block-outer-selection .cm-activeLineGutter,
@@ -495,7 +547,7 @@
 
 .mdw-host .cm-lineNumbers {
   min-width: 2.5rem;
-  color: #6e7781;
+  color: #626c76;
 }
 
 .mdw-host .cm-lineNumbers .cm-gutterElement {
@@ -520,7 +572,7 @@
 .mdw-host .cm-gutters {
   border-right: 1px solid #d8dee4;
   background: #f6f8fa;
-  color: #6e7781;
+  color: #626c76;
 }
 
 .mdw-host .cm-activeLine {
@@ -613,6 +665,7 @@
 }
 
 .mdw-host .ProseMirror table.mdw-managed-block-cursor,
+.mdw-host .ProseMirror pre.mdw-managed-block-cursor,
 .mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor,
 .mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor {
   position: relative;
@@ -620,6 +673,8 @@
 
 .mdw-host .ProseMirror table.mdw-managed-block-cursor::before,
 .mdw-host .ProseMirror table.mdw-managed-block-cursor::after,
+.mdw-host .ProseMirror pre.mdw-managed-block-cursor::before,
+.mdw-host .ProseMirror pre.mdw-managed-block-cursor::after,
 .mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor::before,
 .mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor::after,
 .mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor::before,
@@ -638,6 +693,7 @@
 }
 
 .mdw-host .ProseMirror table.mdw-managed-block-cursor-before::before,
+.mdw-host .ProseMirror pre.mdw-managed-block-cursor-before::before,
 .mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor-before::before,
 .mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor-before::before {
   content: "";
@@ -645,6 +701,7 @@
 }
 
 .mdw-host .ProseMirror table.mdw-managed-block-cursor-after::after,
+.mdw-host .ProseMirror pre.mdw-managed-block-cursor-after::after,
 .mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor-after::after,
 .mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor-after::after {
   content: "";

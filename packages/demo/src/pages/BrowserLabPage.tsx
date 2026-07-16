@@ -158,6 +158,15 @@ export type BrowserLabTransferResult = {
 export type BrowserLabSnapshot = {
   activeElement: string | null;
   changeCount: number;
+  codeBlocks: {
+    active: number;
+    codeMirrorEditors: number;
+    error: number;
+    inactive: number;
+    loading: number;
+    staticViews: number;
+    total: number;
+  };
   codeMirrorFocused: boolean;
   id: string;
   markdown: string;
@@ -227,6 +236,7 @@ declare global {
 }
 
 type MountedEditor = {
+  activationObserver: MutationObserver;
   changeCount: number;
   controlledEcho: boolean;
   editor: MarkdownEditor;
@@ -526,6 +536,15 @@ function readSnapshot(mounted: MountedEditor): BrowserLabSnapshot {
   return {
     activeElement: describeActiveElement(mounted),
     changeCount: mounted.changeCount,
+    codeBlocks: {
+      active: mounted.editor.view.dom.querySelectorAll('[data-mdw-code-block-state="active"]').length,
+      codeMirrorEditors: mounted.editor.view.dom.querySelectorAll(".cm-editor").length,
+      error: mounted.editor.view.dom.querySelectorAll('[data-mdw-code-block-state="error"]').length,
+      inactive: mounted.editor.view.dom.querySelectorAll('[data-mdw-code-block-state="inactive"]').length,
+      loading: mounted.editor.view.dom.querySelectorAll('[data-mdw-code-block-state="loading"]').length,
+      staticViews: mounted.editor.view.dom.querySelectorAll(".mdw-code-block-static").length,
+      total: mounted.editor.view.dom.querySelectorAll(".mdw-code-block").length,
+    },
     codeMirrorFocused: activeElement instanceof HTMLElement && activeElement.classList.contains("cm-content"),
     id: mounted.section.dataset.e2eEditor ?? "",
     markdown: mounted.editor.getMarkdown(),
@@ -602,31 +621,16 @@ export function BrowserLabPage() {
 
     const editors = new Map<string, MountedEditor>();
     const listenerLedger = createGlobalListenerLedger(window);
-    const codeMirrorBaselineOwner = "__codemirror-browser-baseline";
-    const codeMirrorBaselineHost = document.createElement("div");
-    codeMirrorBaselineHost.hidden = true;
-    labRoot.append(codeMirrorBaselineHost);
-    const codeMirrorBaselineEditor = listenerLedger.scope(codeMirrorBaselineOwner, () => createEditor({
-      element: codeMirrorBaselineHost,
-      markdown: "```\nbrowser baseline\n```",
-    }));
-    codeMirrorBaselineEditor.destroy();
-    codeMirrorBaselineHost.remove();
-    const codeMirrorBaseline = listenerLedger.snapshot(codeMirrorBaselineOwner);
-    const expectedFirefoxBaseline = codeMirrorBaseline.total === 2
-      && codeMirrorBaseline.byTargetAndType["document:copy"] === 1
-      && codeMirrorBaseline.byTargetAndType["document:cut"] === 1
-      && Object.keys(codeMirrorBaseline.byTargetAndType).length === 2;
-
-    if (codeMirrorBaseline.total !== 0 && !expectedFirefoxBaseline) {
-      throw new Error(`Unexpected CodeMirror global-listener baseline: ${JSON.stringify(codeMirrorBaseline)}`);
-    }
-
-    // CodeMirror intentionally installs one document-level copy/cut pair per
-    // Firefox document to work around an upstream empty-selection bug. Warm it
-    // before measurements so editor lifecycle deltas remain exact.
-    listenerLedger.acceptBaseline(codeMirrorBaselineOwner);
-
+    let didActivateCodeMirror = false;
+    let didAcceptFirefoxCodeMirrorBaseline = false;
+    const noteCodeMirrorActivation = (node: Node) => {
+      if (
+        node instanceof Element
+        && (node.matches(".cm-editor") || node.querySelector(".cm-editor"))
+      ) {
+        didActivateCodeMirror = true;
+      }
+    };
     const mountEditorInHost = (
       mounted: MountedEditor,
       spec: Omit<BrowserLabEditorSpec, "direction" | "id" | "placement" | "portal" | "root">,
@@ -693,6 +697,10 @@ export function BrowserLabPage() {
       }
 
       try {
+        if (mounted.editor.view.dom.querySelector(".cm-editor")) {
+          didActivateCodeMirror = true;
+        }
+
         mounted.editor.destroy();
       } finally {
         for (const unsubscribe of mounted.eventUnsubscribes.values()) {
@@ -700,6 +708,7 @@ export function BrowserLabPage() {
         }
 
         mounted.eventUnsubscribes.clear();
+        mounted.activationObserver.disconnect();
         mounted.section.remove();
         editors.delete(id);
       }
@@ -795,7 +804,16 @@ export function BrowserLabPage() {
 
         const effectivePortalRoot = explicitPortalRoot
           ?? (rootMode === "shadow" ? editorRoot as ShadowRoot : document.body);
+        const activationObserver = new MutationObserver((records) => {
+          for (const record of records) {
+            for (const node of record.addedNodes) {
+              noteCodeMirrorActivation(node);
+            }
+          }
+        });
+        activationObserver.observe(host, { childList: true, subtree: true });
         const mounted: MountedEditor = {
+          activationObserver,
           changeCount: 0,
           controlledEcho: false,
           editor: null as unknown as MarkdownEditor,
@@ -818,6 +836,7 @@ export function BrowserLabPage() {
         try {
           mountEditorInHost(mounted, spec);
         } catch (error) {
+          activationObserver.disconnect();
           section.remove();
           throw error;
         }
@@ -1053,6 +1072,13 @@ export function BrowserLabPage() {
         };
       },
       listenerSnapshot(id) {
+        listenerLedger.acceptPlaywrightHarnessBaseline();
+        listenerLedger.acceptAxeCoreBaseline();
+
+        if (didActivateCodeMirror && !didAcceptFirefoxCodeMirrorBaseline) {
+          didAcceptFirefoxCodeMirrorBaseline = listenerLedger.acceptFirefoxCodeMirrorCopyCutBaseline();
+        }
+
         return listenerLedger.snapshot(id);
       },
       dispatchTransfer(id, spec) {

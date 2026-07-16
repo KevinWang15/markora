@@ -83,6 +83,23 @@ import {
 } from "./resourcePolicy";
 import { createResourceOpenPlugin } from "./resourceInteractions";
 
+function destroyProseMirrorView(view: EditorView) {
+  const input = (view as EditorView & {
+    input?: { hideSelectionGuard: (() => void) | null };
+  }).input;
+  const selectionGuard = input?.hideSelectionGuard;
+
+  // prosemirror-view's invisible-selection guard is a one-shot document
+  // listener that its normal destroy path does not remove. Release it now so
+  // a host document cannot retain a destroyed embedded editor.
+  if (selectionGuard) {
+    view.dom.ownerDocument.removeEventListener("selectionchange", selectionGuard);
+    input.hideSelectionGuard = null;
+  }
+
+  view.destroy();
+}
+
 type BrowserWindow = Window & typeof globalThis;
 
 type EditorRuntimeOptions = {
@@ -265,10 +282,26 @@ function getEditorRootActiveElement(view: EditorView) {
   const ownerWindow = view.dom.ownerDocument.defaultView;
 
   if (ownerWindow?.ShadowRoot && root instanceof ownerWindow.ShadowRoot) {
-    return root.activeElement;
+    return root.activeElement ?? view.dom.ownerDocument.activeElement;
   }
 
   return view.dom.ownerDocument.activeElement;
+}
+
+function isActiveElementInsideEditor(view: EditorView, activeElement: Element | null) {
+  return activeElement !== null && view.dom.contains(activeElement);
+}
+
+function blurElement(element: Element | null) {
+  if (!element) {
+    return;
+  }
+
+  const blur = (element as Element & { blur?: unknown }).blur;
+
+  if (typeof blur === "function") {
+    blur.call(element);
+  }
 }
 
 function createCleanupError(message: string, errors: readonly unknown[]) {
@@ -917,7 +950,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
     if (view && !view.isDestroyed) {
       try {
-        view.destroy();
+        destroyProseMirrorView(view);
       } catch (error) {
         errors.push(error);
       }
@@ -1625,7 +1658,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
       const activeElement = getEditorRootActiveElement(view);
 
-      if (activeElement instanceof ownerWindow.Node && view.dom.contains(activeElement)) {
+      if (isActiveElementInsideEditor(view, activeElement)) {
         return;
       }
 
@@ -1754,11 +1787,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       assertActive("blur the editor");
       const activeElement = getEditorRootActiveElement(view);
 
-      if (
-        activeElement instanceof ownerWindow.HTMLElement
-        && view.dom.contains(activeElement)
-      ) {
-        activeElement.blur();
+      if (isActiveElementInsideEditor(view, activeElement)) {
+        blurElement(activeElement);
       }
     },
     focus(selection) {
@@ -1825,7 +1855,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         () => changeEmitter.flushFinal(),
         () => assetController.cancelAll({ dispatch: false, emit: false }),
         () => { cleanupErrors.push(...extensionAssembly.cleanupSetup()); },
-        () => view.destroy(),
+        () => destroyProseMirrorView(view),
         () => { cleanupErrors.push(...extensionAssembly.cleanupAssembly()); },
       ]) {
         try {

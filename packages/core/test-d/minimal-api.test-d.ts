@@ -10,6 +10,7 @@ import {
   type MarkdownEditor,
   type MarkdownEditorChangeMode,
   type MarkdownEditorChangeOrigin,
+  type MarkdownEditorCodeBlockRuntimeErrorEvent,
   type MarkdownEditorExtensionHandle,
   type ToolbarState,
   type UpdateEditorOptions,
@@ -71,6 +72,7 @@ const handle: MarkdownEditorExtensionHandle<
   { count: number }
 > = editor.extensions.get(extension);
 const toolbar: ToolbarState = editor.getToolbarState();
+const sharedRuntimeErrorType = null as unknown as MarkdownEditorCodeBlockRuntimeErrorEvent;
 editor.subscribe("asset", ({ reason, upload }) => {
   const status = upload.status;
   void reason;
@@ -121,6 +123,7 @@ const destroyedError: MarkdownEditorDestroyedError =
 void count;
 void changeMode;
 void toolbar;
+void sharedRuntimeErrorType;
 void origin;
 void destroyedError;
 void (null as unknown as InternalMarkdownEditorExtensionDefinition);

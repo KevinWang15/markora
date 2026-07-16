@@ -5,6 +5,10 @@ import { TextSelection } from 'prosemirror-state';
 import { EditorView as CodeMirrorView, ViewPlugin } from '@codemirror/view';
 import { createEditor } from '../src/createEditor';
 import type { EditorUiFactory } from '../src';
+import {
+  installControlledIntersectionObservers,
+  waitForCodeBlockState,
+} from './codeBlockTestUtils';
 
 const foreignWindows: Array<Window & typeof globalThis> = [];
 const restores: Array<() => void> = [];
@@ -91,6 +95,12 @@ function installAnimationFrameStub(targetWindow: Window & typeof globalThis = wi
       pendingCallbacks.forEach((callback) => callback(0));
     },
   };
+}
+
+function installCodeBlockObserver(targetWindow: Window & typeof globalThis = window) {
+  const observer = installControlledIntersectionObservers(targetWindow);
+  restores.push(observer.restore);
+  return observer;
 }
 
 function getDocumentStats(editor: ReturnType<typeof createEditor>) {
@@ -244,7 +254,7 @@ describe('editor runtime', () => {
     editor.destroy();
   });
 
-  it('renders code block node views in the host document', () => {
+  it('renders passive code block node views in the host document', () => {
     const foreignWindow = createForeignWindow();
     const editor = createEditor({
       element: createHost(foreignWindow.document),
@@ -256,13 +266,17 @@ describe('editor runtime', () => {
 
     expect(codeBlock).not.toBeNull();
     expect(languageBadge?.textContent).toBe('ts');
-    expect(codeBlock?.querySelector('.cm-content')?.getAttribute('aria-label')).toBe('Code block editor');
+    expect(codeBlock?.getAttribute('data-mdw-code-block-state')).toBe('inactive');
+    expect(codeBlock?.querySelector('.mdw-code-block-static-code')?.hasAttribute('aria-label')).toBe(false);
+    expect(codeBlock?.querySelector('.mdw-code-block-static-code')?.textContent).toBe('const value = 1');
+    expect(codeBlock?.querySelector('.cm-editor')).toBeNull();
     expect(codeBlock?.ownerDocument).toBe(foreignWindow.document);
     expect(document.querySelector('.mdw-code-block')).toBeNull();
     editor.destroy();
   });
 
   it('loads custom code block language support lazily', async () => {
+    const intersectionObservers = installCodeBlockObserver();
     const loader = vi.fn(async () => ViewPlugin.define((view) => {
       view.dom.setAttribute('data-language-loaded', 'custom');
       return {};
@@ -275,20 +289,21 @@ describe('editor runtime', () => {
       markdown: ['```custom', 'const value = 1', '```'].join('\n'),
     });
 
-    const codeMirrorDom = editor.view.dom.querySelector('.cm-editor');
-
     expect(loader).not.toHaveBeenCalled();
-    expect(codeMirrorDom?.getAttribute('data-language-loaded')).toBeNull();
+    expect(editor.view.dom.querySelector('.cm-editor')).toBeNull();
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    intersectionObservers.emitAll(true);
+    await waitForCodeBlockState(editor, 'active');
+    await vi.waitFor(() => {
+      expect(editor.view.dom.querySelector('.cm-editor')?.getAttribute('data-language-loaded')).toBe('custom');
+    });
 
     expect(loader).toHaveBeenCalledTimes(1);
-    expect(codeMirrorDom?.getAttribute('data-language-loaded')).toBe('custom');
     editor.destroy();
   });
 
   it('reuses the same lazy language loader for matching code blocks', async () => {
+    const intersectionObservers = installCodeBlockObserver();
     const loader = vi.fn(async () => ViewPlugin.define((view) => {
       view.dom.setAttribute('data-language-loaded', 'custom');
       return {};
@@ -301,11 +316,14 @@ describe('editor runtime', () => {
       markdown: ['```custom', 'first', '```', '', '```custom', 'second', '```'].join('\n'),
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(loader).not.toHaveBeenCalled();
+    intersectionObservers.emitAll(true);
+    await waitForCodeBlockState(editor, 'active', 2);
+    await vi.waitFor(() => {
+      expect(editor.view.dom.querySelectorAll('.cm-editor[data-language-loaded="custom"]').length).toBe(2);
+    });
 
     expect(loader).toHaveBeenCalledTimes(1);
-    expect(editor.view.dom.querySelectorAll('.cm-editor[data-language-loaded="custom"]').length).toBe(2);
     editor.destroy();
   });
 

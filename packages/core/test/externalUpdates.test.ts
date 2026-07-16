@@ -6,6 +6,10 @@ import {
   setMarkdownEditorTransactionOrigin,
   type MarkdownEditor,
 } from "../src";
+import {
+  installControlledIntersectionObservers,
+  waitForCodeBlockState,
+} from "./codeBlockTestUtils";
 
 const editors: MarkdownEditor[] = [];
 const restores: Array<() => void> = [];
@@ -161,11 +165,15 @@ describe("reconciled external Markdown updates", () => {
     expect(editor.commands.undo()).toBe(false);
   });
 
-  it("retains unaffected code-block node views across a reconciled update", () => {
+  it("retains unaffected code-block node views across a reconciled update", async () => {
+    const intersectionObservers = installControlledIntersectionObservers(window);
+    restores.push(intersectionObservers.restore);
     const editor = track(createEditor({
       element: createHost(),
       markdown: "```js\nconst answer = 42;\n```\n\ntail",
     }));
+    intersectionObservers.emitAll(true);
+    await waitForCodeBlockState(editor, "active");
     const codeMirror = editor.view.dom.querySelector(".cm-editor");
 
     expect(codeMirror).not.toBeNull();

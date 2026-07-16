@@ -197,6 +197,7 @@ function createModuleGraphPlugin() {
         .filter((chunk) => chunk.isEntry && chunk.facadeModuleId)
         .map((chunk) => chunk.facadeModuleId);
       const staticModuleIds = new Set();
+      const emittedModuleIds = new Set(chunks.flatMap((chunk) => Object.keys(chunk.modules)));
 
       const visit = (moduleId) => {
         if (staticModuleIds.has(moduleId)) {
@@ -219,7 +220,10 @@ function createModuleGraphPlugin() {
         label: ${JSON.stringify(label)},
         entryModuleIds: entryModuleIds.sort(),
         staticModuleIds: [...staticModuleIds].sort(),
-        emittedModuleIds: [...new Set(chunks.flatMap((chunk) => Object.keys(chunk.modules)))].sort(),
+        emittedModuleIds: [...emittedModuleIds].sort(),
+        lazyModuleIds: [...emittedModuleIds]
+          .filter((moduleId) => !staticModuleIds.has(moduleId))
+          .sort(),
         chunks: chunks
           .map((chunk) => ({
             dynamicImports: [...chunk.dynamicImports].sort(),
@@ -381,11 +385,17 @@ function readBundleReport(label) {
   const chunkSource = report.chunks
     .map((chunk) => readFileSync(join(outputDir, chunk.fileName), "utf8"))
     .join("\n");
+  const cssSource = readdirSync(outputDir)
+    .filter((fileName) => fileName.endsWith(".css"))
+    .sort()
+    .map((fileName) => readFileSync(join(outputDir, fileName), "utf8"))
+    .join("\n");
 
   return {
     ...report,
     outputDir,
     chunkSource,
+    cssSource,
     chunks: report.chunks.map((chunk) => ({
       ...chunk,
       dynamicImports: chunk.dynamicImports ?? [],
@@ -393,6 +403,9 @@ function readBundleReport(label) {
     })),
     staticModuleIds: report.staticModuleIds.map(normalizeModuleId),
     emittedModuleIds: report.emittedModuleIds.map(normalizeModuleId),
+    lazyModuleIds: (report.lazyModuleIds ?? report.emittedModuleIds.filter(
+      (moduleId) => !report.staticModuleIds.includes(moduleId),
+    )).map(normalizeModuleId),
   };
 }
 
@@ -442,7 +455,7 @@ function assertPackedProvenance(rootReport, minimalReport, rootMeasurement, mini
   assertPackedModule(rootReport, "/node_modules/markora-ui/dist/index.js", "Packed markora-ui entry");
   assertPackedModule(rootReport, "/node_modules/markora-ui/dist/styles.css", "Packed markora-ui stylesheet");
   assertPackedModule(minimalReport, "/node_modules/markora/dist/minimal.js", "Packed markora minimal entry");
-  assertPackedModule(minimalReport, "/node_modules/markora/dist/styles.css", "Packed minimal stylesheet");
+  assertPackedModule(minimalReport, "/node_modules/markora/dist/minimal.css", "Packed minimal stylesheet");
 
   if (minimalMeasurement.lazyJs.chunkCount !== 0) {
     throw new Error(
@@ -455,6 +468,17 @@ function assertPackedProvenance(rootReport, minimalReport, rootMeasurement, mini
     throw new Error(
       "Packed root and minimal consumers must each emit exactly one production stylesheet.",
     );
+  }
+
+  for (const selector of [
+    ".ProseMirror.mdw-has-managed-block-cursor",
+    "pre.mdw-managed-block-cursor",
+    "pre.mdw-managed-block-cursor-before:before",
+    "pre.mdw-managed-block-cursor-after:after",
+  ]) {
+    if (!minimalReport.cssSource.includes(selector)) {
+      throw new Error(`Packed minimal stylesheet omitted managed code-block selector ${selector}.`);
+    }
   }
 }
 
@@ -529,11 +553,35 @@ function assertBundleIsolation(rootReport, minimalReport) {
     throw new Error("The compatibility bundle did not resolve the packed markora root entry.");
   }
 
-  if (!rootReport.staticModuleIds.some((moduleId) => moduleIdIncludes(
-    moduleId,
-    "/node_modules/@codemirror/",
-  ))) {
-    throw new Error("The compatibility bundle did not include CodeMirror, so the isolation assertion was not exercised.");
+  const rootStaticCodeMirrorModules = rootReport.staticModuleIds.filter((moduleId) => (
+    moduleIdIncludes(moduleId, "/node_modules/@codemirror/")
+    || moduleIdIncludes(moduleId, "/node_modules/@lezer/")
+    || moduleIdIncludes(moduleId, "/node_modules/markora/dist/activeCodeBlockView.js")
+  ));
+
+  if (rootStaticCodeMirrorModules.length > 0) {
+    throw new Error(`The compatibility entry eagerly included CodeMirror runtime modules:\n${rootStaticCodeMirrorModules
+      .map((moduleId) => `- ${moduleId}`)
+      .join("\n")}`);
+  }
+
+  const requiredLazyCodeMirrorFragments = [
+    "/node_modules/markora/dist/activeCodeBlockView.js",
+    "/node_modules/@codemirror/commands/",
+    "/node_modules/@codemirror/language/",
+    "/node_modules/@codemirror/state/",
+    "/node_modules/@codemirror/view/",
+    "/node_modules/@lezer/common/",
+    "/node_modules/@lezer/highlight/",
+  ];
+  const missingLazyCodeMirrorFragments = requiredLazyCodeMirrorFragments.filter((fragment) => (
+    !rootReport.lazyModuleIds.some((moduleId) => moduleIdIncludes(moduleId, fragment))
+  ));
+
+  if (missingLazyCodeMirrorFragments.length > 0) {
+    throw new Error(
+      `The compatibility bundle omitted lazy CodeMirror runtime modules: ${missingLazyCodeMirrorFragments.join(", ")}.`,
+    );
   }
 
   for (const externalExtensionName of ["@pack-smoke/callout", "@pack-smoke/highlight"]) {
@@ -783,6 +831,9 @@ function writeMeasurementReport({
     },
     invariants: {
       initialAndLazyPartitionTotal: true,
+      compatibilityInitialExcludesCodeMirror: true,
+      compatibilityLazyIncludesCodeMirror: true,
+      minimalExcludesCodeMirror: true,
       minimalHasNoLazyChunks: measurements.minimal.lazyJs.chunkCount === 0,
       packedEntriesAndStylesResolved: true,
       packedPackageVersionsMatched: true,
@@ -1039,7 +1090,7 @@ import {
   packedCalloutExtension,
   packedHighlightExtension,
 } from "./extensions";
-import "markora/styles.css";
+import "markora/minimal.css";
 
 export const packedExternalExtensions = [
   packedCalloutExtension,

@@ -1,6 +1,10 @@
 import { EditorView as CodeMirrorView } from "@codemirror/view";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { createEditor } from "../src/createEditor";
+import {
+  installControlledIntersectionObservers,
+  waitForCodeBlockState,
+} from "./codeBlockTestUtils";
 
 const editors: Array<ReturnType<typeof createEditor>> = [];
 
@@ -44,6 +48,17 @@ function deferredExtension() {
 }
 
 installDomStubs();
+const intersectionObservers = installControlledIntersectionObservers(window);
+
+async function activateCodeBlocks(
+  editor: ReturnType<typeof createEditor>,
+  count = 1,
+) {
+  intersectionObservers.emitAll(true);
+  await waitForCodeBlockState(editor, "active", count);
+}
+
+afterAll(() => intersectionObservers.restore());
 
 afterEach(() => {
   editors.splice(0).forEach((editor) => editor.destroy());
@@ -51,12 +66,13 @@ afterEach(() => {
 });
 
 describe("embedded read-only surfaces", () => {
-  it("mirrors editable updates into CodeMirror and blocks non-sync document changes", () => {
+  it("mirrors editable updates into CodeMirror and blocks non-sync document changes", async () => {
     const editor = trackEditor(createEditor({
       editable: false,
       element: createHost(),
       markdown: "```ts\nconst value = 1\n```",
     }));
+    await activateCodeBlocks(editor);
     const codeMirrorDom = editor.view.dom.querySelector<HTMLElement>(".cm-editor");
     const content = codeMirrorDom?.querySelector<HTMLElement>(".cm-content");
     const codeMirror = codeMirrorDom ? CodeMirrorView.findFromDOM(codeMirrorDom) : null;
@@ -72,21 +88,25 @@ describe("embedded read-only surfaces", () => {
     expect(codeMirror?.state.doc.toString()).toBe("const value = 2");
 
     editor.updateOptions({ editable: true });
-    expect(content?.getAttribute("contenteditable")).toBe("true");
-    expect(content?.getAttribute("aria-readonly")).toBe("false");
+    const editableContent = editor.view.dom.querySelector<HTMLElement>(".cm-content");
+    expect(editableContent?.getAttribute("contenteditable")).toBe("true");
+    expect(editableContent?.getAttribute("aria-readonly")).toBe("false");
 
     editor.updateOptions({ editable: false });
-    expect(content?.getAttribute("contenteditable")).toBe("false");
-    expect(content?.getAttribute("aria-readonly")).toBe("true");
+    const readonlyContent = editor.view.dom.querySelector<HTMLElement>(".cm-content");
+    expect(readonlyContent?.getAttribute("contenteditable")).toBe("false");
+    expect(readonlyContent?.getAttribute("aria-readonly")).toBe("true");
   });
 
   it("reports only the live, current async language rejection", async () => {
     const stale = deferredExtension();
     const current = deferredExtension();
+    const staleLoader = vi.fn(() => stale.promise);
+    const currentLoader = vi.fn(() => current.promise);
     const editor = trackEditor(createEditor({
       codeBlockLanguages: {
-        current: () => current.promise,
-        stale: () => stale.promise,
+        current: currentLoader,
+        stale: staleLoader,
       },
       element: createHost(),
       markdown: "```stale\nold\n```",
@@ -96,9 +116,10 @@ describe("embedded read-only surfaces", () => {
       errors.push({ error: event.error, language: event.context.language });
     });
 
-    await Promise.resolve();
+    await activateCodeBlocks(editor);
+    await vi.waitFor(() => expect(staleLoader).toHaveBeenCalledTimes(1));
     editor.commands.setMarkdown("```current\nnew\n```");
-    await Promise.resolve();
+    await vi.waitFor(() => expect(currentLoader).toHaveBeenCalledTimes(1));
     const staleError = new Error("stale language failure");
     stale.reject(staleError);
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -112,9 +133,10 @@ describe("embedded read-only surfaces", () => {
 
   it("reports a shared language-loader failure once for multiple matching blocks", async () => {
     const deferred = deferredExtension();
+    const loader = vi.fn(() => deferred.promise);
     const editor = trackEditor(createEditor({
       codeBlockLanguages: {
-        shared: () => deferred.promise,
+        shared: loader,
       },
       element: createHost(),
       markdown: ["```shared", "first", "```", "", "```shared", "second", "```"].join("\n"),
@@ -122,7 +144,8 @@ describe("embedded read-only surfaces", () => {
     const errors: unknown[] = [];
     editor.subscribe("error", (event) => errors.push(event));
 
-    await Promise.resolve();
+    await activateCodeBlocks(editor, 2);
+    await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
     deferred.reject(new Error("shared failure"));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(errors).toHaveLength(1);
@@ -130,16 +153,18 @@ describe("embedded read-only surfaces", () => {
 
   it("suppresses a late language rejection after destroy", async () => {
     const deferred = deferredExtension();
+    const loader = vi.fn(() => deferred.promise);
     const editor = trackEditor(createEditor({
       codeBlockLanguages: {
-        late: () => deferred.promise,
+        late: loader,
       },
       element: createHost(),
       markdown: "```late\nold\n```",
     }));
     const errors: unknown[] = [];
     editor.subscribe("error", (event) => errors.push(event));
-    await Promise.resolve();
+    await activateCodeBlocks(editor);
+    await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
     editor.destroy();
 
     deferred.reject(new Error("late failure"));

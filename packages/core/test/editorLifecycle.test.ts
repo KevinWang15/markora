@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import {
   Decoration as CodeMirrorDecoration,
   EditorView as CodeMirrorEditorView,
@@ -7,12 +7,20 @@ import {
 } from "@codemirror/view";
 import { TextSelection } from "prosemirror-state";
 import {
+  ManagedBlockCursor,
+  isManagedBlockNodeFromSchema,
+} from "../src/managedBlockCursor";
+import {
   createEditor,
   MarkdownEditorDestroyedError,
   type CodeBlockLanguageRegistry,
   type EditorUiFactory,
   type MarkdownEditor,
 } from "../src";
+import {
+  installControlledIntersectionObservers,
+  waitForCodeBlockState,
+} from "./codeBlockTestUtils";
 
 const editors: MarkdownEditor[] = [];
 
@@ -31,6 +39,12 @@ function installDomStubs() {
 }
 
 installDomStubs();
+const intersectionObservers = installControlledIntersectionObservers(window);
+
+async function activateCodeBlocks(editor: MarkdownEditor, count = 1) {
+  intersectionObservers.emitAll(true);
+  await waitForCodeBlockState(editor, "active", count);
+}
 
 function createHost() {
   const host = document.createElement("div");
@@ -74,6 +88,8 @@ function createUiFactory(spies: {
     },
   });
 }
+
+afterAll(() => intersectionObservers.restore());
 
 afterEach(() => {
   for (const editor of editors.splice(0)) {
@@ -746,9 +762,10 @@ describe("typed editor subscriptions", () => {
     editor.commands.setMarkdown("```broken\ncode\n```");
     expect(errors).toEqual([]);
     expect(editor.getMarkdown()).toBe("```broken\ncode\n```");
-    expect(editor.view.dom.querySelector(".cm-editor")).not.toBeNull();
+    expect(editor.view.dom.querySelector(".cm-editor")).toBeNull();
 
-    await Promise.resolve();
+    intersectionObservers.emitAll(true);
+    await vi.waitFor(() => expect(errors).toEqual([failure]));
     expect(errors).toEqual([failure]);
     expect(editor.getMarkdown()).toBe("nested");
     expect(editor.view.dom.querySelector(".cm-editor")).toBeNull();
@@ -775,7 +792,8 @@ describe("typed editor subscriptions", () => {
     expect(loader).not.toHaveBeenCalled();
     expect(editor.getMarkdown()).toBe("```custom\ncode\n```");
 
-    await Promise.resolve();
+    intersectionObservers.emitAll(true);
+    await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
     expect(loader).toHaveBeenCalledOnce();
     expect(editor.getMarkdown()).toBe("nested");
     expect(editor.view.dom.textContent).toContain("nested");
@@ -802,7 +820,8 @@ describe("typed editor subscriptions", () => {
     editor.commands.setMarkdown("```custom\ncode\n```");
     expect(editor.getMarkdown()).toBe("```custom\ncode\n```");
 
-    await Promise.resolve();
+    intersectionObservers.emitAll(true);
+    await vi.waitFor(() => expect(editor.getMarkdown()).toBe("nested"));
     expect(editor.getMarkdown()).toBe("nested");
     expect(editor.view.dom.textContent).toContain("nested");
     expect(editor.view.dom.querySelector(".cm-editor")).toBeNull();
@@ -821,9 +840,10 @@ describe("typed editor subscriptions", () => {
 
     editor.commands.setMarkdown("```broken\ncode\n```");
     expect(errors).toEqual([]);
-    expect(editor.view.dom.querySelector(".cm-editor")).not.toBeNull();
+    expect(editor.view.dom.querySelector(".cm-editor")).toBeNull();
 
-    await Promise.resolve();
+    intersectionObservers.emitAll(true);
+    await vi.waitFor(() => expect(errors).toHaveLength(1));
     expect(errors).toHaveLength(1);
     expect(errors[0]).toBeInstanceOf(Error);
     expect((errors[0] as Error).message).toContain("Unrecognized extension value");
@@ -836,7 +856,13 @@ describe("typed editor subscriptions", () => {
     let shouldThrow = true;
     const editor = track(createEditor({
       codeBlockLanguages: {
-        custom: CodeMirrorEditorView.exceptionSink.of((error) => extensionErrors.push(error)),
+        custom: [
+          CodeMirrorEditorView.exceptionSink.of((error) => extensionErrors.push(error)),
+          ViewPlugin.define((view) => {
+            view.dom.setAttribute("data-forwarding-extension", "ready");
+            return {};
+          }),
+        ],
       },
       element: createHost(),
       markdown: "```custom\ncode\n```",
@@ -848,7 +874,11 @@ describe("typed editor subscriptions", () => {
       },
     }));
 
-    await Promise.resolve();
+    await activateCodeBlocks(editor);
+    await vi.waitFor(() => {
+      expect(editor.view.dom.querySelector(".cm-editor")?.getAttribute("data-forwarding-extension"))
+        .toBe("ready");
+    });
     const codeMirrorDom = editor.view.dom.querySelector<HTMLElement>(".cm-editor")!;
     const codeMirror = CodeMirrorEditorView.findFromDOM(codeMirrorDom)!;
     codeMirror.contentDOM.focus();
@@ -999,6 +1029,7 @@ describe("typed editor subscriptions", () => {
     const blurEvents = vi.fn();
     editor.subscribe("focus", focusEvents);
     editor.subscribe("blur", blurEvents);
+    await activateCodeBlocks(editor);
 
     editor.focus();
     expect(focusEvents).not.toHaveBeenCalled();
@@ -1066,6 +1097,80 @@ describe("typed editor subscriptions", () => {
     expect(activeSelectionListeners.size).toBe(0);
   });
 
+  it("removes ProseMirror's one-shot hidden-selection guard on destroy", () => {
+    const selectionChangeDescriptor = Object.getOwnPropertyDescriptor(document, "onselectionchange");
+    Object.defineProperty(document, "onselectionchange", {
+      configurable: true,
+      value: null,
+      writable: true,
+    });
+    const activeSelectionListeners = new Set<EventListenerOrEventListenerObject>();
+    const originalAddEventListener = document.addEventListener;
+    const originalRemoveEventListener = document.removeEventListener;
+    vi.spyOn(document, "addEventListener").mockImplementation((function (
+      this: Document,
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      if (type === "selectionchange") {
+        activeSelectionListeners.add(listener);
+      }
+
+      originalAddEventListener.call(this, type, listener, options);
+    }) as typeof document.addEventListener);
+    vi.spyOn(document, "removeEventListener").mockImplementation((function (
+      this: Document,
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | EventListenerOptions,
+    ) {
+      if (type === "selectionchange") {
+        activeSelectionListeners.delete(listener);
+      }
+
+      originalRemoveEventListener.call(this, type, listener, options);
+    }) as typeof document.removeEventListener);
+
+    try {
+      const editor = track(createEditor({
+        element: createHost(),
+        markdown: "before\n\n```\ncode\n```",
+      }));
+      let blockPos = -1;
+      editor.view.state.doc.descendants((node, pos) => {
+        if (blockPos < 0 && node.type.name === "code_block") {
+          blockPos = pos;
+          return false;
+        }
+
+        return true;
+      });
+      const cursor = ManagedBlockCursor.create(
+        editor.view.state.doc,
+        blockPos,
+        "before",
+        (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node),
+      )!;
+
+      editor.view.focus();
+      editor.view.dispatch(editor.view.state.tr.setSelection(cursor));
+
+      expect(editor.view.dom.classList.contains("ProseMirror-hideselection")).toBe(true);
+      expect(activeSelectionListeners.size).toBe(2);
+
+      editor.destroy();
+
+      expect(activeSelectionListeners.size).toBe(0);
+    } finally {
+      if (selectionChangeDescriptor) {
+        Object.defineProperty(document, "onselectionchange", selectionChangeDescriptor);
+      } else {
+        Reflect.deleteProperty(document, "onselectionchange");
+      }
+    }
+  });
+
   it("reports a rejected language loader as one recoverable error", async () => {
     const failure = new Error("language unavailable");
     const editor = track(createEditor({
@@ -1078,6 +1183,8 @@ describe("typed editor subscriptions", () => {
     const errors: unknown[] = [];
     editor.subscribe("error", (event) => errors.push(event));
 
+    intersectionObservers.emitAll(true);
+    await waitForCodeBlockState(editor, "active");
     await vi.waitFor(() => expect(errors).toHaveLength(1));
     expect(errors[0]).toMatchObject({
       code: "code-block-language-load-failed",
@@ -1284,7 +1391,9 @@ describe("editor lifecycle", () => {
 
     class ThrowingWidget extends WidgetType {
       toDOM(view: CodeMirrorEditorView) {
-        return view.dom.ownerDocument.createElement("span");
+        const element = view.dom.ownerDocument.createElement("span");
+        element.setAttribute("data-fragile-widget", "mounted");
+        return element;
       }
 
       destroy() {
@@ -1305,7 +1414,10 @@ describe("editor lifecycle", () => {
       markdown: "```fragile\ncode\n```",
     }));
 
-    await Promise.resolve();
+    await activateCodeBlocks(editor);
+    await vi.waitFor(() => {
+      expect(editor.view.dom.querySelector('[data-fragile-widget="mounted"]')).not.toBeNull();
+    });
 
     expect(() => editor.destroy()).toThrow(failure);
     expect(editor.isDestroyed).toBe(true);
@@ -1322,7 +1434,9 @@ describe("editor lifecycle", () => {
 
     class ThrowingWidget extends WidgetType {
       toDOM(view: CodeMirrorEditorView) {
-        return view.dom.ownerDocument.createElement("span");
+        const element = view.dom.ownerDocument.createElement("span");
+        element.setAttribute("data-fragile-widget", "mounted");
+        return element;
       }
 
       destroy() {
@@ -1342,7 +1456,10 @@ describe("editor lifecycle", () => {
       markdown: "```fragile\ncode\n```",
     }));
 
-    await Promise.resolve();
+    await activateCodeBlocks(editor);
+    await vi.waitFor(() => {
+      expect(editor.view.dom.querySelector('[data-fragile-widget="mounted"]')).not.toBeNull();
+    });
 
     expect(() => editor.commands.setMarkdown("plain")).toThrow(failure);
     expect(editor.getMarkdown()).toBe("plain");
@@ -1366,7 +1483,7 @@ describe("editor lifecycle", () => {
     expect(() => createEditor({ element: host })).toThrow("already has a live editor");
   });
 
-  it("does not claim the host when language-registry enumeration fails", () => {
+  it("keeps the passive shell usable when lazy language-registry enumeration fails", async () => {
     const host = createHost();
     const failure = new Error("registry getter failed");
     const registry = Object.create(null) as CodeBlockLanguageRegistry;
@@ -1377,14 +1494,31 @@ describe("editor lifecycle", () => {
       },
     });
 
-    expect(() => createEditor({
+    const editor = track(createEditor({
       codeBlockLanguages: registry,
       element: host,
-    })).toThrow(failure);
-    expect(host.classList.contains("mdw-host")).toBe(false);
+      markdown: "```broken\ncode\n```",
+    }));
+    const errors: Array<{ code: string; error: unknown; language?: string }> = [];
+    editor.subscribe("error", (event) => errors.push({
+      code: event.code,
+      error: event.error,
+      language: event.context.language,
+    }));
 
-    const editor = track(createEditor({ element: host, markdown: "recovered" }));
-    expect(editor.getMarkdown()).toBe("recovered");
+    expect(host.classList.contains("mdw-host")).toBe(true);
+    expect(editor.view.dom.querySelector(".cm-editor")).toBeNull();
+    expect(editor.view.dom.querySelector(".mdw-code-block-static-code")?.textContent).toBe("code");
+
+    intersectionObservers.emitAll(true);
+    await waitForCodeBlockState(editor, "error");
+    await vi.waitFor(() => expect(errors).toHaveLength(1));
+    expect(errors).toEqual([{
+      code: "code-block-runtime-load-failed",
+      error: failure,
+      language: "broken",
+    }]);
+    expect(editor.view.dom.querySelector(".mdw-code-block-static-code")?.textContent).toBe("code");
   });
 
   it("cleans returned UI controllers when reading their configuration fails", () => {
@@ -1448,7 +1582,9 @@ describe("editor lifecycle", () => {
     expect(host.classList.contains("mdw-host")).toBe(true);
     expect(host.querySelector(".ProseMirror")).not.toBeNull();
 
-    await Promise.resolve();
+    intersectionObservers.emitAll(true);
+    await waitForCodeBlockState(editor, "active");
+    await vi.waitFor(() => expect(errors).toEqual([failure]));
     expect(errors).toEqual([failure]);
     expect(editor.getMarkdown()).toBe("```broken\ncode\n```");
   });

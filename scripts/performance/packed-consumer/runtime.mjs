@@ -5,15 +5,21 @@ import "markora/styles.css";
 const API_VERSION = "1.0.0";
 const EVENT_TIMING_DELIVERY_WAIT_MS = 100;
 const EVENT_TIMING_THRESHOLD_MS = 16;
+const CODE_BLOCK_ACTIVATION_TIMEOUT_MS = 8_000;
+const CODE_BLOCK_CAPACITY_PRESSURE_SHELLS = 9;
+const CODE_BLOCK_ACTIVATION_STRATEGY = "viewport-bounded-static-shell";
+const CODE_BLOCK_STATE_ATTRIBUTE = "data-mdw-code-block-state";
+const CODE_BLOCK_VIEWPORT_PROBE = "first-middle-last-selection";
 const fixtures = new Map();
 const textEncoder = new TextEncoder();
+const MAX_SETTLED_CODE_MIRROR_EDITORS = 8;
 const editorHost = requireElement("editor-host");
 const codecHost = requireElement("codec-host");
 const emptyCodeMirrorExtension = Object.freeze([]);
 
 // Override every built-in alias so a future fixture label cannot accidentally
-// add a dynamic language import to a runtime measurement. Plain fences still
-// construct their normal CodeMirror NodeViews.
+// add a dynamic grammar import to a runtime measurement. The representative
+// fixtures use plain fences and exercise the viewport-bounded editor runtime.
 const deterministicCodeBlockLanguages = Object.freeze(Object.fromEntries([
   "javascript",
   "js",
@@ -254,17 +260,24 @@ function countDescendantNodes(root) {
 
 function readDomCounts(host = editorHost) {
   return {
+    activeCodeBlocks: host.querySelectorAll(`[${CODE_BLOCK_STATE_ATTRIBUTE}="active"]`).length,
     animations: document.getAnimations().length,
     blockquotes: host.querySelectorAll("blockquote").length,
     bulletLists: host.querySelectorAll("ul").length,
+    codeBlockActiveHosts: host.querySelectorAll(".mdw-code-block-active").length,
+    codeBlockErrors: host.querySelectorAll(`[${CODE_BLOCK_STATE_ATTRIBUTE}="error"]`).length,
+    codeBlockShells: host.querySelectorAll(".mdw-code-block").length,
+    codeBlocksLoading: host.querySelectorAll(`[${CODE_BLOCK_STATE_ATTRIBUTE}="loading"]`).length,
     codeMirrorEditors: host.querySelectorAll(".cm-editor").length,
     descendantElements: host.querySelectorAll("*").length,
     descendantNodes: countDescendantNodes(host),
     hostChildNodes: host.childNodes.length,
     imageViews: host.querySelectorAll(".mdw-image").length,
     listItems: host.querySelectorAll("li").length,
+    inactiveCodeBlocks: host.querySelectorAll(`[${CODE_BLOCK_STATE_ATTRIBUTE}="inactive"]`).length,
     orderedLists: host.querySelectorAll("ol").length,
     proseMirrorEditors: host.querySelectorAll(".ProseMirror").length,
+    staticCodeBlocks: host.querySelectorAll(".mdw-code-block-static").length,
     tables: host.querySelectorAll("table").length,
   };
 }
@@ -314,13 +327,57 @@ function assertDomState(expected) {
 
   const { stats } = requireFixture(activeMount.fixtureId);
   for (const [statName, countName] of [
-    ["codeBlocks", "codeMirrorEditors"],
+    ["codeBlocks", "codeBlockShells"],
     ["images", "imageViews"],
     ["tables", "tables"],
   ]) {
     if (typeof stats[statName] === "number" && counts[countName] !== stats[statName]) {
       throw new Error(`Mounted ${countName} count ${counts[countName]} does not match fixture ${statName} ${stats[statName]}.`);
     }
+  }
+
+  if (counts.activeCodeBlocks !== counts.codeMirrorEditors) {
+    throw new Error(
+      `Mounted active code-block count ${counts.activeCodeBlocks} does not match CodeMirror editor count ${counts.codeMirrorEditors}.`,
+    );
+  }
+
+  const codeBlockStateCount = counts.inactiveCodeBlocks
+    + counts.codeBlocksLoading
+    + counts.activeCodeBlocks
+    + counts.codeBlockErrors;
+
+  if (codeBlockStateCount !== counts.codeBlockShells) {
+    throw new Error(
+      `Mounted code-block states account for ${codeBlockStateCount} of ${counts.codeBlockShells} shells.`,
+    );
+  }
+
+  if (
+    counts.staticCodeBlocks !== counts.codeBlockShells
+    || counts.codeBlockActiveHosts !== counts.codeBlockShells
+  ) {
+    throw new Error(
+      `Mounted code-block surfaces are incomplete: static=${counts.staticCodeBlocks}, activeHosts=${counts.codeBlockActiveHosts}, shells=${counts.codeBlockShells}.`,
+    );
+  }
+
+  if (counts.codeBlocksLoading !== 0) {
+    throw new Error(`Mounted editor retained ${counts.codeBlocksLoading} loading code blocks after settlement.`);
+  }
+
+  if (counts.codeBlockErrors !== 0) {
+    throw new Error(`Mounted editor retained ${counts.codeBlockErrors} failed code-block activations.`);
+  }
+
+  if (counts.codeMirrorEditors > Math.min(stats.codeBlocks ?? 0, MAX_SETTLED_CODE_MIRROR_EDITORS)) {
+    throw new Error(
+      `Mounted CodeMirror editor count ${counts.codeMirrorEditors} exceeded the viewport cap ${MAX_SETTLED_CODE_MIRROR_EDITORS}.`,
+    );
+  }
+
+  if ((stats.codeBlocks ?? 0) > 1 && counts.codeMirrorEditors >= stats.codeBlocks) {
+    throw new Error("Every code block activated CodeMirror; viewport activation is not bounded.");
   }
   return counts;
 }
@@ -565,7 +622,294 @@ async function settlePage() {
   await nextFrame();
   await nextFrame();
   await nextTask();
+  const activationDeadline = performance.now() + CODE_BLOCK_ACTIVATION_TIMEOUT_MS;
+
+  while (editorHost.querySelector(`[${CODE_BLOCK_STATE_ATTRIBUTE}="loading"]`)) {
+    if (performance.now() >= activationDeadline) {
+      throw new Error(
+        `Code-block activation did not settle within ${CODE_BLOCK_ACTIVATION_TIMEOUT_MS} ms.`,
+      );
+    }
+    await nextFrame();
+    await nextTask();
+  }
   return readDomCounts();
+}
+
+function codeBlockProbeIndexes(count) {
+  return [...new Set([0, Math.floor((count - 1) / 2), count - 1])];
+}
+
+async function waitForCodeBlockActivation(shell, index) {
+  const deadline = performance.now() + CODE_BLOCK_ACTIVATION_TIMEOUT_MS;
+
+  while (performance.now() < deadline) {
+    await settlePage();
+    const state = shell.getAttribute(CODE_BLOCK_STATE_ATTRIBUTE);
+
+    if (state === "active") {
+      const dom = assertDomState("mounted");
+
+      if (!shell.querySelector(".cm-editor")) {
+        throw new Error(`Activated code block ${index} did not contain a CodeMirror editor.`);
+      }
+
+      return dom;
+    }
+
+    if (state === "error") {
+      throw new Error(`Code block ${index} entered the activation error state.`);
+    }
+
+    await nextFrame();
+  }
+
+  throw new Error(
+    `Code block ${index} did not activate within ${CODE_BLOCK_ACTIVATION_TIMEOUT_MS} ms.`,
+  );
+}
+
+async function pressureCodeBlockCapacity(shells) {
+  if (!activeMount) {
+    throw new Error("Mount an editor before applying code-block capacity pressure.");
+  }
+
+  if (shells.length < CODE_BLOCK_CAPACITY_PRESSURE_SHELLS) {
+    throw new Error(
+      `Code-block capacity pressure requires ${CODE_BLOCK_CAPACITY_PRESSURE_SHELLS} shells, received ${shells.length}.`,
+    );
+  }
+
+  const pressureShells = shells.slice(0, CODE_BLOCK_CAPACITY_PRESSURE_SHELLS);
+
+  let resetPosition = null;
+  activeMount.editor.view.state.doc.descendants((node, position) => {
+    if (resetPosition !== null) {
+      return false;
+    }
+    if (node.isTextblock && node.type.name !== "code_block") {
+      resetPosition = position + 1;
+      return false;
+    }
+    return true;
+  });
+
+  if (resetPosition === null) {
+    throw new Error("Code-block capacity pressure requires a non-code text position for focus reset.");
+  }
+
+  activeMount.editor.focus({ anchor: resetPosition });
+  activeMount.editor.blur();
+  window.scrollTo(0, 0);
+
+  if (activeMount.editor.view.dom.contains(document.activeElement)) {
+    throw new Error("Code-block capacity pressure could not clear composite editor focus.");
+  }
+
+  // Start from a provably cold pool. Prior first/middle/last visits may have
+  // left live editors behind, so counting only the final global total could
+  // otherwise pass without putting nine fresh shells under pressure.
+  shells.forEach((shell, index) => {
+    Object.assign(shell.style, {
+      height: "1px",
+      left: `${-100_000 - index}px`,
+      margin: "0",
+      pointerEvents: "none",
+      position: "fixed",
+      top: "-100000px",
+      width: "1px",
+      zIndex: "-1",
+    });
+  });
+
+  const coldDeadline = performance.now() + CODE_BLOCK_ACTIVATION_TIMEOUT_MS;
+  let coldDom = readDomCounts();
+
+  while (performance.now() < coldDeadline) {
+    await settlePage();
+    coldDom = readDomCounts();
+
+    if (coldDom.codeBlockErrors !== 0) {
+      throw new Error(
+        `Code-block capacity reset encountered ${coldDom.codeBlockErrors} activation errors.`,
+      );
+    }
+
+    if (
+      coldDom.activeCodeBlocks === 0
+      && coldDom.codeBlocksLoading === 0
+      && coldDom.codeMirrorEditors === 0
+    ) {
+      break;
+    }
+
+    await nextFrame();
+  }
+
+  const coldStates = shells.map((shell) => shell.getAttribute(CODE_BLOCK_STATE_ATTRIBUTE));
+  if (
+    coldDom.activeCodeBlocks !== 0
+    || coldDom.codeBlocksLoading !== 0
+    || coldDom.codeMirrorEditors !== 0
+    || coldStates.some((state) => state !== "inactive")
+  ) {
+    throw new Error(
+      `Code-block capacity reset did not reach a cold pool: ${JSON.stringify({ dom: coldDom, states: coldStates })}.`,
+    );
+  }
+
+  // Put nine real shells inside the viewport at once. This benchmark-only
+  // layout pressure makes the observer request one editor beyond the pool
+  // limit and leaves the settled eight-editor worst case mounted for the CDP
+  // memory snapshot. The editor and all inline styles are discarded at the
+  // end of the isolated lifecycle.
+  pressureShells.forEach((shell, index) => {
+    Object.assign(shell.style, {
+      height: "1px",
+      left: `${index}px`,
+      margin: "0",
+      pointerEvents: "none",
+      position: "fixed",
+      top: `${index}px`,
+      width: "1px",
+      zIndex: "-1",
+    });
+  });
+
+  const deadline = performance.now() + CODE_BLOCK_ACTIVATION_TIMEOUT_MS;
+  let dom = readDomCounts();
+  let pressureStates = pressureShells.map((shell) => (
+    shell.getAttribute(CODE_BLOCK_STATE_ATTRIBUTE)
+  ));
+
+  while (performance.now() < deadline) {
+    await settlePage();
+    dom = readDomCounts();
+    pressureStates = pressureShells.map((shell) => (
+      shell.getAttribute(CODE_BLOCK_STATE_ATTRIBUTE)
+    ));
+    const activePressureShells = pressureStates.filter((state) => state === "active").length;
+    const inactivePressureShells = pressureStates.filter((state) => state === "inactive").length;
+
+    if (dom.codeBlockErrors !== 0) {
+      throw new Error(
+        `Code-block capacity pressure encountered ${dom.codeBlockErrors} activation errors.`,
+      );
+    }
+
+    if (
+      dom.activeCodeBlocks === MAX_SETTLED_CODE_MIRROR_EDITORS
+      && dom.codeBlocksLoading === 0
+      && dom.codeMirrorEditors === MAX_SETTLED_CODE_MIRROR_EDITORS
+      && activePressureShells === MAX_SETTLED_CODE_MIRROR_EDITORS
+      && inactivePressureShells === 1
+    ) {
+      break;
+    }
+
+    await nextFrame();
+  }
+
+  dom = assertDomState("mounted");
+  pressureStates = pressureShells.map((shell) => shell.getAttribute(CODE_BLOCK_STATE_ATTRIBUTE));
+  const activePressureShells = pressureStates.filter((state) => state === "active").length;
+  const inactivePressureShells = pressureStates.filter((state) => state === "inactive").length;
+
+  if (
+    dom.activeCodeBlocks !== MAX_SETTLED_CODE_MIRROR_EDITORS
+    || dom.codeBlocksLoading !== 0
+    || dom.codeMirrorEditors !== MAX_SETTLED_CODE_MIRROR_EDITORS
+    || activePressureShells !== MAX_SETTLED_CODE_MIRROR_EDITORS
+    || inactivePressureShells !== 1
+  ) {
+    throw new Error(
+      `Code-block capacity pressure did not settle at an exact eight-plus-one split: ${JSON.stringify({ dom, states: pressureStates })}.`,
+    );
+  }
+
+  return Object.freeze({
+    activeEditors: dom.codeMirrorEditors,
+    activePressureShells,
+    inactivePressureShells,
+    pressureShells: pressureShells.length,
+    states: Object.freeze(pressureStates),
+  });
+}
+
+function codeBlockSelectionPositions(editor) {
+  const positions = [];
+  editor.view.state.doc.descendants((node, position) => {
+    if (node.type.name === "code_block") {
+      positions.push(position + 1);
+    }
+  });
+  return positions;
+}
+
+async function probeCodeBlockActivation() {
+  if (!activeMount) {
+    throw new Error("Mount an editor before probing code-block activation.");
+  }
+
+  await settlePage();
+  const shells = [...editorHost.querySelectorAll(".mdw-code-block")];
+  const selectionPositions = codeBlockSelectionPositions(activeMount.editor);
+  const expectedCodeBlocks = requireFixture(activeMount.fixtureId).stats.codeBlocks;
+
+  if (
+    typeof expectedCodeBlocks !== "number"
+    || shells.length !== expectedCodeBlocks
+    || selectionPositions.length !== expectedCodeBlocks
+  ) {
+    throw new Error(
+      `Code-block activation probe found ${shells.length} shells and ${selectionPositions.length} model positions for fixture count ${expectedCodeBlocks}.`,
+    );
+  }
+
+  const visits = [];
+  let peakCodeMirrorEditors = readDomCounts().codeMirrorEditors;
+
+  for (const index of codeBlockProbeIndexes(shells.length)) {
+    const shell = shells[index];
+    shell.scrollIntoView({ block: "center", inline: "nearest" });
+    await settlePage();
+    const viewportDom = assertDomState("mounted");
+    const viewportState = shell.getAttribute(CODE_BLOCK_STATE_ATTRIBUTE);
+    peakCodeMirrorEditors = Math.max(peakCodeMirrorEditors, viewportDom.codeMirrorEditors);
+    activeMount.editor.focus({ anchor: selectionPositions[index] });
+    const dom = await waitForCodeBlockActivation(shell, index);
+    peakCodeMirrorEditors = Math.max(peakCodeMirrorEditors, dom.codeMirrorEditors);
+    visits.push(Object.freeze({
+      activeCodeBlocks: dom.activeCodeBlocks,
+      codeMirrorEditors: dom.codeMirrorEditors,
+      index,
+      state: shell.getAttribute(CODE_BLOCK_STATE_ATTRIBUTE),
+      viewportCodeMirrorEditors: viewportDom.codeMirrorEditors,
+      viewportState,
+    }));
+  }
+
+  const capacityPressure = await pressureCodeBlockCapacity(shells);
+  peakCodeMirrorEditors = Math.max(
+    peakCodeMirrorEditors,
+    capacityPressure.activeEditors,
+  );
+
+  const finalDom = assertDomState("mounted");
+
+  if (finalDom.codeMirrorEditors === 0) {
+    throw new Error("Code-block activation probe completed without a live CodeMirror editor.");
+  }
+
+  return Object.freeze({
+    capacityPressure,
+    finalDom,
+    maxSettledEditors: MAX_SETTLED_CODE_MIRROR_EDITORS,
+    peakCodeMirrorEditors,
+    probe: CODE_BLOCK_VIEWPORT_PROBE,
+    strategy: CODE_BLOCK_ACTIVATION_STRATEGY,
+    visits: Object.freeze(visits),
+  });
 }
 
 async function settle() {
@@ -1149,6 +1493,13 @@ async function destroy(mode) {
 }
 
 const schema = deepFreeze({
+  codeBlockActivation: {
+    capacityPressureShells: CODE_BLOCK_CAPACITY_PRESSURE_SHELLS,
+    maxSettledEditors: MAX_SETTLED_CODE_MIRROR_EDITORS,
+    probe: CODE_BLOCK_VIEWPORT_PROBE,
+    stateAttribute: CODE_BLOCK_STATE_ATTRIBUTE,
+    strategy: CODE_BLOCK_ACTIVATION_STRATEGY,
+  },
   durationUnit: "milliseconds",
   fixtureInput: {
     id: "string",
@@ -1194,6 +1545,7 @@ const api = Object.freeze({
   prepareCodec,
   primeClean,
   primeDirty,
+  probeCodeBlockActivation,
   ready: true,
   releaseCodec,
   releaseParsed,

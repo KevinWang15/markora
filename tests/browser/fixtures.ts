@@ -69,6 +69,15 @@ export type LabEditorSpec = {
 export type LabSnapshot = {
   activeElement: string | null;
   changeCount: number;
+  codeBlocks: {
+    active: number;
+    codeMirrorEditors: number;
+    error: number;
+    inactive: number;
+    loading: number;
+    staticViews: number;
+    total: number;
+  };
   codeMirrorFocused: boolean;
   id: string;
   markdown: string;

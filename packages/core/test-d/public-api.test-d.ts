@@ -15,6 +15,7 @@ import {
   type MarkdownEditorChangeMode,
   type MarkdownEditorChangeOrigin,
   type MarkdownEditorCodeBlockOptions,
+  type MarkdownEditorCodeBlockRuntimeErrorEvent,
   type MarkdownEditorCommands,
   type MarkdownEditorDomAttributes,
   type MarkdownEditorErrorEvent,
@@ -164,6 +165,15 @@ const unsubscribeError = editor.subscribe("error", (event: MarkdownEditorErrorEv
     const language: string = event.context.language;
     void recoverable;
     void language;
+  } else if (event.code === "code-block-runtime-load-failed") {
+    const runtimeEvent: MarkdownEditorCodeBlockRuntimeErrorEvent = event;
+    const phase: "runtime" = event.context.phase;
+    const language: string = event.context.language;
+    const recoverable: true = event.recoverable;
+    void runtimeEvent;
+    void phase;
+    void language;
+    void recoverable;
   } else {
     const phase: string = event.context.phase;
     const recoverable: boolean = event.recoverable;

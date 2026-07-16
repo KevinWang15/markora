@@ -2,8 +2,6 @@ import { Plugin } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import { ManagedBlockCursor, type ManagedBlockBoundary, type BoundarySide } from "./managedBlockCursor";
 
-type BrowserWindow = Window & typeof globalThis;
-
 const DEBUG_MANAGED_BLOCK_CURSOR = false;
 
 function debugManagedBlockCursor(factory: () => unknown) {
@@ -14,22 +12,25 @@ function debugManagedBlockCursor(factory: () => unknown) {
   console.debug("[managed-block-debug]", factory());
 }
 
-function getOwnerWindow(view: EditorView): BrowserWindow {
-  const ownerWindow = view.dom.ownerDocument.defaultView as BrowserWindow | null;
-
-  if (!ownerWindow) {
-    throw new Error("Markora managed block cursors require a window-backed document.");
-  }
-
-  return ownerWindow;
-}
-
-function asHTMLElement(value: Element | null, ownerWindow: BrowserWindow) {
-  return value instanceof ownerWindow.HTMLElement ? value : null;
+function getEditorRoot(view: EditorView) {
+  return view.dom.getRootNode() as Node & {
+    activeElement?: Element | null;
+    host?: Element;
+  };
 }
 
 function getActiveElement(view: EditorView) {
-  return asHTMLElement(view.dom.ownerDocument.activeElement, getOwnerWindow(view));
+  const root = getEditorRoot(view);
+  return root.activeElement ?? view.dom.ownerDocument.activeElement;
+}
+
+function isNeutralFocusAfterInternalBlur(view: EditorView, activeElement: Element | null) {
+  const root = getEditorRoot(view);
+  return (
+    !activeElement
+    || activeElement === view.dom.ownerDocument.body
+    || (root.nodeType === 11 && activeElement === root.host)
+  );
 }
 
 function describeActiveElement(view: EditorView, activeElement = getActiveElement(view)) {
@@ -45,7 +46,15 @@ function describeActiveElement(view: EditorView, activeElement = getActiveElemen
 }
 
 function queryViewHTMLElement(view: EditorView, selector: string) {
-  return asHTMLElement(view.dom.querySelector(selector), getOwnerWindow(view));
+  return view.dom.querySelector<HTMLElement>(selector);
+}
+
+function blurElement(element: Element) {
+  const blur = (element as Element & { blur?: unknown }).blur;
+
+  if (typeof blur === "function") {
+    blur.call(element);
+  }
 }
 
 function logManagedBlockCursor(view: EditorView, phase: string, extraFactory?: () => Record<string, unknown>) {
@@ -122,8 +131,26 @@ function focusOuterViewForManagedCursor(view: EditorView) {
 
     const nextActiveElement = getActiveElement(view);
 
-    if (nextActiveElement && view.dom.contains(nextActiveElement) && nextActiveElement.closest(".cm-editor")) {
-      nextActiveElement.blur();
+    // The transaction that installed the managed cursor may have notified host
+    // subscribers before this microtask. Respect any focus handoff they made;
+    // only move focus when CodeMirror still owns it.
+    if (
+      !nextActiveElement
+      || !view.dom.contains(nextActiveElement)
+      || !nextActiveElement.closest(".cm-editor")
+    ) {
+      return;
+    }
+
+    blurElement(nextActiveElement);
+
+    const activeAfterBlur = getActiveElement(view);
+
+    if (
+      activeAfterBlur !== view.dom
+      && !isNeutralFocusAfterInternalBlur(view, activeAfterBlur)
+    ) {
+      return;
     }
 
     view.dom.focus();

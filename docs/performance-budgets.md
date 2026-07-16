@@ -1,14 +1,14 @@
 # Performance budgets
 
-This document defines the measurement contract established by `EE-013` and extended by `EE-014`. It covers Markora as an embedded editor component; it does not measure a standalone application or the React documentation site.
+This document defines the measurement contract established by `EE-013` and extended by `EE-014` and `EE-015`. It covers Markora as an embedded editor component; it does not measure a standalone application or the React documentation site.
 
-`performance/baseline.json` remains the immutable `packed-embedded-v1` historical record. `performance/ee014-hot-path.json` is the reviewed `packed-embedded-v2` candidate record, and `performance/budgets.json` is the current checked contract. Changing a limit or measurement semantic requires an explicit review of raw evidence, environment, variance, and user-facing impact.
+`performance/baseline.json` remains the immutable `packed-embedded-v1` historical record. `performance/ee014-hot-path.json` and `performance/ee015-lazy-code-blocks.json` are the reviewed `packed-embedded-v2` and `packed-embedded-v3` candidate records, and `performance/budgets.json` is the current checked contract. Changing a limit or measurement semantic requires an explicit review of raw evidence, environment, variance, and user-facing impact.
 
 ## Compatibility decision
 
 Runtime measurements use a small production-built, headless embedded consumer installed from a freshly packed `markora` tarball. It exercises the compatibility preset and core stylesheet without the optional `markora-ui` package. Measuring this consumer catches package-export, dependency-resolution, tree-shaking, CSS, and production-build behavior that a workspace import through the documentation application can hide. The benchmark records tarball and fixture provenance in its report.
 
-Bundle reporting separately measures the compatibility entry with `markora-ui` and the `markora/minimal` entry graph, each installed from fresh tarballs, so shared chunks cannot make either graph appear artificially small. The totals include each checked consumer entry and its assertions as well as the installed package graph; the report hashes the harness so a measurement-instrumentation change cannot be mistaken for package drift. `pnpm pack:smoke` remains the structural package-isolation gate; the runtime report adds production latency and memory budgets rather than replacing it.
+Bundle reporting separately measures the compatibility entry with `markora-ui` and the `markora/minimal` entry graph, each installed from fresh tarballs, so shared chunks cannot make either graph appear artificially small. The compatibility graph must exclude CodeMirror, Lezer, and the active code-block adapter from its complete static import closure while retaining them in lazy chunks. The minimal graph must exclude them from every emitted chunk and imports `markora/minimal.css`, which omits compatibility-only table, task, opaque-source, and code-editor presentation rules. The totals include each checked consumer entry and its assertions as well as the installed package graph; the report hashes the harness so a measurement-instrumentation change cannot be mistaken for package drift. `pnpm pack:smoke` remains the structural package-isolation gate; the runtime report adds production latency and memory budgets rather than replacing it.
 
 `EE-013` did not change the editor API, Markdown compatibility contract, resource security policy, DOM semantics, or accessibility behavior. It fixed one teardown leak found by the benchmark: ImageView now owns and cancels its infinite loading-spinner animation when loading ends or the view is destroyed. `EE-014` intentionally changes the omitted `onChangeMode` from same-stack delivery to coalesced idle delivery while retaining explicit `"immediate"` and `"animationFrame"` modes. Parse/serialize output, update-event semantics, synchronous snapshots, resource policy, and DOM/accessibility behavior remain unchanged.
 
@@ -39,6 +39,7 @@ All latency is measured with the browser's monotonic clock. Package preparation,
 | Teardown | milliseconds | A dirty editor's synchronous `destroy()` and required cleanup; post-destroy DOM settlement is reported separately when available |
 | Mounted memory | bytes/counts | Garbage-collected Chromium JavaScript, embedder-heap, backing-storage, DOM-node, document, and listener deltas from a warmed packed-page baseline to a settled editor |
 | Retained memory | bytes/counts | The same counters after destroy relative to the warmed baseline; tracked memory is the reported sum of JavaScript, embedder-heap, and backing-storage deltas |
+| Code-block activation | counts and DOM evidence | Settled shell states and live `.cm-editor` instances while the first, middle, and last fences are selected in turn; active editors must remain within the fixed pool cap |
 | Bundle size | bytes | Independently built compatibility and minimal static graphs, with production raw and compressed sizes plus async chunks |
 
 Chromium memory evidence comes from the Chrome DevTools Protocol rather than `performance.memory`. Garbage collection is performed outside latency samples. One-time module and language-loading caches are warmed before the memory baseline so retained module code is not mislabeled as an editor leak. Firefox and WebKit timing can be recorded separately, but Chromium is the canonical CI memory environment.
@@ -49,7 +50,7 @@ The v2 hot-path probe is a benchmark-only extension built exclusively through th
 
 ## Sampling and variance
 
-The benchmark profile controls warmups and retained samples. The full local command uses three warmup rounds, 20 retained timing pairs, and seven retained memory samples per size. CI uses one warmup, five timing pairs, and three memory samples per size on a serial hosted runner. Every timing pair retains the unchanged historical page plus fresh immediate-control and omitted-default hot-path pages; candidate/control order alternates. Each CDP memory sample receives a fresh browser process and performs one throwaway editor lifecycle before its baseline. Both profiles write their effective counts, size order, scenario isolation/order, browser mode, and viewport into the result.
+The benchmark profile controls warmups and retained samples. The full local command uses three warmup rounds, 20 retained timing pairs, and seven retained memory samples per size. CI uses one warmup, five timing pairs, and three memory samples per size on a serial hosted runner. Every timing pair retains the unchanged historical page plus fresh immediate-control and omitted-default hot-path pages; candidate/control order alternates. Each CDP memory sample receives a fresh browser process and performs one throwaway editor lifecycle before its baseline. The warm and measured lifecycles scroll to and select the first, middle, and last code blocks. The report retains viewport-only state as diagnostic evidence, requires every authoritative selection to produce a live editor, and gates both the observed peak and final live-editor count at eight. Every shell must have exactly one `inactive`, `loading`, `active`, or `error` state; passive and active containers remain countable; settled loading and error counts must be zero. Both profiles write their effective counts, size order, scenario isolation/order, browser mode, and viewport into the result.
 
 Warmups are excluded from summaries. Measured document sizes are rotated rather than always running from smallest to largest. Samples are not silently trimmed. For every primary latency and memory series the report retains raw values and records count, minimum, maximum, mean, median, nearest-rank p90 and p95, standard deviation, coefficient of variation, and median absolute deviation; Event Timing remains per-sample diagnostic metadata.
 
@@ -101,11 +102,29 @@ The large-document result is the architectural acceptance signal: at 500 KiB the
 
 All 21 candidate memory lifecycles again retain zero DOM nodes, event listeners, and documents. The two small internal scheduler/validation modules move the separately built compatibility graph to 1,268,271 B initial plus 570,072 B lazy JavaScript and 156 static modules, and the minimal graph to 681,464 B and 128 modules. Byte limits pass below warning; the reviewed module-count warning bands fire without crossing their failure ceilings. Those warnings are accepted for this iteration and remain visible for `EE-015` bundle work.
 
+## Approved EE-015 lazy-activation candidate
+
+The `packed-embedded-v3` harness treats initial and lazy JavaScript as separate architectural budgets. The root static closure is invalid if it contains the active code-block adapter or any CodeMirror or Lezer module; the emitted lazy closure is invalid if it omits the adapter, CodeMirror state/view/commands/language, or the shared Lezer runtime. The overall root failure ceilings remain 1,900,000 raw and 570,000 gzip bytes, so moving work behind activation cannot hide total growth. The minimal consumer remains a single static graph with no CodeMirror or Lezer modules and now uses its dedicated stripped stylesheet.
+
+`performance/ee015-lazy-code-blocks.json` is the full local v3 evidence captured on 2026-07-17 from the candidate tree based on revision `5037562`. It uses the same Apple M4 Max, macOS, Node.js, pnpm, Playwright, and Chromium environment as the earlier records and retains three warmup rounds, 20 paired timing samples, and seven fresh-process memory samples per size. The runtime probe records exact shell and activation evidence in addition to CDP totals: every memory lifecycle pressures nine shells, observes an exact peak and settled count of eight live editors, and settles with no loading or error shells.
+
+The values below summarize the seven isolated memory samples per size. Mounted tracked memory is the median; retained tracked memory, mounted nodes, and mounted listeners are maxima.
+
+| Exact bytes | Mounted tracked memory | Retained tracked memory | Mounted nodes | Mounted listeners | Peak/final editors | Retained nodes/listeners/documents |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 102,400 | 11.83 MB | 0.64 MB | 7,825 | 327 | 8 / 8 | 0 / 0 / 0 |
+| 512,000 | 51.55 MB | 0.26 MB | 34,425 | 327 | 8 / 8 | 0 / 0 / 0 |
+| 1,048,576 | 103.97 MB | 0.24 MB | 69,005 | 327 | 8 / 8 | 0 / 0 / 0 |
+
+Compared with the approved v2 candidate on the same machine, passive shells reduce p95 initial mount-to-presentation from 106.0/393.3/931.7 ms to 85.2/342.2/845.6 ms across the three sizes. Maximum mounted nodes fall from 8,985/45,945/93,993 to 7,825/34,425/69,005, while mounted listeners become document-size independent at 327 instead of rising to 5,187. All 21 teardown lifecycles again retain zero DOM nodes, listeners, and documents.
+
+The separately built compatibility graph is 808,108 B initial plus 1,078,728 B lazy JavaScript, with 146 static modules; its static closure excludes the active adapter, CodeMirror, and Lezer. The complete graph is 1,886,836 B raw and 561,474 B gzip. The independently built minimal graph is 681,873 B, 128 modules, and has no lazy chunks or CodeMirror/Lezer modules; `minimal.css` is 4,728 B raw. Total compatibility raw/gzip JavaScript and raw CSS are above their warning ceilings but remain below the reviewed failure ceilings, so those accepted warnings stay visible rather than being rebased away.
+
 ## Warning and failure policy
 
 Each enforced metric has an explicit warning ceiling and failure ceiling. A value above the warning ceiling emits a visible CI annotation without failing the job. A value above the failure ceiling emits an error and makes `pnpm perf:ci` fail. Missing required samples, non-finite results, fixture drift, packed-consumer provenance failure, or an incompatible report schema are measurement failures rather than performance passes. Both drivers retain phase-attributed partial evidence for operational failures and replace workspace, home, and temporary paths with stable tokens before CI uploads it.
 
-Budgets are fixed reviewed values in `performance/budgets.json`; the current run never rewrites or rebases them automatically. CI requires exactly one warmup, five timing pairs, three memory samples, every required document size, the pinned viewport/context/hot-path contract, and the declared isolation topology. Timing variability warns above a coefficient of variation of 0.25 and invalidates the run above 0.60. Historical latency, memory, and bundle ceilings are unchanged. V2 additionally gates maximum default synchronous processing, default presentation, and final snapshot latency at every size, plus maximum default/immediate ratio for 500 KiB and 1 MiB. Missing callbacks, invalid cadence, non-canonical output, final-state mismatch, or late delivery are hard measurement failures rather than budget leaves.
+Budgets are fixed reviewed values in `performance/budgets.json`; the current run never rewrites or rebases them automatically. CI requires exactly one warmup, five timing pairs, three memory samples, every required document size, the pinned viewport/context/hot-path contract, and the declared isolation topology. Timing variability warns above a coefficient of variation of 0.25 and invalidates the run above 0.60. Historical latency ceilings remain unchanged. V2 additionally gates maximum default synchronous processing, default presentation, and final snapshot latency at every size, plus maximum default/immediate ratio for 500 KiB and 1 MiB. V3 rebases the initial/lazy bundle partition, retains the total root failure ceiling, tightens mounted memory/node/listener ceilings, and gates active-editor peak/final counts at eight. Missing callbacks, invalid cadence, non-canonical output, final-state mismatch, invalid code-block state partitions, activation failures, or late delivery are hard measurement failures rather than budget leaves.
 
 The approved record is:
 
@@ -113,12 +132,17 @@ The approved record is:
 | --- | --- |
 | Baseline date and revision | 2026-07-17 candidate tree based on `234e6cb`; full raw evidence in `performance/baseline.json` |
 | Hot-path candidate date and revision | 2026-07-17 candidate tree based on `17bb8d5`; full raw evidence in `performance/ee014-hot-path.json` |
+| Lazy-activation candidate date and revision | 2026-07-17 candidate tree based on `5037562`; full raw evidence in `performance/ee015-lazy-code-blocks.json` |
 | Local baseline browser/hardware | Chromium 149.0.7827.55; Apple M4 Max, 16 logical CPUs, 64 GiB, Darwin 25.5.0 arm64 |
 | Canonical enforcement environment | `ubuntu-24.04`, Node.js 24.x, pnpm 10.6.5, Playwright 1.61.1 Chromium; actual versions and hardware recorded per artifact |
 | Runtime latency ceilings | Explicit maximum warning/failure leaves for the six historical metrics plus default sync/presentation/snapshot and large-document paired ratio in `performance/budgets.json` |
 | Memory ceilings | Explicit clean-teardown, tracked-memory, DOM-node, listener, and document leaves; retained listeners/documents must remain zero |
-| Compatibility bundle baseline/candidate | 1,264,908/1,268,271 B initial JS, 570,072 B lazy JS, 15,503 B CSS, 154/156 static modules |
-| Minimal bundle baseline/candidate | 678,165/681,464 B JS, 12,851 B CSS, no lazy chunks, 126/128 static modules |
+| EE-013/014 compatibility bundle history | 1,264,908/1,268,271 B initial JS, 570,072 B lazy JS, 15,503 B CSS, 154/156 static modules |
+| EE-013/014 minimal bundle history | 678,165/681,464 B JS, 12,851 B CSS, no lazy chunks, 126/128 static modules |
+| EE-015 compatibility candidate | 808,108 B initial plus 1,078,728 B lazy JS; 1,886,836 B total; 16,881 B CSS; 146 static modules |
+| EE-015 minimal candidate | 681,873 B JS; 4,728 B CSS; no lazy chunks; 128 static modules |
+| EE-015 compatibility failure ceilings | 830,000 B / 235,000 B gzip initial JS; 1,120,000 B / 355,000 B gzip lazy JS; 1,900,000 B / 570,000 B gzip total JS |
+| EE-015 code-block pool | At most eight settled active editors; every shell in exactly one declared state; no settled loading or error shells |
 
 ## Reproduction
 

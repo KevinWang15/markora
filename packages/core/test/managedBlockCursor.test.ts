@@ -1,12 +1,24 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { EditorView as CodeMirrorView, ViewPlugin } from '@codemirror/view';
 import { EditorState, Selection, TextSelection } from 'prosemirror-state';
-import { createEditor } from '../src/createEditor';
+import { createEditor as createMarkoraEditor } from '../src/createEditor';
 import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from '../src/managedBlockCursor';
 import { createTableNavigation } from '../src/tableNavigation';
+import {
+  installControlledIntersectionObservers,
+  type ControlledIntersectionObservers,
+  waitForCodeBlockState,
+} from './codeBlockTestUtils';
 
 const foreignWindows: Array<Window & typeof globalThis> = [];
+const editors: Array<ReturnType<typeof createMarkoraEditor>> = [];
+
+function createEditor(options: Parameters<typeof createMarkoraEditor>[0]) {
+  const editor = createMarkoraEditor(options);
+  editors.push(editor);
+  return editor;
+}
 
 function installDomStubs(targetWindow: Window & typeof globalThis = window) {
   const RangeCtor = targetWindow.Range;
@@ -35,9 +47,18 @@ function installDomStubs(targetWindow: Window & typeof globalThis = window) {
       targetWindow.clearTimeout(frameId);
     }) as typeof cancelAnimationFrame;
   }
+
+  if (typeof targetWindow.document.elementFromPoint !== 'function') {
+    targetWindow.document.elementFromPoint = () => null;
+  }
+
+  if (typeof targetWindow.document.execCommand !== 'function') {
+    targetWindow.document.execCommand = () => false;
+  }
 }
 
 installDomStubs();
+const intersectionObservers = installControlledIntersectionObservers(window);
 
 function createHost(ownerDocument: Document = document) {
   const element = ownerDocument.createElement('div');
@@ -111,11 +132,27 @@ function dispatchDomKey(target: HTMLElement, key: string) {
   target.dispatchEvent(event);
 }
 
+async function flushAnimationFrames(targetWindow: Window & typeof globalThis = window) {
+  await new Promise<void>((resolve) => targetWindow.requestAnimationFrame(() => resolve()));
+  await new Promise<void>((resolve) => targetWindow.requestAnimationFrame(() => resolve()));
+}
+
 function focusCodeMirrorContent(editor: ReturnType<typeof createEditor>) {
   const cmContent = editor.view.dom.querySelector('.cm-content') as HTMLElement | null;
   expect(cmContent).not.toBeNull();
   cmContent!.focus();
   return cmContent!;
+}
+
+async function activateCodeMirrorAt(
+  editor: ReturnType<typeof createEditor>,
+  position: number,
+  observers: ControlledIntersectionObservers = intersectionObservers,
+) {
+  observers.emitAll(true);
+  await waitForCodeBlockState(editor, 'active');
+  setSelection(editor, TextSelection.create(editor.view.state.doc, position));
+  return focusCodeMirrorContent(editor);
 }
 
 function textInput(editor: ReturnType<typeof createEditor>, text: string) {
@@ -240,7 +277,10 @@ function createTestTableNavigation(editor: ReturnType<typeof createEditor>) {
   });
 }
 
+afterAll(() => intersectionObservers.restore());
+
 afterEach(() => {
+  editors.splice(0).forEach((editor) => editor.destroy());
   document.body.innerHTML = '';
   foreignWindows.splice(0).forEach((targetWindow) => targetWindow.close());
 });
@@ -284,7 +324,7 @@ describe('ManagedBlockCursor', () => {
   });
 
   
-  it('moves from code block start to previous paragraph end with one ArrowLeft', () => {
+  it('moves from code block start to previous paragraph end with one ArrowLeft', async () => {
     const editor = createEditor({
       element: createHost(),
       markdown: [
@@ -301,24 +341,31 @@ describe('ManagedBlockCursor', () => {
     const paragraph = findNodeByName(editor.view.state.doc, 'paragraph');
     const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
     const selection = findSelectionInsideNode(editor.view.state.doc, codeBlock.pos, codeBlock.node, 1);
-    setSelection(editor, selection);
+    const cmContent = await activateCodeMirrorAt(editor, selection.from);
 
-    dispatchDomKey(focusCodeMirrorContent(editor), 'ArrowLeft');
+    dispatchDomKey(cmContent, 'ArrowLeft');
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
     expect(editor.view.state.selection.from).toBe(paragraph.pos + paragraph.node.nodeSize - 1);
+    editor.destroy();
   });
 
-  it('claims the outer selection when a code block is clicked from another block', () => {
+  it('claims the outer selection when a code block is clicked from another block', async () => {
     const editor = createEditor({
       element: createHost(),
       markdown: ['before', '', '```js', 'const a = 1;', '```'].join('\n'),
     });
     const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
-    const cmContent = editor.view.dom.querySelector('.cm-content') as HTMLElement | null;
+    const staticContent = editor.view.dom.querySelector('.mdw-code-block-static-code') as HTMLElement | null;
 
-    expect(cmContent).not.toBeNull();
+    expect(staticContent).not.toBeNull();
     expect(editor.view.state.selection.from).toBeLessThan(codeBlock.pos);
 
+    staticContent!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    staticContent!.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+    staticContent!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    await waitForCodeBlockState(editor, 'active');
+    const cmContent = editor.view.dom.querySelector('.cm-content') as HTMLElement | null;
+    expect(cmContent).not.toBeNull();
     cmContent!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
 
     expect(editor.view.state.selection.from).toBeGreaterThanOrEqual(codeBlock.pos + 1);
@@ -338,11 +385,12 @@ describe('ManagedBlockCursor', () => {
       element: createHost(),
       markdown: ['```captured', 'const a = 1;', '```'].join('\n'),
     });
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
     const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    editor.focus({ anchor: codeBlock.pos + 1, head: codeBlock.pos + 1 });
+
+    await waitForCodeBlockState(editor, 'active');
+    await vi.waitFor(() => expect(codeMirrorView).not.toBeNull());
+
     setSelection(editor, ManagedBlockCursor.create(
       editor.view.state.doc,
       codeBlock.pos,
@@ -587,31 +635,39 @@ describe('ManagedBlockCursor', () => {
     expect(editor.view.state.doc.firstChild?.type.name).toBe('paragraph');
   });
 
-  it('inserts a paragraph below the code block on Enter from after-edge cursor even if CodeMirror keeps focus', () => {
+  it('inserts a paragraph below the code block on Enter from after-edge cursor even if CodeMirror keeps focus', async () => {
     const editor = createEditor({
       element: createHost(),
       markdown: ['```js', 'const a = 1;', '```'].join('\n'),
     });
 
     const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const cmContent = await activateCodeMirrorAt(editor, codeBlock.pos + 1);
     setSelection(editor, ManagedBlockCursor.create(editor.view.state.doc, codeBlock.pos, 'after', (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node))!);
 
-    dispatchDomKey(focusCodeMirrorContent(editor), 'Enter');
+    cmContent.focus();
+    dispatchDomKey(cmContent, 'Enter');
 
     expect(editor.view.state.doc.child(0).type.name).toBe('code_block');
     expect(editor.view.state.doc.child(1).type.name).toBe('paragraph');
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+    editor.destroy();
   });
 
   it('moves focus out of CodeMirror for managed cursors in a foreign window', async () => {
     const foreignWindow = createForeignWindow();
+    const foreignIntersectionObservers = installControlledIntersectionObservers(foreignWindow);
     const editor = createEditor({
       element: createHost(foreignWindow.document),
       markdown: ['```js', 'const a = 1;', '```'].join('\n'),
     });
 
     const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
-    const cmContent = focusCodeMirrorContent(editor);
+    const cmContent = await activateCodeMirrorAt(
+      editor,
+      codeBlock.pos + 1,
+      foreignIntersectionObservers,
+    );
 
     expect(
       foreignWindow.document.activeElement &&
@@ -628,6 +684,181 @@ describe('ManagedBlockCursor', () => {
     expect(activeElement).not.toBe(cmContent);
     expect(activeElement?.closest('.cm-editor')).toBeNull();
     editor.destroy();
+    foreignIntersectionObservers.restore();
+  });
+
+  it('preserves a host focus handoff before managed-cursor focus synchronization', async () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: ['```js', 'const a = 1;', '```'].join('\n'),
+    });
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    await activateCodeMirrorAt(editor, codeBlock.pos + 1);
+    const hostControl = document.createElement('button');
+    hostControl.type = 'button';
+    document.body.append(hostControl);
+    editor.subscribe('selection', () => hostControl.focus());
+
+    setSelection(editor, ManagedBlockCursor.create(
+      editor.view.state.doc,
+      codeBlock.pos,
+      'after',
+      (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node),
+    )!);
+
+    expect(document.activeElement).toBe(hostControl);
+    await Promise.resolve();
+    expect(document.activeElement).toBe(hostControl);
+  });
+
+  it('moves focus out of CodeMirror for a managed cursor in a shadow root', async () => {
+    const shadowHost = document.createElement('div');
+    document.body.append(shadowHost);
+    const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
+    const editorElement = document.createElement('div');
+    shadowRoot.append(editorElement);
+    const editor = createEditor({
+      element: editorElement,
+      markdown: ['```js', 'const a = 1;', '```'].join('\n'),
+    });
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const cmContent = await activateCodeMirrorAt(editor, codeBlock.pos + 1);
+    let shadowActiveElement: Element | null = cmContent;
+    Object.defineProperty(shadowRoot, 'activeElement', {
+      configurable: true,
+      get: () => shadowActiveElement,
+    });
+    Object.defineProperty(cmContent, 'blur', {
+      configurable: true,
+      value: () => {
+        if (shadowActiveElement === cmContent) {
+          shadowActiveElement = null;
+        }
+      },
+    });
+    Object.defineProperty(editor.view.dom, 'focus', {
+      configurable: true,
+      value: () => {
+        shadowActiveElement = editor.view.dom;
+      },
+    });
+
+    setSelection(editor, ManagedBlockCursor.create(
+      editor.view.state.doc,
+      codeBlock.pos,
+      'after',
+      (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node),
+    )!);
+
+    await Promise.resolve();
+    expect(shadowRoot.activeElement).toBe(editor.view.dom);
+  });
+
+  it('recognizes adopted CodeMirror event targets without relying on the owner-window realm', async () => {
+    const foreignWindow = createForeignWindow();
+    const foreignIntersectionObservers = installControlledIntersectionObservers(foreignWindow);
+    const editor = createEditor({
+      element: createHost(foreignWindow.document),
+      markdown: ['```js', 'const a = 1;', '```'].join('\n'),
+    });
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const cmContent = await activateCodeMirrorAt(
+      editor,
+      codeBlock.pos + 1,
+      foreignIntersectionObservers,
+    );
+    const adoptedTarget = document.createElement('span');
+    adoptedTarget.textContent = 'adopted target';
+    cmContent.append(adoptedTarget);
+
+    expect(adoptedTarget.ownerDocument).toBe(foreignWindow.document);
+    expect(adoptedTarget).toBeInstanceOf(window.Node);
+    expect(adoptedTarget).not.toBeInstanceOf(foreignWindow.Node);
+
+    const outerMouseDown = vi.fn(() => false);
+    editor.view.setProps({
+      handleDOMEvents: {
+        mousedown: outerMouseDown,
+      },
+    });
+    adoptedTarget.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    expect(outerMouseDown).not.toHaveBeenCalled();
+
+    const queueMicrotask = vi.fn<(callback: VoidFunction) => void>();
+    foreignWindow.queueMicrotask = queueMicrotask;
+    const delegatedTarget = document.createElement('span');
+    editor.view.dom.querySelector('.mdw-code-block-static-gutter')!.append(delegatedTarget);
+
+    expect(delegatedTarget.ownerDocument).toBe(foreignWindow.document);
+    expect(delegatedTarget).not.toBeInstanceOf(foreignWindow.Node);
+
+    delegatedTarget.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    // One task comes from the editor's composite blur tracker and one from the
+    // code-block manager's delegated activity tracker.
+    expect(queueMicrotask).toHaveBeenCalledTimes(2);
+
+    queueMicrotask.mockClear();
+    delegatedTarget.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+
+    expect(queueMicrotask).toHaveBeenCalledTimes(1);
+    editor.destroy();
+    foreignIntersectionObservers.restore();
+  });
+
+  it('keeps adopted CodeMirror focus inside the composite boundary and blurs it through the public API', async () => {
+    const foreignWindow = createForeignWindow();
+    const foreignIntersectionObservers = installControlledIntersectionObservers(foreignWindow);
+    const editor = createEditor({
+      element: createHost(foreignWindow.document),
+      markdown: ['```js', 'const a = 1;', '```'].join('\n'),
+    });
+    const blurEvents = vi.fn();
+    editor.subscribe('blur', blurEvents);
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const cmContent = await activateCodeMirrorAt(
+      editor,
+      codeBlock.pos + 1,
+      foreignIntersectionObservers,
+    );
+    await Promise.resolve();
+
+    const adoptedControl = document.createElement('button');
+    adoptedControl.type = 'button';
+    editor.view.dom.querySelector('.cm-editor')!.append(adoptedControl);
+
+    expect(adoptedControl.ownerDocument).toBe(foreignWindow.document);
+    expect(adoptedControl).not.toBeInstanceOf(foreignWindow.HTMLElement);
+
+    adoptedControl.focus();
+    await Promise.resolve();
+
+    expect(foreignWindow.document.activeElement).toBe(adoptedControl);
+    expect(blurEvents).not.toHaveBeenCalled();
+
+    // Exercise the containment check after the corresponding focusin has
+    // already settled; an adopted active element must still be considered
+    // part of the editor without an owner-realm instanceof guard.
+    cmContent.dispatchEvent(new foreignWindow.FocusEvent('focusout', {
+      bubbles: true,
+      relatedTarget: adoptedControl,
+    }));
+    await Promise.resolve();
+
+    expect(foreignWindow.document.activeElement).toBe(adoptedControl);
+    expect(blurEvents).not.toHaveBeenCalled();
+
+    editor.blur();
+    await Promise.resolve();
+
+    expect(foreignWindow.document.activeElement).not.toBe(adoptedControl);
+    expect(editor.view.dom.contains(foreignWindow.document.activeElement)).toBe(false);
+    expect(blurEvents).toHaveBeenCalledTimes(1);
+    editor.destroy();
+    foreignIntersectionObservers.restore();
   });
 
   it('removes the active table row from the toolbar', () => {
@@ -709,7 +940,7 @@ describe('ManagedBlockCursor', () => {
     expect(markdown).not.toContain('| A | B |');
   });
 
-  it('moves directly below the code block on ArrowDown from the last line', () => {
+  it('moves directly below the code block on ArrowDown from the last line', async () => {
     const editor = createEditor({
       element: createHost(),
       markdown: ['```js', 'const a = 1;', '```', '', 'after'].join('\n'),
@@ -717,17 +948,141 @@ describe('ManagedBlockCursor', () => {
 
     const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
     const codeEndSelection = findSelectionInsideNode(editor.view.state.doc, codeBlock.pos, codeBlock.node, -1);
-    setSelection(editor, codeEndSelection);
+    const cmContent = await activateCodeMirrorAt(editor, codeEndSelection.from);
 
-    dispatchDomKey(focusCodeMirrorContent(editor), 'ArrowDown');
+    dispatchDomKey(cmContent, 'ArrowDown');
 
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
     expect(editor.view.state.selection).not.toBeInstanceOf(ManagedBlockCursor);
     expect(editor.view.state.doc.textBetween(editor.view.state.selection.from, editor.view.state.selection.to, '\n', '\n')).toBe('');
     expect(editor.view.state.selection.from).toBeGreaterThan(codeBlock.pos + codeBlock.node.nodeSize);
+    await flushAnimationFrames();
+    expect(document.activeElement).toBe(editor.view.dom);
+    editor.destroy();
   });
 
-  it('moves directly above the code block on ArrowUp from the first line', () => {
+  it('preserves a host focus handoff while completing a code-block exit', async () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: ['```js', 'const a = 1;', '```', '', 'after'].join('\n'),
+    });
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const codeEndSelection = findSelectionInsideNode(editor.view.state.doc, codeBlock.pos, codeBlock.node, -1);
+    const cmContent = await activateCodeMirrorAt(editor, codeEndSelection.from);
+    const hostControl = document.createElement('button');
+    hostControl.type = 'button';
+    document.body.append(hostControl);
+    editor.subscribe('selection', () => hostControl.focus());
+
+    dispatchDomKey(cmContent, 'ArrowDown');
+
+    expect(document.activeElement).toBe(hostControl);
+    await flushAnimationFrames();
+    expect(document.activeElement).toBe(hostControl);
+  });
+
+  it('preserves a focusout-driven host handoff while leaving a code block', async () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: ['```js', 'const a = 1;', '```', '', 'after'].join('\n'),
+    });
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const codeEndSelection = findSelectionInsideNode(editor.view.state.doc, codeBlock.pos, codeBlock.node, -1);
+    const cmContent = await activateCodeMirrorAt(editor, codeEndSelection.from);
+    const hostControl = document.createElement('button');
+    hostControl.type = 'button';
+    document.body.append(hostControl);
+    cmContent.addEventListener('focusout', () => hostControl.focus(), { once: true });
+
+    dispatchDomKey(cmContent, 'ArrowDown');
+
+    await flushAnimationFrames();
+    expect(document.activeElement).toBe(hostControl);
+  });
+
+  it('preserves a public blur while completing a code-block exit', async () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: ['```js', 'const a = 1;', '```', '', 'after'].join('\n'),
+    });
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const codeEndSelection = findSelectionInsideNode(editor.view.state.doc, codeBlock.pos, codeBlock.node, -1);
+    const cmContent = await activateCodeMirrorAt(editor, codeEndSelection.from);
+    editor.subscribe('selection', () => editor.blur());
+
+    dispatchDomKey(cmContent, 'ArrowDown');
+
+    await flushAnimationFrames();
+    expect(editor.view.dom.contains(document.activeElement)).toBe(false);
+  });
+
+  it('completes a code-block exit inside a shadow root', async () => {
+    const shadowHost = document.createElement('div');
+    document.body.append(shadowHost);
+    const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
+    const editorElement = document.createElement('div');
+    shadowRoot.append(editorElement);
+    const editor = createEditor({
+      element: editorElement,
+      markdown: ['```js', 'const a = 1;', '```', '', 'after'].join('\n'),
+    });
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const codeEndSelection = findSelectionInsideNode(editor.view.state.doc, codeBlock.pos, codeBlock.node, -1);
+    const cmContent = await activateCodeMirrorAt(editor, codeEndSelection.from);
+    let shadowActiveElement: Element | null = cmContent;
+    Object.defineProperty(shadowRoot, 'activeElement', {
+      configurable: true,
+      get: () => shadowActiveElement,
+    });
+    Object.defineProperty(cmContent, 'blur', {
+      configurable: true,
+      value: () => {
+        if (shadowActiveElement === cmContent) {
+          shadowActiveElement = null;
+        }
+      },
+    });
+    Object.defineProperty(editor.view.dom, 'focus', {
+      configurable: true,
+      value: () => {
+        shadowActiveElement = editor.view.dom;
+      },
+    });
+
+    dispatchDomKey(cmContent, 'ArrowDown');
+
+    await flushAnimationFrames();
+    expect(shadowRoot.activeElement).toBe(editor.view.dom);
+  });
+
+  it('preserves a host focus handoff from an outer-history subscriber', async () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: ['```js', 'const a = 1;', '```'].join('\n'),
+    });
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const insertPos = codeBlock.pos + codeBlock.node.nodeSize - 1;
+    const cmContent = await activateCodeMirrorAt(editor, insertPos);
+    editor.view.dispatch(editor.view.state.tr.insertText('!', insertPos));
+    const hostControl = document.createElement('button');
+    hostControl.type = 'button';
+    document.body.append(hostControl);
+    editor.subscribe('update', () => hostControl.focus());
+    const isMac = /Mac|iPhone|iPad|iPod/.test(window.navigator.platform);
+
+    cmContent.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'z',
+      ctrlKey: !isMac,
+      metaKey: isMac,
+    }));
+
+    expect(editor.getMarkdown()).not.toContain('const a = 1;!');
+    expect(document.activeElement).toBe(hostControl);
+  });
+
+  it('moves directly above the code block on ArrowUp from the first line', async () => {
     const editor = createEditor({
       element: createHost(),
       markdown: ['before', '', '```js', 'const a = 1;', '```'].join('\n'),
@@ -736,24 +1091,25 @@ describe('ManagedBlockCursor', () => {
     const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
     const paragraph = findNodeByName(editor.view.state.doc, 'paragraph');
     const codeStartSelection = findSelectionInsideNode(editor.view.state.doc, codeBlock.pos, codeBlock.node, 1);
-    setSelection(editor, codeStartSelection);
+    const cmContent = await activateCodeMirrorAt(editor, codeStartSelection.from);
 
-    dispatchDomKey(focusCodeMirrorContent(editor), 'ArrowUp');
+    dispatchDomKey(cmContent, 'ArrowUp');
 
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
     expect(editor.view.state.selection).not.toBeInstanceOf(ManagedBlockCursor);
     expect(editor.view.state.selection.from).toBe(paragraph.pos + paragraph.node.nodeSize - 1);
+    editor.destroy();
   });
 
-  it('unwraps the code block into paragraphs on Backspace at start', () => {
+  it('unwraps the code block into paragraphs on Backspace at start', async () => {
     const editor = createEditor({
       element: createHost(),
       markdown: ['```js', 'abc', 'def', '```'].join('\n'),
     });
 
-    setSelection(editor, TextSelection.create(editor.view.state.doc, 2));
+    const cmContent = await activateCodeMirrorAt(editor, 2);
 
-    dispatchDomKey(focusCodeMirrorContent(editor), 'Backspace');
+    dispatchDomKey(cmContent, 'Backspace');
 
     expect(countNodes(editor.view.state.doc, 'code_block')).toBe(0);
     expect(editor.view.state.doc.childCount).toBe(2);
@@ -763,6 +1119,9 @@ describe('ManagedBlockCursor', () => {
     expect(editor.view.state.doc.child(1).textContent).toBe('def');
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
     expect(editor.view.state.selection.from).toBe(1);
+    await flushAnimationFrames();
+    expect(document.activeElement).toBe(editor.view.dom);
+    editor.destroy();
   });
 
 });

@@ -26,7 +26,14 @@ import {
 } from "./performance/representative-document.mjs";
 import { summarizeSamples } from "./performance/statistics.mjs";
 
-const BENCHMARK_VERSION = "packed-embedded-v2";
+const BENCHMARK_VERSION = "packed-embedded-v3";
+const CODE_BLOCK_ACTIVATION_CONTRACT = Object.freeze({
+  capacityPressureShells: 9,
+  maxSettledEditors: 8,
+  probe: "first-middle-last-selection",
+  stateAttribute: "data-mdw-code-block-state",
+  strategy: "viewport-bounded-static-shell",
+});
 const HOT_PATH_CONTRACT = Object.freeze({
   burstIntervalMs: 80,
   burstIntervalMaximumMs: 120,
@@ -88,7 +95,9 @@ function flatContractEquals(actual, expected) {
 }
 const memoryMetricNames = Object.freeze([
   "cleanTeardownMs",
+  "codeBlockActivationPeakEditors",
   "mountedTrackedMemoryDeltaBytes",
+  "mountedCodeMirrorEditors",
   "retainedTrackedMemoryDeltaBytes",
   "mountedJsHeapDeltaBytes",
   "retainedJsHeapDeltaBytes",
@@ -105,7 +114,9 @@ const memoryMetricNames = Object.freeze([
 ]);
 const budgetedMemoryMetricNames = Object.freeze([
   "cleanTeardownMs",
+  "codeBlockActivationPeakEditors",
   "mountedTrackedMemoryDeltaBytes",
+  "mountedCodeMirrorEditors",
   "retainedTrackedMemoryDeltaBytes",
   "mountedNodeDelta",
   "retainedNodeDelta",
@@ -498,6 +509,12 @@ async function openBenchmarkPage(context, baseUrl, fixture) {
       undefined,
       { timeout: 10_000 },
     );
+    const activationContract = await page.evaluate(() => (
+      window.__MARKORA_PERFORMANCE__.schema.codeBlockActivation
+    ));
+    if (!flatContractEquals(activationContract, CODE_BLOCK_ACTIVATION_CONTRACT)) {
+      throw new Error("Packed performance consumer code-block activation contract drifted from the driver.");
+    }
     await page.evaluate((installedFixture) => {
       window.__MARKORA_PERFORMANCE__.installFixture(installedFixture);
     }, {
@@ -1040,14 +1057,17 @@ async function runMemorySample(context, baseUrl, fixture) {
       await page.evaluate(async (fixtureId) => {
         const api = window.__MARKORA_PERFORMANCE__;
         await api.mountAndSettle({ fixtureId, snapshotMode: "none" });
+        await api.probeCodeBlockActivation();
         await api.destroy("clean");
         await api.settle();
       }, fixture.id);
       await collectGarbage(cdp, 2);
       const baseline = await collectMemorySnapshot(cdp);
-      await page.evaluate((fixtureId) => (
-        window.__MARKORA_PERFORMANCE__.mountAndSettle({ fixtureId, snapshotMode: "none" })
-      ), fixture.id);
+      const codeBlockActivation = await page.evaluate(async (fixtureId) => {
+        const api = window.__MARKORA_PERFORMANCE__;
+        await api.mountAndSettle({ fixtureId, snapshotMode: "none" });
+        return api.probeCodeBlockActivation();
+      }, fixture.id);
       await collectGarbage(cdp, 1);
       const mounted = await collectMemorySnapshot(cdp);
       await page.evaluate(() => window.__MARKORA_PERFORMANCE__.primeClean());
@@ -1073,7 +1093,11 @@ async function runMemorySample(context, baseUrl, fixture) {
       return Object.freeze({
         baseline,
         cleanTeardownMs: destroyed.syncDurationMs,
+        codeBlockActivation,
+        codeBlockActivationPeakEditors: codeBlockActivation.peakCodeMirrorEditors,
         mounted,
+        mountedCodeMirrorEditors: destroyed.beforeDom.codeMirrorEditors,
+        mountedDom: destroyed.beforeDom,
         mountedBackingStorageDeltaBytes,
         mountedDocumentDelta: subtract(mounted, baseline, "documents"),
         mountedEmbedderHeapDeltaBytes,
@@ -1359,6 +1383,7 @@ function loadPerformanceBudgetConfig(options) {
     || contract.hotPathIsolation !== "fresh-page-per-scenario-shared-browser-process"
     || contract.memoryIsolation !== "fresh-browser-process-per-sample"
     || contract.defaultChangeMode !== "idle"
+    || !flatContractEquals(contract.codeBlockActivation, CODE_BLOCK_ACTIVATION_CONTRACT)
     || !flatContractEquals(contract.hotPath, HOT_PATH_CONTRACT)
     || JSON.stringify(contract.requiredTargets) !== JSON.stringify(options.targets)
   ) {
@@ -1483,6 +1508,7 @@ function serializeError(error) {
 
 function createReportConfig(options) {
   return Object.freeze({
+    codeBlockActivation: CODE_BLOCK_ACTIVATION_CONTRACT,
     documentVersion: REPRESENTATIVE_DOCUMENT_VERSION,
     hotPath: HOT_PATH_CONTRACT,
     isolation: Object.freeze({

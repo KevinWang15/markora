@@ -35,6 +35,7 @@ export type {
   MarkdownEditorAssetEvent,
   MarkdownEditorBlurEvent,
   MarkdownEditorCodeBlockLanguageErrorEvent,
+  MarkdownEditorCodeBlockRuntimeErrorEvent,
   MarkdownEditorErrorCode,
   MarkdownEditorErrorEvent,
   MarkdownEditorExtensionErrorEvent,

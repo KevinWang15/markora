@@ -97,8 +97,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-012 | DONE | M | Add host-controlled URL, resource, and asset insertion hooks |
 | EE-013 | DONE | S | Establish document-size, latency, memory, and bundle budgets |
 | EE-014 | DONE | M | Remove synchronous full-document serialization from hot typing paths |
-| EE-015 | NEXT | L | Lazily activate CodeMirror blocks and reduce base bundle cost |
-| EE-016 | QUEUED | M | Make task and overlay interactions keyboard and screen-reader complete |
+| EE-015 | DONE | L | Lazily activate CodeMirror blocks and reduce base bundle cost |
+| EE-016 | NEXT | M | Make task and overlay interactions keyboard and screen-reader complete |
 | EE-017 | QUEUED | M | Add deliberate Markdown, rich HTML, and plain-text clipboard behavior |
 | EE-018 | QUEUED | L | Add mature table resize, reorder, selection, and keyboard operations |
 | EE-019 | QUEUED | M | Add configurable auto-pairing, shortcuts, and code-language editing |
@@ -265,7 +265,7 @@ Turn the manual Chrome DevTools Protocol audit into a repeatable release gate.
 - Playwright `1.61.1` is pinned at the workspace root with named Chromium, Firefox, and WebKit projects. Tests run against a production-built Vite preview with failure-only screenshots, video, and traces. Browser test types are part of `pnpm check`, while engine installation and execution remain explicit commands.
 - The private `/__browser` route provides deferred editor creation, destruction, resets, exact Markdown snapshots, deterministic selection setup, host commands, opaque-source updates, open Shadow DOM, body/local/positioned/transformed portals, narrow viewport placement, multiple independent editors, and per-instance output/counters. It is a demo-only regression surface and does not change either published package API.
 - Six required scenarios cover lifecycle/remount and listener cleanup, real heading/mark typing plus undo/redo, link/image/task controls, imported table editing and alignment, CodeMirror editing and boundary exit, and exact inert opaque-source behavior. Six broader scenarios cover multiple-editor isolation, Shadow DOM UI and CodeMirror, local/positioned/transformed responsive overlays with `visualViewport` events, and a transformed responsive table toolbar.
-- Every browser case fails on console errors/assertions, uncaught page errors, failed requests, HTTP responses at or above 400, retained editor/overlay DOM, or an unbalanced document/window/`visualViewport` listener delta. A one-time headless CodeMirror warm-up makes its intentional Firefox document-level copy/cut workaround part of the baseline without exempting later editor-owned listeners.
+- Every browser case fails on console errors/assertions, uncaught page errors, failed requests, HTTP responses at or above 400, retained editor/overlay DOM, or an unbalanced document/window/`visualViewport` listener delta. The ledger records listeners added after a synchronous editor scope under an explicit unscoped owner, so delayed lazy imports remain visible to teardown checks. Firefox's intentional document-level CodeMirror copy/cut pair is accepted only after a real lazy activation and only when exactly one pair exists; there is no eager warm-up or blanket exemption for later listeners.
 - The matrix found and fixed two production interaction bugs. Shadow DOM retargeting closed link/image overlays before their Save clicks; outside-click detection now uses the composed event path. In WebKit, deselecting an image collapsed its source row between task-checkbox `mousedown` and `mouseup`, moving the task and cancelling the click; task activation now occurs on the primary `mousedown` before selection-driven layout can shift.
 - Pull requests and pushes run the six required cases in all three engines. A weekly schedule and manual dispatch run the complete three-engine matrix, with isolated engine installation and retained artifacts per job.
 - Final local browser verification passed all 36 production-preview cases: 12 scenarios each in Chromium, Firefox, and WebKit, with zero collected runtime/network failures and exact listener cleanup. `pnpm check` (419 tests), `pnpm build`, `pnpm pack:smoke`, and `git diff --check` pass.
@@ -511,7 +511,7 @@ Keep editing responsive as documents grow.
 
 ### EE-015 — Lazily activate CodeMirror and reduce bundle cost
 
-Status: `NEXT`
+Status: `DONE` (2026-07-17)
 
 #### Goal
 
@@ -525,9 +525,19 @@ Avoid paying the full code-editor cost for every fence and every consumer.
 - Define a slim base entry point if CodeMirror cannot be removed through tree shaking.
 - Meet bundle and memory budgets from `EE-013`.
 
+#### Completion notes
+
+- Compatibility code fences now keep one permanent, exact `<pre><code>` source shell in ProseMirror. The shell exposes its language and line numbers, remains natively selectable, copyable, and searchable, and moves through explicit `inactive`, `loading`, `active`, and `error` states without duplicating or reparsing source. Its semantic code element avoids invalid naming/read-only ARIA, and the hidden line-number gutter is refreshed only when the passive presentation is needed.
+- One owner-window viewport observer requests activation near the viewport, while a collapsed selection or settled click activates a specific fence with the same logical caret; native drag ranges remain on the passive shell. The pool permits at most eight loading or active editors, retires eligible offscreen editors back to their permanent shells, and retains an interaction-only fallback when `IntersectionObserver` is unavailable.
+- The active CodeMirror adapter is a dynamic import outside the compatibility entry's static closure. Built-in language grammars remain separate on-demand chunks, matching host loaders share one cancellable cached resolution, and stale activation/language work cannot retain a destroyed or deactivated view. Runtime and grammar failures use distinct typed recoverable error events while leaving the exact passive source usable.
+- Packed-consumer graph checks prove that the compatibility initial closure contains neither the active adapter nor CodeMirror/Lezer, while its lazy closure contains the required editor runtime. `markora/minimal` remains a single emitted JavaScript graph with no CodeMirror/Lezer path and now pairs with `markora/minimal.css`, whose stripped compatibility surface still retains the native managed-code boundary cursor. Every output remains below its reviewed failure budget; total compatibility raw/gzip JavaScript and raw CSS retain visible warning-level headroom signals.
+- Interaction coverage exercises ordinary and no-observer activation in Chromium, Firefox, and WebKit; passive drag/range preservation, delayed runtime handoff, and a passive-shell-scoped CDP search in Chromium; document and Shadow DOM focus transfer; host-control, focusout, and public-blur supersession; outer history and Backspace unwrap; read-only and file-transfer policy; and composition beginning before or during lazy resolution. Axe and semantic-ARIA assertions supplement the keyboard, focus, selection, and teardown checks.
+- The `packed-embedded-v3` memory probe visits the first, middle, and last fences, starts capacity pressure from a provably cold pool, and requires an exact eight-active/one-inactive split across nine visible shells before its CDP snapshot. Full local evidence is retained in `performance/ee015-lazy-code-blocks.json`; every measured teardown retains zero DOM nodes, event listeners, and documents, and the canonical CI profile passes the activation, memory, latency, and bundle budgets.
+- Final verification: `pnpm check` passes 847 tests plus every build, type, declaration, and Node ESM check; `pnpm build` and `pnpm pack:smoke` pass; the required production-preview suite passes 100 cases with 14 intentional engine-specific skips; `pnpm perf:ci` and the full local v3 benchmark pass; and `git diff --check` passes.
+
 ### EE-016 — Complete keyboard and screen-reader interactions
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -649,6 +659,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-014` are complete. Gate A's content-safety requirements are satisfied, and the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, and responsive-snapshot foundations for Gate B are established.
+`EE-001` through `EE-015` are complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, including the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, and lazy code-editor foundations.
 
-The next iteration is `EE-015 — Lazily activate CodeMirror and reduce bundle cost`.
+The next iteration is `EE-016 — Complete keyboard and screen-reader interactions`.

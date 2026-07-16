@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { Slice } from "prosemirror-model";
 import { Plugin, PluginKey } from "prosemirror-state";
 import { InputRule } from "prosemirror-inputrules";
@@ -7,8 +7,13 @@ import {
   defineMarkdownEditorExtension,
   type MarkdownEditor,
 } from "../src";
+import {
+  installControlledIntersectionObservers,
+  waitForCodeBlockState,
+} from "./codeBlockTestUtils";
 
 const editors: MarkdownEditor[] = [];
+const intersectionObservers = installControlledIntersectionObservers(window);
 
 if (!Range.prototype.getClientRects) {
   Range.prototype.getClientRects = (() => [] as unknown as DOMRectList);
@@ -31,6 +36,14 @@ function host() {
 function track(editor: MarkdownEditor) {
   editors.push(editor);
   return editor;
+}
+
+async function getActiveCodeMirrorContent(editor: MarkdownEditor) {
+  intersectionObservers.emitAll(true);
+  await waitForCodeBlockState(editor, "active");
+  const content = editor.view.dom.querySelector<HTMLElement>(".cm-content");
+  expect(content).not.toBeNull();
+  return content!;
 }
 
 function createClipboardEvent(options: {
@@ -70,6 +83,27 @@ function createClipboardEvent(options: {
   });
   return event;
 }
+
+function createDropEvent(text: string) {
+  const event = new Event("drop", {
+    bubbles: true,
+    cancelable: true,
+  }) as DragEvent;
+  Object.defineProperty(event, "dataTransfer", {
+    configurable: true,
+    value: {
+      files: { length: 0 },
+      items: [{ kind: "string" }],
+      types: ["text/plain"],
+      getData(type: string) {
+        return ["text", "text/plain"].includes(type.toLowerCase()) ? text : "";
+      },
+    },
+  });
+  return event;
+}
+
+afterAll(() => intersectionObservers.restore());
 
 afterEach(() => {
   editors.splice(0).forEach((editor) => editor.destroy());
@@ -357,7 +391,7 @@ describe("extension runtime contribution lanes", () => {
     })]);
   });
 
-  it("routes nested-code and both clipboard contributions into CodeMirror only", () => {
+  it("routes nested-code and both clipboard contributions into CodeMirror only", async () => {
     const calls: string[] = [];
     const outer = runtimeExtension("acme-clipboard-outer", () => ({
       clipboard: {
@@ -412,10 +446,9 @@ describe("extension runtime contribution lanes", () => {
       extensions: [outer, nested, both],
       markdown: ["```text", "before", "```"].join("\n"),
     }));
-    const codeMirrorContent = editor.view.dom.querySelector<HTMLElement>(".cm-content");
-    expect(codeMirrorContent).not.toBeNull();
-    codeMirrorContent!.focus();
-    codeMirrorContent!.dispatchEvent(createClipboardEvent({ text: "source" }));
+    const codeMirrorContent = await getActiveCodeMirrorContent(editor);
+    codeMirrorContent.focus();
+    codeMirrorContent.dispatchEvent(createClipboardEvent({ text: "source" }));
     let outerText = "source";
     editor.view.someProp("transformPastedText", (transform) => {
       outerText = transform(outerText, false, editor.view);
@@ -427,7 +460,7 @@ describe("extension runtime contribution lanes", () => {
     expect(calls).toEqual(["nested:false", "both:false"]);
   });
 
-  it("short-circuits nested paste and drop handlers in resolved order", () => {
+  it("short-circuits nested paste and drop handlers in resolved order", async () => {
     const calls: string[] = [];
     const createHandlerExtension = (
       name: string,
@@ -455,11 +488,10 @@ describe("extension runtime contribution lanes", () => {
       ],
       markdown: ["```text", "before", "```"].join("\n"),
     }));
-    const codeMirrorContent = editor.view.dom.querySelector<HTMLElement>(".cm-content");
-    expect(codeMirrorContent).not.toBeNull();
-    codeMirrorContent!.focus();
+    const codeMirrorContent = await getActiveCodeMirrorContent(editor);
+    codeMirrorContent.focus();
     const paste = createClipboardEvent({ text: "paste" });
-    codeMirrorContent!.dispatchEvent(paste);
+    codeMirrorContent.dispatchEvent(paste);
     const drop = new Event("drop", {
       bubbles: true,
       cancelable: true,
@@ -473,7 +505,7 @@ describe("extension runtime contribution lanes", () => {
         getData: () => "drop",
       },
     });
-    codeMirrorContent!.dispatchEvent(drop);
+    codeMirrorContent.dispatchEvent(drop);
 
     expect(paste.defaultPrevented).toBe(true);
     expect(drop.defaultPrevented).toBe(true);
@@ -486,7 +518,7 @@ describe("extension runtime contribution lanes", () => {
     ]);
   });
 
-  it("runs nested HTML before text transforms and keeps both-surface slices outer-only", () => {
+  it("runs nested HTML before text transforms and keeps both-surface slices outer-only", async () => {
     const calls: string[] = [];
     const extension = runtimeExtension("acme-clipboard-nested-rich", () => ({
       clipboard: {
@@ -522,10 +554,9 @@ describe("extension runtime contribution lanes", () => {
       extensions: [extension],
       markdown: ["```text", "", "```"].join("\n"),
     }));
-    const codeMirrorContent = editor.view.dom.querySelector<HTMLElement>(".cm-content");
-    expect(codeMirrorContent).not.toBeNull();
-    codeMirrorContent!.focus();
-    codeMirrorContent!.dispatchEvent(createClipboardEvent({
+    const codeMirrorContent = await getActiveCodeMirrorContent(editor);
+    codeMirrorContent.focus();
+    codeMirrorContent.dispatchEvent(createClipboardEvent({
       html: "<strong>source</strong>",
       text: "source",
     }));
@@ -537,7 +568,7 @@ describe("extension runtime contribution lanes", () => {
     ]);
   });
 
-  it("keeps read-only and file guards ahead of nested clipboard hooks", () => {
+  it("keeps read-only and file guards ahead of nested clipboard hooks", async () => {
     const calls: string[] = [];
     const extension = runtimeExtension("acme-clipboard-nested-guarded", () => ({
       clipboard: {
@@ -568,27 +599,74 @@ describe("extension runtime contribution lanes", () => {
       extensions: [extension],
       markdown,
     }));
-    const codeMirrorContent = editor.view.dom.querySelector<HTMLElement>(".cm-content");
-    expect(codeMirrorContent).not.toBeNull();
+    const codeMirrorContent = await getActiveCodeMirrorContent(editor);
     const readonlyEvent = createClipboardEvent({ text: "readonly" });
-    codeMirrorContent!.dispatchEvent(readonlyEvent);
+    codeMirrorContent.dispatchEvent(readonlyEvent);
 
     expect(readonlyEvent.defaultPrevented).toBe(true);
     expect(editor.getMarkdown()).toBe(markdown);
     expect(calls).toEqual([]);
 
     editor.updateOptions({ editable: true });
-    codeMirrorContent!.focus();
+    codeMirrorContent.focus();
     const fileEvent = createClipboardEvent({
       files: [new File(["secret"], "secret.txt", { type: "text/plain" })],
       text: "file text",
     });
-    codeMirrorContent!.dispatchEvent(fileEvent);
+    codeMirrorContent.dispatchEvent(fileEvent);
 
     expect(fileEvent.defaultPrevented).toBe(true);
     expect(editor.getMarkdown()).toBe(markdown);
     expect(calls).toEqual([]);
   });
+
+  it.each([
+    ["paste", "handled"],
+    ["drop", "handled"],
+    ["paste", "throw"],
+    ["drop", "throw"],
+  ] as const)(
+    "always prevents default when a static nested %s handler reports %s",
+    (kind, outcome) => {
+      const failure = new Error(`static ${kind} failed`);
+      const handler = vi.fn(() => {
+        if (outcome === "throw") {
+          throw failure;
+        }
+
+        return true;
+      });
+      const extension = runtimeExtension(`acme-static-${kind}-${outcome}`, () => ({
+        clipboard: {
+          handlers: [{
+            id: kind,
+            kind,
+            surface: "nested-code",
+            create: () => handler,
+          }],
+        },
+      }));
+      const editor = track(createEditor({
+        element: host(),
+        extensions: [extension],
+        markdown: ["```text", "before", "```"].join("\n"),
+      }));
+      editor.subscribe("error", () => {});
+      const staticContent = editor.view.dom.querySelector<HTMLElement>(
+        ".mdw-code-block-static-code",
+      );
+      expect(staticContent).not.toBeNull();
+      expect(editor.view.dom.querySelector(".cm-editor")).toBeNull();
+      const event = kind === "paste"
+        ? createClipboardEvent({ text: "source" })
+        : createDropEvent("source");
+
+      staticContent!.dispatchEvent(event);
+
+      expect(handler).toHaveBeenCalledOnce();
+      expect(event.defaultPrevented).toBe(true);
+    },
+  );
 
   it("rejects duplicate NodeView owners before touching the host", () => {
     const first = runtimeExtension("acme-node-view-first", () => ({
@@ -872,7 +950,7 @@ describe("extension runtime contribution lanes", () => {
     }]);
   });
 
-  it("reports nested clipboard browser failures through the structured error path", () => {
+  it("reports nested clipboard browser failures through the structured error path", async () => {
     const failing = runtimeExtension("acme-clipboard-nested-failing", () => ({
       clipboard: {
         transforms: [{
@@ -899,10 +977,9 @@ describe("extension runtime contribution lanes", () => {
         });
       }
     });
-    const codeMirrorContent = editor.view.dom.querySelector<HTMLElement>(".cm-content");
-    expect(codeMirrorContent).not.toBeNull();
-    codeMirrorContent!.focus();
-    codeMirrorContent!.dispatchEvent(createClipboardEvent({ text: "source" }));
+    const codeMirrorContent = await getActiveCodeMirrorContent(editor);
+    codeMirrorContent.focus();
+    codeMirrorContent.dispatchEvent(createClipboardEvent({ text: "source" }));
 
     expect(editor.getMarkdown()).toContain("source");
     expect(events).toEqual([{

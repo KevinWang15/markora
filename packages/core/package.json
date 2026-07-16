@@ -38,6 +38,7 @@
       "types": "./dist/minimal.d.ts",
       "import": "./dist/minimal.js"
     },
+    "./minimal.css": "./dist/minimal.css",
     "./styles.css": "./dist/styles.css"
   },
   "files": [
@@ -89,6 +90,7 @@
     "prosemirror-view": "^1.41.0"
   },
   "sideEffects": [
+    "./dist/minimal.css",
     "./dist/styles.css"
   ]
 }

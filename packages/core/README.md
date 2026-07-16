@@ -10,8 +10,8 @@ Write Markdown at the speed of thought.
 - Exact, inert source preservation for conservatively recognized front matter, display math, HTML, and directives
 - Headings, blockquotes, lists, flat task items, images, code fences, and pipe tables
 - Inline marks for bold, italic, code, strike, and links
-- Embedded CodeMirror code blocks with language-aware editing
-- Lazy-loaded built-in code block languages with host-extensible loaders
+- Exact, lightweight source-text code-fence shells with viewport-lazy CodeMirror editing
+- Lazy-loaded CodeMirror runtime and built-in languages with host-extensible loaders
 - Toolbar-friendly commands for formatting, links, images, and undo/redo
 - Per-editor URL/image/navigation/upload policy plus managed navigation around tables and code blocks
 
@@ -259,7 +259,7 @@ no ProseMirror `Slice` stage, so a `slice` transform cannot target only
 ```ts
 import { createEditor } from "markora/minimal";
 import { defineMarkdownEditorExtension } from "markora/extension-api";
-import "markora/styles.css";
+import "markora/minimal.css";
 
 const extension = defineMarkdownEditorExtension({
   name: "@acme/counter",
@@ -295,7 +295,10 @@ plain ProseMirror code block. Compatibility-only options such as `ui`,
 `codeBlockLanguages`, and `onEditOpaqueMarkdown` have no built-in surface in
 this entry. Passing `createMinimalMarkdownEditorPreset()` to the root entry
 selects minimal runtime behavior, but only importing `markora/minimal` provides
-the static bundle-isolation guarantee.
+the static JavaScript bundle-isolation guarantee. Pair that entry with
+`markora/minimal.css` to omit compatibility-only table, task, opaque-source,
+and CodeMirror selectors as well;
+`markora/styles.css` remains the compatibility-full stylesheet.
 
 The definitions inside `createDefaultMarkdownEditorPreset()` name adapters
 owned by the root compatibility runtime. The exact preset works with the root
@@ -321,7 +324,7 @@ A typical integration has four parts:
 Host-facing behavior to keep in mind:
 
 - `ariaLabel` or `ariaLabelledBy` gives the inner editor a host-specific accessible name
-- `editor.focus()` targets the outer ProseMirror surface; `editor.blur()` blurs whichever owned ProseMirror or CodeMirror surface is active
+- `editor.focus()` targets the outer ProseMirror surface; `editor.blur()` blurs whichever owned ProseMirror or CodeMirror surface is active, and lazy activation or boundary-exit work does not reclaim focus after that blur or after a host control takes it
 - `editor.commands.reconcileMarkdown(markdown)` applies an authoritative host snapshot while mapping selection/history and preserving plugin state
 - `editor.commands.resetMarkdown(markdown)` explicitly rebuilds editor state; deprecated `setMarkdown()` remains its hard-reset alias
 - `editor.subscribe("state", ...)` refreshes host controls for every accepted state transition, including stored-mark-only changes; `update` remains the document-change-only signal and `onTransaction` the ProseMirror-aware compatibility hook
@@ -518,6 +521,8 @@ const stopAssets = editor.subscribe("asset", ({ reason, upload }) => {
 const stopErrors = editor.subscribe("error", ({ code, context, error, recoverable }) => {
   if (code === "code-block-language-load-failed") {
     reportLanguageFailure(context.language, error, recoverable);
+  } else if (code === "code-block-runtime-load-failed") {
+    reportCodeEditorFailure(context.language, error, recoverable);
   }
 });
 ```
@@ -527,9 +532,14 @@ const stopErrors = editor.subscribe("error", ({ code, context, error, recoverabl
 - Selection events provide `previousSelection`, `selection`, and `origin`. Each host snapshot contains `anchor`, `head`, `from`, `to`, `empty`, and `kind`.
 - State, selection, and update events are ordered state first, then selection when the selection changed, then update when the document changed. Update events contain the accepted change's `origin` and current selection, neither Markdown nor a ProseMirror transaction, and are not affected by `onChangeMode`; call `event.editor.getMarkdown()` only when that subscriber intentionally needs a synchronous snapshot.
 - Asset events report upload lifecycle independently of ProseMirror state; only successful batch insertion subsequently produces ordinary state/update/change activity.
-- Error events report recoverable code-language-load and resource-callback failures plus attributed extension runtime failures. Resource events use code `"resource-callback-failed"` with a resolve/open/load/cleanup phase. Extension events use an `EXTENSION_*` code plus `context.phase` and, when known, `context.extension`, `context.contribution`, or `context.participants`. Language loaders and extensions run after the current editor state update completes, so deferred failures use the same event path without re-entering that update.
+- Error events report recoverable code-runtime-load, code-language-load, and resource-callback failures plus attributed extension runtime failures. A code-runtime failure leaves the exact static source shell usable and reports phase `"runtime"`. Resource events use code `"resource-callback-failed"` with a resolve/open/load/cleanup phase. Extension events use an `EXTENSION_*` code plus `context.phase` and, when known, `context.extension`, `context.contribution`, or `context.participants`. Runtime activation, language loaders, and extensions run outside the current editor state update, so deferred failures use the same event path without re-entering that update.
 
 If a recoverable runtime failure has no error subscriber, Markora forwards it to the editor window's global error reporting path rather than silently swallowing it.
+
+Migration note: hosts with exhaustive `MarkdownEditorErrorCode` switches must
+handle the new `"code-block-runtime-load-failed"` case. It means advanced code
+editing could not activate; the Markdown document and static code source remain
+available.
 
 `onChange` and `onTransaction` remain supported. Use the default idle `onChange(markdown, context)` for coalesced normalized Markdown output, `state` for host UI, `update` for a cheap document-only signal, and `onTransaction(transaction, view, context)` only when an advanced integration needs ProseMirror transaction details.
 
@@ -650,7 +660,9 @@ import type {
 
 ## Code block languages
 
-Built-in CodeMirror highlighting and editing grammars for JavaScript, TypeScript, JSON, CSS, HTML, XML, Markdown, Python, C/C++, Java, Rust, and shell load on demand. You can add or override a grammar with `codeBlockLanguages`:
+The compatibility entry initially renders every fence as an exact, lightweight source-text shell with its language label and line numbers. This permanent shell stays selectable, copyable, searchable, and synchronized with the ProseMirror document without loading CodeMirror. A shared per-editor viewport observer keeps the settled CodeMirror pool bounded to eight editors near the viewport. Placing a caret or starting an edit in an inactive fence also activates it; a native range selection remains on the shell so drag selection and copy are not disrupted. An offscreen editor returns to its shell after a short idle delay when it no longer owns focus, selection, or composition. Browsers without `IntersectionObserver` retain the shell and activate on caret or edit interaction.
+
+The inactive shell deliberately presents plain source rather than running a second syntax engine. Syntax highlighting and advanced code editing begin when the CodeMirror runtime activates. The runtime is outside the compatibility entry's initial JavaScript graph, and the built-in grammars for JavaScript, TypeScript, JSON, CSS, HTML, XML, Markdown, Python, C/C++, Java, Rust, and shell remain separate on-demand chunks. You can add or override a grammar with `codeBlockLanguages`:
 
 ```ts
 import { createDefaultCodeBlockLanguageRegistry, createEditor } from "markora";
@@ -667,7 +679,7 @@ const editor = createEditor({
 });
 ```
 
-Markora invokes language loaders and installs their CodeMirror extensions after the current outer-editor update completes. A block removed or superseded before that deferred work starts does not invoke its loader.
+Markora invokes language loaders only after a block activates and installs their CodeMirror extensions after the current outer-editor update completes. Multiple blocks in the same editor share the cached result for a language. A block removed, deactivated, or superseded before deferred work starts does not apply stale support. Runtime chunk/construction failures emit `"code-block-runtime-load-failed"`; grammar failures emit `"code-block-language-load-failed"`. Both are recoverable error events and leave exact plain source available.
 
 ## API highlights
 

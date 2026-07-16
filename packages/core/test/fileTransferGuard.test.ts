@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
 import { createEditor } from '../src/createEditor';
 import {
@@ -6,6 +6,10 @@ import {
   hasTransferredFiles,
   rejectFileTransferEvent,
 } from '../src/fileTransferGuard';
+import {
+  installControlledIntersectionObservers,
+  waitForCodeBlockState,
+} from './codeBlockTestUtils';
 
 type TransferMock = {
   files?: { readonly length: number; readonly [index: number]: File };
@@ -43,6 +47,7 @@ function installDomStubs() {
 }
 
 installDomStubs();
+const intersectionObservers = installControlledIntersectionObservers(window);
 
 function createHost() {
   const host = document.createElement('div');
@@ -54,6 +59,14 @@ function trackEditor(options: Parameters<typeof createEditor>[0]) {
   const editor = createEditor(options);
   editors.push(editor);
   return editor;
+}
+
+async function getActiveCodeMirrorContent(editor: ReturnType<typeof createEditor>) {
+  intersectionObservers.emitAll(true);
+  await waitForCodeBlockState(editor, 'active');
+  const content = editor.view.dom.querySelector<HTMLElement>('.cm-content');
+  expect(content).not.toBeNull();
+  return content!;
 }
 
 function createTransferEvent(
@@ -104,6 +117,8 @@ function textTransfer(text: string, html = ''): TransferMock {
     },
   };
 }
+
+afterAll(() => intersectionObservers.restore());
 
 afterEach(() => {
   editors.splice(0).forEach((editor) => editor.destroy());
@@ -218,7 +233,7 @@ describe('embedded editor file transfer guard', () => {
     ['paste', 'clipboardData'],
     ['dragover', 'dataTransfer'],
     ['drop', 'dataTransfer'],
-  ] as const)('rejects mixed file and text %s without changing a CodeMirror code block', (type, property) => {
+  ] as const)('rejects mixed file and text %s without changing a CodeMirror code block', async (type, property) => {
     const changes: string[] = [];
     const markdown = ['```js', 'const value = 1;', '```'].join('\n');
     const editor = trackEditor({
@@ -226,8 +241,7 @@ describe('embedded editor file transfer guard', () => {
       markdown,
       onChange: (nextMarkdown) => changes.push(nextMarkdown),
     });
-    const codeMirrorContent = editor.view.dom.querySelector<HTMLElement>('.cm-content');
-    expect(codeMirrorContent).not.toBeNull();
+    const codeMirrorContent = await getActiveCodeMirrorContent(editor);
     const event = createTransferEvent(type, property, fileTransfer({ mixed: true }));
 
     codeMirrorContent!.dispatchEvent(event);
@@ -237,17 +251,74 @@ describe('embedded editor file transfer guard', () => {
     expect(changes).toEqual([]);
   });
 
-  it('continues to process ordinary text paste in a CodeMirror code block', () => {
+  it.each([
+    ['paste', 'clipboardData'],
+    ['drop', 'dataTransfer'],
+  ] as const)('keeps a passive code shell inactive when rejecting file-bearing %s', async (type, property) => {
+    let languageLoads = 0;
+    const editor = trackEditor({
+      codeBlockLanguages: {
+        custom: () => {
+          languageLoads += 1;
+          return [];
+        },
+      },
+      element: createHost(),
+      markdown: ['```custom', 'unchanged', '```'].join('\n'),
+    });
+    const shell = editor.view.dom.querySelector<HTMLElement>('.mdw-code-block')!;
+    const staticCode = shell.querySelector<HTMLElement>('.mdw-code-block-static-code')!;
+    const event = createTransferEvent(type, property, fileTransfer({ mixed: true }));
+
+    staticCode.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(shell.dataset.mdwCodeBlockState).toBe('inactive');
+    expect(shell.querySelector('.cm-editor')).toBeNull();
+    expect(languageLoads).toBe(0);
+  });
+
+  it.each([
+    ['paste', 'clipboardData'],
+    ['drop', 'dataTransfer'],
+  ] as const)('keeps a read-only passive code shell inactive after text %s', async (type, property) => {
+    let languageLoads = 0;
+    const editor = trackEditor({
+      codeBlockLanguages: {
+        custom: () => {
+          languageLoads += 1;
+          return [];
+        },
+      },
+      editable: false,
+      element: createHost(),
+      markdown: ['```custom', 'unchanged', '```'].join('\n'),
+    });
+    const shell = editor.view.dom.querySelector<HTMLElement>('.mdw-code-block')!;
+    const staticCode = shell.querySelector<HTMLElement>('.mdw-code-block-static-code')!;
+    const event = createTransferEvent(type, property, textTransfer('blocked'));
+
+    staticCode.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe(['```custom', 'unchanged', '```'].join('\n'));
+    expect(shell.dataset.mdwCodeBlockState).toBe('inactive');
+    expect(shell.querySelector('.cm-editor')).toBeNull();
+    expect(languageLoads).toBe(0);
+  });
+
+  it('continues to process ordinary text paste in a CodeMirror code block', async () => {
     const editor = trackEditor({
       element: createHost(),
       markdown: ['```js', 'value', '```'].join('\n'),
     });
-    const codeMirrorContent = editor.view.dom.querySelector<HTMLElement>('.cm-content');
-    expect(codeMirrorContent).not.toBeNull();
-    codeMirrorContent!.focus();
+    const codeMirrorContent = await getActiveCodeMirrorContent(editor);
+    codeMirrorContent.focus();
     const event = createTransferEvent('paste', 'clipboardData', textTransfer('next'));
 
-    codeMirrorContent!.dispatchEvent(event);
+    codeMirrorContent.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
     expect(editor.getMarkdown()).toContain('next');
