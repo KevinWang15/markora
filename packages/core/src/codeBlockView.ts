@@ -12,6 +12,7 @@ import {
   normalizeCodeBlockLanguage,
   type CodeBlockLanguageRegistry,
 } from "./codeBlockLanguages";
+import type { MarkdownEditorNestedClipboardPipeline } from "./extensionAssembly";
 import { rejectFileTransferEvent } from "./fileTransferGuard";
 
 type CodeBlockViewInstance = {
@@ -38,6 +39,7 @@ type CodeBlockViewClass = CodeBlockViewConstructor & {
 type CreateCodeBlockViewClassOptions = {
   schema: Schema;
   languageRegistry?: CodeBlockLanguageRegistry;
+  nestedClipboard?: MarkdownEditorNestedClipboardPipeline | null;
   moveBeforeManagedBlock: (view: EditorView, blockPos: number) => boolean;
   onDestroyError?: (error: unknown) => void;
   onLanguageLoadError?: (
@@ -52,12 +54,76 @@ type BrowserWindow = Window & typeof globalThis;
 
 const DEBUG_CODE_BLOCK_CURSOR = false;
 
+const clipboardBlockElements = new Set([
+  "ADDRESS",
+  "ARTICLE",
+  "ASIDE",
+  "BLOCKQUOTE",
+  "DIV",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "HEADER",
+  "LI",
+  "MAIN",
+  "NAV",
+  "OL",
+  "P",
+  "PRE",
+  "SECTION",
+  "TABLE",
+  "TR",
+  "UL",
+]);
+
+function htmlClipboardToText(ownerDocument: Document, html: string) {
+  const template = ownerDocument.createElement("template");
+  template.innerHTML = html;
+
+  const readNode = (node: Node): string => {
+    if (node.nodeType === 3) {
+      return node.nodeValue ?? "";
+    }
+
+    if (node.nodeType !== 1 && node.nodeType !== 11) {
+      return "";
+    }
+
+    if (node instanceof ownerDocument.defaultView!.HTMLElement && node.tagName === "BR") {
+      return "\n";
+    }
+
+    let value = "";
+
+    for (const child of node.childNodes) {
+      value += readNode(child);
+    }
+
+    if (
+      node instanceof ownerDocument.defaultView!.HTMLElement
+      && clipboardBlockElements.has(node.tagName)
+      && value
+      && !value.endsWith("\n")
+    ) {
+      value += "\n";
+    }
+
+    return value;
+  };
+
+  return readNode(template.content).replace(/\n$/, "");
+}
+
 // Returns a new class per call so each instance captures its own schema and
 // language registry via the closure — intentional, not a leak.
 export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOptions): CodeBlockViewClass {
   const {
     schema,
     languageRegistry,
+    nestedClipboard,
     moveBeforeManagedBlock,
     onDestroyError,
     onLanguageLoadError,
@@ -444,8 +510,12 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       this.suppressForwarding = false;
       const pos = this.getPos();
       const selection = this.cm.state.selection.main;
-      const anchor = pos + 1 + selection.anchor;
-      const head = pos + 1 + selection.head;
+      // A paste can update CodeMirror in the same cycle that focus is first
+      // observed. Until forwardUpdate() replaces the outer node, clamp this
+      // transient ownership claim to positions valid in the current node.
+      const currentNodeLength = this.node.textContent.length;
+      const anchor = pos + 1 + Math.min(selection.anchor, currentNodeLength);
+      const head = pos + 1 + Math.min(selection.head, currentNodeLength);
       const outerSelection = this.outerView.state.selection;
 
       if (outerSelection.anchor === anchor && outerSelection.head === head) {
@@ -862,16 +932,130 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       return handled;
     }
 
+    private handleNestedClipboardEvent(
+      kind: "drop" | "paste",
+      event: ClipboardEvent | DragEvent,
+    ) {
+      if (rejectFileTransferEvent(event)) {
+        return true;
+      }
+
+      if (!this.canEdit) {
+        return true;
+      }
+
+      const handled = kind === "paste"
+        ? nestedClipboard?.handlePaste(event as ClipboardEvent, this.outerView)
+        : nestedClipboard?.handleDrop(event as DragEvent, this.outerView);
+
+      if (handled || event.defaultPrevented || !this.canEdit) {
+        return true;
+      }
+
+      return this.maybeInsertTransformedHtml(kind, event);
+    }
+
+    private maybeInsertTransformedHtml(
+      kind: "drop" | "paste",
+      event: ClipboardEvent | DragEvent,
+    ) {
+      const transformHtml = nestedClipboard?.transformHtml;
+
+      if (!transformHtml) {
+        return false;
+      }
+
+      let transfer: DataTransfer | null;
+
+      try {
+        transfer = kind === "paste"
+          ? (event as ClipboardEvent).clipboardData
+          : (event as DragEvent).dataTransfer;
+      } catch {
+        return false;
+      }
+
+      if (!transfer) {
+        return false;
+      }
+
+      let html: string;
+
+      try {
+        html = transfer.getData("text/html");
+      } catch {
+        return false;
+      }
+
+      if (!html) {
+        return false;
+      }
+
+      const transformedHtml = transformHtml(html);
+
+      if (transformedHtml === html) {
+        return false;
+      }
+
+      let text = htmlClipboardToText(this.ownerDocument, transformedHtml);
+
+      if (nestedClipboard?.transformText) {
+        text = nestedClipboard.transformText(text);
+      }
+
+      if (!this.canEdit) {
+        return true;
+      }
+
+      const selection = this.cm.state.selection.main;
+      let from = selection.from;
+      let to = selection.to;
+
+      if (kind === "drop") {
+        let dropPosition: number | null = null;
+
+        try {
+          dropPosition = this.cm.posAtCoords({
+            x: (event as DragEvent).clientX,
+            y: (event as DragEvent).clientY,
+          }, false);
+        } catch {
+          // Synthetic or protected drag events may not expose usable coordinates.
+        }
+
+        from = to = dropPosition ?? selection.head;
+      }
+
+      this.cm.focus();
+
+      if (!this.canEdit) {
+        return true;
+      }
+
+      this.cm.dispatch({
+        changes: { from, to, insert: text },
+        selection: { anchor: from + text.length },
+        scrollIntoView: true,
+        userEvent: kind === "paste" ? "input.paste" : "input.drop",
+      });
+      return true;
+    }
+
     private getExtensions(): Extension[] {
       const language = this.getLanguageLabel();
       return [
         lineNumbers(),
         drawSelection(),
         CodeMirrorView.domEventHandlers({
-          paste: (event) => rejectFileTransferEvent(event),
-          dragover: (event) => rejectFileTransferEvent(event),
-          drop: (event) => rejectFileTransferEvent(event),
+          paste: (event) => this.handleNestedClipboardEvent("paste", event),
+          dragover: (event) => rejectFileTransferEvent(event) || !this.canEdit,
+          drop: (event) => this.handleNestedClipboardEvent("drop", event),
         }),
+        ...(nestedClipboard?.transformText
+          ? [CodeMirrorView.clipboardInputFilter.of((value) => (
+              this.canEdit ? nestedClipboard.transformText!(value) : value
+            ))]
+          : []),
         CodeMirrorState.transactionFilter.of((transaction) => (
           transaction.docChanged && !this.updating && !this.canEdit ? [] : transaction
         )),

@@ -19,8 +19,11 @@ export type LabSelectionSnapshot = {
 
 export type LabEventRecord = {
   code?: string;
+  contribution?: string;
+  extension?: string;
   language?: string;
   message?: string;
+  phase?: string;
   previousSelection?: LabSelectionSnapshot;
   selection?: LabSelectionSnapshot;
   type: LabEventName;
@@ -42,6 +45,7 @@ export type LabEditorSpec = {
   controlledEcho?: boolean;
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
+  extensionMode?: "public-example";
   id: string;
   initialSelection?: LabSelectionTarget;
   markdown?: string;
@@ -60,6 +64,18 @@ export type LabSnapshot = {
   prosemirrorFocused: boolean;
   selection: { anchor: number; from: number; head: number; to: number };
   transactionCount: number;
+};
+
+export type LabExtensionSnapshot = {
+  calloutLifecycle: {
+    cleanupRuns: number;
+    commandRuns: number;
+    nodeViewDestroys: number;
+    setupActive: boolean;
+    setupRuns: number;
+  } | null;
+  manifest: Array<{ name: string; version: string }>;
+  uiActions: Array<{ defaultLabel: string; group: string; id: string }>;
 };
 
 export type LabTransferSpec = {
@@ -233,6 +249,13 @@ export async function remountEditor(
 
 export async function getMarkdown(page: Page, id: string) {
   return page.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.getMarkdown(editorId), id);
+}
+
+export async function getExtensionSnapshot(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.extensionSnapshot(editorId),
+    id,
+  ) as Promise<LabExtensionSnapshot>;
 }
 
 export async function resetEditor(page: Page, id: string, markdown: string) {

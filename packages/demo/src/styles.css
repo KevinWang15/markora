@@ -145,6 +145,61 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, m
   display: block;
 }
 
+.browser-lab-extension-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.browser-lab-extension-actions button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #94a3b8;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.browser-lab-extension-actions button:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.browser-lab-extension-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.demo-extension-callout {
+  margin: 1rem 0;
+  overflow: hidden;
+  border: 1px solid #c4b5fd;
+  border-left: 4px solid #7c3aed;
+  border-radius: 8px;
+  background: #f5f3ff;
+}
+
+.demo-extension-callout__label {
+  display: block;
+  padding: 8px 12px;
+  color: #4c1d95;
+  font-size: 0.875rem;
+  text-transform: capitalize;
+}
+
+.demo-extension-callout__content {
+  padding: 0 12px 4px;
+}
+
+mark[data-demo-highlight="true"] {
+  border-radius: 2px;
+  background: #fef08a;
+  color: inherit;
+}
+
 .topbar,
 .hero-banner,
 .panel,

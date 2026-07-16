@@ -30,6 +30,14 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./extension-api": {
+      "types": "./dist/extension-api.d.ts",
+      "import": "./dist/extension-api.js"
+    },
+    "./minimal": {
+      "types": "./dist/minimal.d.ts",
+      "import": "./dist/minimal.js"
+    },
     "./styles.css": "./dist/styles.css"
   },
   "files": [
@@ -49,9 +57,10 @@
     "publish:public": "npm publish --access public",
     "prepack": "pnpm run build && pnpm run typecheck && pnpm run typecheck:api && pnpm run smoke:node-esm",
     "typecheck:api": "tsc -p tsconfig.api.json --noEmit",
-    "smoke:node-esm": "node --input-type=module -e \"const mod = await import('./dist/index.js'); if (typeof mod.createEditor !== 'function') throw new Error('createEditor export missing');\""
+    "smoke:node-esm": "node --input-type=module -e \"const [root, minimal, extensionApi] = await Promise.all([import('./dist/index.js'), import('./dist/minimal.js'), import('./dist/extension-api.js')]); if (typeof root.createEditor !== 'function') throw new Error('createEditor export missing'); if (typeof minimal.createEditor !== 'function') throw new Error('minimal createEditor export missing'); if (typeof extensionApi.defineMarkdownEditorExtension !== 'function') throw new Error('extension API export missing');\""
   },
   "dependencies": {
+    "@types/markdown-it": "^14.1.2",
     "@codemirror/commands": "^6.8.1",
     "@codemirror/lang-cpp": "^6.0.3",
     "@codemirror/lang-css": "^6.3.1",
@@ -78,9 +87,6 @@
     "prosemirror-schema-list": "^1.5.1",
     "prosemirror-state": "^1.4.3",
     "prosemirror-view": "^1.41.0"
-  },
-  "devDependencies": {
-    "@types/markdown-it": "^14.1.2"
   },
   "sideEffects": [
     "./dist/styles.css"

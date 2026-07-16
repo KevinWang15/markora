@@ -5,23 +5,71 @@ import { type Node as ProseMirrorNode, type NodeType } from "prosemirror-model";
 import { sinkListItem, splitListItem, liftListItem } from "prosemirror-schema-list";
 import { AllSelection, EditorState, NodeSelection, Plugin, Selection, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
-import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from "./managedBlockCursor";
+import { ManagedBlockCursor } from "./managedBlockCursor";
 export { ManagedBlockCursor } from "./managedBlockCursor";
 import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
 import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
 import { createCodeBlockViewClass } from "./codeBlockView";
 import { createChangeEmitter } from "./changeEmitter";
 import { createFileTransferGuardPlugin } from "./fileTransferGuard";
-import { createImportedContentSanitizerPlugin, createTableCellContentFromMarkdown, markdownSerializer, normalizeTableAlignment, parseMarkdown, schema } from "./markdownCodec";
+import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
+import {
+  createCompatibilityMarkdownCodec,
+  normalizeTableAlignment,
+  type MarkdownEditorCodec,
+} from "./markdownCodec";
+import {
+  assertMarkdownEditorCompatibilityAdaptersActive,
+  resolveMarkdownEditorExtensions,
+} from "./extensionResolver";
+import {
+  MARKORA_VERSION,
+  createDefaultMarkdownEditorPreset,
+} from "./extensionPresets";
+import { createMarkdownEditorExtensionAssembly } from "./extensionAssembly";
+import { MarkdownEditorExtensionError } from "./extensionApi";
+import { runInitialMarkdownParse } from "./extensionErrorBoundary";
+import { createMinimalMarkdownCodec } from "./minimalMarkdownCodec";
+import type {
+  CreateEditorOptions,
+  MarkdownEditor,
+  MarkdownEditorActiveMark,
+  MarkdownEditorActiveNode,
+  MarkdownEditorCommands,
+  MarkdownEditorDomAttributes,
+  MarkdownEditorMark,
+  MarkdownEditorMarkdownUpdateOptions,
+  MarkdownEditorSelectionTarget,
+  MarkdownEditorState,
+  MarkdownEditorUi,
+  ToolbarButtonState,
+  ToolbarState,
+  UpdateEditorOptions,
+} from "./editorApi";
+export type {
+  CreateEditorOptions,
+  MarkdownEditor,
+  MarkdownEditorActiveMark,
+  MarkdownEditorActiveNode,
+  MarkdownEditorCommands,
+  MarkdownEditorDomAttributes,
+  MarkdownEditorMark,
+  MarkdownEditorMarkdownUpdateOptions,
+  MarkdownEditorSelectionTarget,
+  MarkdownEditorState,
+  MarkdownEditorUi,
+  ToolbarButtonState,
+  ToolbarState,
+  UpdateEditorOptions,
+} from "./editorApi";
 import { createImageViewClass } from "./imageView";
 import { convertFenceToCodeBlock, createTypingShortcuts, getImageToolbarState, getLinkToolbarState, getMarkInfo, getToolbarMarkState, insertHardBreak, type EditorCommand } from "./editorCommands";
 import { createCodeBlockOuterSelectionPlugin, createHeadingEditingPlugin, createHorizontalRulePlugin, createImagePlugin, createMarkdownRevealPlugin, createMarkBoundaryPlugin, type RevealMarkConfig } from "./editorPlugins";
 import { createCodeBlockSelectionHelpers } from "./codeBlockSelection";
-import type { CodeBlockLanguageRegistry } from "./codeBlockLanguages";
 import { createPipeTableHelpers } from "./pipeTable";
 import { createTableNavigation, type TableAlignment } from "./tableNavigation";
 import type { TableCellInfo } from "./tableTypes";
-import type { ActiveImageInfo, EditorUiControllers, EditorUiFactory, ImageEditorOverlay, LinkEditorOverlay, TableToolbarOverlay } from "./uiTypes";
+import type { ActiveImageInfo, EditorUiControllers, ImageEditorOverlay, LinkEditorOverlay, TableToolbarOverlay } from "./uiTypes";
 import { createNoopUiControllers } from "./uiTypes";
 import { createTaskListHelpers } from "./taskListUtils";
 import { createMediaActionHelpers } from "./mediaActionUtils";
@@ -43,134 +91,9 @@ import {
 import {
   createEditorEventDispatcher,
   MarkdownEditorDestroyedError,
-  type MarkdownEditorEventListener,
-  type MarkdownEditorEventName,
   type MarkdownEditorSelectionKind,
   type MarkdownEditorSelectionSnapshot,
-  type MarkdownEditorUnsubscribe,
 } from "./editorEvents";
-
-export type MarkdownEditorDomAttributes = Readonly<Record<string, string>>;
-
-export type MarkdownEditorSelectionTarget =
-  | "all"
-  | "end"
-  | "start"
-  | {
-    anchor: number;
-    head?: number;
-  };
-
-export type MarkdownEditorMarkdownUpdateOptions = {
-  emitChange?: boolean;
-};
-
-export type CreateEditorOptions = {
-  ariaLabel?: string;
-  ariaLabelledBy?: string;
-  attributes?: MarkdownEditorDomAttributes;
-  autofocus?: boolean;
-  codeBlockLanguages?: CodeBlockLanguageRegistry;
-  editable?: boolean;
-  element: HTMLElement;
-  initialSelection?: MarkdownEditorSelectionTarget;
-  markdown?: string;
-  onTransaction?: (
-    transaction: Parameters<EditorView["dispatch"]>[0],
-    view: EditorView,
-    context: MarkdownEditorChangeContext,
-  ) => void;
-  onChange?: (markdown: string, context: MarkdownEditorChangeContext) => void;
-  onChangeMode?: "immediate" | "animationFrame";
-  onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
-  placeholder?: string;
-  ui?: EditorUiFactory;
-};
-
-export type UpdateEditorOptions = {
-  ariaLabel?: string | null;
-  ariaLabelledBy?: string | null;
-  attributes?: MarkdownEditorDomAttributes | null;
-  editable?: boolean;
-  onChange?: CreateEditorOptions["onChange"] | null;
-  onChangeMode?: "immediate" | "animationFrame";
-  onEditOpaqueMarkdown?: ((request: OpaqueMarkdownEditRequest) => void) | null;
-  onTransaction?: CreateEditorOptions["onTransaction"] | null;
-  placeholder?: string | null;
-};
-
-export type MarkdownEditorMark = "strong" | "em" | "code" | "strike";
-export type MarkdownEditorActiveMark = MarkdownEditorMark | "link";
-export type MarkdownEditorActiveNode = "image" | "table" | "code_block";
-
-export type MarkdownEditorCommands = {
-  reconcileMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => boolean;
-  resetMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => void;
-  /** @deprecated Use resetMarkdown() for an explicit hard reset, or reconcileMarkdown() for ordinary host updates. */
-  setMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => void;
-  toggleMark: (mark: MarkdownEditorMark) => boolean;
-  setLink: (href: string) => boolean;
-  removeLink: () => boolean;
-  insertImage: (attrs: { src: string; alt?: string | null; title?: string | null }) => boolean;
-  removeImage: () => boolean;
-  undo: () => boolean;
-  redo: () => boolean;
-};
-
-export type MarkdownEditorState = {
-  can: {
-    toggleMark: (mark: MarkdownEditorMark) => boolean;
-    setLink: () => boolean;
-    insertImage: () => boolean;
-    undo: () => boolean;
-    redo: () => boolean;
-  };
-  isActive: {
-    mark: (mark: MarkdownEditorActiveMark) => boolean;
-    node: (node: MarkdownEditorActiveNode) => boolean;
-  };
-};
-
-export type MarkdownEditorUi = {
-  editLink: () => boolean;
-  editImage: () => boolean;
-};
-
-export type MarkdownEditor = {
-  readonly isDestroyed: boolean;
-  readonly view: EditorView;
-  commands: MarkdownEditorCommands;
-  state: MarkdownEditorState;
-  ui: MarkdownEditorUi | null;
-  blur: () => void;
-  focus: (selection?: MarkdownEditorSelectionTarget) => void;
-  getMarkdown: () => string;
-  flushChange: () => void;
-  getToolbarState: () => ToolbarState;
-  subscribe: <TType extends MarkdownEditorEventName>(
-    type: TType,
-    listener: MarkdownEditorEventListener<TType>,
-  ) => MarkdownEditorUnsubscribe;
-  updateOptions: (options: UpdateEditorOptions) => void;
-  destroy: () => void;
-};
-
-export type ToolbarButtonState = {
-  active: boolean;
-  enabled: boolean;
-};
-
-export type ToolbarState = {
-  bold: ToolbarButtonState;
-  italic: ToolbarButtonState;
-  code: ToolbarButtonState;
-  strike: ToolbarButtonState;
-  link: ToolbarButtonState;
-  image: ToolbarButtonState;
-  undo: { enabled: boolean };
-  redo: { enabled: boolean };
-};
-
 
 type ActiveLineMarker = {
   pos: number;
@@ -203,8 +126,6 @@ type EditorRuntimeOptions = {
   onTransaction: CreateEditorOptions["onTransaction"];
   placeholder: string | null;
 };
-
-const activeEditorHosts = new WeakSet<HTMLElement>();
 
 function copyEditorAttributes(
   attributes: MarkdownEditorDomAttributes | null | undefined,
@@ -405,6 +326,9 @@ function createChangeContext(origin: MarkdownEditorChangeOrigin): MarkdownEditor
   return Object.freeze({ origin });
 }
 
+function createSchemaRuntimeHelpers(codec: MarkdownEditorCodec) {
+const { schema } = codec;
+const { createTableCellContentFromMarkdown } = codec;
 const {
   maybeToggleTaskListItem,
   scheduleTaskControlFocusAfterHistoryShortcut,
@@ -662,7 +586,7 @@ function selectionTouchesNodeType(state: EditorState, nodeType: NodeType) {
 const { maybeExtendSelectionAcrossCodeBlock } = createCodeBlockSelectionHelpers({ schema });
 
 function isManagedBlockNode(node: ProseMirrorNode | null | undefined): node is ProseMirrorNode {
-  return isManagedBlockNodeFromSchema(schema, node);
+  return Boolean(node && codec.managedBlocks.has(node.type.name));
 }
 
 function findTextSelectionInsideNode(
@@ -750,11 +674,63 @@ const { convertPipeTable } = createPipeTableHelpers({
   createTableCellContentFromMarkdown,
 });
 
+  return {
+    maybeToggleTaskListItem,
+    scheduleTaskControlFocusAfterHistoryShortcut,
+    shouldUseNativeTaskControlTab,
+    canSetLink,
+    setLink,
+    canInsertImage,
+    insertImage,
+    getActiveImageInfo,
+    updateLinkHref,
+    updateActiveImage,
+    removeActiveImage,
+    removeActiveLink,
+    maybeEditActiveImage,
+    maybeOpenImage,
+    maybeOpenLink,
+    maybeEditActiveLink,
+    isEscapedOutsideBoundary,
+    escapeBoundaryMark,
+    createEscapedBoundaryPlugin,
+    revealMarkConfigs,
+    ImageView,
+    getAncestorInfo,
+    getActiveListItemInfo,
+    getActiveLineMarker,
+    updateHeadingLevel,
+    getTableCellContext,
+    selectionTouchesNodeType,
+    maybeExtendSelectionAcrossCodeBlock,
+    isManagedBlockNode,
+    setManagedBlockBoundarySelection,
+    moveBeforeManagedBlock,
+    moveInsideManagedBlock,
+    insertParagraphAtManagedBlockBoundary,
+    removeManagedBlockAtBoundary,
+    getManagedBlockBoundary,
+    getTableBoundaryEscapeInfo,
+    createEmptyTableRow,
+    appendTableRow,
+    appendTableColumn,
+    removeTableRow,
+    removeTableColumn,
+    setTableColumnAlignment,
+    removeActiveTable,
+    moveTableCellVertical,
+    moveTableCell,
+    convertPipeTable,
+  };
+}
+
 export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const {
     autofocus = false,
     codeBlockLanguages,
     element,
+    extensionPreset,
+    extensions,
     initialSelection,
     markdown = "",
     ui,
@@ -765,21 +741,85 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     throw new Error("Markora requires a window-backed document.");
   }
 
+  const defaultExtensionPreset = createDefaultMarkdownEditorPreset();
+  const selectedExtensionPreset = extensionPreset ?? defaultExtensionPreset;
+  const usesCompatibilityPreset = selectedExtensionPreset === defaultExtensionPreset;
+  const extensionResolution = resolveMarkdownEditorExtensions({
+    markoraVersion: MARKORA_VERSION,
+    preset: selectedExtensionPreset,
+    extensions,
+  });
+  assertMarkdownEditorCompatibilityAdaptersActive(
+    extensionResolution,
+    usesCompatibilityPreset,
+  );
+  const codec = usesCompatibilityPreset
+    ? createCompatibilityMarkdownCodec(extensionResolution.extensions)
+    : createMinimalMarkdownCodec(extensionResolution.extensions);
+  const { schema } = codec;
+  const {
+    maybeToggleTaskListItem,
+    scheduleTaskControlFocusAfterHistoryShortcut,
+    shouldUseNativeTaskControlTab,
+    canSetLink,
+    setLink,
+    canInsertImage,
+    insertImage,
+    getActiveImageInfo,
+    updateLinkHref,
+    updateActiveImage,
+    removeActiveImage,
+    removeActiveLink,
+    maybeEditActiveImage,
+    maybeOpenImage,
+    maybeOpenLink,
+    maybeEditActiveLink,
+    isEscapedOutsideBoundary,
+    escapeBoundaryMark,
+    createEscapedBoundaryPlugin,
+    revealMarkConfigs,
+    ImageView,
+    getAncestorInfo,
+    getActiveListItemInfo,
+    getActiveLineMarker,
+    updateHeadingLevel,
+    getTableCellContext,
+    selectionTouchesNodeType,
+    maybeExtendSelectionAcrossCodeBlock,
+    isManagedBlockNode,
+    setManagedBlockBoundarySelection,
+    moveBeforeManagedBlock,
+    moveInsideManagedBlock,
+    insertParagraphAtManagedBlockBoundary,
+    removeManagedBlockAtBoundary,
+    getManagedBlockBoundary,
+    getTableBoundaryEscapeInfo,
+    appendTableRow,
+    appendTableColumn,
+    removeTableRow,
+    removeTableColumn,
+    setTableColumnAlignment,
+    removeActiveTable,
+    moveTableCellVertical,
+    moveTableCell,
+    convertPipeTable,
+  } = createSchemaRuntimeHelpers(codec);
   const requestFrame = typeof ownerWindow.requestAnimationFrame === "function"
     ? ownerWindow.requestAnimationFrame.bind(ownerWindow)
     : ((callback: FrameRequestCallback) => ownerWindow.setTimeout(() => callback(Date.now()), 16));
   const cancelFrame = typeof ownerWindow.cancelAnimationFrame === "function"
     ? ownerWindow.cancelAnimationFrame.bind(ownerWindow)
     : ((frameId: number) => ownerWindow.clearTimeout(frameId));
-  const doc = parseMarkdown(markdown);
+  const doc = runInitialMarkdownParse(() => codec.parse(markdown));
 
   if (!doc) {
     throw new Error("Failed to create an empty ProseMirror document.");
   }
 
-  if (activeEditorHosts.has(element)) {
-    throw new Error("Markora already has a live editor mounted on this element.");
-  }
+  // Canonicalize before claiming the host so extension serializer failures
+  // cannot strand construction-owned DOM or host ownership.
+  const initialMarkdown = codec.serialize(doc);
+  assertEditorHostAvailable(element);
 
   const runtimeOptions: EditorRuntimeOptions = {
     ariaLabel: normalizeAccessibleName(options.ariaLabel, "ariaLabel"),
@@ -795,9 +835,9 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const resolvedInitialSelection = initialSelection
     ? resolveSelectionTarget(doc, initialSelection)
     : undefined;
-  const hostHadClass = element.classList.contains("mdw-host");
   let lifecycle: "active" | "destroyed" | "destroying" = "active";
   let editor: MarkdownEditor;
+  let creationComplete = false;
 
   const reportUnhandled = (error: unknown) => {
     const reportError = (ownerWindow as BrowserWindow & { reportError?: (error: unknown) => void }).reportError;
@@ -812,21 +852,72 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }, 0);
   };
   const eventDispatcher = createEditorEventDispatcher(reportUnhandled);
+  const pendingExtensionErrors: Array<{
+    error: MarkdownEditorExtensionError;
+    useGlobalFallback: boolean;
+  }> = [];
+  const reportExtensionError = (
+    error: MarkdownEditorExtensionError,
+    useGlobalFallback = true,
+  ) => {
+    if (lifecycle === "destroying" || lifecycle === "destroyed") {
+      return;
+    }
 
-  const releaseHostOwnership = () => {
-    activeEditorHosts.delete(element);
+    if (!creationComplete) {
+      pendingExtensionErrors.push({ error, useGlobalFallback });
+      return;
+    }
 
-    if (!hostHadClass) {
-      element.classList.remove("mdw-host");
+    const delivered = eventDispatcher.emit("error", {
+      code: error.code as `EXTENSION_${string}`,
+      context: {
+        phase: error.phase,
+        ...(error.extension ? { extension: error.extension } : {}),
+        ...(error.contribution ? { contribution: error.contribution } : {}),
+        ...(error.participants ? { participants: error.participants } : {}),
+      },
+      editor,
+      error,
+      recoverable: true,
+      type: "error",
+    });
+
+    if (delivered === 0 && useGlobalFallback) {
+      reportUnhandled(error);
     }
   };
+  const runReportedExtensionOperation = <T>(operation: () => T): T => {
+    try {
+      return operation();
+    } catch (error) {
+      if (error instanceof MarkdownEditorExtensionError) {
+        reportExtensionError(error, false);
+      }
+
+      throw error;
+    }
+  };
+  const extensionAssembly = createMarkdownEditorExtensionAssembly({
+    resolution: extensionResolution,
+    codec,
+    ownerDocument: element.ownerDocument,
+    reservedNodeViews: usesCompatibilityPreset
+      ? ["code_block", "image", "raw_block", "raw_inline"]
+      : ["image"],
+    reportError: reportExtensionError,
+  });
 
   const listItemType = schema.nodes.list_item;
+  const createToggleMarkCommand = (name: MarkdownEditorMark): EditorCommand => {
+    const markType = schema.marks[name];
+    return markType ? toggleMark(markType) : () => false;
+  };
   const commands = {
-    toggleBold: toggleMark(schema.marks.strong),
-    toggleItalic: toggleMark(schema.marks.em),
-    toggleCode: toggleMark(schema.marks.code),
-    toggleStrike: toggleMark(schema.marks.strike),
+    toggleBold: createToggleMarkCommand("strong"),
+    toggleItalic: createToggleMarkCommand("em"),
+    toggleCode: createToggleMarkCommand("code"),
+    toggleStrike: createToggleMarkCommand("strike"),
     undo,
     redo,
   } satisfies Record<string, EditorCommand>;
@@ -854,6 +945,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   };
   const CodeBlockView = createCodeBlockViewClass({
     languageRegistry: codeBlockLanguages,
+    nestedClipboard: extensionAssembly.contributions.nestedClipboard,
     onLanguageLoadError(error, language, delivery) {
       if (lifecycle !== "active") {
         return;
@@ -917,12 +1009,19 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   let uiEnabled = false;
   let uiFactoryReturned = false;
 
-  if (activeEditorHosts.has(element)) {
-    throw new Error("Markora already has a live editor mounted on this element.");
-  }
+  let releaseHostOwnership: () => void;
 
-  activeEditorHosts.add(element);
-  element.classList.add("mdw-host");
+  try {
+    releaseHostOwnership = claimEditorHost(element);
+  } catch (error) {
+    extensionAssembly.beginDestroy();
+    const cleanupErrors = extensionAssembly.cleanupAssembly();
+    throwCollectedErrors(
+      "Markora host ownership failed and extension cleanup also failed.",
+      [error, ...cleanupErrors],
+    );
+    throw error;
+  }
 
   try {
     const canRunUiAction = (targetView: EditorView) => (
@@ -982,6 +1081,9 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       }
     }
 
+    extensionAssembly.beginDestroy();
+    cleanupErrors.push(...extensionAssembly.cleanupAssembly());
+
     lifecycle = "destroyed";
     releaseHostOwnership();
 
@@ -1004,8 +1106,14 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }),
     createPlaceholderPlugin(() => runtimeOptions.placeholder),
     createFileTransferGuardPlugin(),
-    createImportedContentSanitizerPlugin(),
+    codec.createImportedContentSanitizerPlugin(),
+    ...(extensionAssembly.contributions.clipboard
+      ? [extensionAssembly.contributions.clipboard]
+      : []),
     createTypingShortcuts({ schema, getAncestorInfo }),
+    ...(extensionAssembly.contributions.inputRules
+      ? [extensionAssembly.contributions.inputRules]
+      : []),
     createHeadingEditingPlugin({ schema, convertPipeTable, updateHeadingLevel }),
     createHorizontalRulePlugin({
       schema,
@@ -1059,7 +1167,14 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       getActiveListItemInfo,
       getActiveLineMarker,
     }),
+    ...extensionAssembly.contributions.plugins,
+    // Clamp the final slice after both structured transforms and raw extension
+    // plugins so extension precedence cannot reintroduce unsafe URLs.
+    codec.createImportedContentSanitizerPlugin(),
     history(),
+    ...(extensionAssembly.contributions.keymap
+      ? [extensionAssembly.contributions.keymap]
+      : []),
     keymap({
       Enter: chainCommands(splitListItem(listItemType), liftEmptyBlock),
       "Shift-Enter": (state, dispatch) => insertHardBreak(schema, state, dispatch),
@@ -1085,10 +1200,13 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const changeEmitter = createChangeEmitter<ProseMirrorNode, MarkdownEditorChangeContext>({
     cancelFrame,
     initialDoc: doc,
+    initialMarkdown,
     mode: runtimeOptions.onChangeMode,
     onChange: runtimeOptions.onChange,
     requestFrame,
-    serialize: (targetDoc) => markdownSerializer.serialize(targetDoc),
+    serialize: (targetDoc) => runReportedExtensionOperation(
+      () => codec.serialize(targetDoc),
+    ),
   });
   finalMarkdown = changeEmitter.getMarkdown(doc);
 
@@ -1215,8 +1333,9 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     const action = operation === "set Markdown" ? "setting" : "resetting";
     const failureMessage = `Multiple Markora callbacks failed while ${action} Markdown.`;
     const emitChange = setOptions?.emitChange ?? false;
+    // Host option getters may reenter and destroy the editor.
     assertActive(operation);
-    const nextDoc = parseMarkdown(nextMarkdown);
+    const nextDoc = runReportedExtensionOperation(() => codec.parse(nextMarkdown));
 
     if (!nextDoc) {
       throw new Error("Failed to parse Markdown into a ProseMirror document.");
@@ -1269,8 +1388,9 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   ) => {
     assertActive("reconcile Markdown");
     const emitChange = updateOptions?.emitChange ?? false;
+    // Host option getters may reenter and destroy the editor.
     assertActive("reconcile Markdown");
-    const nextDoc = parseMarkdown(nextMarkdown);
+    const nextDoc = runReportedExtensionOperation(() => codec.parse(nextMarkdown));
 
     if (!nextDoc) {
       throw new Error("Failed to parse Markdown into a ProseMirror document.");
@@ -1400,16 +1520,35 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     return true;
   };
 
+  const getBuiltinMarkState = (
+    name: MarkdownEditorMark,
+    command: EditorCommand,
+  ): ToolbarButtonState => {
+    const markType = schema.marks[name];
+
+    if (!markType) {
+      return { active: false, enabled: false };
+    }
+
+    return getToolbarMarkState(
+      view.state,
+      name,
+      markType,
+      command,
+      isEscapedOutsideBoundary,
+    );
+  };
+
   const isMarkActive = (mark: MarkdownEditorActiveMark) => {
     switch (mark) {
       case "strong":
-        return getToolbarMarkState(view.state, "strong", schema.marks.strong, commands.toggleBold, isEscapedOutsideBoundary).active;
+        return getBuiltinMarkState("strong", commands.toggleBold).active;
       case "em":
-        return getToolbarMarkState(view.state, "em", schema.marks.em, commands.toggleItalic, isEscapedOutsideBoundary).active;
+        return getBuiltinMarkState("em", commands.toggleItalic).active;
       case "code":
-        return getToolbarMarkState(view.state, "code", schema.marks.code, commands.toggleCode, isEscapedOutsideBoundary).active;
+        return getBuiltinMarkState("code", commands.toggleCode).active;
       case "strike":
-        return getToolbarMarkState(view.state, "strike", schema.marks.strike, commands.toggleStrike, isEscapedOutsideBoundary).active;
+        return getBuiltinMarkState("strike", commands.toggleStrike).active;
       case "link":
         return getLinkToolbarState({ state: view.state, canSetLink, isEscapedOutsideBoundary }).active;
     }
@@ -1495,10 +1634,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const getToolbarState = (): ToolbarState => {
     assertActive("read toolbar state");
     const toolbarState: ToolbarState = {
-      bold: getToolbarMarkState(view.state, "strong", schema.marks.strong, commands.toggleBold, isEscapedOutsideBoundary),
-      italic: getToolbarMarkState(view.state, "em", schema.marks.em, commands.toggleItalic, isEscapedOutsideBoundary),
-      code: getToolbarMarkState(view.state, "code", schema.marks.code, commands.toggleCode, isEscapedOutsideBoundary),
-      strike: getToolbarMarkState(view.state, "strike", schema.marks.strike, commands.toggleStrike, isEscapedOutsideBoundary),
+      bold: getBuiltinMarkState("strong", commands.toggleBold),
+      italic: getBuiltinMarkState("em", commands.toggleItalic),
+      code: getBuiltinMarkState("code", commands.toggleCode),
+      strike: getBuiltinMarkState("strike", commands.toggleStrike),
       link: getLinkToolbarState({ state: view.state, canSetLink, isEscapedOutsideBoundary }),
       image: getImageToolbarState({ state: view.state, canInsertImage, getActiveImageInfo }),
       undo: { enabled: runtimeOptions.editable && commands.undo(view.state) },
@@ -1522,8 +1661,11 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const cleanupConstructionFailure = (primaryError: unknown) => {
     const errors = [primaryError];
     lifecycle = "destroying";
+    pendingExtensionErrors.length = 0;
+    extensionAssembly.beginDestroy();
 
     for (const cleanup of [
+      () => { errors.push(...extensionAssembly.cleanupSetup()); },
       () => {
         if (view && !view.isDestroyed) {
           runWithViewErrorCollector(errors, () => view.destroy());
@@ -1532,6 +1674,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       () => linkEditor.destroy(),
       () => imageEditor.destroy(),
       () => tableToolbar.destroy(),
+      () => { errors.push(...extensionAssembly.cleanupAssembly()); },
     ]) {
       try {
         cleanup();
@@ -1574,18 +1717,23 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       editable: () => runtimeOptions.editable,
       state: initialState,
       nodeViews: {
-        code_block(node, view, getPos) {
-          return new CodeBlockView(node, view, getPos as () => number);
-        },
+        ...(usesCompatibilityPreset ? {
+          code_block(node: ProseMirrorNode, targetView: EditorView, getPos: () => number | undefined) {
+            return new CodeBlockView(node, targetView, getPos as () => number);
+          },
+        } : {}),
         image(node, editorView) {
           return new ImageView(node, editorView.dom.ownerDocument);
         },
-        raw_block(node, editorView, getPos) {
-          return new RawBlockView(node, editorView, getPos);
-        },
-        raw_inline(node, editorView, getPos) {
-          return new RawInlineView(node, editorView, getPos);
-        },
+        ...(usesCompatibilityPreset ? {
+          raw_block(node: ProseMirrorNode, editorView: EditorView, getPos: (() => number | undefined) | boolean) {
+            return new RawBlockView(node, editorView, getPos as () => number | undefined);
+          },
+          raw_inline(node: ProseMirrorNode, editorView: EditorView, getPos: (() => number | undefined) | boolean) {
+            return new RawInlineView(node, editorView, getPos as () => number | undefined);
+          },
+        } : {}),
+        ...extensionAssembly.contributions.nodeViews,
       },
       dispatchTransaction(this: EditorView, transaction) {
         const activeView = this;
@@ -1648,7 +1796,9 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     cleanupConstructionFailure(error);
   }
 
-  CodeBlockView.setEditable(runtimeOptions.editable);
+  if (usesCompatibilityPreset) {
+    CodeBlockView.setEditable(runtimeOptions.editable);
+  }
   syncReadonlyControls(view);
 
   const handleFocusIn = (nativeEvent: FocusEvent) => {
@@ -1824,7 +1974,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
     const optionErrors: unknown[] = [];
 
-    if (changesEditable) {
+    if (changesEditable && usesCompatibilityPreset) {
       try {
         CodeBlockView.setEditable(runtimeOptions.editable);
       } catch (error) {
@@ -1859,7 +2009,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       }
     }
 
-    if (changesEditable || changesOnEditOpaqueMarkdown) {
+    if (usesCompatibilityPreset && (changesEditable || changesOnEditOpaqueMarkdown)) {
       RawBlockView.refresh();
       RawInlineView.refresh();
     }
@@ -1880,6 +2030,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       return lifecycle !== "active" || view.isDestroyed;
     },
     view,
+    extensions: extensionAssembly.registry,
     commands: editorCommandApi,
     state: editorStateApi,
     ui: uiEnabled ? {
@@ -1949,13 +2100,18 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
       const cleanupErrors: unknown[] = [];
 
+      lifecycle = "destroying";
+      creationComplete = false;
+      pendingExtensionErrors.length = 0;
+      extensionAssembly.beginDestroy();
+
       try {
         finalMarkdown = changeEmitter.getMarkdown(view.state.doc);
       } catch (error) {
         cleanupErrors.push(error);
       }
 
-      lifecycle = "destroying";
+      pendingExtensionErrors.length = 0;
       pendingBlurVersion += 1;
       view.dom.removeEventListener("focusin", handleFocusIn);
       view.dom.removeEventListener("focusout", handleFocusOut);
@@ -1963,10 +2119,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       for (const cleanup of [
         () => changeEmitter.flush(),
         () => uiControllers.clearSelectionAnchor(),
+        () => { cleanupErrors.push(...extensionAssembly.cleanupSetup()); },
         () => runWithViewErrorCollector(cleanupErrors, () => view.destroy()),
         () => linkEditor.destroy(),
         () => imageEditor.destroy(),
         () => tableToolbar.destroy(),
+        () => { cleanupErrors.push(...extensionAssembly.cleanupAssembly()); },
       ]) {
         try {
           cleanup();
@@ -1990,6 +2148,30 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       }
     },
   };
+
+  try {
+    extensionAssembly.attachView({ view, editor });
+    creationComplete = true;
+
+    for (const pending of pendingExtensionErrors.splice(0)) {
+      ownerWindow.queueMicrotask(() => {
+        if (creationComplete && lifecycle === "active" && !view.isDestroyed) {
+          reportExtensionError(pending.error, pending.useGlobalFallback);
+        }
+      });
+    }
+  } catch (setupError) {
+    try {
+      editor.destroy();
+    } catch (cleanupError) {
+      throw createCleanupError(
+        "Markora extension setup failed and cleanup also failed.",
+        [setupError, cleanupError],
+      );
+    }
+
+    throw setupError;
+  }
 
   if (autofocus) {
     try {

@@ -1,6 +1,6 @@
 import MarkdownIt from "markdown-it";
 import type Token from "markdown-it/lib/token.mjs";
-import { Fragment, Schema, Slice, type Mark, type Node as ProseMirrorNode, type NodeSpec } from "prosemirror-model";
+import { Fragment, Schema, Slice, type Mark, type MarkSpec, type Node as ProseMirrorNode, type NodeSpec } from "prosemirror-model";
 import {
   MarkdownParser,
   MarkdownSerializer,
@@ -8,8 +8,24 @@ import {
   defaultMarkdownParser,
   defaultMarkdownSerializer,
   schema as baseSchema,
+  type ParseSpec,
 } from "prosemirror-markdown";
 import { Plugin } from "prosemirror-state";
+import {
+  MarkdownEditorExtensionError,
+  isValidMarkdownEditorLocalId,
+} from "./extensionApi";
+import type { ResolvedMarkdownEditorExtension } from "./extensionResolver";
+import {
+  compileMarkdownEditorParserTokens,
+  registerMarkdownEditorTokenizerRules,
+  wrapMarkdownEditorExtensionRuntimeCallback,
+} from "./markdownContributionCompiler";
+import { createReadonlySet } from "./readonlySet";
+import {
+  compileMarkdownEditorSchemaEntries,
+  type MarkdownEditorOrderedSchemaMap,
+} from "./schemaContributionOrder";
 import {
   configureOpaqueMarkdown,
   createOpaqueMarkdownEnvironment,
@@ -362,10 +378,164 @@ const schemaNodes = (
   .addToEnd("table_cell", tableNodeSpecs.table_cell)
   .addToEnd("table_header", tableNodeSpecs.table_header);
 
-export const schema: Schema = new Schema({
-  nodes: schemaNodes,
-  marks: baseSchema.spec.marks.addToEnd("strike", strikeMarkSpec),
-});
+function extensionCodecError(options: {
+  code?: string;
+  phase: "schema" | "tokenizer" | "codec" | "parse" | "serialize";
+  message: string;
+  extension?: string;
+  contribution?: string;
+  participants?: readonly string[];
+  cause?: unknown;
+}): never {
+  throw new MarkdownEditorExtensionError({
+    code: options.code ?? "EXTENSION_CONTRIBUTION_CONFLICT",
+    ...options,
+  });
+}
+
+const compatibilityTokenizerFoundationAnchors = [
+  { id: "@markora/table/table", phase: "block", markdownItName: "table" },
+  {
+    id: "@markora/opaque/directive",
+    phase: "block",
+    markdownItName: "markora_directive_container",
+  },
+  { id: "@markora/foundation/block/fence", phase: "block", markdownItName: "fence" },
+  {
+    id: "@markora/foundation/block/paragraph",
+    phase: "block",
+    markdownItName: "paragraph",
+  },
+  { id: "@markora/foundation/inline/text", phase: "inline", markdownItName: "text" },
+  {
+    id: "@markora/foundation/inline/emphasis",
+    phase: "inline",
+    markdownItName: "emphasis",
+  },
+  { id: "@markora/foundation/core/inline", phase: "core", markdownItName: "inline" },
+] as const;
+
+function qualifyMarkdownToken(extensionName: string, localId: string) {
+  const suffix = localId.match(/_(open|close)$/)?.[0] ?? "";
+  const root = suffix ? localId.slice(0, -suffix.length) : localId;
+
+  if (!isValidMarkdownEditorLocalId(root)) {
+    extensionCodecError({
+      code: "EXTENSION_INVALID_DEFINITION",
+      phase: "tokenizer",
+      message: `Markdown token local ID "${localId}" is invalid.`,
+      extension: extensionName,
+      contribution: localId,
+    });
+  }
+
+  return `${extensionName}/${root}${suffix}`;
+}
+
+export type MarkdownEditorCodec = Readonly<{
+  schema: Schema;
+  tokenizer: MarkdownIt;
+  parser: MarkdownParser;
+  serializer: MarkdownSerializer;
+  parse(markdown: string): ProseMirrorNode | null;
+  serialize(doc: ProseMirrorNode): string;
+  createImportedContentSanitizerPlugin(): Plugin;
+  createTableCellContentFromMarkdown(text: string): Fragment;
+  managedBlocks: ReadonlySet<string>;
+}>;
+
+/** Build the current Markora Markdown dialect as one isolated codec graph. */
+export function createCompatibilityMarkdownCodec(
+  resolvedExtensions: readonly ResolvedMarkdownEditorExtension[] = [],
+): MarkdownEditorCodec {
+  const foundationNodes = schemaNodes as MarkdownEditorOrderedSchemaMap<NodeSpec>;
+  const foundationMarks = baseSchema.spec.marks.addToEnd(
+    "strike",
+    strikeMarkSpec,
+  ) as MarkdownEditorOrderedSchemaMap<MarkSpec>;
+  const nodeEntries = resolvedExtensions.flatMap(({ definition }) => (
+    (definition.schema?.nodes ?? []).map((entry) => ({
+      owner: definition.name,
+      entry,
+    }))
+  ));
+  const markEntries = resolvedExtensions.flatMap(({ definition }) => (
+    (definition.schema?.marks ?? []).map((entry) => ({
+      owner: definition.name,
+      entry,
+    }))
+  ));
+  const nodes = compileMarkdownEditorSchemaEntries({
+    foundation: foundationNodes,
+    entries: nodeEntries,
+    kind: "node",
+    missingTargetCode: "EXTENSION_MISSING_DEPENDENCY",
+    fail: (failure) => extensionCodecError({ phase: "schema", ...failure }),
+  });
+  const marks = compileMarkdownEditorSchemaEntries({
+    foundation: foundationMarks,
+    entries: markEntries,
+    kind: "mark",
+    missingTargetCode: "EXTENSION_MISSING_DEPENDENCY",
+    fail: (failure) => extensionCodecError({ phase: "schema", ...failure }),
+  });
+  const nodeOwners = new Map<string, string>();
+  const markOwners = new Map<string, string>();
+  foundationNodes.forEach((name) => nodeOwners.set(name, "@markora/foundation"));
+  foundationMarks.forEach((name) => markOwners.set(name, "@markora/foundation"));
+
+  for (const { definition } of resolvedExtensions) {
+    for (const entry of definition.schema?.nodes ?? []) {
+      nodeOwners.set(entry.name, definition.name);
+    }
+
+    for (const entry of definition.schema?.marks ?? []) {
+      markOwners.set(entry.name, definition.name);
+    }
+  }
+
+  const schemaContributors = resolvedExtensions
+    .filter(({ definition }) => (
+      (definition.schema?.nodes?.length ?? 0) > 0
+      || (definition.schema?.marks?.length ?? 0) > 0
+    ))
+    .map(({ definition }) => definition.name);
+  let schema: Schema;
+
+  try {
+    schema = new Schema({ nodes, marks });
+  } catch (cause) {
+    extensionCodecError({
+      code: "EXTENSION_INVALID_DEFINITION",
+      phase: "schema",
+      message: "The compiled Markdown editor schema is invalid.",
+      ...(schemaContributors.length === 1
+        ? { extension: schemaContributors[0] }
+        : schemaContributors.length > 1
+          ? { participants: schemaContributors }
+          : {}),
+      cause,
+    });
+  }
+  const managedBlocks = new Set(["code_block", "table", "raw_block"]);
+
+  for (const { definition } of resolvedExtensions) {
+    for (const name of definition.schema?.managedBlocks ?? []) {
+      const nodeType = schema.nodes[name];
+
+      if (!nodeType || nodeOwners.get(name) !== definition.name || !nodeType.isBlock) {
+        extensionCodecError({
+          code: "EXTENSION_INVALID_DEFINITION",
+          phase: "schema",
+          message: `Managed block "${name}" must be a block node contributed by extension "${definition.name}".`,
+          extension: definition.name,
+          contribution: name,
+        });
+      }
+
+      managedBlocks.add(name);
+    }
+  }
 
 const markdownTokenizer = new MarkdownIt("commonmark", { html: true }).enable("strikethrough").enable("table");
 configureOpaqueMarkdown(markdownTokenizer);
@@ -401,7 +571,13 @@ markdownTokenizer.core.ruler.after("inline", "markora_table_cell_paragraphs", (s
   state.tokens = nextTokens;
 });
 
-const defaultMarkdownTokens = {
+registerMarkdownEditorTokenizerRules(
+  markdownTokenizer,
+  resolvedExtensions,
+  compatibilityTokenizerFoundationAnchors,
+);
+
+const foundationMarkdownTokens: Record<string, ParseSpec> = {
   ...defaultMarkdownParser.tokens,
   table: { block: "table" },
   thead: { ignore: true },
@@ -415,8 +591,13 @@ const defaultMarkdownTokens = {
   markora_opaque_block: { node: "raw_block", getAttrs: (token: Token) => getOpaqueTokenAttrs(token, "unknown-fence") },
   markora_opaque_inline: { node: "raw_inline", getAttrs: (token: Token) => getOpaqueTokenAttrs(token, "inline-directive") },
 };
-
-const markdownParser = new MarkdownParser(schema, markdownTokenizer, defaultMarkdownTokens);
+const markdownTokens = compileMarkdownEditorParserTokens({
+  foundationTokens: foundationMarkdownTokens,
+  schema,
+  extensions: resolvedExtensions,
+  qualifyToken: qualifyMarkdownToken,
+});
+const markdownParser = new MarkdownParser(schema, markdownTokenizer, markdownTokens);
 
 function serializeTableCell(node: ProseMirrorNode) {
   const cellDoc = schema.nodes.doc.create(null, node.content);
@@ -433,7 +614,7 @@ function serializeTableCell(node: ProseMirrorNode) {
     .replace(/\|/g, "\\|");
 }
 
-export function createTableCellContentFromMarkdown(text: string) {
+function createTableCellContentFromMarkdown(text: string) {
   const parsedDoc = parseMarkdown(text);
 
   if (!parsedDoc || parsedDoc.childCount === 0) {
@@ -453,8 +634,10 @@ function createTableDividerRow(node: ProseMirrorNode) {
   return `| ${parts.join(" | ")} |`;
 }
 
-export const markdownSerializer = new MarkdownSerializer(
-  {
+const serializerNodes: Record<
+  string,
+  (typeof defaultMarkdownSerializer.nodes)[string]
+> = {
     ...defaultMarkdownSerializer.nodes,
     raw_block(state: MarkdownSerializerState, node: ProseMirrorNode) {
       const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
@@ -514,12 +697,94 @@ export const markdownSerializer = new MarkdownSerializer(
 
       listState.inTightList = previousTight;
     },
-  },
-  {
-    ...defaultMarkdownSerializer.marks,
-    strike: { open: "~~", close: "~~", mixable: true, expelEnclosingWhitespace: true },
-  },
-);
+};
+const serializerMarks: Record<
+  string,
+  (typeof defaultMarkdownSerializer.marks)[string]
+> = {
+  ...defaultMarkdownSerializer.marks,
+  strike: { open: "~~", close: "~~", mixable: true, expelEnclosingWhitespace: true },
+};
+
+for (const { definition } of resolvedExtensions) {
+  const nodeSerializers = definition.markdown?.serializer?.nodes ?? {};
+  const markSerializers = definition.markdown?.serializer?.marks ?? {};
+
+  for (const [name, serializer] of Object.entries(nodeSerializers)) {
+    if (serializerNodes[name] || nodeOwners.get(name) !== definition.name) {
+      extensionCodecError({
+        phase: "codec",
+        message: `Markdown node serializer "${name}" must exclusively own a node contributed by "${definition.name}".`,
+        extension: definition.name,
+        contribution: name,
+      });
+    }
+
+    serializerNodes[name] = wrapMarkdownEditorExtensionRuntimeCallback(
+      serializer,
+      {
+        phase: "serialize",
+        extension: definition.name,
+        contribution: `${definition.name}/${name}`,
+      },
+    );
+  }
+
+  for (const [name, serializer] of Object.entries(markSerializers)) {
+    if (serializerMarks[name] || markOwners.get(name) !== definition.name) {
+      extensionCodecError({
+        phase: "codec",
+        message: `Markdown mark serializer "${name}" must exclusively own a mark contributed by "${definition.name}".`,
+        extension: definition.name,
+        contribution: name,
+      });
+    }
+
+    serializerMarks[name] = {
+      ...serializer,
+      open: typeof serializer.open === "function"
+        ? wrapMarkdownEditorExtensionRuntimeCallback(serializer.open, {
+            phase: "serialize",
+            extension: definition.name,
+            contribution: `${definition.name}/${name}`,
+          })
+        : serializer.open,
+      close: typeof serializer.close === "function"
+        ? wrapMarkdownEditorExtensionRuntimeCallback(serializer.close, {
+            phase: "serialize",
+            extension: definition.name,
+            contribution: `${definition.name}/${name}`,
+          })
+        : serializer.close,
+    };
+  }
+
+  for (const entry of definition.schema?.nodes ?? []) {
+    if (!serializerNodes[entry.name]) {
+      extensionCodecError({
+        code: "EXTENSION_INVALID_DEFINITION",
+        phase: "codec",
+        message: `Persisted schema node "${entry.name}" requires a Markdown serializer.`,
+        extension: definition.name,
+        contribution: entry.name,
+      });
+    }
+  }
+
+  for (const entry of definition.schema?.marks ?? []) {
+    if (!serializerMarks[entry.name]) {
+      extensionCodecError({
+        code: "EXTENSION_INVALID_DEFINITION",
+        phase: "codec",
+        message: `Persisted schema mark "${entry.name}" requires a Markdown serializer.`,
+        extension: definition.name,
+        contribution: entry.name,
+      });
+    }
+  }
+}
+
+const markdownSerializer = new MarkdownSerializer(serializerNodes, serializerMarks);
 
 function stripTaskPrefixFromInline(fragment: Fragment, count: number) {
   let remaining = count;
@@ -689,7 +954,7 @@ function sanitizeImportedDoc(doc: ProseMirrorNode) {
   return schema.topNodeType.createAndFill() ?? doc;
 }
 
-export function parseMarkdown(markdown: string) {
+function parseMarkdown(markdown: string) {
   if (markdown.trim().length === 0) {
     return schema.topNodeType.createAndFill();
   }
@@ -699,7 +964,7 @@ export function parseMarkdown(markdown: string) {
   ));
 }
 
-export function createImportedContentSanitizerPlugin() {
+function createImportedContentSanitizerPlugin() {
   return new Plugin({
     props: {
       transformPasted(slice) {
@@ -714,3 +979,33 @@ export function createImportedContentSanitizerPlugin() {
     },
   });
 }
+
+  return Object.freeze({
+    schema,
+    tokenizer: markdownTokenizer,
+    parser: markdownParser,
+    serializer: markdownSerializer,
+    parse: parseMarkdown,
+    serialize(doc: ProseMirrorNode) {
+      return markdownSerializer.serialize(doc);
+    },
+    createImportedContentSanitizerPlugin,
+    createTableCellContentFromMarkdown,
+    managedBlocks: createReadonlySet(managedBlocks),
+  });
+}
+
+const compatibilityMarkdownCodec = createCompatibilityMarkdownCodec();
+
+/** @deprecated Internal compatibility singleton. Editor runtimes use a codec assembly. */
+export const schema = compatibilityMarkdownCodec.schema;
+/** @deprecated Internal compatibility singleton. Editor runtimes use a codec assembly. */
+export const markdownSerializer = compatibilityMarkdownCodec.serializer;
+/** @deprecated Internal compatibility singleton. Editor runtimes use a codec assembly. */
+export const parseMarkdown = compatibilityMarkdownCodec.parse;
+/** @deprecated Internal compatibility singleton. Editor runtimes use a codec assembly. */
+export const createImportedContentSanitizerPlugin =
+  compatibilityMarkdownCodec.createImportedContentSanitizerPlugin;
+/** @deprecated Internal compatibility singleton. Editor runtimes use a codec assembly. */
+export const createTableCellContentFromMarkdown =
+  compatibilityMarkdownCodec.createTableCellContentFromMarkdown;

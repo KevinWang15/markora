@@ -110,6 +110,86 @@ const editor = createEditor({
 });
 ```
 
+## Extensions and the minimal entry
+
+The root entry uses Markora's compatibility preset, preserving tables, tasks,
+strike-through, opaque source, CodeMirror fences, and the existing optional UI
+adapter. Add public extensions with the `extensions` option; definitions are
+validated and compiled before the host element is claimed.
+
+Extension packages should define their schema, Markdown codec, commands, state,
+plugins, NodeViews, clipboard behavior, and headless UI actions through
+`markora/extension-api`. That entry also re-exports the supported Markdown-it
+and ProseMirror constructors so packages do not accidentally install duplicate
+runtime identities. Published extensions should peer-depend on a compatible
+`markora` version.
+
+Extension contexts receive a frozen public codec facade containing only the
+final schema plus `parse()` and `serialize()`. State queries are observational:
+attempting to dispatch directly or through `runCommand()` while a query is
+running throws an attributed extension error. Keeping captured extension
+storage unchanged inside a query remains the extension author's responsibility.
+
+Clipboard contributions can target the outer ProseMirror editor,
+`nested-code` CodeMirror editors, or `both`. Nested code is a plain-text
+surface: consumed paste/drop handlers run before ordered HTML-to-text and text
+transforms, while file rejection and read-only policy always run first. It has
+no ProseMirror `Slice` stage, so a `slice` transform cannot target only
+`nested-code`; with `surface: "both"`, that slice transform runs outer-only.
+
+```ts
+import { createEditor } from "markora/minimal";
+import { defineMarkdownEditorExtension } from "markora/extension-api";
+import "markora/styles.css";
+
+const extension = defineMarkdownEditorExtension({
+  name: "@acme/counter",
+  version: "1.0.0",
+  compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+  createStorage: () => ({ count: 0 }),
+  createRuntime: ({ storage }) => ({
+    commands: {
+      increment: () => {
+        storage.count += 1;
+        return true;
+      },
+    },
+    state: { count: () => storage.count },
+  }),
+});
+
+const editor = createEditor({
+  element: hostElement,
+  extensions: [extension],
+  markdown: "Small by default",
+});
+
+editor.extensions.get(extension).commands.increment();
+console.log(editor.extensions.manifest);
+```
+
+`markora/minimal` is a separate static bundle graph. It keeps the CommonMark
+document foundation, basic editing, lifecycle policy, events, history, links,
+images, and the extension kernel, while omitting tables, tasks, strike-through,
+opaque source, CodeMirror, and the default UI. Fenced code remains editable as a
+plain ProseMirror code block. Compatibility-only options such as `ui`,
+`codeBlockLanguages`, and `onEditOpaqueMarkdown` have no built-in surface in
+this entry. Passing `createMinimalMarkdownEditorPreset()` to the root entry
+selects minimal runtime behavior, but only importing `markora/minimal` provides
+the static bundle-isolation guarantee.
+
+The definitions inside `createDefaultMarkdownEditorPreset()` name adapters
+owned by the root compatibility runtime. The exact preset works with the root
+entry; copying those definitions into an anonymous preset or passing them to
+`markora/minimal` throws `EXTENSION_INCOMPATIBLE` instead of publishing a
+manifest for behavior that is not active.
+
+Extension sets are creation-only. Persist `editor.extensions.manifest` beside
+Markdown that depends on non-default syntax, and destroy/recreate the editor to
+change definitions or configuration. The complete versioning, ordering,
+ownership, lifecycle, security, and persistence contract is documented in the
+repository's extension-system RFC.
+
 ## Integration notes
 
 A typical integration has four parts:
@@ -213,7 +293,7 @@ editor.updateOptions({
 
 The method accepts `editable`, `placeholder`, `attributes`, `ariaLabel`, `ariaLabelledBy`, `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Nullable fields clear their current value. Changing `onChange` or `onChangeMode` first flushes pending output once through the previous listener, then installs the new listener/mode. Callback and presentation changes do not rebuild EditorState or emit an `update` event.
 
-`element`, `markdown`, `initialSelection`, the autofocus action, `ui`, and `codeBlockLanguages` are creation-only. Use `commands.reconcileMarkdown()` for ordinary host snapshots or `commands.resetMarkdown()` for an explicit state replacement.
+`element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `codeBlockLanguages`, `extensionPreset`, and `extensions` are creation-only. Use `commands.reconcileMarkdown()` for ordinary host snapshots or `commands.resetMarkdown()` for an explicit state replacement.
 
 ## Typed events
 
@@ -238,7 +318,7 @@ const stopErrors = editor.subscribe("error", ({ code, context, error, recoverabl
 - Focus and blur events expose `nativeEvent`. The focus boundary includes the outer ProseMirror surface and nested CodeMirror editors, so moving between them does not create a false blur/focus pair. Both events cross one microtask boundary: focus waits for the browser and nested editor's focus stack to finish, while blur waits until the next focused element can be checked.
 - Selection events provide `previousSelection`, `selection`, and `origin`. Each host snapshot contains `anchor`, `head`, `from`, `to`, `empty`, and `kind`.
 - Selection and update events fire synchronously, with selection before update for the same accepted state change. Both expose the accepted change's `origin`. Update events contain the current selection, neither Markdown nor a ProseMirror transaction, and are not affected by `onChangeMode`; call `event.editor.getMarkdown()` only when that subscriber actually needs a snapshot.
-- Error events currently report recoverable code-language-load failures with a stable `code`, `context.language`, and the original `error`. Language loaders and extensions run after the current editor state update completes, so synchronous failures use the same event path without re-entering that update.
+- Error events report recoverable code-language-load failures and attributed extension runtime failures. Extension events use an `EXTENSION_*` code plus `context.phase` and, when known, `context.extension`, `context.contribution`, or `context.participants`. Language loaders and extensions run after the current editor state update completes, so deferred failures use the same event path without re-entering that update.
 
 If a recoverable runtime failure has no error subscriber, Markora forwards it to the editor window's global error reporting path rather than silently swallowing it.
 
@@ -269,9 +349,15 @@ Existing one-argument `onChange` and two-argument `onTransaction` callbacks rema
 ```ts
 import {
   createDefaultCodeBlockLanguageRegistry,
+  createDefaultMarkdownEditorPreset,
   createEditor,
+  createMinimalMarkdownEditorPreset,
+  defineMarkdownEditorExtension,
+  defineMarkdownEditorPreset,
   getMarkdownEditorTransactionOrigin,
+  MARKORA_EXTENSION_API_VERSION,
   MarkdownEditorDestroyedError,
+  MarkdownEditorExtensionError,
   setMarkdownEditorTransactionOrigin,
 } from "markora";
 import type {
@@ -352,6 +438,6 @@ Markora invokes language loaders and installs their CodeMirror extensions after 
 ## Development
 
 - `pnpm dev` starts the core watcher and demo site together
-- `pnpm pack:smoke` verifies the packed `markora` and `markora-ui` tarballs in a tiny Vite consumer app
+- `pnpm pack:smoke` verifies the packed `markora` and `markora-ui` tarballs, public extension declarations, and independent root/minimal bundle graphs in a tiny Vite consumer app
 - `pnpm release:check` dry-runs the core npm tarball and then runs the packed-consumer smoke test
 - `pnpm check` builds the workspace, runs typechecks, executes API type tests, smoke-tests Node ESM imports, and runs the shared test suite

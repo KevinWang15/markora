@@ -1,5 +1,6 @@
 export type ChangeEmitterOptions<TDoc, TContext> = {
   initialDoc: TDoc;
+  initialMarkdown?: string;
   mode: "immediate" | "animationFrame";
   onChange?: (markdown: string, context: TContext) => void;
   requestFrame: (callback: FrameRequestCallback) => number;
@@ -17,7 +18,7 @@ export function createChangeEmitter<TDoc, TContext>(options: ChangeEmitterOption
   let mode = options.mode;
   let onChange = options.onChange;
   let lastSerializedDoc = initialDoc;
-  let lastSerializedMarkdown = serialize(initialDoc);
+  let lastSerializedMarkdown = options.initialMarkdown ?? serialize(initialDoc);
   let pendingFrame: number | null = null;
   let pendingDoc: TDoc | null = null;
   let pendingContext: TContext | null = null;

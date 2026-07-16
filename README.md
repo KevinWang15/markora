@@ -8,7 +8,7 @@ Write Markdown at the speed of thought.
 
 ## Packages
 
-- `packages/core` — the npm package published as `markora`
+- `packages/core` — the npm package published as `markora`, including the `minimal` and `extension-api` entries
 - `packages/ui` — the npm package published as `markora-ui`
 - `packages/demo` — the Vite docs site, live playground, and internal regression surface
 
@@ -20,6 +20,7 @@ Write Markdown at the speed of thought.
 - Inline marks for bold, italic, code, strike, and links
 - Embedded CodeMirror code blocks with lazy-loaded built-in grammars
 - Headless command/state APIs plus optional overlays from `markora-ui`
+- A versioned creation-time extension kernel and an independently bundled minimal entry
 - Safer URL sanitization and managed navigation around tables and code blocks
 
 ## Markdown compatibility
@@ -112,6 +113,8 @@ editor.updateOptions({
 - `onEditOpaqueMarkdown` lets the host open its own source editor for protected opaque atoms; its guarded update function rejects stale writes
 - `editor.flushChange()` forces any pending animation-frame batched Markdown emission to run immediately
 - `editor.view` is a version-coupled advanced escape hatch. Inspection and `dispatch()` are supported for advanced integrations; direct `setProps()`, `updateState()`, DOM mutation, or `destroy()` can bypass Markora invariants and events and are outside the public semver contract
+- `markora/extension-api` is the supported constructor/type boundary for external schema, Markdown, command, state, plugin, NodeView, clipboard, and UI-action contributions
+- `markora/minimal` keeps the extension kernel and basic CommonMark editing in a separate static graph without CodeMirror or default-only syntax modules
 
 ## External Markdown updates
 
@@ -135,7 +138,7 @@ Document activity is classified as `"user"`, `"command"`, `"external"`, `"reset"
 
 See the [embedded editor production plan](./docs/embedded-editor-production-plan.md) for the ordered path from the current editor kernel to a production-grade embedded editing component.
 
-The accepted [extension system RFC](./docs/extension-system-rfc.md) defines the creation-time composition, lifecycle, compatibility, and packaging contract targeted by the next kernel iteration.
+The implemented [extension system RFC](./docs/extension-system-rfc.md) defines the creation-time composition, lifecycle, compatibility, and packaging contract. Package-level examples and minimal-entry guidance live in the [`markora` README](./packages/core/README.md#extensions-and-the-minimal-entry).
 
 Hosts preparing a release should also review the [embedded input and accessibility contract](./docs/input-accessibility-certification.md) and run the [assistive-technology checklist](./docs/assistive-technology-checklist.md) on their supported platform matrix.
 

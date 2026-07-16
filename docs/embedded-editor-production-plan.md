@@ -1,7 +1,7 @@
 # Markora Embedded Editor Production Plan
 
 - Status: Active
-- Last updated: 2026-07-15
+- Last updated: 2026-07-16
 - Scope: Embeddable Markdown editor packages (`markora` and `markora-ui`) only
 
 ## Purpose
@@ -92,8 +92,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-007 | DONE | M | Add production embed configuration and lifecycle APIs |
 | EE-008 | DONE | M | Separate reconciled external updates from hard document resets |
 | EE-009 | DONE | S | Approve a versioned editor and Markdown extension RFC |
-| EE-010 | NEXT | L | Implement the extension kernel and migrate built-ins onto it |
-| EE-011 | QUEUED | M | Complete the block, list, task, code, and table command surface |
+| EE-010 | DONE | L | Implement the extension kernel and migrate built-ins onto it |
+| EE-011 | NEXT | M | Complete the block, list, task, code, and table command surface |
 | EE-012 | QUEUED | M | Add host-controlled URL, resource, and asset insertion hooks |
 | EE-013 | QUEUED | S | Establish document-size, latency, memory, and bundle budgets |
 | EE-014 | QUEUED | M | Remove synchronous full-document serialization from hot typing paths |
@@ -375,7 +375,7 @@ Design the stable customization contract before adding more built-in syntax.
 
 ### EE-010 — Implement the extension kernel
 
-Status: `NEXT`
+Status: `DONE` (2026-07-16)
 
 #### Goal
 
@@ -389,9 +389,20 @@ Move from a fixed editor assembly to the approved composable architecture.
 - Ensure a minimal editor can omit expensive optional behavior.
 - Preserve existing public behavior or provide a documented migration path.
 
+#### Completion notes
+
+- `markora/extension-api` now exposes the versioned definition, preset, schema/Markdown, runtime, lifecycle, error, and exact typed-handle contract without exporting core-private compiler helpers. Public editor/event types moved behind neutral modules, and definitions/presets are validated, snapshotted, branded, and immutable before resolution.
+- Each editor compiles an isolated schema/tokenizer/parser/serializer graph. SemVer compatibility, dependencies, conflicts, required/optional order edges, stable topological sorting, schema foundation gaps, tokenizer anchors, parser targets, serializer ownership, managed blocks, and persistence manifests have phase-attributed diagnostics. Invalid contributed schema specs fail before host ownership.
+- Per-editor storage, commands, read-only state queries, setup scopes, plugins, input rules, first-true keymaps, NodeViews, outer/nested clipboard pipelines, and headless UI actions now run through deterministic kernel lanes. Return values and NodeView surfaces are validated; NodeView and extension cleanup failures are attributed and cannot prevent later cleanup.
+- Lifecycle and security boundaries are enforced around extensions: assembly completes before the host is claimed, setup rollback and reentrant teardown release all ownership, lifecycle signals abort before final serialization, public contexts receive only a frozen codec facade, state queries cannot dispatch, and final URL sanitization runs after extension clipboard/plugins. Read-only and file-transfer policy remains ahead of both outer and nested hooks.
+- The default preset names the existing strike, table, task, CodeMirror, and opaque-source behavior as compatibility adapters. Their legacy foundation patches remain where the additive public contract cannot migrate them safely without changing persisted identities or browser behavior; the optional UI remains a compatibility host adapter. These definitions are rejected outside the exact root compatibility runtime so manifests never advertise inactive behavior.
+- `markora/minimal` is a genuine separate static graph with the CommonMark document foundation, lifecycle/events/history, links/images, managed plain code blocks, and the extension kernel, while excluding CodeMirror and default-only syntax/runtime modules. Packed-consumer analysis measures the root at 2,298,688 bytes/150 static modules and minimal at 841,401 bytes/118 static modules; formal budgets remain `EE-013` work.
+- The private RFC prototype was replaced by public callout-block and highlight-mark examples used by the demo, declaration tests, packed external consumer, and real-browser suite, then deleted. Required browser coverage verifies parse/render/edit/serialize, keyboard behavior, accessible NodeViews/UI actions, cleanup, and exact outer/nested clipboard policy in Chromium, Firefox, and WebKit, including the Chromium CDP IME gate.
+- Final verification: `pnpm check` passes 694 unit/conformance tests and all build/type/package ESM checks; `pnpm test:browser:required` passes 70 cases with two expected non-Chromium CDP skips (72 total); `pnpm pack:smoke` passes the independent root/minimal graphs; and `git diff --check` passes.
+
 ### EE-011 — Complete the command and state surface
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -593,6 +604,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-009` were completed on 2026-07-15, satisfying Gate A's content-safety requirements and establishing the browser, complex-input, accessibility, host-lifecycle, external-update, and extension-contract foundations for Gate B.
+`EE-001` through `EE-010` are complete. Gate A's content-safety requirements are satisfied, and the browser, complex-input, accessibility, host-lifecycle, external-update, and extension-kernel foundations for Gate B are established.
 
-The next iteration is `EE-010 — Implement the extension kernel`.
+The next iteration is `EE-011 — Complete the command and state surface`.

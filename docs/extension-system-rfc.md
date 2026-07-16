@@ -13,7 +13,7 @@ The first extension API is creation-time only. It supports additive schema nodes
 
 `createEditor()` without extension options must retain today's behavior through a default compatibility preset. A minimal preset omits optional and expensive behavior, and a separate `markora/minimal` entry keeps the default graph out of minimal bundles. Optional syntax and renderers live in separately imported, tree-shakable packages; there is no global registry or auto-discovery.
 
-This document approves the contract. The public types and kernel do not exist yet. The private prototype under `packages/extension-rfc-prototype` is executable design evidence, not a supported Markora extension package.
+This document approved the contract before implementation. The private prototype that originally lived under `packages/extension-rfc-prototype` was executable design evidence, not a supported Markora extension package; EE-010 replaced and removed it after the real public kernel gained equivalent package-consumer coverage.
 
 ## Goals
 
@@ -327,7 +327,7 @@ type MarkdownEditorRuntimeState<Runtime> =
 
 `createRuntime()` returns direct host-shaped command/state functions that close over its immutable assembly context; public callers never supply ProseMirror state or dispatch. The late-bound `getState()`, `dispatch()`, and `runCommand()` bridge always resolves the editor's current view state. `dispatch()` accepts only a transaction created from that current state, tags the extension origin, and applies lifecycle/read-only policy; `runCommand()` invokes an ordinary ProseMirror `Command` through the same path. Calling the bridge during `createRuntime()` itself fails with `EXTENSION_RUNTIME_NOT_READY`; returned closures use it only after the view exists. Reset changes the bridge's current state without recreating the closures.
 
-The runtime also returns the named contributions above. Clipboard contributions use the same ordered base. Transforms declare `text`, `html`, or `slice` plus `outer`, `nested-code`, or `both`, and return the transformed value. Paste/drop handlers declare a surface and return `true` only when they consumed the event. UI actions use the typed zero-argument references defined below. Every nested contribution factory receives the finalized assembly context; none receives a partially constructed schema or codec.
+The runtime also returns the named contributions above. Clipboard contributions use the same ordered base. Transforms declare `text`, `html`, or `slice` plus `outer`, `nested-code`, or `both`, and return the transformed value. Paste/drop handlers declare a surface and return `true` only when they consumed the event. Nested code editors are plain-text surfaces: they run `html` transforms before converting changed HTML to text, then run `text` transforms, and have no ProseMirror `Slice` stage. A `slice` transform targeting only `nested-code` is invalid; a `slice` transform targeting `both` runs only on the outer ProseMirror surface. UI actions use the typed zero-argument references defined below. Every nested contribution factory receives the finalized assembly context; none receives a partially constructed schema or codec.
 
 The definition helper's declaration contract rejects command-map members that are not functions returning `boolean` and state-map members that are not functions. This validation is applied after inferring the `createRuntime()` return, avoiding a broad contextual index signature that would erase command parameter types. Authors must annotate command parameters because TypeScript can infer returns but cannot infer the intended host argument types.
 
@@ -479,13 +479,13 @@ Markdown fidelity policy still applies. An extension must document its accepted 
 - `createRuntime()` receives the finalized schema, per-editor storage, dependency handles, and the late-bound runtime bridge, then returns extension-local host-shaped command and state maps.
 - Commands return `boolean` and are automatically guarded by editor lifecycle and read-only policy.
 - Transactions dispatched by a structured extension command receive origin `extension:<extension-name>`.
-- State contributions call `getState()` when invoked so they always query the current `EditorState`; they must not dispatch or mutate storage.
+- State contributions call `getState()` when invoked so they always query the current `EditorState`; they cannot dispatch directly or through `runCommand()`, and should not mutate captured storage.
 - Per-editor mutable data is created synchronously by `createStorage()` in resolved dependency order.
 - Persistent transactional state belongs in a ProseMirror plugin state field, not ordinary storage.
 - Storage is not serialized, migrated, cleared by `resetMarkdown()`, or shared between editors.
 - Host access to storage is typed but read-only at the API boundary; the owning extension controls mutation.
 
-Commands and state remain extension-local to avoid name collisions and impossible global TypeScript augmentation. Dependencies access each other only through declared dependency handles. The single runtime factory is also the TypeScript inference boundary: storage is known before command/state closures are contextually checked. Read-only state-query behavior is a semantic rule that runtime diagnostics and tests enforce; TypeScript cannot prove that a closure never mutates captured storage.
+Commands and state remain extension-local to avoid name collisions and impossible global TypeScript augmentation. Dependencies access each other only through declared dependency handles. The single runtime factory is also the TypeScript inference boundary: storage is known before command/state closures are contextually checked. The kernel enforces the editor-state boundary for queries, including nested calls, and attributes attempted dispatch to the innermost query. Storage purity remains an extension-author rule because neither TypeScript nor the runtime can reliably detect mutation through an arbitrary captured object graph.
 
 ## Plugins, keymaps, input rules, and NodeViews
 
@@ -500,9 +500,9 @@ The compiler uses fixed lanes so extensions cannot precede kernel policy:
 5. Ordered extension and built-in keymaps.
 6. Base ProseMirror keymap.
 
-The precise built-in contribution IDs are published with `EE-010`; their relative behavior must preserve the existing browser suite. Structured key bindings form a first-`true` chain. A contribution that needs internal fallback, such as table `Tab` before list indentation, should declare one command that performs that chain rather than relying on accidental plugin order.
+The stable tokenizer anchors and optional tokenizer rule IDs are published above. `EE-010` keeps the default table/task/CodeMirror/opaque runtime behavior in named compatibility adapters rather than pretending their legacy plugin fragments are additive public contributions. They therefore expose no false runtime contribution IDs: their kernel lanes remain fixed, while public extension contributions order against one another inside the documented lanes. A later adapter migration must publish stable IDs before allowing third-party edges to target it. Structured key bindings form a first-`true` chain. A contribution that needs internal fallback, such as table `Tab` before list indentation, should declare one command that performs that chain rather than relying on accidental plugin order.
 
-One NodeView owner is allowed per node type. NodeView constructors receive the lifecycle/error context, must clean DOM and async work in `destroy()`, and must not create global listeners without returning owned cleanup. Lazy resources must use versioned cancellation like the existing CodeMirror language loader.
+One NodeView owner is allowed per node type. The kernel validates each returned NodeView and its callback surface, wraps constructor and callback failures with extension/contribution attribution, and isolates `destroy()` failures so one broken view cannot prevent sibling cleanup. NodeView constructors receive the lifecycle/error context, must clean DOM and async work in `destroy()`, and must not create global listeners without returning owned cleanup. Lazy resources must use versioned cancellation like the existing CodeMirror language loader.
 
 ## Paste and drop
 
@@ -604,13 +604,14 @@ class MarkdownEditorExtensionError extends Error {
 
 Stable code families are `EXTENSION_INVALID_DEFINITION`, `EXTENSION_INCOMPATIBLE`, `EXTENSION_MISSING_DEPENDENCY`, `EXTENSION_CONFLICT`, `EXTENSION_ORDER_CYCLE`, `EXTENSION_CONTRIBUTION_CONFLICT`, `EXTENSION_NOT_INSTALLED`, `EXTENSION_RUNTIME_NOT_READY`, `EXTENSION_FACTORY_FAILED`, `EXTENSION_RUNTIME_FAILED`, and `EXTENSION_CLEANUP_FAILED`. More specific additive codes may be introduced within those families. `extension` identifies a single owner when attribution is possible; graph/system errors instead use `participants` or leave both fields absent.
 
-Resolution, schema, tokenizer, codec, initial-parse, storage, assembly, view, and setup failures are fatal to creation. Initial and later parse failures identify the responsible tokenizer/parser contribution when possible and otherwise remain system errors. Host-invoked command, state, parse, and serialize failures notify typed error subscribers when present and are then rethrown after state consistency is restored; because the throw is already a reporting channel, the global fallback is suppressed. Browser-driven input/clipboard failures report an extension error, use the global fallback only when no subscriber handled it, and abort that pipeline. Raw ProseMirror plugin exceptions retain ProseMirror's native propagation semantics when the kernel cannot safely isolate them.
+Resolution, schema, tokenizer, codec, initial-parse, storage, assembly, view, and setup failures are fatal to creation. Initial and later parse failures identify the responsible tokenizer/parser contribution when possible and otherwise remain system errors. Host-invoked command, state, parse, serialize, and NodeView callback failures notify typed error subscribers when present and are then rethrown after state consistency is restored; because the throw is already a reporting channel, the global fallback is suppressed. Browser-driven input/clipboard failures report an extension error, use the global fallback only when no subscriber handled it, and abort that pipeline. NodeView teardown failures are retained for the editor's cleanup aggregate so later views and extension scopes still clean up. Raw ProseMirror plugin exceptions retain ProseMirror's native propagation semantics when the kernel cannot safely isolate them.
 
 The typed `error` subscription gains extension failure codes and context. Non-throwing browser pipelines use the existing global reporting fallback only when no listener exists; synchronously thrown creation/host-call errors do not also use that fallback. Teardown errors aggregate without preventing later cleanup.
 
 ## Presets and compatibility adapters
 
 - Omitting `extensionPreset` uses the default compatibility preset and preserves current Markdown, commands, events, UI, and browser behavior.
+- The definitions inside the default preset advertise root-only compatibility adapters. They are accepted only when the exact default preset drives the root compatibility runtime; copying them into an anonymous preset or passing them to `markora/minimal` fails with `EXTENSION_INCOMPATIBLE` rather than emitting a false persistence manifest.
 - The minimal preset contains the stable document foundation, basic paragraphs/text, lifecycle policy, and base editing behavior, but omits tables, tasks, CodeMirror, optional UI, and optional syntax.
 - Tables, tasks, strike, CodeMirror fences, opaque source, and default UI become named built-in definitions where practical.
 - Current schema-spec adjustments that cannot use the additive public contract remain in the foundation or a documented internal compatibility adapter.
@@ -676,6 +677,7 @@ Markdown plus the host's extension manifest is the stable persistence/interchang
 ## Security and accessibility rules
 
 - Extensions execute trusted application code with the same authority as the embedding host; the API is not a sandbox.
+- Public contexts expose a frozen codec facade with the final schema and parse/serialize operations, not mutable tokenizer, parser, serializer, policy, or managed-block assembly internals.
 - Kernel read-only, file rejection, URL sanitization, and lifecycle checks cannot be reordered behind extension hooks.
 - NodeViews must create inert DOM by default and must not execute serialized HTML or scripts.
 - Executable or remote renderers require explicit host policy and belong in optional packages.
@@ -707,9 +709,9 @@ Markdown plus the host's extension manifest is the stable persistence/interchang
 - Untrusted-code sandboxing and auto-discovery.
 - Framework render slots and the complete theme/localization/UI contract.
 
-## Prototype evidence
+## Prototype evidence (historical)
 
-The private `@markora-internal/extension-rfc-prototype` workspace package exercises the contract without importing Markora or any core-private module:
+The former private `@markora-internal/extension-rfc-prototype` workspace package exercised the contract without importing Markora or any core-private module:
 
 - A multiline `:::warning Title` container contributes a block node, tokenizer rule, parser token, serializer, and wrapping command.
 - `==highlight==` contributes an inline mark, tokenizer rule, parser token, serializer, toggle command, keymap, and input rule.
@@ -718,7 +720,7 @@ The private `@markora-internal/extension-rfc-prototype` workspace package exerci
 - Runtime tests cover combined nested syntax, canonical serialization, semantic round-trip, deterministic ordering, and fatal ownership conflicts.
 - A declaration-only fixture proves fully inferred command/state/storage types, heterogeneous branded arrays, exact-definition lookup, the no-storage overload, and structural-impostor rejection without casts.
 
-The prototype intentionally cannot install these definitions into today's `createEditor()`. That is evidence for, not a workaround around, the per-editor compiler required by `EE-010`. The package is private, has no exports, and must be deleted or migrated when the real public kernel replaces it.
+The prototype intentionally could not install these definitions into the pre-EE-010 `createEditor()`. EE-010 replaced it with public-package examples, packed-consumer compilation/runtime checks, and real-browser tests, then deleted the obsolete private package.
 
 ## EE-010 implementation checklist
 

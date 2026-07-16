@@ -11,6 +11,10 @@ import {
 import { createDefaultUi } from "markora-ui";
 import { useEffect, useRef } from "react";
 import { createGlobalListenerLedger, type ListenerSnapshot } from "../browser-lab/listenerLedger";
+import {
+  publicCalloutExtension,
+  publicExampleExtensions,
+} from "../extensions/publicExampleExtensions";
 
 export type BrowserLabRoot = "document" | "shadow";
 export type BrowserLabPortal = "body" | "default" | "local" | "positioned" | "transformed";
@@ -23,6 +27,7 @@ export type BrowserLabEditorSpec = {
   controlledEcho?: boolean;
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
+  extensionMode?: "public-example";
   id: string;
   initialSelection?: MarkdownEditorSelectionTarget;
   markdown?: string;
@@ -39,8 +44,11 @@ export type BrowserLabUpdateOptions = Pick<
 
 export type BrowserLabEventRecord = {
   code?: string;
+  contribution?: string;
+  extension?: string;
   language?: string;
   message?: string;
+  phase?: string;
   previousSelection?: MarkdownEditorSelectionSnapshot;
   selection?: MarkdownEditorSelectionSnapshot;
   type: MarkdownEditorEventName;
@@ -49,6 +57,18 @@ export type BrowserLabEventRecord = {
 export type BrowserLabEventSnapshot = {
   counts: Record<MarkdownEditorEventName, number>;
   log: BrowserLabEventRecord[];
+};
+
+export type BrowserLabExtensionSnapshot = {
+  calloutLifecycle: {
+    cleanupRuns: number;
+    commandRuns: number;
+    nodeViewDestroys: number;
+    setupActive: boolean;
+    setupRuns: number;
+  } | null;
+  manifest: Array<{ name: string; version: string }>;
+  uiActions: Array<{ defaultLabel: string; group: string; id: string }>;
 };
 
 export type BrowserLabCopyResult = {
@@ -117,6 +137,7 @@ export type BrowserLabApi = {
   dispatchTransfer: (id: string, spec: BrowserLabTransferSpec) => BrowserLabTransferResult;
   dispatchViewportEvent: (type: "resize" | "scroll") => void;
   events: (id: string) => BrowserLabEventSnapshot;
+  extensionSnapshot: (id: string) => BrowserLabExtensionSnapshot;
   focus: (id: string, selection?: MarkdownEditorSelectionTarget) => void;
   getMarkdown: (id: string) => string;
   isDestroyed: (id: string) => boolean;
@@ -157,6 +178,8 @@ type MountedEditor = {
   eventCounts: Record<MarkdownEditorEventName, number>;
   eventLog: BrowserLabEventRecord[];
   eventUnsubscribes: Map<MarkdownEditorEventName, () => void>;
+  extensionActions?: HTMLElement;
+  extensionMode?: "public-example";
   explicitPortalRoot?: HTMLElement | ShadowRoot;
   host: HTMLElement;
   id: string;
@@ -219,8 +242,11 @@ function subscribeToEditorEvents(mounted: MountedEditor) {
   mounted.eventUnsubscribes.set("error", mounted.editor.subscribe("error", (event) => {
     recordEvent(mounted, {
       code: event.code,
-      language: event.context.language,
+      contribution: "phase" in event.context ? event.context.contribution : undefined,
+      extension: "phase" in event.context ? event.context.extension : undefined,
+      language: "language" in event.context ? event.context.language : undefined,
       message: event.error instanceof Error ? event.error.message : String(event.error),
+      phase: "phase" in event.context ? event.context.phase : undefined,
       type: "error",
     });
   }));
@@ -298,6 +324,56 @@ function readSnapshot(mounted: MountedEditor): BrowserLabSnapshot {
   };
 }
 
+function readExtensionSnapshot(mounted: MountedEditor): BrowserLabExtensionSnapshot {
+  const registry = mounted.editor.extensions;
+  const calloutLifecycle = registry.has(publicCalloutExtension)
+    ? { ...registry.get(publicCalloutExtension).storage }
+    : null;
+
+  return {
+    calloutLifecycle,
+    manifest: registry.manifest.extensions.map(({ name, version }) => ({ name, version })),
+    uiActions: registry.uiActions.map(({ defaultLabel, group, id }) => ({
+      defaultLabel,
+      group,
+      id,
+    })),
+  };
+}
+
+function renderExtensionActions(mounted: MountedEditor) {
+  mounted.extensionActions?.remove();
+  mounted.extensionActions = undefined;
+
+  if (mounted.editor.extensions.uiActions.length === 0) {
+    return;
+  }
+
+  const toolbar = mounted.section.ownerDocument.createElement("div");
+  toolbar.className = "browser-lab-extension-actions";
+  toolbar.dataset.e2eExtensionActions = mounted.id;
+  toolbar.setAttribute("role", "toolbar");
+  toolbar.setAttribute("aria-label", `${mounted.id} extension actions`);
+
+  for (const action of mounted.editor.extensions.uiActions) {
+    const button = toolbar.ownerDocument.createElement("button");
+    button.type = "button";
+    button.dataset.e2eExtensionAction = action.id;
+    button.textContent = action.defaultLabel;
+    button.disabled = !action.isEnabled();
+    button.addEventListener("click", () => {
+      action.run();
+      mounted.editor.flushChange();
+      mounted.output.textContent = mounted.editor.getMarkdown();
+      button.disabled = !action.isEnabled();
+    });
+    toolbar.append(button);
+  }
+
+  mounted.section.insertBefore(toolbar, mounted.output);
+  mounted.extensionActions = toolbar;
+}
+
 export function BrowserLabPage() {
   const labRootRef = useRef<HTMLElement | null>(null);
 
@@ -340,6 +416,8 @@ export function BrowserLabPage() {
       spec: Omit<BrowserLabEditorSpec, "direction" | "id" | "placement" | "portal" | "root">,
     ) => {
       mounted.controlledEcho = spec.controlledEcho ?? false;
+      const extensionMode = spec.extensionMode ?? mounted.extensionMode;
+      mounted.extensionMode = extensionMode;
       const existingOverlays = new Set(
         mounted.portalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR),
       );
@@ -351,6 +429,7 @@ export function BrowserLabPage() {
         autofocus: spec.autofocus,
         editable: spec.editable,
         element: mounted.host,
+        extensions: extensionMode === "public-example" ? publicExampleExtensions : undefined,
         initialSelection: spec.initialSelection,
         markdown: spec.markdown ?? `# ${mounted.id}\n\nBrowser lab paragraph.`,
         onChangeMode: "animationFrame",
@@ -378,6 +457,7 @@ export function BrowserLabPage() {
       }));
 
       subscribeToEditorEvents(mounted);
+      renderExtensionActions(mounted);
 
       for (const overlay of mounted.portalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR)) {
         if (!existingOverlays.has(overlay)) {
@@ -505,6 +585,7 @@ export function BrowserLabPage() {
           eventCounts: createEventCounts(),
           eventLog: [],
           eventUnsubscribes: new Map(),
+          extensionMode: spec.extensionMode,
           explicitPortalRoot,
           host,
           id,
@@ -562,6 +643,11 @@ export function BrowserLabPage() {
         const mounted = requireEditor(editors, id);
         const wasDestroyed = mounted.editor.isDestroyed;
         mounted.editor.destroy();
+
+        for (const button of mounted.extensionActions?.querySelectorAll("button") ?? []) {
+          button.disabled = true;
+        }
+
         return !wasDestroyed && mounted.editor.isDestroyed;
       },
       destroyAll,
@@ -577,6 +663,9 @@ export function BrowserLabPage() {
           counts,
           log: mounted.eventLog.map((event) => ({ ...event })),
         };
+      },
+      extensionSnapshot(id) {
+        return readExtensionSnapshot(requireEditor(editors, id));
       },
       focus(id, selection) {
         requireEditor(editors, id).editor.focus(selection);

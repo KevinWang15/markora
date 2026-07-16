@@ -28,8 +28,10 @@ export type {
 export { MarkdownEditorDestroyedError } from "./editorEvents";
 export type {
   MarkdownEditorBlurEvent,
+  MarkdownEditorCodeBlockLanguageErrorEvent,
   MarkdownEditorErrorCode,
   MarkdownEditorErrorEvent,
+  MarkdownEditorExtensionErrorEvent,
   MarkdownEditorEventListener,
   MarkdownEditorEventMap,
   MarkdownEditorEventName,
@@ -49,3 +51,14 @@ export type {
 } from "./codeBlockLanguages";
 export type { EditorUiFactory } from "./uiTypes";
 export type { OpaqueMarkdownEditRequest, OpaqueMarkdownKind } from "./opaqueMarkdown";
+export {
+  MARKORA_EXTENSION_API_VERSION,
+  MarkdownEditorExtensionError,
+  defineMarkdownEditorExtension,
+  defineMarkdownEditorPreset,
+} from "./extension-api";
+export type * from "./extension-api";
+export {
+  createDefaultMarkdownEditorPreset,
+  createMinimalMarkdownEditorPreset,
+} from "./extensionPresets";

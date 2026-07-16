@@ -102,12 +102,17 @@ const unsubscribeBlur = editor.subscribe("blur", (event) => {
   void nativeEvent;
 });
 const unsubscribeError = editor.subscribe("error", (event: MarkdownEditorErrorEvent) => {
-  const code: "code-block-language-load-failed" = event.code;
-  const recoverable: true = event.recoverable;
-  const language: string = event.context.language;
-  void code;
-  void recoverable;
-  void language;
+  if (event.code === "code-block-language-load-failed") {
+    const recoverable: true = event.recoverable;
+    const language: string = event.context.language;
+    void recoverable;
+    void language;
+  } else {
+    const phase: string = event.context.phase;
+    const recoverable: boolean = event.recoverable;
+    void phase;
+    void recoverable;
+  }
 });
 const eventMap: MarkdownEditorEventMap = null as never;
 unsubscribeUpdate();

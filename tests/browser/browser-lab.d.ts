@@ -17,8 +17,11 @@ type BrowserLabSelectionSnapshot = {
 
 type BrowserLabEventRecord = {
   code?: string;
+  contribution?: string;
+  extension?: string;
   language?: string;
   message?: string;
+  phase?: string;
   previousSelection?: BrowserLabSelectionSnapshot;
   selection?: BrowserLabSelectionSnapshot;
   type: BrowserLabEventName;
@@ -40,6 +43,7 @@ type BrowserLabTestSpec = {
   controlledEcho?: boolean;
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
+  extensionMode?: "public-example";
   id: string;
   initialSelection?: BrowserLabSelectionTarget;
   markdown?: string;
@@ -58,6 +62,18 @@ type BrowserLabTestSnapshot = {
   prosemirrorFocused: boolean;
   selection: { anchor: number; from: number; head: number; to: number };
   transactionCount: number;
+};
+
+type BrowserLabExtensionSnapshot = {
+  calloutLifecycle: {
+    cleanupRuns: number;
+    commandRuns: number;
+    nodeViewDestroys: number;
+    setupActive: boolean;
+    setupRuns: number;
+  } | null;
+  manifest: Array<{ name: string; version: string }>;
+  uiActions: Array<{ defaultLabel: string; group: string; id: string }>;
 };
 
 interface Window {
@@ -86,6 +102,7 @@ interface Window {
       counts: Record<BrowserLabEventName, number>;
       log: BrowserLabEventRecord[];
     };
+    extensionSnapshot(id: string): BrowserLabExtensionSnapshot;
     focus(id: string, selection?: BrowserLabSelectionTarget): void;
     getMarkdown(id: string): string;
     isDestroyed(id: string): boolean;

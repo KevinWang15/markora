@@ -1,4 +1,8 @@
-import type { MarkdownEditor } from "./createEditor";
+import type { MarkdownEditor } from "./editorApi";
+import type {
+  MarkdownEditorExtensionError,
+  MarkdownEditorExtensionErrorPhase,
+} from "./extensionApi";
 import type { MarkdownEditorChangeOrigin } from "./transactionOrigin";
 
 export type MarkdownEditorSelectionKind =
@@ -41,16 +45,34 @@ export type MarkdownEditorUpdateEvent = MarkdownEditorEventBase<"update"> & {
   selection: MarkdownEditorSelectionSnapshot;
 };
 
-export type MarkdownEditorErrorCode = "code-block-language-load-failed";
+export type MarkdownEditorErrorCode =
+  | "code-block-language-load-failed"
+  | `EXTENSION_${string}`;
 
-export type MarkdownEditorErrorEvent = MarkdownEditorEventBase<"error"> & {
-  code: MarkdownEditorErrorCode;
+export type MarkdownEditorCodeBlockLanguageErrorEvent = MarkdownEditorEventBase<"error"> & {
+  code: "code-block-language-load-failed";
   context: {
     language: string;
   };
   error: unknown;
   recoverable: true;
 };
+
+export type MarkdownEditorExtensionErrorEvent = MarkdownEditorEventBase<"error"> & {
+  code: `EXTENSION_${string}`;
+  context: {
+    phase: MarkdownEditorExtensionErrorPhase;
+    extension?: string;
+    contribution?: string;
+    participants?: readonly string[];
+  };
+  error: MarkdownEditorExtensionError;
+  recoverable: boolean;
+};
+
+export type MarkdownEditorErrorEvent =
+  | MarkdownEditorCodeBlockLanguageErrorEvent
+  | MarkdownEditorExtensionErrorEvent;
 
 export type MarkdownEditorEventMap = {
   blur: MarkdownEditorBlurEvent;
