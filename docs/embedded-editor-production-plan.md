@@ -1,7 +1,7 @@
 # Markora Embedded Editor Production Plan
 
 - Status: Active
-- Last updated: 2026-07-16
+- Last updated: 2026-07-17
 - Scope: Embeddable Markdown editor packages (`markora` and `markora-ui`) only
 
 ## Purpose
@@ -95,8 +95,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-010 | DONE | L | Implement the extension kernel and migrate built-ins onto it |
 | EE-011 | DONE | M | Complete the block, list, task, code, and table command surface |
 | EE-012 | DONE | M | Add host-controlled URL, resource, and asset insertion hooks |
-| EE-013 | NEXT | S | Establish document-size, latency, memory, and bundle budgets |
-| EE-014 | QUEUED | M | Remove synchronous full-document serialization from hot typing paths |
+| EE-013 | DONE | S | Establish document-size, latency, memory, and bundle budgets |
+| EE-014 | NEXT | M | Remove synchronous full-document serialization from hot typing paths |
 | EE-015 | QUEUED | L | Lazily activate CodeMirror blocks and reduce base bundle cost |
 | EE-016 | QUEUED | M | Make task and overlay interactions keyboard and screen-reader complete |
 | EE-017 | QUEUED | M | Add deliberate Markdown, rich HTML, and plain-text clipboard behavior |
@@ -458,7 +458,7 @@ Support production image/media workflows without making storage a core responsib
 
 ### EE-013 — Establish performance and bundle budgets
 
-Status: `NEXT`
+Status: `DONE` (completed 2026-07-17)
 
 #### Goal
 
@@ -472,9 +472,19 @@ Create reproducible baselines before changing performance-sensitive architecture
 - Record baseline hardware/browser details and variance.
 - Set CI warning and failure budgets approved by the project.
 
+#### Completion notes
+
+- A versioned generator creates deterministic 102,400-, 512,000-, and 1,048,576-byte documents containing repeated prose, inline marks, four-level nested lists, tables, fenced code blocks, and host-denied images. Unit tests lock exact sizes, structural counts, determinism, and raw-sample statistics; each report records the resulting fixture hashes.
+- The production benchmark installs a fresh packed `markora` tarball into an isolated consumer and uses only public package and extension APIs. It measures synchronous mount, mount-to-presentation, a trusted keydown-to-presentation proxy, direct codec parse/serialize, clean and dirty teardown, and CDP memory/DOM/listener/document deltas. Timing pages and memory browser processes have explicit isolation, deadlines, provenance assertions, and cleanup invariants.
+- `performance/baseline.json` retains the approved 3-warmup, 20-timing-sample, 7-memory-sample-per-size local run with raw samples, p90/p95 and variance statistics, browser/hardware/toolchain identity, packed tarball and fixture hashes, stable module provenance, and hashes for every benchmark input. The full measurement contract and rounded results are documented in `docs/performance-budgets.md`.
+- `performance/budgets.json` defines reviewed warning/failure ceilings for all runtime and independently built compatibility/minimal bundle metrics. The fixed CI contract uses Ubuntu 24.04, Node 24, pinned pnpm/Chromium, one warmup, five timing samples, three fresh-process memory samples per size, and uploads success or partial failure evidence.
+- The approved production graphs measure 1,264,908 B initial plus 570,072 B lazy compatibility JavaScript (154 static modules) and 678,165 B minimal JavaScript with no lazy chunk (126 static modules). Raw/gzip JavaScript, CSS, lazy/total output, and module-count budgets are all enforced.
+- The benchmark exposed an infinite ImageView loading-spinner animation retaining roughly 6,200 detached nodes per 100 KiB lifecycle. ImageView now owns and cancels that animation when loading ends or the view is destroyed; all 21 approved teardown lifecycles retain zero DOM nodes, event listeners, and documents after garbage collection.
+- Final verification: `pnpm check` passes 772 unit/declaration tests and every build, type, and package ESM check; `pnpm test:browser:required` passes 86 cases with four expected non-Chromium CDP skips (90 total); the full packed baseline passes 60 timing and 21 memory samples; `pnpm perf:ci` passes all 18 bundle-budget checks plus 15 timing and nine memory samples; and `git diff --check` passes.
+
 ### EE-014 — Remove full serialization from hot typing paths
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -628,6 +638,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-012` are complete. Gate A's content-safety requirements are satisfied, and the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, and host-controlled resource foundations for Gate B are established.
+`EE-001` through `EE-013` are complete. Gate A's content-safety requirements are satisfied, and the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, and performance-budget foundations for Gate B are established.
 
-The next iteration is `EE-013 — Establish performance and bundle budgets`.
+The next iteration is `EE-014 — Remove full serialization from hot typing paths`.

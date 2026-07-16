@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Markora packed performance consumer</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-synthesis: none;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        padding: 0;
+      }
+
+      body {
+        background: #fff;
+        color: #111827;
+      }
+
+      #benchmark-root {
+        box-sizing: border-box;
+        margin: 0 auto;
+        min-height: 100vh;
+        padding: 24px;
+        width: min(100%, 1024px);
+      }
+
+      #editor-host {
+        box-sizing: border-box;
+        min-height: 320px;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="benchmark-root">
+      <div id="editor-host"></div>
+      <div id="codec-host" hidden></div>
+    </main>
+    <script type="module" src="./runtime.mjs"></script>
+  </body>
+</html>

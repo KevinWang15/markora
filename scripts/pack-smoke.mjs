@@ -1,24 +1,119 @@
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { dirname, join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
+
+import {
+  evaluateBudget,
+  reportBudgetEvaluations,
+} from "./performance/budget-evaluator.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const packSmokePath = fileURLToPath(import.meta.url);
 const workspaceNodeModulesDir = resolve(rootDir, "node_modules/.pnpm/node_modules");
 const npmCachePath = resolve(rootDir, ".npm-cache");
-const tempRoot = mkdtempSync(join(tmpdir(), "markora-pack-smoke-"));
-const tarballRoot = join(tempRoot, "tarballs");
-const smokeAppDir = join(tempRoot, "app");
-const smokeNodeModulesDir = join(smokeAppDir, "node_modules");
 const viteCliPath = resolve(rootDir, "packages/demo/node_modules/vite/bin/vite.js");
 const tscCliPath = resolve(rootDir, "node_modules/typescript/bin/tsc");
-const rootPackageJson = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf8"));
+const defaultBudgetPath = resolve(rootDir, "performance/budgets.json");
+let commandOptions;
+let currentPhase = "argument-parsing";
+let reportWritten = false;
+let rootPackageJson;
+let smokeAppDir;
+let smokeNodeModulesDir;
+let tarballRoot;
+let tempRoot;
+let availableMeasurements = null;
+const availablePackages = [];
 
-mkdirSync(npmCachePath, { recursive: true });
-mkdirSync(tarballRoot, { recursive: true });
-mkdirSync(smokeAppDir, { recursive: true });
-mkdirSync(smokeNodeModulesDir, { recursive: true });
+function readValueArgument(args, index, name) {
+  const value = args[index + 1];
+
+  if (!value || value.startsWith("--")) {
+    throw new Error(`${name} requires a path.`);
+  }
+
+  return value;
+}
+
+function readInlinePath(argument, prefix) {
+  const value = argument.slice(prefix.length);
+
+  if (!value) {
+    throw new Error(`${prefix.slice(0, -1)} requires a path.`);
+  }
+
+  return value;
+}
+
+function parseArguments(args) {
+  let budgetPath = process.env.MARKORA_BUNDLE_BUDGET_PATH ?? defaultBudgetPath;
+  let reportPath = process.env.MARKORA_BUNDLE_REPORT_PATH;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+
+    if (argument === "--budget") {
+      budgetPath = resolve(rootDir, readValueArgument(args, index, "--budget"));
+      index += 1;
+    } else if (argument.startsWith("--budget=")) {
+      budgetPath = resolve(rootDir, readInlinePath(argument, "--budget="));
+    } else if (argument === "--report") {
+      reportPath = resolve(rootDir, readValueArgument(args, index, "--report"));
+      index += 1;
+    } else if (argument.startsWith("--report=")) {
+      reportPath = resolve(rootDir, readInlinePath(argument, "--report="));
+    } else {
+      throw new Error(`Unknown pack smoke argument: ${argument}`);
+    }
+  }
+
+  return Object.freeze({
+    budgetPath: resolve(rootDir, budgetPath),
+    reportPath: reportPath ? resolve(rootDir, reportPath) : undefined,
+  });
+}
+
+function discoverRequestedReportPath(args) {
+  let reportPath = process.env.MARKORA_BUNDLE_REPORT_PATH;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--report" && args[index + 1] && !args[index + 1].startsWith("--")) {
+      reportPath = args[index + 1];
+      index += 1;
+    } else if (argument.startsWith("--report=") && argument.length > "--report=".length) {
+      reportPath = argument.slice("--report=".length);
+    }
+  }
+  return reportPath ? resolve(rootDir, reportPath) : undefined;
+}
+
+const requestedReportPath = discoverRequestedReportPath(process.argv.slice(2));
+
+class CommandExecutionError extends Error {
+  constructor(command, result) {
+    const label = basename(command);
+    const detail = result.error?.code ? ` (${result.error.code})` : "";
+    super(`${label} failed with status ${result.status ?? "unavailable"}${detail}.`);
+    this.name = "CommandExecutionError";
+    this.command = label;
+    this.exitCode = result.status ?? 1;
+    this.signal = result.signal ?? null;
+  }
+}
 
 function run(command, args, { cwd = rootDir, capture = false } = {}) {
   const result = spawnSync(command, args, {
@@ -43,7 +138,7 @@ function run(command, args, { cwd = rootDir, capture = false } = {}) {
       }
     }
 
-    process.exit(result.status ?? 1);
+    throw new CommandExecutionError(command, result);
   }
 
   return result;
@@ -66,6 +161,7 @@ function packPackage(packagePath) {
   return {
     name: packageJson.name,
     tarballPath: join(packageOutputDir, tarballs[0]),
+    version: packageJson.version,
   };
 }
 
@@ -124,12 +220,16 @@ function createModuleGraphPlugin() {
         entryModuleIds: entryModuleIds.sort(),
         staticModuleIds: [...staticModuleIds].sort(),
         emittedModuleIds: [...new Set(chunks.flatMap((chunk) => Object.keys(chunk.modules)))].sort(),
-        chunks: chunks.map((chunk) => ({
-          fileName: chunk.fileName,
-          isEntry: chunk.isEntry,
-          renderedBytes: Buffer.byteLength(chunk.code),
-          moduleIds: Object.keys(chunk.modules).sort(),
-        })),
+        chunks: chunks
+          .map((chunk) => ({
+            dynamicImports: [...chunk.dynamicImports].sort(),
+            fileName: chunk.fileName,
+            imports: [...chunk.imports].sort(),
+            isEntry: chunk.isEntry,
+            renderedBytes: Buffer.byteLength(chunk.code),
+            moduleIds: Object.keys(chunk.modules).sort(),
+          }))
+          .sort((left, right) => left.fileName.localeCompare(right.fileName)),
       };
 
       this.emitFile({
@@ -149,7 +249,7 @@ export default {
       formats: ["es"],
       fileName: "index",
     },
-    minify: false,
+    minify: "esbuild",
     outDir: ${JSON.stringify(`dist/${label}`)},
   },
   plugins: [createModuleGraphPlugin()],
@@ -159,6 +259,120 @@ export default {
 
 function normalizeModuleId(moduleId) {
   return moduleId.replaceAll("\\", "/").replace(/\?.*$/, "");
+}
+
+function gzipByteLength(source) {
+  return gzipSync(source, { level: 9, mtime: 0 }).byteLength;
+}
+
+function sha256File(filePath) {
+  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}
+
+function measureFiles(outputDir, fileNames) {
+  return fileNames.reduce(
+    (measurement, fileName) => {
+      const source = readFileSync(join(outputDir, fileName));
+      measurement.gzipBytes += gzipByteLength(source);
+      measurement.rawBytes += source.byteLength;
+      return measurement;
+    },
+    { gzipBytes: 0, rawBytes: 0 },
+  );
+}
+
+function collectInitialChunks(report) {
+  const chunksByFileName = new Map(report.chunks.map((chunk) => [chunk.fileName, chunk]));
+  const initialChunks = new Set();
+  const pending = report.chunks
+    .filter((chunk) => chunk.isEntry)
+    .map((chunk) => chunk.fileName);
+
+  if (pending.length === 0) {
+    throw new Error(`${report.label} did not emit an entry chunk.`);
+  }
+
+  while (pending.length > 0) {
+    const fileName = pending.pop();
+
+    if (initialChunks.has(fileName)) {
+      continue;
+    }
+
+    const chunk = chunksByFileName.get(fileName);
+
+    if (!chunk) {
+      throw new Error(`${report.label} referenced missing static chunk ${fileName}.`);
+    }
+
+    initialChunks.add(fileName);
+
+    for (const importedFileName of chunk.imports) {
+      if (!chunksByFileName.has(importedFileName)) {
+        throw new Error(`${report.label} left static import ${importedFileName} external.`);
+      }
+
+      pending.push(importedFileName);
+    }
+  }
+
+  return initialChunks;
+}
+
+function measureBundleGraph(report) {
+  const initialChunkNames = collectInitialChunks(report);
+  const allChunkNames = report.chunks.map((chunk) => chunk.fileName).sort();
+  const lazyChunkNames = allChunkNames.filter((fileName) => !initialChunkNames.has(fileName));
+  const initialFileNames = [...initialChunkNames].sort();
+  const cssFileNames = readdirSync(report.outputDir)
+    .filter((fileName) => fileName.endsWith(".css"))
+    .sort();
+  const initialJs = measureFiles(report.outputDir, initialFileNames);
+  const lazyJs = measureFiles(report.outputDir, lazyChunkNames);
+  const totalJs = measureFiles(report.outputDir, allChunkNames);
+  const css = measureFiles(report.outputDir, cssFileNames);
+
+  for (const chunk of report.chunks) {
+    const fileBytes = readFileSync(join(report.outputDir, chunk.fileName)).byteLength;
+
+    if (fileBytes !== chunk.renderedBytes) {
+      throw new Error(
+        `${report.label} chunk ${chunk.fileName} changed after graph measurement `
+        + `(${chunk.renderedBytes} rendered bytes, ${fileBytes} emitted bytes).`,
+      );
+    }
+  }
+
+  if (
+    initialJs.rawBytes + lazyJs.rawBytes !== totalJs.rawBytes
+    || initialJs.gzipBytes + lazyJs.gzipBytes !== totalJs.gzipBytes
+  ) {
+    throw new Error(`${report.label} initial and lazy bundle measurements did not equal the total.`);
+  }
+
+  return Object.freeze({
+    css: Object.freeze({
+      ...css,
+      fileCount: cssFileNames.length,
+      fileNames: Object.freeze(cssFileNames),
+    }),
+    initialJs: Object.freeze({
+      ...initialJs,
+      chunkCount: initialFileNames.length,
+      chunkNames: Object.freeze(initialFileNames),
+    }),
+    lazyJs: Object.freeze({
+      ...lazyJs,
+      chunkCount: lazyChunkNames.length,
+      chunkNames: Object.freeze(lazyChunkNames),
+    }),
+    staticModuleCount: report.staticModuleIds.length,
+    totalJs: Object.freeze({
+      ...totalJs,
+      chunkCount: allChunkNames.length,
+      chunkNames: Object.freeze(allChunkNames),
+    }),
+  });
 }
 
 function readBundleReport(label) {
@@ -172,6 +386,11 @@ function readBundleReport(label) {
     ...report,
     outputDir,
     chunkSource,
+    chunks: report.chunks.map((chunk) => ({
+      ...chunk,
+      dynamicImports: chunk.dynamicImports ?? [],
+      imports: chunk.imports ?? [],
+    })),
     staticModuleIds: report.staticModuleIds.map(normalizeModuleId),
     emittedModuleIds: report.emittedModuleIds.map(normalizeModuleId),
   };
@@ -179,6 +398,64 @@ function readBundleReport(label) {
 
 function moduleIdIncludes(moduleId, fragment) {
   return normalizeModuleId(moduleId).includes(fragment);
+}
+
+function assertPackedModule(report, fragment, label) {
+  const packedNodeModulesPrefix = `${normalizeModuleId(realpathSync(smokeNodeModulesDir))}/`;
+  const moduleIds = [...report.staticModuleIds, ...report.emittedModuleIds];
+  const matchingModuleIds = moduleIds.filter((moduleId) => moduleIdIncludes(moduleId, fragment));
+
+  if (matchingModuleIds.length === 0) {
+    throw new Error(`${label} was not present in the ${report.label} graph.`);
+  }
+
+  const unpackedModuleIds = matchingModuleIds.filter(
+    (moduleId) => !normalizeModuleId(moduleId).startsWith(packedNodeModulesPrefix),
+  );
+
+  if (unpackedModuleIds.length > 0) {
+    throw new Error(
+      `${label} did not resolve from the packed consumer node_modules:\n${unpackedModuleIds
+        .map((moduleId) => `- ${moduleId}`)
+        .join("\n")}`,
+    );
+  }
+}
+
+function assertPackedPackage(packageInfo) {
+  const packageJson = JSON.parse(readFileSync(
+    join(smokeNodeModulesDir, packageInfo.name, "package.json"),
+    "utf8",
+  ));
+
+  if (packageJson.name !== packageInfo.name || packageJson.version !== packageInfo.version) {
+    throw new Error(
+      `Packed ${packageInfo.name} provenance mismatch: expected ${packageInfo.version}, `
+      + `received ${packageJson.name}@${packageJson.version}.`,
+    );
+  }
+}
+
+function assertPackedProvenance(rootReport, minimalReport, rootMeasurement, minimalMeasurement) {
+  assertPackedModule(rootReport, "/node_modules/markora/dist/index.js", "Packed markora root entry");
+  assertPackedModule(rootReport, "/node_modules/markora/dist/styles.css", "Packed markora stylesheet");
+  assertPackedModule(rootReport, "/node_modules/markora-ui/dist/index.js", "Packed markora-ui entry");
+  assertPackedModule(rootReport, "/node_modules/markora-ui/dist/styles.css", "Packed markora-ui stylesheet");
+  assertPackedModule(minimalReport, "/node_modules/markora/dist/minimal.js", "Packed markora minimal entry");
+  assertPackedModule(minimalReport, "/node_modules/markora/dist/styles.css", "Packed minimal stylesheet");
+
+  if (minimalMeasurement.lazyJs.chunkCount !== 0) {
+    throw new Error(
+      `markora/minimal emitted ${minimalMeasurement.lazyJs.chunkCount} lazy chunks; `
+      + "the minimal packed graph must remain a single static graph.",
+    );
+  }
+
+  if (rootMeasurement.css.fileCount !== 1 || minimalMeasurement.css.fileCount !== 1) {
+    throw new Error(
+      "Packed root and minimal consumers must each emit exactly one production stylesheet.",
+    );
+  }
 }
 
 function assertBundleIsolation(rootReport, minimalReport) {
@@ -195,6 +472,7 @@ function assertBundleIsolation(rootReport, minimalReport) {
     "/node_modules/markora/dist/pipeTable.js",
     "/node_modules/markora/dist/tableNavigation.js",
     "/node_modules/markora/dist/taskListUtils.js",
+    "/node_modules/markora-ui/",
     "/node_modules/@codemirror/",
     "/node_modules/@lezer/",
   ];
@@ -264,23 +542,296 @@ function assertBundleIsolation(rootReport, minimalReport) {
     }
   }
 
-  const rootBytes = rootReport.chunks.reduce((total, chunk) => total + chunk.renderedBytes, 0);
-  const minimalBytes = minimalReport.chunks.reduce((total, chunk) => total + chunk.renderedBytes, 0);
+}
 
+function describeCount(count, singular) {
+  return `${count} ${singular}${count === 1 ? "" : "s"}`;
+}
+
+function printBundleMeasurement(label, measurement) {
   console.log([
-    "Packed bundle graph:",
-    `  markora: ${rootBytes} bytes, ${rootReport.staticModuleIds.length} static modules`,
-    `  markora/minimal: ${minimalBytes} bytes, ${minimalReport.staticModuleIds.length} static modules`,
+    `  ${label}:`,
+    `    initial JS: ${measurement.initialJs.rawBytes} raw / ${measurement.initialJs.gzipBytes} gzip bytes (${describeCount(measurement.initialJs.chunkCount, "chunk")})`,
+    `    lazy JS: ${measurement.lazyJs.rawBytes} raw / ${measurement.lazyJs.gzipBytes} gzip bytes (${describeCount(measurement.lazyJs.chunkCount, "chunk")})`,
+    `    total JS: ${measurement.totalJs.rawBytes} raw / ${measurement.totalJs.gzipBytes} gzip bytes (${describeCount(measurement.totalJs.chunkCount, "chunk")})`,
+    `    CSS: ${measurement.css.rawBytes} raw / ${measurement.css.gzipBytes} gzip bytes (${describeCount(measurement.css.fileCount, "file")})`,
+    `    static modules: ${measurement.staticModuleCount}`,
   ].join("\n"));
 }
 
-const corePackage = packPackage(join(rootDir, "packages/core"));
-const uiPackage = packPackage(join(rootDir, "packages/ui"));
+function printBundleMeasurements(rootMeasurement, minimalMeasurement) {
+  console.log("Packed production bundle graph (per-file gzip level 9):");
+  printBundleMeasurement("markora", rootMeasurement);
+  printBundleMeasurement("markora/minimal", minimalMeasurement);
+}
 
+const bundleBudgetMetrics = Object.freeze([
+  ["initialJs", "rawBytes"],
+  ["initialJs", "gzipBytes"],
+  ["lazyJs", "rawBytes"],
+  ["lazyJs", "gzipBytes"],
+  ["totalJs", "rawBytes"],
+  ["totalJs", "gzipBytes"],
+  ["css", "rawBytes"],
+  ["css", "gzipBytes"],
+]);
+
+function loadBudgetConfig(filePath) {
+  const config = JSON.parse(readFileSync(filePath, "utf8"));
+
+  if (config.schemaVersion !== 1 || !config.bundle || typeof config.bundle !== "object") {
+    throw new TypeError("Performance budgets must use schemaVersion 1 and define bundle budgets.");
+  }
+
+  return config;
+}
+
+function evaluateBundleBudgets(config, measurements) {
+  const evaluations = [];
+
+  for (const graphName of ["root", "minimal"]) {
+    const measurement = measurements[graphName];
+    const budget = config.bundle[graphName];
+
+    if (!budget || typeof budget !== "object") {
+      throw new TypeError(`Bundle budgets are missing the ${graphName} graph.`);
+    }
+
+    for (const [groupName, metricName] of bundleBudgetMetrics) {
+      evaluations.push(evaluateBudget(
+        `bundle.${graphName}.${groupName}.${metricName}`,
+        measurement[groupName][metricName],
+        budget[groupName]?.[metricName],
+      ));
+    }
+
+    evaluations.push(evaluateBudget(
+      `bundle.${graphName}.staticModuleCount`,
+      measurement.staticModuleCount,
+      budget.staticModuleCount,
+    ));
+  }
+
+  return evaluations;
+}
+
+function displayPath(filePath) {
+  const normalizedRoot = `${normalizeModuleId(rootDir)}/`;
+  const normalizedPath = normalizeModuleId(filePath);
+  if (normalizedPath.startsWith(normalizedRoot)) {
+    return normalizedPath.slice(normalizedRoot.length);
+  }
+
+  for (const [directory, token] of [
+    [tempRoot, "<pack-smoke-temp>"],
+    [homedir(), "<home>"],
+  ]) {
+    if (!directory) {
+      continue;
+    }
+    const normalizedDirectory = normalizeModuleId(directory);
+    if (normalizedPath === normalizedDirectory || normalizedPath.startsWith(`${normalizedDirectory}/`)) {
+      return `${token}${normalizedPath.slice(normalizedDirectory.length)}`;
+    }
+  }
+
+  return basename(normalizedPath);
+}
+
+function createHarnessProvenance() {
+  return Object.freeze({
+    "scripts/pack-smoke.mjs": sha256File(packSmokePath),
+  });
+}
+
+function describePackage(packageInfo) {
+  return Object.freeze({
+    name: packageInfo.name,
+    sha256: sha256File(packageInfo.tarballPath),
+    tarball: basename(packageInfo.tarballPath),
+    version: packageInfo.version,
+  });
+}
+
+function rememberPackage(packageInfo) {
+  availablePackages.push(describePackage(packageInfo));
+}
+
+function sanitizeReportText(value) {
+  let text = String(value).replaceAll("\\", "/");
+  const replacements = [];
+  for (const [directory, token] of [
+    [rootDir, "<workspace>"],
+    [tempRoot, "<pack-smoke-temp>"],
+    [homedir(), "<home>"],
+  ]) {
+    if (!directory) {
+      continue;
+    }
+    replacements.push([normalizeModuleId(directory), token]);
+    if (existsSync(directory)) {
+      replacements.push([normalizeModuleId(realpathSync(directory)), token]);
+    }
+  }
+  replacements.sort(([left], [right]) => right.length - left.length);
+  for (const [directory, token] of replacements) {
+    text = text.replaceAll(directory, token);
+  }
+  return text;
+}
+
+function serializeReportError(error) {
+  const serialized = {
+    message: sanitizeReportText(error instanceof Error ? error.message : error),
+    name: error instanceof Error ? error.name : "UnknownError",
+  };
+  if (error instanceof CommandExecutionError) {
+    serialized.command = error.command;
+    serialized.exitCode = error.exitCode;
+    serialized.signal = error.signal;
+  }
+  return Object.freeze(serialized);
+}
+
+function readViteVersion() {
+  try {
+    return JSON.parse(readFileSync(
+      resolve(rootDir, "packages/demo/node_modules/vite/package.json"),
+      "utf8",
+    )).version;
+  } catch {
+    return null;
+  }
+}
+
+function writeFailureReport(error) {
+  const reportPath = commandOptions?.reportPath ?? requestedReportPath;
+  if (!reportPath) {
+    return false;
+  }
+  const budgetConfigPath = commandOptions?.budgetPath ?? defaultBudgetPath;
+  const report = {
+    schemaVersion: 1,
+    kind: "markora-packed-bundle-budget-report",
+    generatedAt: new Date().toISOString(),
+    status: "error",
+    phase: currentPhase,
+    error: serializeReportError(error),
+    harness: createHarnessProvenance(),
+    budgetConfig: displayPath(budgetConfigPath),
+    budgetConfigSha256: existsSync(budgetConfigPath) ? sha256File(budgetConfigPath) : null,
+    environment: {
+      architecture: process.arch,
+      node: process.version,
+      platform: process.platform,
+      vite: readViteVersion(),
+    },
+    provenance: {
+      consumer: "production-minified Vite library build",
+      source: "npm-pack tarballs",
+      packages: availablePackages,
+    },
+    graphs: availableMeasurements,
+    partial: true,
+  };
+
+  mkdirSync(dirname(reportPath), { recursive: true });
+  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+  console.error(`Failed packed bundle report written to ${reportPath}`);
+  return true;
+}
+
+function writeMeasurementReport({
+  budgetConfigPath,
+  budgetResult,
+  corePackage,
+  measurements,
+  reportPath,
+  uiPackage,
+}) {
+  if (!reportPath) {
+    return;
+  }
+
+  const vitePackage = JSON.parse(readFileSync(
+    resolve(rootDir, "packages/demo/node_modules/vite/package.json"),
+    "utf8",
+  ));
+  const report = {
+    schemaVersion: 1,
+    kind: "markora-packed-bundle-budget-report",
+    generatedAt: new Date().toISOString(),
+    status: budgetResult.passed ? "passed" : "failed",
+    harness: createHarnessProvenance(),
+    budgetConfig: displayPath(budgetConfigPath),
+    budgetConfigSha256: sha256File(budgetConfigPath),
+    compression: {
+      algorithm: "gzip",
+      level: 9,
+      members: "per-emitted-file",
+    },
+    environment: {
+      architecture: process.arch,
+      node: process.version,
+      platform: process.platform,
+      vite: vitePackage.version,
+    },
+    provenance: {
+      consumer: "production-minified Vite library build",
+      source: "npm-pack tarballs",
+      packages: [corePackage, uiPackage].map(describePackage),
+    },
+    invariants: {
+      initialAndLazyPartitionTotal: true,
+      minimalHasNoLazyChunks: measurements.minimal.lazyJs.chunkCount === 0,
+      packedEntriesAndStylesResolved: true,
+      packedPackageVersionsMatched: true,
+      rootAndMinimalGraphsIndependent: true,
+    },
+    graphs: measurements,
+    budgets: {
+      evaluations: budgetResult.evaluations,
+      failures: budgetResult.failures,
+      passed: budgetResult.passed,
+      warnings: budgetResult.warnings,
+    },
+  };
+
+  mkdirSync(dirname(reportPath), { recursive: true });
+  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+  console.log(`Packed bundle report written to ${reportPath}`);
+  return true;
+}
+
+function main() {
+currentPhase = "argument-parsing";
+commandOptions = parseArguments(process.argv.slice(2));
+currentPhase = "workspace-preparation";
+rootPackageJson = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf8"));
+tempRoot = mkdtempSync(join(tmpdir(), "markora-pack-smoke-"));
+tarballRoot = join(tempRoot, "tarballs");
+smokeAppDir = join(tempRoot, "app");
+smokeNodeModulesDir = join(smokeAppDir, "node_modules");
+mkdirSync(npmCachePath, { recursive: true });
+mkdirSync(tarballRoot, { recursive: true });
+mkdirSync(smokeAppDir, { recursive: true });
+mkdirSync(smokeNodeModulesDir, { recursive: true });
+
+currentPhase = "core-package";
+const corePackage = packPackage(join(rootDir, "packages/core"));
+rememberPackage(corePackage);
+currentPhase = "ui-package";
+const uiPackage = packPackage(join(rootDir, "packages/ui"));
+rememberPackage(uiPackage);
+
+currentPhase = "packed-dependency-isolation";
 copyWorkspaceDependencies();
 unpackPackage(corePackage.name, corePackage.tarballPath);
 unpackPackage(uiPackage.name, uiPackage.tarballPath);
+assertPackedPackage(corePackage);
+assertPackedPackage(uiPackage);
 
+currentPhase = "consumer-generation";
 writeFileSync(join(smokeAppDir, "package.json"), `${JSON.stringify({
   name: "markora-pack-smoke",
   private: true,
@@ -488,6 +1039,7 @@ import {
   packedCalloutExtension,
   packedHighlightExtension,
 } from "./extensions";
+import "markora/styles.css";
 
 export const packedExternalExtensions = [
   packedCalloutExtension,
@@ -796,7 +1348,9 @@ writeFileSync(join(smokeAppDir, "tsconfig.json"), `${JSON.stringify({
   include: ["src/api.ts"],
 }, null, 2)}\n`);
 
+currentPhase = "consumer-typecheck";
 run("node", [tscCliPath, "-p", "tsconfig.json"], { cwd: smokeAppDir });
+currentPhase = "node-import-smoke";
 run("node", ["--input-type=module", "-e", `
   const extensionApi = await import("markora/extension-api");
   const minimal = await import("markora/minimal");
@@ -808,14 +1362,26 @@ run("node", ["--input-type=module", "-e", `
   }
 `], { cwd: smokeAppDir });
 
+currentPhase = "bundle-configuration";
 writeBundleConfig("root", "./src/root.js");
 writeBundleConfig("minimal", "./src/minimal.js");
+currentPhase = "root-bundle-build";
 run("node", [viteCliPath, "build", "--config", "vite.root.config.mjs"], { cwd: smokeAppDir });
+currentPhase = "minimal-bundle-build";
 run("node", [viteCliPath, "build", "--config", "vite.minimal.config.mjs"], { cwd: smokeAppDir });
 
+currentPhase = "bundle-validation";
 const rootBundleReport = readBundleReport("root");
 const minimalBundleReport = readBundleReport("minimal");
+const rootBundleMeasurement = measureBundleGraph(rootBundleReport);
+const minimalBundleMeasurement = measureBundleGraph(minimalBundleReport);
 assertBundleIsolation(rootBundleReport, minimalBundleReport);
+assertPackedProvenance(
+  rootBundleReport,
+  minimalBundleReport,
+  rootBundleMeasurement,
+  minimalBundleMeasurement,
+);
 const minimalEntryChunk = minimalBundleReport.chunks.find((chunk) => chunk.isEntry);
 
 if (!minimalEntryChunk) {
@@ -823,6 +1389,7 @@ if (!minimalEntryChunk) {
 }
 
 const minimalEntrySpecifier = `./dist/minimal/${minimalEntryChunk.fileName}`;
+currentPhase = "minimal-runtime-smoke";
 run("node", ["--input-type=module", "-e", `
   const consumer = await import(${JSON.stringify(minimalEntrySpecifier)});
   const names = consumer.packedExternalExtensions?.map((extension) => extension.name);
@@ -831,4 +1398,52 @@ run("node", ["--input-type=module", "-e", `
   }
 `], { cwd: smokeAppDir });
 
+const measurements = Object.freeze({
+  minimal: minimalBundleMeasurement,
+  root: rootBundleMeasurement,
+});
+availableMeasurements = measurements;
+printBundleMeasurements(rootBundleMeasurement, minimalBundleMeasurement);
+currentPhase = "budget-evaluation";
+const budgetConfig = loadBudgetConfig(commandOptions.budgetPath);
+const evaluations = evaluateBundleBudgets(budgetConfig, measurements);
+const budgetSummary = reportBudgetEvaluations(evaluations, {
+  title: "Markora packed bundle budget",
+});
+const budgetResult = Object.freeze({
+  evaluations: Object.freeze(evaluations),
+  failures: budgetSummary.failures,
+  passed: budgetSummary.passed,
+  warnings: budgetSummary.warnings,
+});
+currentPhase = "report-writing";
+reportWritten = Boolean(writeMeasurementReport({
+  budgetConfigPath: commandOptions.budgetPath,
+  budgetResult,
+  corePackage,
+  measurements,
+  reportPath: commandOptions.reportPath,
+  uiPackage,
+}));
+
+if (!budgetResult.passed) {
+  throw new Error(`${budgetResult.failures.length} packed bundle budget(s) exceeded their failure ceilings.`);
+}
+
+currentPhase = "complete";
 console.log(`Pack smoke test passed in ${smokeAppDir}`);
+}
+
+try {
+  main();
+} catch (error) {
+  if (!reportWritten) {
+    try {
+      reportWritten = writeFailureReport(error);
+    } catch (reportError) {
+      console.error("Could not write failed packed bundle report:", reportError);
+    }
+  }
+  console.error(error instanceof Error ? error.stack : error);
+  process.exitCode = error instanceof CommandExecutionError ? error.exitCode : 1;
+}

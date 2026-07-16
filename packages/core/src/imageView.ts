@@ -34,6 +34,7 @@ export function createImageViewClass(options: {
     private img: HTMLImageElement;
     private status: HTMLSpanElement;
     private spinner: HTMLSpanElement;
+    private spinnerAnimation: Animation | null = null;
     private errorIcon: HTMLSpanElement;
     private statusText: HTMLSpanElement;
     private requestVersion = 0;
@@ -108,15 +109,6 @@ export function createImageViewClass(options: {
       this.spinner.style.borderTopColor = "rgba(59, 130, 246, 0.95)";
       this.spinner.style.borderRadius = "999px";
       this.spinner.style.display = "inline-block";
-      if (typeof this.spinner.animate === "function") {
-        this.spinner.animate(
-          [
-            { transform: "rotate(0deg)" },
-            { transform: "rotate(360deg)" },
-          ],
-          { duration: 900, iterations: Infinity },
-        );
-      }
 
       this.errorIcon = doc.createElement("span");
       this.errorIcon.textContent = "⚠️";
@@ -182,6 +174,7 @@ export function createImageViewClass(options: {
 
       this.destroyed = true;
       this.requestVersion += 1;
+      this.stopSpinnerAnimation();
       this.cancelRequest();
       this.img.onload = null;
       this.img.onerror = null;
@@ -234,8 +227,34 @@ export function createImageViewClass(options: {
       }
     }
 
+    private startSpinnerAnimation() {
+      if (this.spinnerAnimation || typeof this.spinner.animate !== "function") {
+        return;
+      }
+
+      this.spinnerAnimation = this.spinner.animate(
+        [
+          { transform: "rotate(0deg)" },
+          { transform: "rotate(360deg)" },
+        ],
+        { duration: 900, iterations: Infinity },
+      );
+    }
+
+    private stopSpinnerAnimation() {
+      const animation = this.spinnerAnimation;
+      this.spinnerAnimation = null;
+      animation?.cancel();
+    }
+
     private setState(state: "loading" | "loaded" | "error", message = "") {
       this.loadState = state;
+
+      if (state === "loading") {
+        this.startSpinnerAnimation();
+      } else {
+        this.stopSpinnerAnimation();
+      }
 
       if (state !== "error") {
         this.errorUsesAltText = false;

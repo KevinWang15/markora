@@ -6,3 +6,4 @@ packages/*/dist
 blob-report
 playwright-report
 test-results
+performance-results

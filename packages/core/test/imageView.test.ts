@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEditor } from '../src/createEditor';
 import { createImageViewClass } from '../src/imageView';
 import { schema } from '../src/markdownCodec';
@@ -11,11 +11,130 @@ function createHost() {
   return element;
 }
 
+function installAnimationMock() {
+  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'animate');
+  const animations: Array<{ cancel: ReturnType<typeof vi.fn> }> = [];
+  const animate = vi.fn(() => {
+    const animation = { cancel: vi.fn() };
+    animations.push(animation);
+    return animation as unknown as Animation;
+  });
+
+  Object.defineProperty(Element.prototype, 'animate', {
+    configurable: true,
+    value: animate,
+  });
+
+  return {
+    animate,
+    animations,
+    restore() {
+      if (descriptor) {
+        Object.defineProperty(Element.prototype, 'animate', descriptor);
+      } else {
+        delete (Element.prototype as Partial<Element>).animate;
+      }
+    },
+  };
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
 });
 
 describe('image node view', () => {
+  it('cancels spinner animation when loading ends and does not cancel it twice on destroy', () => {
+    const animationMock = installAnimationMock();
+    try {
+      const ImageView = createImageViewClass({
+        imageNodeType: schema.nodes.image,
+        resources: normalizeMarkdownEditorResources({
+          loadImage: () => null,
+        }),
+      });
+      const imageView = new ImageView(schema.nodes.image.create({
+        alt: 'Denied',
+        src: '/denied.png',
+        title: null,
+      }), document);
+
+      expect(animationMock.animate).toHaveBeenCalledTimes(1);
+      expect(animationMock.animations[0].cancel).toHaveBeenCalledTimes(1);
+
+      imageView.destroy();
+      imageView.destroy();
+
+      expect(animationMock.animations[0].cancel).toHaveBeenCalledTimes(1);
+    } finally {
+      animationMock.restore();
+    }
+  });
+
+  it('replaces a stopped spinner animation when a later source starts loading', () => {
+    const animationMock = installAnimationMock();
+    try {
+      const ImageView = createImageViewClass({
+        imageNodeType: schema.nodes.image,
+        resources: normalizeMarkdownEditorResources({
+          loadImage: ({ url }) => ({ src: url }),
+        }),
+      });
+      const imageView = new ImageView(schema.nodes.image.create({
+        alt: 'First',
+        src: '/first.png',
+        title: null,
+      }), document);
+      const image = imageView.dom.querySelector('img');
+
+      expect(image).not.toBeNull();
+      expect(animationMock.animate).toHaveBeenCalledTimes(1);
+      expect(animationMock.animations[0].cancel).not.toHaveBeenCalled();
+
+      image!.dispatchEvent(new Event('error'));
+      expect(animationMock.animations[0].cancel).toHaveBeenCalledTimes(1);
+
+      imageView.update(schema.nodes.image.create({
+        alt: 'Second',
+        src: '/second.png',
+        title: null,
+      }));
+      expect(animationMock.animate).toHaveBeenCalledTimes(2);
+      expect(animationMock.animations[1].cancel).not.toHaveBeenCalled();
+
+      imageView.destroy();
+      imageView.destroy();
+      expect(animationMock.animations[0].cancel).toHaveBeenCalledTimes(1);
+      expect(animationMock.animations[1].cancel).toHaveBeenCalledTimes(1);
+    } finally {
+      animationMock.restore();
+    }
+  });
+
+  it('keeps loading functional when Element.animate is unavailable', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'animate');
+    delete (Element.prototype as Partial<Element>).animate;
+    try {
+      const ImageView = createImageViewClass({
+        imageNodeType: schema.nodes.image,
+        resources: normalizeMarkdownEditorResources({
+          loadImage: () => null,
+        }),
+      });
+      const imageView = new ImageView(schema.nodes.image.create({
+        alt: 'Fallback',
+        src: '/fallback.png',
+        title: null,
+      }), document);
+
+      expect(imageView.dom.textContent).toContain('Image blocked by resource policy');
+      expect(() => imageView.destroy()).not.toThrow();
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(Element.prototype, 'animate', descriptor);
+      }
+    }
+  });
+
   it('atomizes complete image Markdown from a regular document transaction', () => {
     const editor = createEditor({
       element: createHost(),

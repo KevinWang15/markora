@@ -1,0 +1,50 @@
+name: Performance budgets
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "43 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  benchmark:
+    name: Packed Chromium benchmark
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.5
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Measure and check performance budgets
+        run: pnpm perf:ci
+      - name: Upload performance evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: performance-benchmark-${{ github.run_attempt }}
+          path: performance-results/
+          if-no-files-found: error
+          retention-days: 30

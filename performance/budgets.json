@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "runtime": {
+    "contract": {
+      "benchmarkVersion": "packed-embedded-v1",
+      "documentVersion": "mixed-embedded-v1",
+      "requiredTargets": [102400, 512000, 1048576],
+      "profile": "ci",
+      "browser": "chromium",
+      "viewport": { "width": 1280, "height": 720 },
+      "deviceScaleFactor": 1,
+      "locale": "en-US",
+      "timezone": "UTC",
+      "reducedMotion": "reduce",
+      "sampling": { "warmups": 1, "timingSamples": 5, "memorySamples": 3 },
+      "timingIsolation": "fresh-page-shared-browser-process",
+      "memoryIsolation": "fresh-browser-process-per-sample"
+    },
+    "minimumTimingSamples": 5,
+    "minimumMemorySamples": 3,
+    "variance": {
+      "timing": { "warning": 0.25, "failure": 0.6 }
+    },
+    "timing": {
+      "102400": {
+        "initialParseRenderSyncMs": { "statistic": "maximum", "warning": 140, "failure": 200 },
+        "initialParseRenderToPresentationMs": { "statistic": "maximum", "warning": 260, "failure": 380 },
+        "codecParseMs": { "statistic": "maximum", "warning": 20, "failure": 30 },
+        "codecSerializeMs": { "statistic": "maximum", "warning": 12, "failure": 20 },
+        "keydownToPresentationProxyMs": { "statistic": "maximum", "warning": 45, "failure": 70 },
+        "dirtyTeardownMs": { "statistic": "maximum", "warning": 35, "failure": 50 }
+      },
+      "512000": {
+        "initialParseRenderSyncMs": { "statistic": "maximum", "warning": 560, "failure": 800 },
+        "initialParseRenderToPresentationMs": { "statistic": "maximum", "warning": 1000, "failure": 1400 },
+        "codecParseMs": { "statistic": "maximum", "warning": 70, "failure": 100 },
+        "codecSerializeMs": { "statistic": "maximum", "warning": 260, "failure": 380 },
+        "keydownToPresentationProxyMs": { "statistic": "maximum", "warning": 330, "failure": 480 },
+        "dirtyTeardownMs": { "statistic": "maximum", "warning": 360, "failure": 525 }
+      },
+      "1048576": {
+        "initialParseRenderSyncMs": { "statistic": "maximum", "warning": 1550, "failure": 2200 },
+        "initialParseRenderToPresentationMs": { "statistic": "maximum", "warning": 2300, "failure": 3250 },
+        "codecParseMs": { "statistic": "maximum", "warning": 190, "failure": 280 },
+        "codecSerializeMs": { "statistic": "maximum", "warning": 1100, "failure": 1550 },
+        "keydownToPresentationProxyMs": { "statistic": "maximum", "warning": 1150, "failure": 1650 },
+        "dirtyTeardownMs": { "statistic": "maximum", "warning": 1300, "failure": 1900 }
+      }
+    },
+    "memory": {
+      "102400": {
+        "cleanTeardownMs": { "statistic": "maximum", "warning": 10, "failure": 15 },
+        "mountedTrackedMemoryDeltaBytes": { "statistic": "median", "warning": 18000000, "failure": 24000000 },
+        "retainedTrackedMemoryDeltaBytes": { "statistic": "maximum", "warning": 1000000, "failure": 2000000 },
+        "mountedNodeDelta": { "statistic": "maximum", "warning": 9500, "failure": 10000 },
+        "retainedNodeDelta": { "statistic": "maximum", "warning": 0, "failure": 50 },
+        "mountedListenerDelta": { "statistic": "maximum", "warning": 550, "failure": 575 },
+        "retainedListenerDelta": { "statistic": "maximum", "warning": 0, "failure": 0 },
+        "retainedDocumentDelta": { "statistic": "maximum", "warning": 0, "failure": 0 }
+      },
+      "512000": {
+        "cleanTeardownMs": { "statistic": "maximum", "warning": 35, "failure": 50 },
+        "mountedTrackedMemoryDeltaBytes": { "statistic": "median", "warning": 87000000, "failure": 116000000 },
+        "retainedTrackedMemoryDeltaBytes": { "statistic": "maximum", "warning": 1000000, "failure": 2000000 },
+        "mountedNodeDelta": { "statistic": "maximum", "warning": 48500, "failure": 51000 },
+        "retainedNodeDelta": { "statistic": "maximum", "warning": 0, "failure": 50 },
+        "mountedListenerDelta": { "statistic": "maximum", "warning": 2680, "failure": 2820 },
+        "retainedListenerDelta": { "statistic": "maximum", "warning": 0, "failure": 0 },
+        "retainedDocumentDelta": { "statistic": "maximum", "warning": 0, "failure": 0 }
+      },
+      "1048576": {
+        "cleanTeardownMs": { "statistic": "maximum", "warning": 75, "failure": 105 },
+        "mountedTrackedMemoryDeltaBytes": { "statistic": "median", "warning": 176000000, "failure": 235000000 },
+        "retainedTrackedMemoryDeltaBytes": { "statistic": "maximum", "warning": 1000000, "failure": 2000000 },
+        "mountedNodeDelta": { "statistic": "maximum", "warning": 99000, "failure": 104000 },
+        "retainedNodeDelta": { "statistic": "maximum", "warning": 0, "failure": 50 },
+        "mountedListenerDelta": { "statistic": "maximum", "warning": 5450, "failure": 5720 },
+        "retainedListenerDelta": { "statistic": "maximum", "warning": 0, "failure": 0 },
+        "retainedDocumentDelta": { "statistic": "maximum", "warning": 0, "failure": 0 }
+      }
+    }
+  },
+  "bundle": {
+    "root": {
+      "initialJs": {
+        "rawBytes": { "warning": 1280000, "failure": 1310000 },
+        "gzipBytes": { "warning": 355000, "failure": 365000 }
+      },
+      "lazyJs": {
+        "rawBytes": { "warning": 580000, "failure": 600000 },
+        "gzipBytes": { "warning": 202000, "failure": 210000 }
+      },
+      "totalJs": {
+        "rawBytes": { "warning": 1860000, "failure": 1900000 },
+        "gzipBytes": { "warning": 555000, "failure": 570000 }
+      },
+      "css": {
+        "rawBytes": { "warning": 16000, "failure": 17000 },
+        "gzipBytes": { "warning": 3200, "failure": 3400 }
+      },
+      "staticModuleCount": { "warning": 154, "failure": 157 }
+    },
+    "minimal": {
+      "initialJs": {
+        "rawBytes": { "warning": 690000, "failure": 705000 },
+        "gzipBytes": { "warning": 194000, "failure": 200000 }
+      },
+      "lazyJs": {
+        "rawBytes": { "warning": 0, "failure": 0 },
+        "gzipBytes": { "warning": 0, "failure": 0 }
+      },
+      "totalJs": {
+        "rawBytes": { "warning": 690000, "failure": 705000 },
+        "gzipBytes": { "warning": 194000, "failure": 200000 }
+      },
+      "css": {
+        "rawBytes": { "warning": 13250, "failure": 14000 },
+        "gzipBytes": { "warning": 2825, "failure": 3000 }
+      },
+      "staticModuleCount": { "warning": 126, "failure": 129 }
+    }
+  }
+}

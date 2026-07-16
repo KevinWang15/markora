@@ -1,0 +1,3409 @@
+{
+  "benchmarkVersion": "packed-embedded-v1",
+  "budgets": {
+    "checked": false,
+    "configSha256": "a34fc6438d28cda598082ee807536ad6b1dc2cf1ce4afbdd11c073c014ccfda6",
+    "evaluations": [],
+    "passed": true
+  },
+  "config": {
+    "documentVersion": "mixed-embedded-v1",
+    "isolation": {
+      "memory": "fresh-browser-process-per-sample",
+      "timing": "fresh-page-shared-browser-process"
+    },
+    "profile": "baseline",
+    "sampling": {
+      "memorySamples": 7,
+      "samples": 20,
+      "warmups": 3
+    },
+    "sizeOrder": [
+      102400,
+      512000,
+      1048576
+    ]
+  },
+  "createdAt": "2026-07-16T18:17:38.570Z",
+  "environment": {
+    "browser": {
+      "cdp": {
+        "protocolVersion": "1.3",
+        "product": "HeadlessChrome/149.0.7827.55",
+        "revision": "@3188f8a607ae7e067593be8aab7f02d2451fec07",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+        "jsVersion": "14.9.207.21"
+      },
+      "headless": true,
+      "playwrightVersion": "1.61.1",
+      "productVersion": "149.0.7827.55",
+      "systemInfo": {
+        "gpu": {
+          "devices": [
+            {
+              "deviceId": 65535,
+              "deviceString": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver-5.0.0)",
+              "driverVendor": "SwANGLE",
+              "driverVersion": "5.0.0",
+              "vendorId": 65535,
+              "vendorString": "Google Inc. (Google)"
+            }
+          ],
+          "displayType": "ANGLE_SWIFTSHADER",
+          "featureStatus": {
+            "2d_canvas": "unavailable_software",
+            "direct_rendering_display_compositor": "disabled_off_ok",
+            "gpu_compositing": "disabled_software",
+            "multiple_raster_threads": "enabled_on",
+            "opengl": "disabled_off",
+            "rasterization": "disabled_software",
+            "raw_draw": "disabled_off_ok",
+            "skia_graphite": "disabled_off",
+            "trees_in_viz": "disabled_off",
+            "video_decode": "disabled_software",
+            "video_encode": "disabled_software",
+            "webgl": "unavailable_software",
+            "webgpu": "unavailable_software",
+            "webnn": "unavailable_software"
+          },
+          "glRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver-5.0.0)"
+        },
+        "modelName": "Mac",
+        "modelVersion": "16.5"
+      }
+    },
+    "ci": {
+      "githubActions": false,
+      "runnerImage": null,
+      "runnerName": null
+    },
+    "git": {
+      "dirty": true,
+      "revision": "234e6cbbd4f7c2cabb3b25174ecaa58a9d23e4fe"
+    },
+    "host": {
+      "architecture": "arm64",
+      "cpuModel": "Apple M4 Max",
+      "freeMemoryBytesAtStart": 6066176000,
+      "logicalCpuCount": 16,
+      "node": "v25.6.0",
+      "os": "darwin",
+      "osRelease": "25.5.0",
+      "platform": "darwin",
+      "pnpm": "10.6.5",
+      "totalMemoryBytes": 68719476736,
+      "vite": "6.4.1"
+    },
+    "page": {
+      "crossOriginIsolated": true,
+      "deviceMemoryGiB": 32,
+      "devicePixelRatio": 1,
+      "hardwareConcurrency": 16,
+      "language": "en-US",
+      "timeZone": "UTC",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+      "viewport": {
+        "height": 720,
+        "width": 1280
+      }
+    }
+  },
+  "fixtures": {
+    "102400": {
+      "id": "mixed-embedded-v1-102400",
+      "sha256": "4f11bea8cfa1e5981cff91f382c459b72220f89eea1be80b5061903b425c934c",
+      "stats": {
+        "bytes": 102400,
+        "codeBlocks": 17,
+        "images": 34,
+        "nestedLists": 17,
+        "sections": 17,
+        "tables": 17,
+        "targetBytes": 102400,
+        "version": "mixed-embedded-v1"
+      }
+    },
+    "512000": {
+      "id": "mixed-embedded-v1-512000",
+      "sha256": "51647be3103d3faa877aa38aa149ebff13426bcdb40208b40596e86390b510ae",
+      "stats": {
+        "bytes": 512000,
+        "codeBlocks": 87,
+        "images": 174,
+        "nestedLists": 87,
+        "sections": 87,
+        "tables": 87,
+        "targetBytes": 512000,
+        "version": "mixed-embedded-v1"
+      }
+    },
+    "1048576": {
+      "id": "mixed-embedded-v1-1048576",
+      "sha256": "46203d64ea09a69b8996d63df587b7e59dc0525eee070296c6a89203baffb99c",
+      "stats": {
+        "bytes": 1048576,
+        "codeBlocks": 178,
+        "images": 356,
+        "nestedLists": 178,
+        "sections": 178,
+        "tables": 178,
+        "targetBytes": 1048576,
+        "version": "mixed-embedded-v1"
+      }
+    }
+  },
+  "harness": {
+    "performance/budgets.json": "9e566973be634d436d8f954b7861469e7832a35751c6561662205f76f6de7b1d",
+    "scripts/performance-benchmark.mjs": "5f7f0dd3a95302b5c34e4d2d617225f9dd12bfad9d568b2fd63374da49752259",
+    "scripts/performance/budget-evaluator.mjs": "e6add92b4669414f89043b4c0347c132a5004025651ecdeb149df7d3998efa00",
+    "scripts/performance/packed-consumer/index.html": "10c242eb50355abe3a262c26b94457bfb811b941790b1449b24636d911dbd68f",
+    "scripts/performance/packed-consumer/runtime.mjs": "b98023e4a9a656f2674d8887d0177f43d1491827a2272950dfbe2b9122820846",
+    "scripts/performance/representative-document.mjs": "91432d79ed2b558f9c06a224792980cfbc9519d9f95e4011aa0242fa5c430d76",
+    "scripts/performance/statistics.mjs": "f07082f8c0092821f4660817852636387803c5ea23380693b207ab90ebffdb55"
+  },
+  "package": {
+    "name": "markora",
+    "tarball": "markora-0.0.1.tgz",
+    "tarballSha256": "5a142de8ff21896d5762c4ac4c51535210da1a7dab87a9c6ad501a278db9e085",
+    "version": "0.0.1"
+  },
+  "provenance": {
+    "chunks": [
+      {
+        "dynamicImports": [
+          "assets/index-B6WAbZcc.js",
+          "assets/index-B6WAbZcc.js",
+          "assets/index-B6WAbZcc.js",
+          "assets/index-B6WAbZcc.js",
+          "assets/index-BYcRUgGB.js",
+          "assets/index-DaBobhRO.js",
+          "assets/index-B9l1gbxQ.js",
+          "assets/index-x7G_XBZO.js",
+          "assets/index-DUOgxarq.js",
+          "assets/index-DUOgxarq.js",
+          "assets/index-DTowUGSt.js",
+          "assets/index-DTowUGSt.js",
+          "assets/index-BHDC7P5Z.js",
+          "assets/index-BHDC7P5Z.js",
+          "assets/index-BHDC7P5Z.js",
+          "assets/index-B2PW-mfJ.js",
+          "assets/index-CaBVU-lV.js",
+          "assets/index-CaBVU-lV.js",
+          "assets/shell-CjFT_Tl9.js",
+          "assets/shell-CjFT_Tl9.js",
+          "assets/shell-CjFT_Tl9.js"
+        ],
+        "fileName": "assets/index-CNQs9Pie.js",
+        "imports": [],
+        "isDynamicEntry": false,
+        "isEntry": true,
+        "moduleIds": [
+          "\u0000vite/modulepreload-polyfill.js",
+          "\u0000vite/preload-helper.js",
+          "<workspace>/node_modules/.pnpm/@codemirror+commands@6.10.2/node_modules/@codemirror/commands/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@codemirror+language@6.12.2/node_modules/@codemirror/language/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@codemirror+state@6.5.4/node_modules/@codemirror/state/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@codemirror+view@6.39.16/node_modules/@codemirror/view/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@lezer+common@1.5.1/node_modules/@lezer/common/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@lezer+highlight@1.2.3/node_modules/@lezer/highlight/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@marijn+find-cluster-break@1.0.2/node_modules/@marijn/find-cluster-break/src/index.js",
+          "<workspace>/node_modules/.pnpm/entities@4.5.0/node_modules/entities/lib/esm/decode.js",
+          "<workspace>/node_modules/.pnpm/entities@4.5.0/node_modules/entities/lib/esm/decode_codepoint.js",
+          "<workspace>/node_modules/.pnpm/entities@4.5.0/node_modules/entities/lib/esm/generated/decode-data-html.js",
+          "<workspace>/node_modules/.pnpm/entities@4.5.0/node_modules/entities/lib/esm/generated/decode-data-xml.js",
+          "<workspace>/node_modules/.pnpm/linkify-it@5.0.0/node_modules/linkify-it/index.mjs",
+          "<workspace>/node_modules/.pnpm/linkify-it@5.0.0/node_modules/linkify-it/lib/re.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/common/html_blocks.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/common/html_re.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/common/utils.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/helpers/index.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/helpers/parse_link_destination.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/helpers/parse_link_label.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/helpers/parse_link_title.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/index.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/parser_block.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/parser_core.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/parser_inline.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/presets/commonmark.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/presets/default.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/presets/zero.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/renderer.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/ruler.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_block/blockquote.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_block/code.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_block/fence.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_block/heading.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_block/hr.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_block/html_block.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_block/lheading.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_block/list.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_block/paragraph.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_block/reference.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_block/state_block.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_block/table.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_core/block.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_core/inline.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_core/linkify.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_core/normalize.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_core/replacements.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_core/smartquotes.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_core/state_core.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_core/text_join.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/autolink.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/backticks.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/balance_pairs.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/emphasis.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/entity.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/escape.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/fragments_join.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/html_inline.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/image.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/link.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/linkify.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/newline.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/state_inline.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/strikethrough.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/rules_inline/text.mjs",
+          "<workspace>/node_modules/.pnpm/markdown-it@14.1.1/node_modules/markdown-it/lib/token.mjs",
+          "<workspace>/node_modules/.pnpm/mdurl@2.0.0/node_modules/mdurl/index.mjs",
+          "<workspace>/node_modules/.pnpm/mdurl@2.0.0/node_modules/mdurl/lib/decode.mjs",
+          "<workspace>/node_modules/.pnpm/mdurl@2.0.0/node_modules/mdurl/lib/encode.mjs",
+          "<workspace>/node_modules/.pnpm/mdurl@2.0.0/node_modules/mdurl/lib/format.mjs",
+          "<workspace>/node_modules/.pnpm/mdurl@2.0.0/node_modules/mdurl/lib/parse.mjs",
+          "<workspace>/node_modules/.pnpm/orderedmap@2.1.1/node_modules/orderedmap/dist/index.js",
+          "<workspace>/node_modules/.pnpm/prosemirror-commands@1.7.1/node_modules/prosemirror-commands/dist/index.js",
+          "<workspace>/node_modules/.pnpm/prosemirror-history@1.5.0/node_modules/prosemirror-history/dist/index.js",
+          "<workspace>/node_modules/.pnpm/prosemirror-inputrules@1.5.1/node_modules/prosemirror-inputrules/dist/index.js",
+          "<workspace>/node_modules/.pnpm/prosemirror-keymap@1.2.3/node_modules/prosemirror-keymap/dist/index.js",
+          "<workspace>/node_modules/.pnpm/prosemirror-markdown@1.13.4/node_modules/prosemirror-markdown/dist/index.js",
+          "<workspace>/node_modules/.pnpm/prosemirror-model@1.25.4/node_modules/prosemirror-model/dist/index.js",
+          "<workspace>/node_modules/.pnpm/prosemirror-schema-list@1.5.1/node_modules/prosemirror-schema-list/dist/index.js",
+          "<workspace>/node_modules/.pnpm/prosemirror-state@1.4.4/node_modules/prosemirror-state/dist/index.js",
+          "<workspace>/node_modules/.pnpm/prosemirror-transform@1.11.0/node_modules/prosemirror-transform/dist/index.js",
+          "<workspace>/node_modules/.pnpm/prosemirror-view@1.41.6/node_modules/prosemirror-view/dist/index.js",
+          "<workspace>/node_modules/.pnpm/punycode.js@2.3.1/node_modules/punycode.js/punycode.es6.js",
+          "<workspace>/node_modules/.pnpm/rope-sequence@1.3.4/node_modules/rope-sequence/dist/index.js",
+          "<workspace>/node_modules/.pnpm/style-mod@4.1.3/node_modules/style-mod/src/style-mod.js",
+          "<workspace>/node_modules/.pnpm/uc.micro@2.1.0/node_modules/uc.micro/categories/Cc/regex.mjs",
+          "<workspace>/node_modules/.pnpm/uc.micro@2.1.0/node_modules/uc.micro/categories/Cf/regex.mjs",
+          "<workspace>/node_modules/.pnpm/uc.micro@2.1.0/node_modules/uc.micro/categories/P/regex.mjs",
+          "<workspace>/node_modules/.pnpm/uc.micro@2.1.0/node_modules/uc.micro/categories/S/regex.mjs",
+          "<workspace>/node_modules/.pnpm/uc.micro@2.1.0/node_modules/uc.micro/categories/Z/regex.mjs",
+          "<workspace>/node_modules/.pnpm/uc.micro@2.1.0/node_modules/uc.micro/index.mjs",
+          "<workspace>/node_modules/.pnpm/uc.micro@2.1.0/node_modules/uc.micro/properties/Any/regex.mjs",
+          "<workspace>/node_modules/.pnpm/w3c-keyname@2.2.8/node_modules/w3c-keyname/index.js",
+          "<packed-app>/index.html",
+          "<packed-app>/index.html",
+          "<packed-app>/node_modules/markora/dist/assetUploads.js",
+          "<packed-app>/node_modules/markora/dist/changeEmitter.js",
+          "<packed-app>/node_modules/markora/dist/codeBlockLanguages.js",
+          "<packed-app>/node_modules/markora/dist/codeBlockSelection.js",
+          "<packed-app>/node_modules/markora/dist/codeBlockView.js",
+          "<packed-app>/node_modules/markora/dist/createEditor.js",
+          "<packed-app>/node_modules/markora/dist/defaultExtensionPreset.js",
+          "<packed-app>/node_modules/markora/dist/documentUpdate.js",
+          "<packed-app>/node_modules/markora/dist/editorCommands.js",
+          "<packed-app>/node_modules/markora/dist/editorEvents.js",
+          "<packed-app>/node_modules/markora/dist/editorPlugins.js",
+          "<packed-app>/node_modules/markora/dist/extensionApi.js",
+          "<packed-app>/node_modules/markora/dist/extensionAssembly.js",
+          "<packed-app>/node_modules/markora/dist/extensionContributionOrder.js",
+          "<packed-app>/node_modules/markora/dist/extensionDefinitionStore.js",
+          "<packed-app>/node_modules/markora/dist/extensionErrorBoundary.js",
+          "<packed-app>/node_modules/markora/dist/extensionLifecycle.js",
+          "<packed-app>/node_modules/markora/dist/extensionResolver.js",
+          "<packed-app>/node_modules/markora/dist/extensionSemver.js",
+          "<packed-app>/node_modules/markora/dist/extensionVersion.js",
+          "<packed-app>/node_modules/markora/dist/fileTransferGuard.js",
+          "<packed-app>/node_modules/markora/dist/hostOwnership.js",
+          "<packed-app>/node_modules/markora/dist/imageView.js",
+          "<packed-app>/node_modules/markora/dist/managedBlockBoundary.js",
+          "<packed-app>/node_modules/markora/dist/managedBlockCursor.js",
+          "<packed-app>/node_modules/markora/dist/managedBlockCursorPlugin.js",
+          "<packed-app>/node_modules/markora/dist/markBoundaryUtils.js",
+          "<packed-app>/node_modules/markora/dist/markdownCodec.js",
+          "<packed-app>/node_modules/markora/dist/markdownContributionCompiler.js",
+          "<packed-app>/node_modules/markora/dist/mediaActionUtils.js",
+          "<packed-app>/node_modules/markora/dist/minimalMarkdownCodec.js",
+          "<packed-app>/node_modules/markora/dist/opaqueMarkdown.js",
+          "<packed-app>/node_modules/markora/dist/opaqueNodeView.js",
+          "<packed-app>/node_modules/markora/dist/pipeTable.js",
+          "<packed-app>/node_modules/markora/dist/placeholderPlugin.js",
+          "<packed-app>/node_modules/markora/dist/readonlySet.js",
+          "<packed-app>/node_modules/markora/dist/resourcePolicy.js",
+          "<packed-app>/node_modules/markora/dist/schemaContributionOrder.js",
+          "<packed-app>/node_modules/markora/dist/structuralCommands.js",
+          "<packed-app>/node_modules/markora/dist/styles.css",
+          "<packed-app>/node_modules/markora/dist/tableCommands.js",
+          "<packed-app>/node_modules/markora/dist/tableNavigation.js",
+          "<packed-app>/node_modules/markora/dist/taskListUtils.js",
+          "<packed-app>/node_modules/markora/dist/transactionOrigin.js",
+          "<packed-app>/node_modules/markora/dist/uiTypes.js",
+          "<packed-app>/node_modules/markora/dist/urlUtils.js",
+          "<packed-app>/runtime.mjs"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/index-BYcRUgGB.js",
+        "imports": [
+          "assets/index-CcpZzNsh.js",
+          "assets/index-CNQs9Pie.js"
+        ],
+        "isDynamicEntry": true,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@codemirror+lang-json@6.0.2/node_modules/@codemirror/lang-json/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@lezer+json@1.0.3/node_modules/@lezer/json/dist/index.js"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/index-x7G_XBZO.js",
+        "imports": [
+          "assets/index-CcpZzNsh.js",
+          "assets/index-CNQs9Pie.js"
+        ],
+        "isDynamicEntry": true,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@codemirror+lang-xml@6.1.0/node_modules/@codemirror/lang-xml/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@lezer+xml@1.0.6/node_modules/@lezer/xml/dist/index.js"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/index-DUOgxarq.js",
+        "imports": [
+          "assets/index-CNQs9Pie.js",
+          "assets/index-C81HorwH.js",
+          "assets/index-B9l1gbxQ.js",
+          "assets/index-CcpZzNsh.js",
+          "assets/index-DaBobhRO.js",
+          "assets/index-B6WAbZcc.js"
+        ],
+        "isDynamicEntry": true,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@codemirror+lang-markdown@6.5.0/node_modules/@codemirror/lang-markdown/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@lezer+markdown@1.6.3/node_modules/@lezer/markdown/dist/index.js"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/index-B9l1gbxQ.js",
+        "imports": [
+          "assets/index-CcpZzNsh.js",
+          "assets/index-CNQs9Pie.js",
+          "assets/index-DaBobhRO.js",
+          "assets/index-B6WAbZcc.js",
+          "assets/index-C81HorwH.js"
+        ],
+        "isDynamicEntry": true,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@codemirror+lang-html@6.4.11/node_modules/@codemirror/lang-html/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@lezer+html@1.3.13/node_modules/@lezer/html/dist/index.js"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/index-B6WAbZcc.js",
+        "imports": [
+          "assets/index-CcpZzNsh.js",
+          "assets/index-CNQs9Pie.js",
+          "assets/index-C81HorwH.js"
+        ],
+        "isDynamicEntry": true,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@codemirror+lang-javascript@6.2.5/node_modules/@codemirror/lang-javascript/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@lezer+javascript@1.5.4/node_modules/@lezer/javascript/dist/index.js"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/index-DaBobhRO.js",
+        "imports": [
+          "assets/index-CcpZzNsh.js",
+          "assets/index-CNQs9Pie.js"
+        ],
+        "isDynamicEntry": true,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@codemirror+lang-css@6.3.1/node_modules/@codemirror/lang-css/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@lezer+css@1.3.1/node_modules/@lezer/css/dist/index.js"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/index-DTowUGSt.js",
+        "imports": [
+          "assets/index-CcpZzNsh.js",
+          "assets/index-CNQs9Pie.js",
+          "assets/index-C81HorwH.js"
+        ],
+        "isDynamicEntry": true,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@codemirror+lang-python@6.2.1/node_modules/@codemirror/lang-python/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@lezer+python@1.1.18/node_modules/@lezer/python/dist/index.js"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/index-C81HorwH.js",
+        "imports": [
+          "assets/index-CNQs9Pie.js"
+        ],
+        "isDynamicEntry": false,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@codemirror+autocomplete@6.20.1/node_modules/@codemirror/autocomplete/dist/index.js"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/index-BHDC7P5Z.js",
+        "imports": [
+          "assets/index-CcpZzNsh.js",
+          "assets/index-CNQs9Pie.js"
+        ],
+        "isDynamicEntry": true,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@codemirror+lang-cpp@6.0.3/node_modules/@codemirror/lang-cpp/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@lezer+cpp@1.1.5/node_modules/@lezer/cpp/dist/index.js"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/index-B2PW-mfJ.js",
+        "imports": [
+          "assets/index-CcpZzNsh.js",
+          "assets/index-CNQs9Pie.js"
+        ],
+        "isDynamicEntry": true,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@codemirror+lang-java@6.0.2/node_modules/@codemirror/lang-java/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@lezer+java@1.1.3/node_modules/@lezer/java/dist/index.js"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/index-CaBVU-lV.js",
+        "imports": [
+          "assets/index-CcpZzNsh.js",
+          "assets/index-CNQs9Pie.js"
+        ],
+        "isDynamicEntry": true,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@codemirror+lang-rust@6.0.2/node_modules/@codemirror/lang-rust/dist/index.js",
+          "<workspace>/node_modules/.pnpm/@lezer+rust@1.0.2/node_modules/@lezer/rust/dist/index.js"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/index-CcpZzNsh.js",
+        "imports": [
+          "assets/index-CNQs9Pie.js"
+        ],
+        "isDynamicEntry": false,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@lezer+lr@1.4.8/node_modules/@lezer/lr/dist/index.js"
+        ]
+      },
+      {
+        "dynamicImports": [],
+        "fileName": "assets/shell-CjFT_Tl9.js",
+        "imports": [],
+        "isDynamicEntry": true,
+        "isEntry": false,
+        "moduleIds": [
+          "<workspace>/node_modules/.pnpm/@codemirror+legacy-modes@6.5.2/node_modules/@codemirror/legacy-modes/mode/shell.js"
+        ]
+      }
+    ],
+    "moduleCount": 166,
+    "resolvedMarkoraModules": [
+      "<packed-app>/node_modules/markora/dist/assetUploads.js",
+      "<packed-app>/node_modules/markora/dist/changeEmitter.js",
+      "<packed-app>/node_modules/markora/dist/codeBlockLanguages.js",
+      "<packed-app>/node_modules/markora/dist/codeBlockSelection.js",
+      "<packed-app>/node_modules/markora/dist/codeBlockView.js",
+      "<packed-app>/node_modules/markora/dist/createEditor.js",
+      "<packed-app>/node_modules/markora/dist/defaultExtensionPreset.js",
+      "<packed-app>/node_modules/markora/dist/documentUpdate.js",
+      "<packed-app>/node_modules/markora/dist/editorCommands.js",
+      "<packed-app>/node_modules/markora/dist/editorEvents.js",
+      "<packed-app>/node_modules/markora/dist/editorPlugins.js",
+      "<packed-app>/node_modules/markora/dist/extensionApi.js",
+      "<packed-app>/node_modules/markora/dist/extensionAssembly.js",
+      "<packed-app>/node_modules/markora/dist/extensionContributionOrder.js",
+      "<packed-app>/node_modules/markora/dist/extensionDefinitionStore.js",
+      "<packed-app>/node_modules/markora/dist/extensionErrorBoundary.js",
+      "<packed-app>/node_modules/markora/dist/extensionLifecycle.js",
+      "<packed-app>/node_modules/markora/dist/extensionResolver.js",
+      "<packed-app>/node_modules/markora/dist/extensionSemver.js",
+      "<packed-app>/node_modules/markora/dist/extensionVersion.js",
+      "<packed-app>/node_modules/markora/dist/fileTransferGuard.js",
+      "<packed-app>/node_modules/markora/dist/hostOwnership.js",
+      "<packed-app>/node_modules/markora/dist/imageView.js",
+      "<packed-app>/node_modules/markora/dist/managedBlockBoundary.js",
+      "<packed-app>/node_modules/markora/dist/managedBlockCursor.js",
+      "<packed-app>/node_modules/markora/dist/managedBlockCursorPlugin.js",
+      "<packed-app>/node_modules/markora/dist/markBoundaryUtils.js",
+      "<packed-app>/node_modules/markora/dist/markdownCodec.js",
+      "<packed-app>/node_modules/markora/dist/markdownContributionCompiler.js",
+      "<packed-app>/node_modules/markora/dist/mediaActionUtils.js",
+      "<packed-app>/node_modules/markora/dist/minimalMarkdownCodec.js",
+      "<packed-app>/node_modules/markora/dist/opaqueMarkdown.js",
+      "<packed-app>/node_modules/markora/dist/opaqueNodeView.js",
+      "<packed-app>/node_modules/markora/dist/pipeTable.js",
+      "<packed-app>/node_modules/markora/dist/placeholderPlugin.js",
+      "<packed-app>/node_modules/markora/dist/readonlySet.js",
+      "<packed-app>/node_modules/markora/dist/resourcePolicy.js",
+      "<packed-app>/node_modules/markora/dist/schemaContributionOrder.js",
+      "<packed-app>/node_modules/markora/dist/structuralCommands.js",
+      "<packed-app>/node_modules/markora/dist/styles.css",
+      "<packed-app>/node_modules/markora/dist/tableCommands.js",
+      "<packed-app>/node_modules/markora/dist/tableNavigation.js",
+      "<packed-app>/node_modules/markora/dist/taskListUtils.js",
+      "<packed-app>/node_modules/markora/dist/transactionOrigin.js",
+      "<packed-app>/node_modules/markora/dist/uiTypes.js",
+      "<packed-app>/node_modules/markora/dist/urlUtils.js"
+    ]
+  },
+  "runtime": {
+    "memory": {
+      "samples": [
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 530904,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5308416,
+              "usedHeapBytes": 4748404
+            },
+            "cleanTeardownMs": 2.6449999809265137,
+            "mounted": {
+              "backingStorageBytes": 1022247,
+              "documents": 1,
+              "embedderHeapBytes": 9345496,
+              "jsEventListeners": 531,
+              "nodes": 9016,
+              "totalHeapBytes": 8192000,
+              "usedHeapBytes": 7600992
+            },
+            "mountedBackingStorageDeltaBytes": 52805,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 8814592,
+            "mountedJsHeapDeltaBytes": 2852588,
+            "mountedListenerDelta": 518,
+            "mountedNodeDelta": 8985,
+            "mountedTrackedMemoryDeltaBytes": 11719985,
+            "retained": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 797024,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5570560,
+              "usedHeapBytes": 4929100
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 266120,
+            "retainedJsHeapDeltaBytes": 180696,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 446816
+          },
+          "round": 0,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 856640,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5603328,
+              "usedHeapBytes": 5012544
+            },
+            "cleanTeardownMs": 13.969999998807907,
+            "mounted": {
+              "backingStorageBytes": 1637281,
+              "documents": 1,
+              "embedderHeapBytes": 46166416,
+              "jsEventListeners": 2561,
+              "nodes": 45976,
+              "totalHeapBytes": 18186240,
+              "usedHeapBytes": 17366648
+            },
+            "mountedBackingStorageDeltaBytes": 258239,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 45309776,
+            "mountedJsHeapDeltaBytes": 12354104,
+            "mountedListenerDelta": 2548,
+            "mountedNodeDelta": 45945,
+            "mountedTrackedMemoryDeltaBytes": 57922119,
+            "retained": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 858208,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 6389760,
+              "usedHeapBytes": 5206760
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 1568,
+            "retainedJsHeapDeltaBytes": 194216,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 195784
+          },
+          "round": 0,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1915618,
+              "documents": 1,
+              "embedderHeapBytes": 1219240,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 6127616,
+              "usedHeapBytes": 5302560
+            },
+            "cleanTeardownMs": 26.924999982118607,
+            "mounted": {
+              "backingStorageBytes": 2444977,
+              "documents": 1,
+              "embedderHeapBytes": 93242520,
+              "jsEventListeners": 5200,
+              "nodes": 94024,
+              "totalHeapBytes": 30507008,
+              "usedHeapBytes": 29510712
+            },
+            "mountedBackingStorageDeltaBytes": 529359,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 92023280,
+            "mountedJsHeapDeltaBytes": 24208152,
+            "mountedListenerDelta": 5187,
+            "mountedNodeDelta": 93993,
+            "mountedTrackedMemoryDeltaBytes": 116760791,
+            "retained": {
+              "backingStorageBytes": 1915609,
+              "documents": 1,
+              "embedderHeapBytes": 1219488,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 6389760,
+              "usedHeapBytes": 5467308
+            },
+            "retainedBackingStorageDeltaBytes": -9,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 248,
+            "retainedJsHeapDeltaBytes": 164748,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 164987
+          },
+          "round": 0,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 857040,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5603328,
+              "usedHeapBytes": 5015096
+            },
+            "cleanTeardownMs": 13.640000015497208,
+            "mounted": {
+              "backingStorageBytes": 1637281,
+              "documents": 1,
+              "embedderHeapBytes": 46176880,
+              "jsEventListeners": 2561,
+              "nodes": 45976,
+              "totalHeapBytes": 18186240,
+              "usedHeapBytes": 17335504
+            },
+            "mountedBackingStorageDeltaBytes": 258239,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 45319840,
+            "mountedJsHeapDeltaBytes": 12320408,
+            "mountedListenerDelta": 2548,
+            "mountedNodeDelta": 45945,
+            "mountedTrackedMemoryDeltaBytes": 57898487,
+            "retained": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 858328,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5865472,
+              "usedHeapBytes": 5207356
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 1288,
+            "retainedJsHeapDeltaBytes": 192260,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 193548
+          },
+          "round": 1,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1915618,
+              "documents": 1,
+              "embedderHeapBytes": 1218984,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5603328,
+              "usedHeapBytes": 5301408
+            },
+            "cleanTeardownMs": 26.25499999523163,
+            "mounted": {
+              "backingStorageBytes": 2444977,
+              "documents": 1,
+              "embedderHeapBytes": 93293528,
+              "jsEventListeners": 5200,
+              "nodes": 94024,
+              "totalHeapBytes": 30769152,
+              "usedHeapBytes": 29859424
+            },
+            "mountedBackingStorageDeltaBytes": 529359,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 92074544,
+            "mountedJsHeapDeltaBytes": 24558016,
+            "mountedListenerDelta": 5187,
+            "mountedNodeDelta": 93993,
+            "mountedTrackedMemoryDeltaBytes": 117161919,
+            "retained": {
+              "backingStorageBytes": 1915609,
+              "documents": 1,
+              "embedderHeapBytes": 1219344,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 6127616,
+              "usedHeapBytes": 5466968
+            },
+            "retainedBackingStorageDeltaBytes": -9,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 360,
+            "retainedJsHeapDeltaBytes": 165560,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 165911
+          },
+          "round": 1,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 531072,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5308416,
+              "usedHeapBytes": 4744948
+            },
+            "cleanTeardownMs": 2.810000002384186,
+            "mounted": {
+              "backingStorageBytes": 1022247,
+              "documents": 1,
+              "embedderHeapBytes": 9345240,
+              "jsEventListeners": 531,
+              "nodes": 9016,
+              "totalHeapBytes": 8192000,
+              "usedHeapBytes": 7601524
+            },
+            "mountedBackingStorageDeltaBytes": 52805,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 8814168,
+            "mountedJsHeapDeltaBytes": 2856576,
+            "mountedListenerDelta": 518,
+            "mountedNodeDelta": 8985,
+            "mountedTrackedMemoryDeltaBytes": 11723549,
+            "retained": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 757232,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5570560,
+              "usedHeapBytes": 4927408
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 226160,
+            "retainedJsHeapDeltaBytes": 182460,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 408620
+          },
+          "round": 1,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1915618,
+              "documents": 1,
+              "embedderHeapBytes": 1219384,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5603328,
+              "usedHeapBytes": 5300132
+            },
+            "cleanTeardownMs": 26.74499997496605,
+            "mounted": {
+              "backingStorageBytes": 2444977,
+              "documents": 1,
+              "embedderHeapBytes": 93204088,
+              "jsEventListeners": 5200,
+              "nodes": 94024,
+              "totalHeapBytes": 30507008,
+              "usedHeapBytes": 29508084
+            },
+            "mountedBackingStorageDeltaBytes": 529359,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 91984704,
+            "mountedJsHeapDeltaBytes": 24207952,
+            "mountedListenerDelta": 5187,
+            "mountedNodeDelta": 93993,
+            "mountedTrackedMemoryDeltaBytes": 116722015,
+            "retained": {
+              "backingStorageBytes": 1915609,
+              "documents": 1,
+              "embedderHeapBytes": 1219600,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 6651904,
+              "usedHeapBytes": 5466812
+            },
+            "retainedBackingStorageDeltaBytes": -9,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 216,
+            "retainedJsHeapDeltaBytes": 166680,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 166887
+          },
+          "round": 2,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 531032,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5570560,
+              "usedHeapBytes": 4747508
+            },
+            "cleanTeardownMs": 2.584999978542328,
+            "mounted": {
+              "backingStorageBytes": 1022247,
+              "documents": 1,
+              "embedderHeapBytes": 9345200,
+              "jsEventListeners": 531,
+              "nodes": 9016,
+              "totalHeapBytes": 8192000,
+              "usedHeapBytes": 7601664
+            },
+            "mountedBackingStorageDeltaBytes": 52805,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 8814168,
+            "mountedJsHeapDeltaBytes": 2854156,
+            "mountedListenerDelta": 518,
+            "mountedNodeDelta": 8985,
+            "mountedTrackedMemoryDeltaBytes": 11721129,
+            "retained": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 762824,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5570560,
+              "usedHeapBytes": 4929100
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 231792,
+            "retainedJsHeapDeltaBytes": 181592,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 413384
+          },
+          "round": 2,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 856640,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5603328,
+              "usedHeapBytes": 5014796
+            },
+            "cleanTeardownMs": 13.514999985694885,
+            "mounted": {
+              "backingStorageBytes": 1637281,
+              "documents": 1,
+              "embedderHeapBytes": 46146456,
+              "jsEventListeners": 2561,
+              "nodes": 45976,
+              "totalHeapBytes": 18448384,
+              "usedHeapBytes": 17365276
+            },
+            "mountedBackingStorageDeltaBytes": 258239,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 45289816,
+            "mountedJsHeapDeltaBytes": 12350480,
+            "mountedListenerDelta": 2548,
+            "mountedNodeDelta": 45945,
+            "mountedTrackedMemoryDeltaBytes": 57898535,
+            "retained": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 858280,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5865472,
+              "usedHeapBytes": 5209224
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 1640,
+            "retainedJsHeapDeltaBytes": 194428,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 196068
+          },
+          "round": 2,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 790096,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5046272,
+              "usedHeapBytes": 4744912
+            },
+            "cleanTeardownMs": 2.8299999833106995,
+            "mounted": {
+              "backingStorageBytes": 1022247,
+              "documents": 1,
+              "embedderHeapBytes": 9345496,
+              "jsEventListeners": 531,
+              "nodes": 9016,
+              "totalHeapBytes": 8192000,
+              "usedHeapBytes": 7597712
+            },
+            "mountedBackingStorageDeltaBytes": 52805,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 8555400,
+            "mountedJsHeapDeltaBytes": 2852800,
+            "mountedListenerDelta": 518,
+            "mountedNodeDelta": 8985,
+            "mountedTrackedMemoryDeltaBytes": 11461005,
+            "retained": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 533816,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5570560,
+              "usedHeapBytes": 4927372
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": -256280,
+            "retainedJsHeapDeltaBytes": 182460,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": -73820
+          },
+          "round": 3,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 856704,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5341184,
+              "usedHeapBytes": 5011484
+            },
+            "cleanTeardownMs": 13.685000002384186,
+            "mounted": {
+              "backingStorageBytes": 1637281,
+              "documents": 1,
+              "embedderHeapBytes": 46275792,
+              "jsEventListeners": 2561,
+              "nodes": 45976,
+              "totalHeapBytes": 18710528,
+              "usedHeapBytes": 17381468
+            },
+            "mountedBackingStorageDeltaBytes": 258239,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 45419088,
+            "mountedJsHeapDeltaBytes": 12369984,
+            "mountedListenerDelta": 2548,
+            "mountedNodeDelta": 45945,
+            "mountedTrackedMemoryDeltaBytes": 58047311,
+            "retained": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 858248,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5865472,
+              "usedHeapBytes": 5207476
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 1544,
+            "retainedJsHeapDeltaBytes": 195992,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 197536
+          },
+          "round": 3,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1915618,
+              "documents": 1,
+              "embedderHeapBytes": 1219240,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5865472,
+              "usedHeapBytes": 5302252
+            },
+            "cleanTeardownMs": 27.12999999523163,
+            "mounted": {
+              "backingStorageBytes": 2444977,
+              "documents": 1,
+              "embedderHeapBytes": 93278552,
+              "jsEventListeners": 5200,
+              "nodes": 94024,
+              "totalHeapBytes": 31031296,
+              "usedHeapBytes": 29530404
+            },
+            "mountedBackingStorageDeltaBytes": 529359,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 92059312,
+            "mountedJsHeapDeltaBytes": 24228152,
+            "mountedListenerDelta": 5187,
+            "mountedNodeDelta": 93993,
+            "mountedTrackedMemoryDeltaBytes": 116816823,
+            "retained": {
+              "backingStorageBytes": 1915609,
+              "documents": 1,
+              "embedderHeapBytes": 1219600,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 6389760,
+              "usedHeapBytes": 5467292
+            },
+            "retainedBackingStorageDeltaBytes": -9,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 360,
+            "retainedJsHeapDeltaBytes": 165040,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 165391
+          },
+          "round": 3,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 856704,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5341184,
+              "usedHeapBytes": 5014544
+            },
+            "cleanTeardownMs": 13.754999995231628,
+            "mounted": {
+              "backingStorageBytes": 1637281,
+              "documents": 1,
+              "embedderHeapBytes": 46172664,
+              "jsEventListeners": 2561,
+              "nodes": 45976,
+              "totalHeapBytes": 18186240,
+              "usedHeapBytes": 17364544
+            },
+            "mountedBackingStorageDeltaBytes": 258239,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 45315960,
+            "mountedJsHeapDeltaBytes": 12350000,
+            "mountedListenerDelta": 2548,
+            "mountedNodeDelta": 45945,
+            "mountedTrackedMemoryDeltaBytes": 57924199,
+            "retained": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 858248,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 6127616,
+              "usedHeapBytes": 5208612
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 1544,
+            "retainedJsHeapDeltaBytes": 194068,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 195612
+          },
+          "round": 4,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1915618,
+              "documents": 1,
+              "embedderHeapBytes": 1215800,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5865472,
+              "usedHeapBytes": 5300364
+            },
+            "cleanTeardownMs": 27.075000017881393,
+            "mounted": {
+              "backingStorageBytes": 2444977,
+              "documents": 1,
+              "embedderHeapBytes": 93385760,
+              "jsEventListeners": 5200,
+              "nodes": 94024,
+              "totalHeapBytes": 30507008,
+              "usedHeapBytes": 29525512
+            },
+            "mountedBackingStorageDeltaBytes": 529359,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 92169960,
+            "mountedJsHeapDeltaBytes": 24225148,
+            "mountedListenerDelta": 5187,
+            "mountedNodeDelta": 93993,
+            "mountedTrackedMemoryDeltaBytes": 116924467,
+            "retained": {
+              "backingStorageBytes": 1915609,
+              "documents": 1,
+              "embedderHeapBytes": 1220432,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 6651904,
+              "usedHeapBytes": 5468336
+            },
+            "retainedBackingStorageDeltaBytes": -9,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 4632,
+            "retainedJsHeapDeltaBytes": 167972,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 172595
+          },
+          "round": 4,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 530904,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5308416,
+              "usedHeapBytes": 4746612
+            },
+            "cleanTeardownMs": 2.8299999833106995,
+            "mounted": {
+              "backingStorageBytes": 1022247,
+              "documents": 1,
+              "embedderHeapBytes": 9345200,
+              "jsEventListeners": 531,
+              "nodes": 9016,
+              "totalHeapBytes": 8192000,
+              "usedHeapBytes": 7601764
+            },
+            "mountedBackingStorageDeltaBytes": 52805,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 8814296,
+            "mountedJsHeapDeltaBytes": 2855152,
+            "mountedListenerDelta": 518,
+            "mountedNodeDelta": 8985,
+            "mountedTrackedMemoryDeltaBytes": 11722253,
+            "retained": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 764728,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5570560,
+              "usedHeapBytes": 4929200
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 233824,
+            "retainedJsHeapDeltaBytes": 182588,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 416412
+          },
+          "round": 4,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1915618,
+              "documents": 1,
+              "embedderHeapBytes": 1219320,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5865472,
+              "usedHeapBytes": 5300588
+            },
+            "cleanTeardownMs": 26.044999986886978,
+            "mounted": {
+              "backingStorageBytes": 2444977,
+              "documents": 1,
+              "embedderHeapBytes": 93344200,
+              "jsEventListeners": 5200,
+              "nodes": 94024,
+              "totalHeapBytes": 31031296,
+              "usedHeapBytes": 29852372
+            },
+            "mountedBackingStorageDeltaBytes": 529359,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 92124880,
+            "mountedJsHeapDeltaBytes": 24551784,
+            "mountedListenerDelta": 5187,
+            "mountedNodeDelta": 93993,
+            "mountedTrackedMemoryDeltaBytes": 117206023,
+            "retained": {
+              "backingStorageBytes": 1915609,
+              "documents": 1,
+              "embedderHeapBytes": 1219136,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 6389760,
+              "usedHeapBytes": 5465500
+            },
+            "retainedBackingStorageDeltaBytes": -9,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": -184,
+            "retainedJsHeapDeltaBytes": 164912,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 164719
+          },
+          "round": 5,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 531032,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5308416,
+              "usedHeapBytes": 4746528
+            },
+            "cleanTeardownMs": 2.8649999797344208,
+            "mounted": {
+              "backingStorageBytes": 1022247,
+              "documents": 1,
+              "embedderHeapBytes": 9345792,
+              "jsEventListeners": 531,
+              "nodes": 9016,
+              "totalHeapBytes": 8192000,
+              "usedHeapBytes": 7599456
+            },
+            "mountedBackingStorageDeltaBytes": 52805,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 8814760,
+            "mountedJsHeapDeltaBytes": 2852928,
+            "mountedListenerDelta": 518,
+            "mountedNodeDelta": 8985,
+            "mountedTrackedMemoryDeltaBytes": 11720493,
+            "retained": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 533944,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5570560,
+              "usedHeapBytes": 4929116
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 2912,
+            "retainedJsHeapDeltaBytes": 182588,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 185500
+          },
+          "round": 5,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 856704,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5865472,
+              "usedHeapBytes": 5013000
+            },
+            "cleanTeardownMs": 13.730000019073486,
+            "mounted": {
+              "backingStorageBytes": 1637281,
+              "documents": 1,
+              "embedderHeapBytes": 46163856,
+              "jsEventListeners": 2561,
+              "nodes": 45976,
+              "totalHeapBytes": 18448384,
+              "usedHeapBytes": 17368712
+            },
+            "mountedBackingStorageDeltaBytes": 258239,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 45307152,
+            "mountedJsHeapDeltaBytes": 12355712,
+            "mountedListenerDelta": 2548,
+            "mountedNodeDelta": 45945,
+            "mountedTrackedMemoryDeltaBytes": 57921103,
+            "retained": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 858248,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 6127616,
+              "usedHeapBytes": 5206880
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 1544,
+            "retainedJsHeapDeltaBytes": 193880,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 195424
+          },
+          "round": 5,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 530832,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5308416,
+              "usedHeapBytes": 4745860
+            },
+            "cleanTeardownMs": 2.5550000071525574,
+            "mounted": {
+              "backingStorageBytes": 1022247,
+              "documents": 1,
+              "embedderHeapBytes": 9344792,
+              "jsEventListeners": 531,
+              "nodes": 9016,
+              "totalHeapBytes": 8192000,
+              "usedHeapBytes": 7602112
+            },
+            "mountedBackingStorageDeltaBytes": 52805,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 8813960,
+            "mountedJsHeapDeltaBytes": 2856252,
+            "mountedListenerDelta": 518,
+            "mountedNodeDelta": 8985,
+            "mountedTrackedMemoryDeltaBytes": 11723017,
+            "retained": {
+              "backingStorageBytes": 969442,
+              "documents": 1,
+              "embedderHeapBytes": 797304,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5570560,
+              "usedHeapBytes": 4927324
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 266472,
+            "retainedJsHeapDeltaBytes": 181464,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 447936
+          },
+          "round": 6,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 856640,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5865472,
+              "usedHeapBytes": 5015336
+            },
+            "cleanTeardownMs": 13.594999998807907,
+            "mounted": {
+              "backingStorageBytes": 1637281,
+              "documents": 1,
+              "embedderHeapBytes": 46176016,
+              "jsEventListeners": 2561,
+              "nodes": 45976,
+              "totalHeapBytes": 18186240,
+              "usedHeapBytes": 17368500
+            },
+            "mountedBackingStorageDeltaBytes": 258239,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 45319376,
+            "mountedJsHeapDeltaBytes": 12353164,
+            "mountedListenerDelta": 2548,
+            "mountedNodeDelta": 45945,
+            "mountedTrackedMemoryDeltaBytes": 57930779,
+            "retained": {
+              "backingStorageBytes": 1379042,
+              "documents": 1,
+              "embedderHeapBytes": 858208,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5865472,
+              "usedHeapBytes": 5208204
+            },
+            "retainedBackingStorageDeltaBytes": 0,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 1568,
+            "retainedJsHeapDeltaBytes": 192868,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 194436
+          },
+          "round": 6,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "baseline": {
+              "backingStorageBytes": 1915618,
+              "documents": 1,
+              "embedderHeapBytes": 1219240,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 5603328,
+              "usedHeapBytes": 5300764
+            },
+            "cleanTeardownMs": 29.55000001192093,
+            "mounted": {
+              "backingStorageBytes": 2444977,
+              "documents": 1,
+              "embedderHeapBytes": 93184472,
+              "jsEventListeners": 5200,
+              "nodes": 94024,
+              "totalHeapBytes": 30769152,
+              "usedHeapBytes": 29514360
+            },
+            "mountedBackingStorageDeltaBytes": 529359,
+            "mountedDocumentDelta": 0,
+            "mountedEmbedderHeapDeltaBytes": 91965232,
+            "mountedJsHeapDeltaBytes": 24213596,
+            "mountedListenerDelta": 5187,
+            "mountedNodeDelta": 93993,
+            "mountedTrackedMemoryDeltaBytes": 116708187,
+            "retained": {
+              "backingStorageBytes": 1915609,
+              "documents": 1,
+              "embedderHeapBytes": 1219536,
+              "jsEventListeners": 13,
+              "nodes": 31,
+              "totalHeapBytes": 6389760,
+              "usedHeapBytes": 5466300
+            },
+            "retainedBackingStorageDeltaBytes": -9,
+            "retainedDocumentDelta": 0,
+            "retainedEmbedderHeapDeltaBytes": 296,
+            "retainedJsHeapDeltaBytes": 165536,
+            "retainedListenerDelta": 0,
+            "retainedNodeDelta": 0,
+            "retainedTrackedMemoryDeltaBytes": 165823
+          },
+          "round": 6,
+          "targetBytes": 1048576
+        }
+      ],
+      "summaries": {
+        "102400": {
+          "cleanTeardownMs": {
+            "coefficientOfVariation": 0.045,
+            "count": 7,
+            "maximum": 2.865,
+            "mean": 2.731,
+            "median": 2.81,
+            "medianAbsoluteDeviation": 0.055,
+            "minimum": 2.555,
+            "p90": 2.865,
+            "p95": 2.865,
+            "standardDeviation": 0.122
+          },
+          "mountedTrackedMemoryDeltaBytes": {
+            "coefficientOfVariation": 0.008,
+            "count": 7,
+            "maximum": 11723549,
+            "mean": 11684490.143,
+            "median": 11721129,
+            "medianAbsoluteDeviation": 1144,
+            "minimum": 11461005,
+            "p90": 11723549,
+            "p95": 11723549,
+            "standardDeviation": 91245.393
+          },
+          "retainedTrackedMemoryDeltaBytes": {
+            "coefficientOfVariation": 0.567,
+            "count": 7,
+            "maximum": 447936,
+            "mean": 320692.571,
+            "median": 413384,
+            "medianAbsoluteDeviation": 33432,
+            "minimum": -73820,
+            "p90": 447936,
+            "p95": 447936,
+            "standardDeviation": 181855.654
+          },
+          "mountedJsHeapDeltaBytes": {
+            "coefficientOfVariation": 0.001,
+            "count": 7,
+            "maximum": 2856576,
+            "mean": 2854350.286,
+            "median": 2854156,
+            "medianAbsoluteDeviation": 1356,
+            "minimum": 2852588,
+            "p90": 2856576,
+            "p95": 2856576,
+            "standardDeviation": 1548.398
+          },
+          "retainedJsHeapDeltaBytes": {
+            "coefficientOfVariation": 0.004,
+            "count": 7,
+            "maximum": 182588,
+            "mean": 181978.286,
+            "median": 182460,
+            "medianAbsoluteDeviation": 128,
+            "minimum": 180696,
+            "p90": 182588,
+            "p95": 182588,
+            "standardDeviation": 683.015
+          },
+          "mountedEmbedderHeapDeltaBytes": {
+            "coefficientOfVariation": 0.01,
+            "count": 7,
+            "maximum": 8814760,
+            "mean": 8777334.857,
+            "median": 8814168,
+            "medianAbsoluteDeviation": 208,
+            "minimum": 8555400,
+            "p90": 8814760,
+            "p95": 8814760,
+            "standardDeviation": 90604.876
+          },
+          "retainedEmbedderHeapDeltaBytes": {
+            "coefficientOfVariation": 1.313,
+            "count": 7,
+            "maximum": 266472,
+            "mean": 138714.286,
+            "median": 231792,
+            "medianAbsoluteDeviation": 34328,
+            "minimum": -256280,
+            "p90": 266472,
+            "p95": 266472,
+            "standardDeviation": 182198.113
+          },
+          "mountedBackingStorageDeltaBytes": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 52805,
+            "mean": 52805,
+            "median": 52805,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 52805,
+            "p90": 52805,
+            "p95": 52805,
+            "standardDeviation": 0
+          },
+          "retainedBackingStorageDeltaBytes": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          },
+          "mountedNodeDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 8985,
+            "mean": 8985,
+            "median": 8985,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 8985,
+            "p90": 8985,
+            "p95": 8985,
+            "standardDeviation": 0
+          },
+          "retainedNodeDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          },
+          "mountedListenerDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 518,
+            "mean": 518,
+            "median": 518,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 518,
+            "p90": 518,
+            "p95": 518,
+            "standardDeviation": 0
+          },
+          "retainedListenerDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          },
+          "mountedDocumentDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          },
+          "retainedDocumentDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          }
+        },
+        "512000": {
+          "cleanTeardownMs": {
+            "coefficientOfVariation": 0.01,
+            "count": 7,
+            "maximum": 13.97,
+            "mean": 13.699,
+            "median": 13.685,
+            "medianAbsoluteDeviation": 0.07,
+            "minimum": 13.515,
+            "p90": 13.97,
+            "p95": 13.97,
+            "standardDeviation": 0.134
+          },
+          "mountedTrackedMemoryDeltaBytes": {
+            "coefficientOfVariation": 0.001,
+            "count": 7,
+            "maximum": 58047311,
+            "mean": 57934647.571,
+            "median": 57922119,
+            "medianAbsoluteDeviation": 8660,
+            "minimum": 57898487,
+            "p90": 58047311,
+            "p95": 58047311,
+            "standardDeviation": 47463.237
+          },
+          "retainedTrackedMemoryDeltaBytes": {
+            "coefficientOfVariation": 0.006,
+            "count": 7,
+            "maximum": 197536,
+            "mean": 195486.857,
+            "median": 195612,
+            "medianAbsoluteDeviation": 456,
+            "minimum": 193548,
+            "p90": 197536,
+            "p95": 197536,
+            "standardDeviation": 1165.46
+          },
+          "mountedJsHeapDeltaBytes": {
+            "coefficientOfVariation": 0.001,
+            "count": 7,
+            "maximum": 12369984,
+            "mean": 12350550.286,
+            "median": 12353164,
+            "medianAbsoluteDeviation": 2684,
+            "minimum": 12320408,
+            "p90": 12369984,
+            "p95": 12369984,
+            "standardDeviation": 13797.712
+          },
+          "retainedJsHeapDeltaBytes": {
+            "coefficientOfVariation": 0.006,
+            "count": 7,
+            "maximum": 195992,
+            "mean": 193958.857,
+            "median": 194068,
+            "medianAbsoluteDeviation": 360,
+            "minimum": 192260,
+            "p90": 195992,
+            "p95": 195992,
+            "standardDeviation": 1102.86
+          },
+          "mountedEmbedderHeapDeltaBytes": {
+            "coefficientOfVariation": 0.001,
+            "count": 7,
+            "maximum": 45419088,
+            "mean": 45325858.286,
+            "median": 45315960,
+            "medianAbsoluteDeviation": 6184,
+            "minimum": 45289816,
+            "p90": 45419088,
+            "p95": 45419088,
+            "standardDeviation": 39234.837
+          },
+          "retainedEmbedderHeapDeltaBytes": {
+            "coefficientOfVariation": 0.067,
+            "count": 7,
+            "maximum": 1640,
+            "mean": 1528,
+            "median": 1544,
+            "medianAbsoluteDeviation": 24,
+            "minimum": 1288,
+            "p90": 1640,
+            "p95": 1640,
+            "standardDeviation": 102.895
+          },
+          "mountedBackingStorageDeltaBytes": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 258239,
+            "mean": 258239,
+            "median": 258239,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 258239,
+            "p90": 258239,
+            "p95": 258239,
+            "standardDeviation": 0
+          },
+          "retainedBackingStorageDeltaBytes": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          },
+          "mountedNodeDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 45945,
+            "mean": 45945,
+            "median": 45945,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 45945,
+            "p90": 45945,
+            "p95": 45945,
+            "standardDeviation": 0
+          },
+          "retainedNodeDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          },
+          "mountedListenerDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 2548,
+            "mean": 2548,
+            "median": 2548,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 2548,
+            "p90": 2548,
+            "p95": 2548,
+            "standardDeviation": 0
+          },
+          "retainedListenerDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          },
+          "mountedDocumentDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          },
+          "retainedDocumentDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          }
+        },
+        "1048576": {
+          "cleanTeardownMs": {
+            "coefficientOfVariation": 0.039,
+            "count": 7,
+            "maximum": 29.55,
+            "mean": 27.104,
+            "median": 26.925,
+            "medianAbsoluteDeviation": 0.205,
+            "minimum": 26.045,
+            "p90": 29.55,
+            "p95": 29.55,
+            "standardDeviation": 1.068
+          },
+          "mountedTrackedMemoryDeltaBytes": {
+            "coefficientOfVariation": 0.002,
+            "count": 7,
+            "maximum": 117206023,
+            "mean": 116900032.143,
+            "median": 116816823,
+            "medianAbsoluteDeviation": 107644,
+            "minimum": 116708187,
+            "p90": 117206023,
+            "p95": 117206023,
+            "standardDeviation": 191840.228
+          },
+          "retainedTrackedMemoryDeltaBytes": {
+            "coefficientOfVariation": 0.015,
+            "count": 7,
+            "maximum": 172595,
+            "mean": 166616.143,
+            "median": 165823,
+            "medianAbsoluteDeviation": 836,
+            "minimum": 164719,
+            "p90": 172595,
+            "p95": 172595,
+            "standardDeviation": 2527.015
+          },
+          "mountedJsHeapDeltaBytes": {
+            "coefficientOfVariation": 0.006,
+            "count": 7,
+            "maximum": 24558016,
+            "mean": 24313257.143,
+            "median": 24225148,
+            "medianAbsoluteDeviation": 16996,
+            "minimum": 24207952,
+            "p90": 24558016,
+            "p95": 24558016,
+            "standardDeviation": 153006.383
+          },
+          "retainedJsHeapDeltaBytes": {
+            "coefficientOfVariation": 0.006,
+            "count": 7,
+            "maximum": 167972,
+            "mean": 165778.286,
+            "median": 165536,
+            "medianAbsoluteDeviation": 624,
+            "minimum": 164748,
+            "p90": 167972,
+            "p95": 167972,
+            "standardDeviation": 1074.964
+          },
+          "mountedEmbedderHeapDeltaBytes": {
+            "coefficientOfVariation": 0.001,
+            "count": 7,
+            "maximum": 92169960,
+            "mean": 92057416,
+            "median": 92059312,
+            "medianAbsoluteDeviation": 65568,
+            "minimum": 91965232,
+            "p90": 92169960,
+            "p95": 92169960,
+            "standardDeviation": 68101.497
+          },
+          "retainedEmbedderHeapDeltaBytes": {
+            "coefficientOfVariation": 1.836,
+            "count": 7,
+            "maximum": 4632,
+            "mean": 846.857,
+            "median": 296,
+            "medianAbsoluteDeviation": 64,
+            "minimum": -184,
+            "p90": 4632,
+            "p95": 4632,
+            "standardDeviation": 1554.904
+          },
+          "mountedBackingStorageDeltaBytes": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 529359,
+            "mean": 529359,
+            "median": 529359,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 529359,
+            "p90": 529359,
+            "p95": 529359,
+            "standardDeviation": 0
+          },
+          "retainedBackingStorageDeltaBytes": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": -9,
+            "mean": -9,
+            "median": -9,
+            "medianAbsoluteDeviation": 0,
+            "minimum": -9,
+            "p90": -9,
+            "p95": -9,
+            "standardDeviation": 0
+          },
+          "mountedNodeDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 93993,
+            "mean": 93993,
+            "median": 93993,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 93993,
+            "p90": 93993,
+            "p95": 93993,
+            "standardDeviation": 0
+          },
+          "retainedNodeDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          },
+          "mountedListenerDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 5187,
+            "mean": 5187,
+            "median": 5187,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 5187,
+            "p90": 5187,
+            "p95": 5187,
+            "standardDeviation": 0
+          },
+          "retainedListenerDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          },
+          "mountedDocumentDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          },
+          "retainedDocumentDelta": {
+            "coefficientOfVariation": 0,
+            "count": 7,
+            "maximum": 0,
+            "mean": 0,
+            "median": 0,
+            "medianAbsoluteDeviation": 0,
+            "minimum": 0,
+            "p90": 0,
+            "p95": 0,
+            "standardDeviation": 0
+          }
+        }
+      }
+    },
+    "timing": {
+      "samples": [
+        {
+          "metrics": {
+            "codecParseMs": 7.819999992847443,
+            "codecSerializeMs": 3.949999988079071,
+            "dirtyTeardownMs": 12.560000002384186,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 54.65999999642372,
+            "initialParseRenderToPresentationMs": 102.70500001311302,
+            "keydownToPresentationProxyMs": 12.815000027418137
+          },
+          "round": 0,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 26.00499999523163,
+            "codecSerializeMs": 96.75,
+            "dirtyTeardownMs": 143.75499999523163,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 128,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 221.30499997735023,
+            "initialParseRenderToPresentationMs": 381.0649999976158,
+            "keydownToPresentationProxyMs": 129.2800000011921
+          },
+          "round": 0,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 71.93000000715256,
+            "codecSerializeMs": 394.90000000596046,
+            "dirtyTeardownMs": 487.8799999952316,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 440,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 640.705000013113,
+            "initialParseRenderToPresentationMs": 964.1500000059605,
+            "keydownToPresentationProxyMs": 441.4050000011921
+          },
+          "round": 0,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 25.990000009536743,
+            "codecSerializeMs": 103.74499997496605,
+            "dirtyTeardownMs": 148.24499997496605,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 128,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 216.41500002145767,
+            "initialParseRenderToPresentationMs": 375.1650000214577,
+            "keydownToPresentationProxyMs": 131.50999999046326
+          },
+          "round": 1,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 47.31999999284744,
+            "codecSerializeMs": 401.0150000154972,
+            "dirtyTeardownMs": 456.875,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 432,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 571.3000000119209,
+            "initialParseRenderToPresentationMs": 866.2249999940395,
+            "keydownToPresentationProxyMs": 427.2699999809265
+          },
+          "round": 1,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.590000003576279,
+            "codecSerializeMs": 4.219999998807907,
+            "dirtyTeardownMs": 13.13500002026558,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 54.179999977350235,
+            "initialParseRenderToPresentationMs": 103.78499999642372,
+            "keydownToPresentationProxyMs": 13.234999984502792
+          },
+          "round": 1,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 47.0799999833107,
+            "codecSerializeMs": 393.30500000715256,
+            "dirtyTeardownMs": 463.05000001192093,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 416,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 568.9799999892712,
+            "initialParseRenderToPresentationMs": 866.3650000095367,
+            "keydownToPresentationProxyMs": 411.47499999403954
+          },
+          "round": 2,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.5950000286102295,
+            "codecSerializeMs": 3.854999989271164,
+            "dirtyTeardownMs": 12.270000010728836,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 54.28499999642372,
+            "initialParseRenderToPresentationMs": 102.52000001072884,
+            "keydownToPresentationProxyMs": 13.070000022649765
+          },
+          "round": 2,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 26.030000001192093,
+            "codecSerializeMs": 105.18500000238419,
+            "dirtyTeardownMs": 144.37999999523163,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 136,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 219.00999999046326,
+            "initialParseRenderToPresentationMs": 381.6399999856949,
+            "keydownToPresentationProxyMs": 130.31999999284744
+          },
+          "round": 2,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.919999986886978,
+            "codecSerializeMs": 3.8550000190734863,
+            "dirtyTeardownMs": 12.644999980926514,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 53.58500000834465,
+            "initialParseRenderToPresentationMs": 101.56999999284744,
+            "keydownToPresentationProxyMs": 13.050000011920929
+          },
+          "round": 3,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 26.570000022649765,
+            "codecSerializeMs": 103.36499997973442,
+            "dirtyTeardownMs": 146.15000000596046,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 136,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 214.5949999988079,
+            "initialParseRenderToPresentationMs": 376.4699999988079,
+            "keydownToPresentationProxyMs": 135.98500001430511
+          },
+          "round": 3,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 69.18500000238419,
+            "codecSerializeMs": 401.36500000953674,
+            "dirtyTeardownMs": 501.52000001072884,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 440,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 633.625,
+            "initialParseRenderToPresentationMs": 934.2349999845028,
+            "keydownToPresentationProxyMs": 447.3900000154972
+          },
+          "round": 3,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 26.66499999165535,
+            "codecSerializeMs": 99.62000000476837,
+            "dirtyTeardownMs": 140.55000001192093,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 128,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 217.80000001192093,
+            "initialParseRenderToPresentationMs": 378.1850000023842,
+            "keydownToPresentationProxyMs": 129.27499997615814
+          },
+          "round": 4,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 72.09000000357628,
+            "codecSerializeMs": 389.0300000011921,
+            "dirtyTeardownMs": 463.99000000953674,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 432,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 581.5,
+            "initialParseRenderToPresentationMs": 884.1899999976158,
+            "keydownToPresentationProxyMs": 428.93000000715256
+          },
+          "round": 4,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.78999999165535,
+            "codecSerializeMs": 3.8350000083446503,
+            "dirtyTeardownMs": 12.03999999165535,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 55.889999985694885,
+            "initialParseRenderToPresentationMs": 103.03499999642372,
+            "keydownToPresentationProxyMs": 13.185000002384186
+          },
+          "round": 4,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 80.70500001311302,
+            "codecSerializeMs": 382.16499999165535,
+            "dirtyTeardownMs": 468.6200000047684,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 416,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 587.2450000047684,
+            "initialParseRenderToPresentationMs": 883.4449999928474,
+            "keydownToPresentationProxyMs": 412.46499997377396
+          },
+          "round": 5,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.840000003576279,
+            "codecSerializeMs": 3.8250000178813934,
+            "dirtyTeardownMs": 12.514999985694885,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 53.150000005960464,
+            "initialParseRenderToPresentationMs": 101.24000000953674,
+            "keydownToPresentationProxyMs": 13.355000019073486
+          },
+          "round": 5,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 26.55000001192093,
+            "codecSerializeMs": 101.56000000238419,
+            "dirtyTeardownMs": 139.0600000023842,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 136,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 226.8449999988079,
+            "initialParseRenderToPresentationMs": 391.4650000035763,
+            "keydownToPresentationProxyMs": 139.62999999523163
+          },
+          "round": 5,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.935000002384186,
+            "codecSerializeMs": 3.9099999964237213,
+            "dirtyTeardownMs": 12.625,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 52.71000000834465,
+            "initialParseRenderToPresentationMs": 100.41499999165535,
+            "keydownToPresentationProxyMs": 12.879999995231628
+          },
+          "round": 6,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 26.150000005960464,
+            "codecSerializeMs": 102.13499999046326,
+            "dirtyTeardownMs": 142.52000001072884,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 128,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 219.56999999284744,
+            "initialParseRenderToPresentationMs": 379.1099999845028,
+            "keydownToPresentationProxyMs": 129.73500001430511
+          },
+          "round": 6,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 86.38499999046326,
+            "codecSerializeMs": 380.9500000178814,
+            "dirtyTeardownMs": 498.50999999046326,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 416,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 584.0150000154972,
+            "initialParseRenderToPresentationMs": 886.7700000107288,
+            "keydownToPresentationProxyMs": 412.61999997496605
+          },
+          "round": 6,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 26.525000005960464,
+            "codecSerializeMs": 109.82499998807907,
+            "dirtyTeardownMs": 148.21500000357628,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 136,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 219.77500000596046,
+            "initialParseRenderToPresentationMs": 386.8100000023842,
+            "keydownToPresentationProxyMs": 132.47499999403954
+          },
+          "round": 7,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 85.875,
+            "codecSerializeMs": 408.419999986887,
+            "dirtyTeardownMs": 457.7849999964237,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 432,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 579.9599999785423,
+            "initialParseRenderToPresentationMs": 882.5549999773502,
+            "keydownToPresentationProxyMs": 433.375
+          },
+          "round": 7,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.780000001192093,
+            "codecSerializeMs": 4.185000002384186,
+            "dirtyTeardownMs": 12.735000014305115,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 53.93000000715256,
+            "initialParseRenderToPresentationMs": 102.37000000476837,
+            "keydownToPresentationProxyMs": 13.379999995231628
+          },
+          "round": 7,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 86.125,
+            "codecSerializeMs": 385.34999999403954,
+            "dirtyTeardownMs": 453.6399999856949,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 424,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 592.7400000095367,
+            "initialParseRenderToPresentationMs": 894.5399999916553,
+            "keydownToPresentationProxyMs": 432.49000000953674
+          },
+          "round": 8,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.675000011920929,
+            "codecSerializeMs": 4.185000002384186,
+            "dirtyTeardownMs": 12.949999988079071,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 53.769999980926514,
+            "initialParseRenderToPresentationMs": 102.16999998688698,
+            "keydownToPresentationProxyMs": 13.229999989271164
+          },
+          "round": 8,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 42.48499998450279,
+            "codecSerializeMs": 112.625,
+            "dirtyTeardownMs": 160.2999999821186,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 152,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 238.6400000154972,
+            "initialParseRenderToPresentationMs": 408.125,
+            "keydownToPresentationProxyMs": 149.99500000476837
+          },
+          "round": 8,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 8.294999986886978,
+            "codecSerializeMs": 4.574999988079071,
+            "dirtyTeardownMs": 13.24499997496605,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 53.314999997615814,
+            "initialParseRenderToPresentationMs": 101.49000000953674,
+            "keydownToPresentationProxyMs": 12.78999999165535
+          },
+          "round": 9,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 25.91499999165535,
+            "codecSerializeMs": 99.01499998569489,
+            "dirtyTeardownMs": 143.96000000834465,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 136,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 219.08499997854233,
+            "initialParseRenderToPresentationMs": 378.7699999809265,
+            "keydownToPresentationProxyMs": 132.80499997735023
+          },
+          "round": 9,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 70.71500000357628,
+            "codecSerializeMs": 399.90000000596046,
+            "dirtyTeardownMs": 470.9150000214577,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 448,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 586.580000013113,
+            "initialParseRenderToPresentationMs": 886.4150000214577,
+            "keydownToPresentationProxyMs": 444.330000013113
+          },
+          "round": 9,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 29.025000005960464,
+            "codecSerializeMs": 113.26499998569489,
+            "dirtyTeardownMs": 158.03999999165535,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 144,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 230.2199999988079,
+            "initialParseRenderToPresentationMs": 399.4650000035763,
+            "keydownToPresentationProxyMs": 135.57499998807907
+          },
+          "round": 10,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 71.88499999046326,
+            "codecSerializeMs": 403.55500000715256,
+            "dirtyTeardownMs": 488.82499998807907,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 440,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 591.5749999880791,
+            "initialParseRenderToPresentationMs": 886.6949999928474,
+            "keydownToPresentationProxyMs": 445.53999999165535
+          },
+          "round": 10,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 8.125,
+            "codecSerializeMs": 4.344999998807907,
+            "dirtyTeardownMs": 14.159999996423721,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 55.224999994039536,
+            "initialParseRenderToPresentationMs": 103.09000000357628,
+            "keydownToPresentationProxyMs": 13.485000014305115
+          },
+          "round": 10,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 88.56000000238419,
+            "codecSerializeMs": 373.5750000178814,
+            "dirtyTeardownMs": 464.2999999821186,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 424,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 580.330000013113,
+            "initialParseRenderToPresentationMs": 881.4900000095367,
+            "keydownToPresentationProxyMs": 432.82000002264977
+          },
+          "round": 11,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.825000017881393,
+            "codecSerializeMs": 4.194999992847443,
+            "dirtyTeardownMs": 14.300000011920929,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 53.564999997615814,
+            "initialParseRenderToPresentationMs": 100.46500000357628,
+            "keydownToPresentationProxyMs": 13.71000000834465
+          },
+          "round": 11,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 37.025000005960464,
+            "codecSerializeMs": 100.51500001549721,
+            "dirtyTeardownMs": 142.4500000178814,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 128,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 215.16999998688698,
+            "initialParseRenderToPresentationMs": 374.69999998807907,
+            "keydownToPresentationProxyMs": 131.61500000953674
+          },
+          "round": 11,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.764999985694885,
+            "codecSerializeMs": 4.109999984502792,
+            "dirtyTeardownMs": 13.050000011920929,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 54.525000005960464,
+            "initialParseRenderToPresentationMs": 102.15000000596046,
+            "keydownToPresentationProxyMs": 13.375
+          },
+          "round": 12,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 26.5,
+            "codecSerializeMs": 97.4249999821186,
+            "dirtyTeardownMs": 145.2199999988079,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 136,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 215.11500000953674,
+            "initialParseRenderToPresentationMs": 375.55000001192093,
+            "keydownToPresentationProxyMs": 133.8100000023842
+          },
+          "round": 12,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 74.17500001192093,
+            "codecSerializeMs": 384.8600000143051,
+            "dirtyTeardownMs": 466.77500000596046,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 456,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 579.3249999880791,
+            "initialParseRenderToPresentationMs": 886.6299999952316,
+            "keydownToPresentationProxyMs": 457.3799999952316
+          },
+          "round": 12,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 26.764999985694885,
+            "codecSerializeMs": 95.89999997615814,
+            "dirtyTeardownMs": 139.41999998688698,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 128,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 221.77500000596046,
+            "initialParseRenderToPresentationMs": 383.9350000023842,
+            "keydownToPresentationProxyMs": 124.46500000357628
+          },
+          "round": 13,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 70.51999998092651,
+            "codecSerializeMs": 394.13000002503395,
+            "dirtyTeardownMs": 497.35499998927116,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 424,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 580.4050000011921,
+            "initialParseRenderToPresentationMs": 873.1750000119209,
+            "keydownToPresentationProxyMs": 419.65000000596046
+          },
+          "round": 13,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.804999977350235,
+            "codecSerializeMs": 3.8949999809265137,
+            "dirtyTeardownMs": 12.5,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 54.150000005960464,
+            "initialParseRenderToPresentationMs": 101.4699999988079,
+            "keydownToPresentationProxyMs": 12.865000009536743
+          },
+          "round": 13,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 71.16999998688698,
+            "codecSerializeMs": 377.25999999046326,
+            "dirtyTeardownMs": 483.625,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 480,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 583.2650000154972,
+            "initialParseRenderToPresentationMs": 896.380000025034,
+            "keydownToPresentationProxyMs": 477.044999986887
+          },
+          "round": 14,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.680000007152557,
+            "codecSerializeMs": 3.8850000202655792,
+            "dirtyTeardownMs": 12.5799999833107,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 55.375,
+            "initialParseRenderToPresentationMs": 102.89999997615814,
+            "keydownToPresentationProxyMs": 13.759999990463257
+          },
+          "round": 14,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 26.599999994039536,
+            "codecSerializeMs": 102.2199999988079,
+            "dirtyTeardownMs": 140.15000000596046,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 136,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 235.0600000023842,
+            "initialParseRenderToPresentationMs": 393.55000001192093,
+            "keydownToPresentationProxyMs": 132.0600000023842
+          },
+          "round": 14,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.754999995231628,
+            "codecSerializeMs": 3.9449999928474426,
+            "dirtyTeardownMs": 12.659999996423721,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 56.21999999880791,
+            "initialParseRenderToPresentationMs": 103.60999998450279,
+            "keydownToPresentationProxyMs": 13.370000004768372
+          },
+          "round": 15,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 37.04499998688698,
+            "codecSerializeMs": 98.40000000596046,
+            "dirtyTeardownMs": 140.71500000357628,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 128,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 217.47999998927116,
+            "initialParseRenderToPresentationMs": 376.38499999046326,
+            "keydownToPresentationProxyMs": 130.1850000023842
+          },
+          "round": 15,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 48.60999998450279,
+            "codecSerializeMs": 391.5049999952316,
+            "dirtyTeardownMs": 473.8799999952316,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 440,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 591.8499999940395,
+            "initialParseRenderToPresentationMs": 896.2700000107288,
+            "keydownToPresentationProxyMs": 446.97499999403954
+          },
+          "round": 15,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 34.66499999165535,
+            "codecSerializeMs": 99.13999998569489,
+            "dirtyTeardownMs": 140.63999998569489,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 136,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 219.6700000166893,
+            "initialParseRenderToPresentationMs": 380.2650000154972,
+            "keydownToPresentationProxyMs": 134.21500000357628
+          },
+          "round": 16,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 85.75,
+            "codecSerializeMs": 380.8449999988079,
+            "dirtyTeardownMs": 482.6599999964237,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 440,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 584.3900000154972,
+            "initialParseRenderToPresentationMs": 877.3000000119209,
+            "keydownToPresentationProxyMs": 436.5799999833107
+          },
+          "round": 16,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.700000017881393,
+            "codecSerializeMs": 4.2249999940395355,
+            "dirtyTeardownMs": 12.955000013113022,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 54.14999997615814,
+            "initialParseRenderToPresentationMs": 101.22999998927116,
+            "keydownToPresentationProxyMs": 13.099999994039536
+          },
+          "round": 16,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 68.91499999165535,
+            "codecSerializeMs": 395.66499999165535,
+            "dirtyTeardownMs": 452.9350000023842,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 424,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 584.7600000202656,
+            "initialParseRenderToPresentationMs": 882.7199999988079,
+            "keydownToPresentationProxyMs": 429.7649999856949
+          },
+          "round": 17,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.615000009536743,
+            "codecSerializeMs": 3.8499999940395355,
+            "dirtyTeardownMs": 12.325000017881393,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 24,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 56.15500000119209,
+            "initialParseRenderToPresentationMs": 103.36000001430511,
+            "keydownToPresentationProxyMs": 14.534999996423721
+          },
+          "round": 17,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 26.08500000834465,
+            "codecSerializeMs": 102.375,
+            "dirtyTeardownMs": 144.00499999523163,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 128,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 217.08000001311302,
+            "initialParseRenderToPresentationMs": 377.43000000715256,
+            "keydownToPresentationProxyMs": 121.89499998092651
+          },
+          "round": 17,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 8.074999988079071,
+            "codecSerializeMs": 4.604999989271164,
+            "dirtyTeardownMs": 13.340000003576279,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 54.064999997615814,
+            "initialParseRenderToPresentationMs": 100.89000001549721,
+            "keydownToPresentationProxyMs": 13.034999996423721
+          },
+          "round": 18,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 34.65500000119209,
+            "codecSerializeMs": 101.19499999284744,
+            "dirtyTeardownMs": 145.0300000011921,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 136,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 218.91499999165535,
+            "initialParseRenderToPresentationMs": 381.5300000011921,
+            "keydownToPresentationProxyMs": 132.63499999046326
+          },
+          "round": 18,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 71.19999998807907,
+            "codecSerializeMs": 394.57499998807907,
+            "dirtyTeardownMs": 464.2649999856949,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 448,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 610.7950000166893,
+            "initialParseRenderToPresentationMs": 919.7849999964237,
+            "keydownToPresentationProxyMs": 450
+          },
+          "round": 18,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 37.679999977350235,
+            "codecSerializeMs": 99.22499999403954,
+            "dirtyTeardownMs": 142.875,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 128,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 217.2349999845028,
+            "initialParseRenderToPresentationMs": 376.0199999809265,
+            "keydownToPresentationProxyMs": 129.21500000357628
+          },
+          "round": 19,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 93.73499998450279,
+            "codecSerializeMs": 410.22499999403954,
+            "dirtyTeardownMs": 537.5200000107288,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 472,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 587.0550000071526,
+            "initialParseRenderToPresentationMs": 885.1599999964237,
+            "keydownToPresentationProxyMs": 479.31999999284744
+          },
+          "round": 19,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 8.08500000834465,
+            "codecSerializeMs": 4.564999997615814,
+            "dirtyTeardownMs": 13.694999992847443,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 54.229999989271164,
+            "initialParseRenderToPresentationMs": 101.34999999403954,
+            "keydownToPresentationProxyMs": 13.180000007152557
+          },
+          "round": 19,
+          "targetBytes": 102400
+        }
+      ],
+      "summaries": {
+        "102400": {
+          "initialParseRenderSyncMs": {
+            "coefficientOfVariation": 0.018,
+            "count": 20,
+            "maximum": 56.22,
+            "mean": 54.357,
+            "median": 54.165,
+            "medianAbsoluteDeviation": 0.537,
+            "minimum": 52.71,
+            "p90": 55.89,
+            "p95": 56.155,
+            "standardDeviation": 0.954
+          },
+          "initialParseRenderToPresentationMs": {
+            "coefficientOfVariation": 0.01,
+            "count": 20,
+            "maximum": 103.785,
+            "mean": 102.091,
+            "median": 102.16,
+            "medianAbsoluteDeviation": 0.843,
+            "minimum": 100.415,
+            "p90": 103.36,
+            "p95": 103.61,
+            "standardDeviation": 0.998
+          },
+          "codecParseMs": {
+            "coefficientOfVariation": 0.024,
+            "count": 20,
+            "maximum": 8.295,
+            "mean": 7.834,
+            "median": 7.797,
+            "medianAbsoluteDeviation": 0.12,
+            "minimum": 7.59,
+            "p90": 8.085,
+            "p95": 8.125,
+            "standardDeviation": 0.185
+          },
+          "codecSerializeMs": {
+            "coefficientOfVariation": 0.062,
+            "count": 20,
+            "maximum": 4.605,
+            "mean": 4.101,
+            "median": 4.03,
+            "medianAbsoluteDeviation": 0.175,
+            "minimum": 3.825,
+            "p90": 4.565,
+            "p95": 4.575,
+            "standardDeviation": 0.256
+          },
+          "keydownToPresentationProxyMs": {
+            "coefficientOfVariation": 0.029,
+            "count": 20,
+            "maximum": 14.535,
+            "mean": 13.27,
+            "median": 13.207,
+            "medianAbsoluteDeviation": 0.17,
+            "minimum": 12.79,
+            "p90": 13.71,
+            "p95": 13.76,
+            "standardDeviation": 0.391
+          },
+          "dirtyTeardownMs": {
+            "coefficientOfVariation": 0.045,
+            "count": 20,
+            "maximum": 14.3,
+            "mean": 12.914,
+            "median": 12.698,
+            "medianAbsoluteDeviation": 0.305,
+            "minimum": 12.04,
+            "p90": 13.695,
+            "p95": 14.16,
+            "standardDeviation": 0.583
+          }
+        },
+        "512000": {
+          "initialParseRenderSyncMs": {
+            "coefficientOfVariation": 0.029,
+            "count": 20,
+            "maximum": 238.64,
+            "mean": 221.038,
+            "median": 219.047,
+            "medianAbsoluteDeviation": 2.112,
+            "minimum": 214.595,
+            "p90": 230.22,
+            "p95": 235.06,
+            "standardDeviation": 6.437
+          },
+          "initialParseRenderToPresentationMs": {
+            "coefficientOfVariation": 0.023,
+            "count": 20,
+            "maximum": 408.125,
+            "mean": 382.782,
+            "median": 379.688,
+            "medianAbsoluteDeviation": 3.485,
+            "minimum": 374.7,
+            "p90": 393.55,
+            "p95": 399.465,
+            "standardDeviation": 8.727
+          },
+          "codecParseMs": {
+            "coefficientOfVariation": 0.173,
+            "count": 20,
+            "maximum": 42.485,
+            "mean": 29.746,
+            "median": 26.585,
+            "medianAbsoluteDeviation": 0.568,
+            "minimum": 25.915,
+            "p90": 37.045,
+            "p95": 37.68,
+            "standardDeviation": 5.161
+          },
+          "codecSerializeMs": {
+            "coefficientOfVariation": 0.046,
+            "count": 20,
+            "maximum": 113.265,
+            "mean": 102.174,
+            "median": 101.377,
+            "medianAbsoluteDeviation": 2.3,
+            "minimum": 95.9,
+            "p90": 109.825,
+            "p95": 112.625,
+            "standardDeviation": 4.732
+          },
+          "keydownToPresentationProxyMs": {
+            "coefficientOfVariation": 0.042,
+            "count": 20,
+            "maximum": 149.995,
+            "mean": 132.334,
+            "median": 131.838,
+            "medianAbsoluteDeviation": 2.24,
+            "minimum": 121.895,
+            "p90": 135.985,
+            "p95": 139.63,
+            "standardDeviation": 5.527
+          },
+          "dirtyTeardownMs": {
+            "coefficientOfVariation": 0.038,
+            "count": 20,
+            "maximum": 160.3,
+            "mean": 144.784,
+            "median": 143.858,
+            "medianAbsoluteDeviation": 2.718,
+            "minimum": 139.06,
+            "p90": 148.245,
+            "p95": 158.04,
+            "standardDeviation": 5.449
+          }
+        },
+        "1048576": {
+          "initialParseRenderSyncMs": {
+            "coefficientOfVariation": 0.03,
+            "count": 20,
+            "maximum": 640.705,
+            "mean": 590.02,
+            "median": 584.575,
+            "medianAbsoluteDeviation": 4.43,
+            "minimum": 568.98,
+            "p90": 610.795,
+            "p95": 633.625,
+            "standardDeviation": 17.822
+          },
+          "initialParseRenderToPresentationMs": {
+            "coefficientOfVariation": 0.025,
+            "count": 20,
+            "maximum": 964.15,
+            "mean": 891.725,
+            "median": 885.788,
+            "medianAbsoluteDeviation": 6.392,
+            "minimum": 866.225,
+            "p90": 919.785,
+            "p95": 934.235,
+            "standardDeviation": 22.669
+          },
+          "codecParseMs": {
+            "coefficientOfVariation": 0.178,
+            "count": 20,
+            "maximum": 93.735,
+            "mean": 73.096,
+            "median": 71.907,
+            "medianAbsoluteDeviation": 5.895,
+            "minimum": 47.08,
+            "p90": 86.385,
+            "p95": 88.56,
+            "standardDeviation": 13.021
+          },
+          "codecSerializeMs": {
+            "coefficientOfVariation": 0.026,
+            "count": 20,
+            "maximum": 410.225,
+            "mean": 392.13,
+            "median": 393.718,
+            "medianAbsoluteDeviation": 8.008,
+            "minimum": 373.575,
+            "p90": 403.555,
+            "p95": 408.42,
+            "standardDeviation": 10.013
+          },
+          "keydownToPresentationProxyMs": {
+            "coefficientOfVariation": 0.042,
+            "count": 20,
+            "maximum": 479.32,
+            "mean": 438.341,
+            "median": 434.977,
+            "medianAbsoluteDeviation": 11.28,
+            "minimum": 411.475,
+            "p90": 457.38,
+            "p95": 477.045,
+            "standardDeviation": 18.315
+          },
+          "dirtyTeardownMs": {
+            "coefficientOfVariation": 0.043,
+            "count": 20,
+            "maximum": 537.52,
+            "mean": 476.746,
+            "median": 469.768,
+            "medianAbsoluteDeviation": 12.892,
+            "minimum": 452.935,
+            "p90": 498.51,
+            "p95": 501.52,
+            "standardDeviation": 20.349
+          }
+        }
+      },
+      "warmups": [
+        {
+          "metrics": {
+            "codecParseMs": 7.694999992847443,
+            "codecSerializeMs": 4.264999985694885,
+            "dirtyTeardownMs": 12.590000003576279,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 24,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 54.77999997138977,
+            "initialParseRenderToPresentationMs": 102.5,
+            "keydownToPresentationProxyMs": 13.370000004768372
+          },
+          "round": 0,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 37.83500000834465,
+            "codecSerializeMs": 101.56499999761581,
+            "dirtyTeardownMs": 140.4800000190735,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 136,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 219.41499999165535,
+            "initialParseRenderToPresentationMs": 380.22999998927116,
+            "keydownToPresentationProxyMs": 133.4249999821186
+          },
+          "round": 0,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 70.11500000953674,
+            "codecSerializeMs": 404.1550000011921,
+            "dirtyTeardownMs": 460.7900000214577,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 440,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 573.4549999833107,
+            "initialParseRenderToPresentationMs": 878.2099999785423,
+            "keydownToPresentationProxyMs": 440.9099999964237
+          },
+          "round": 0,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 25.890000015497208,
+            "codecSerializeMs": 97.43499997258186,
+            "dirtyTeardownMs": 141.58500000834465,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 152,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 245.19000002741814,
+            "initialParseRenderToPresentationMs": 424.1400000154972,
+            "keydownToPresentationProxyMs": 149.2049999833107
+          },
+          "round": 1,
+          "targetBytes": 512000
+        },
+        {
+          "metrics": {
+            "codecParseMs": 69.51999998092651,
+            "codecSerializeMs": 388.1399999856949,
+            "dirtyTeardownMs": 470.00999999046326,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 424,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 586.8599999845028,
+            "initialParseRenderToPresentationMs": 884.5250000059605,
+            "keydownToPresentationProxyMs": 431.625
+          },
+          "round": 1,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.764999985694885,
+            "codecSerializeMs": 4.215000003576279,
+            "dirtyTeardownMs": 12.680000007152557,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 55.57499998807907,
+            "initialParseRenderToPresentationMs": 104.13499999046326,
+            "keydownToPresentationProxyMs": 13.639999985694885
+          },
+          "round": 1,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 86.375,
+            "codecSerializeMs": 399.22499999403954,
+            "dirtyTeardownMs": 459.69499999284744,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 416,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 602.4499999880791,
+            "initialParseRenderToPresentationMs": 902.8350000083447,
+            "keydownToPresentationProxyMs": 408.5900000035763
+          },
+          "round": 2,
+          "targetBytes": 1048576
+        },
+        {
+          "metrics": {
+            "codecParseMs": 7.949999988079071,
+            "codecSerializeMs": 4.66499999165535,
+            "dirtyTeardownMs": 13.689999997615814,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 16,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 54.894999980926514,
+            "initialParseRenderToPresentationMs": 101.9249999821186,
+            "keydownToPresentationProxyMs": 13.115000009536743
+          },
+          "round": 2,
+          "targetBytes": 102400
+        },
+        {
+          "metrics": {
+            "codecParseMs": 35.929999977350235,
+            "codecSerializeMs": 104.63999998569489,
+            "dirtyTeardownMs": 151.5649999976158,
+            "eventTimingCensoredBelowMs": null,
+            "eventTimingDurationMs": 136,
+            "eventTimingSupported": true,
+            "initialParseRenderSyncMs": 215.9050000011921,
+            "initialParseRenderToPresentationMs": 376.6899999976158,
+            "keydownToPresentationProxyMs": 130.1550000011921
+          },
+          "round": 2,
+          "targetBytes": 512000
+        }
+      ]
+    }
+  },
+  "schemaVersion": 1,
+  "status": "passed"
+}
