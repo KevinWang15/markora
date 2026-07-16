@@ -89,6 +89,7 @@ import type { TableCellInfo } from "./tableTypes";
 import type { ActiveImageInfo, EditorUiControllers, ImageEditorOverlay, LinkEditorOverlay, TableToolbarOverlay } from "./uiTypes";
 import { createNoopUiControllers } from "./uiTypes";
 import { createTaskListHelpers } from "./taskListUtils";
+import { createTaskListItemViewClass } from "./taskListItemView";
 import { createStructuralCommandSet } from "./structuralCommands";
 import { createMediaActionHelpers } from "./mediaActionUtils";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
@@ -351,10 +352,15 @@ function blurElement(element: Element | null) {
 
 function syncReadonlyControls(view: EditorView) {
   const editable = view.editable;
+  const ownerWindow = view.dom.ownerDocument.defaultView;
 
   for (const control of view.dom.querySelectorAll<HTMLElement>('[data-mdw-task-control="true"]')) {
     control.setAttribute("aria-disabled", editable ? "false" : "true");
     control.tabIndex = editable ? 0 : -1;
+
+    if (ownerWindow && control instanceof ownerWindow.HTMLButtonElement) {
+      control.disabled = !editable;
+    }
   }
 }
 
@@ -387,9 +393,8 @@ function createSchemaRuntimeHelpers(
 const { schema } = codec;
 const { createTableCellContentFromMarkdown } = codec;
 const {
+  handleNativeTaskControlKeyDown,
   maybeToggleTaskListItem,
-  scheduleTaskControlFocusAfterHistoryShortcut,
-  shouldUseNativeTaskControlTab,
 } = createTaskListHelpers(schema);
 const {
   canSetLink,
@@ -736,9 +741,8 @@ const { convertPipeTable } = createPipeTableHelpers({
 });
 
   return {
+    handleNativeTaskControlKeyDown,
     maybeToggleTaskListItem,
-    scheduleTaskControlFocusAfterHistoryShortcut,
-    shouldUseNativeTaskControlTab,
     canSetLink,
     setLink,
     canInsertImage,
@@ -825,9 +829,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     : createMinimalMarkdownCodec(extensionResolution.extensions, resources);
   const { schema } = codec;
   const {
+    handleNativeTaskControlKeyDown,
     maybeToggleTaskListItem,
-    scheduleTaskControlFocusAfterHistoryShortcut,
-    shouldUseNativeTaskControlTab,
     canSetLink,
     setLink,
     canInsertImage,
@@ -1133,6 +1136,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     moveBeforeManagedBlock,
     setManagedBlockBoundarySelection,
   });
+  const TaskListItemView = createTaskListItemViewClass(schema.nodes.list_item);
   const RawBlockView = createOpaqueNodeViewClass({
     display: "block",
     getOnEdit: () => runtimeOptions.onEditOpaqueMarkdown,
@@ -1300,11 +1304,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       tableToolbar,
       enableDefaultUi: uiEnabled,
       convertFenceToCodeBlock: (view) => convertFenceToCodeBlock(schema, view),
+      handleNativeTaskControlKeyDown,
       maybeExtendSelectionAcrossCodeBlock,
       escapeBoundaryMark,
       maybeToggleTaskListItem,
-      scheduleTaskControlFocusAfterHistoryShortcut,
-      shouldUseNativeTaskControlTab,
       maybeOpenImage,
       maybeOpenLink,
       maybeEditActiveImage,
@@ -2209,6 +2212,11 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       editable: () => runtimeOptions.editable,
       state: initialState,
       nodeViews: {
+        ...(usesCompatibilityPreset ? {
+          list_item(node: ProseMirrorNode, targetView: EditorView) {
+            return new TaskListItemView(node, targetView);
+          },
+        } : {}),
         ...(usesCompatibilityPreset ? {
           code_block(node: ProseMirrorNode, targetView: EditorView, getPos: () => number | undefined) {
             return new CodeBlockView(node, targetView, getPos as () => number);

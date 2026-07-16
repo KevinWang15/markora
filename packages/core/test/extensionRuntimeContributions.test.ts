@@ -696,6 +696,28 @@ describe("extension runtime contribution lanes", () => {
     expect(element.childNodes).toHaveLength(0);
   });
 
+  it("lets an explicit extension NodeView override the compatibility task item view", () => {
+    const extension = runtimeExtension("acme-list-item-view", () => ({
+      nodeViews: [{
+        id: "list-item",
+        node: "list_item",
+        create: ({ ownerDocument }) => () => {
+          const dom = ownerDocument.createElement("li");
+          dom.dataset.extensionListItem = "true";
+          return { contentDOM: dom, dom };
+        },
+      }],
+    }));
+    const editor = track(createEditor({
+      element: host(),
+      extensions: [extension],
+      markdown: "* [ ] overridden task",
+    }));
+
+    expect(editor.view.dom.querySelector('[data-extension-list-item="true"]')).not.toBeNull();
+    expect(editor.view.dom.querySelector('[data-mdw-task-control="true"]')).toBeNull();
+  });
+
   it.each([
     {
       code: "EXTENSION_RUNTIME_FAILED",

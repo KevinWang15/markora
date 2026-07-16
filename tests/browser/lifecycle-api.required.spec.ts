@@ -244,6 +244,37 @@ test("@required dynamic read-only mode covers ProseMirror, CodeMirror, tasks, co
   expect(await resetEditor(labPage, id, "external replacement")).toBe("external replacement");
 });
 
+test("@required read-only reconciliation constructs a disabled native task control", async ({ labPage }) => {
+  const id = "lifecycle-readonly-reconciled-task";
+  await mountEditor(labPage, {
+    editable: false,
+    id,
+    markdown: "ordinary",
+  });
+
+  const reconciled = await reconcileEditor(labPage, id, "* [ ] inserted while read-only");
+  expect(reconciled.changed).toBe(true);
+  const task = editorLocator(labPage, id).getByRole("checkbox", {
+    name: "inserted while read-only",
+  });
+  await expect(task).toHaveAttribute("type", "button");
+  await expect(task).toHaveAttribute("aria-disabled", "true");
+  await expect(task).toHaveAttribute("tabindex", "-1");
+  await expect(task).toBeDisabled();
+
+  const beforeClick = await snapshotEditor(labPage, id);
+  await task.evaluate((element) => (element as HTMLButtonElement).click());
+  await settleEditor(labPage, id);
+  const afterClick = await snapshotEditor(labPage, id);
+  expect(afterClick.transactionCount).toBe(beforeClick.transactionCount);
+  expect(afterClick.markdown).toBe("* [ ] inserted while read-only");
+
+  expect((await updateEditorOptions(labPage, id, { editable: true })).statePreserved).toBe(true);
+  await expect(task).toBeEnabled();
+  await expect(task).toHaveAttribute("aria-disabled", "false");
+  await expect(task).toHaveAttribute("tabindex", "0");
+});
+
 test("@required reconciled external updates preserve caret, focus, history, and controlled-host boundaries", async ({ labPage }) => {
   const id = "lifecycle-reconcile";
   await mountEditor(labPage, {

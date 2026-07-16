@@ -301,9 +301,8 @@ export function createMarkBoundaryPlugin(options: {
   convertFenceToCodeBlock: (view: EditorView) => boolean;
   maybeExtendSelectionAcrossCodeBlock: (view: EditorView, direction: -1 | 1) => boolean;
   escapeBoundaryMark: (view: EditorView, direction: "left" | "right") => boolean;
-  maybeToggleTaskListItem: (view: EditorView, pos: number, event: MouseEvent | KeyboardEvent) => boolean;
-  scheduleTaskControlFocusAfterHistoryShortcut: (view: EditorView, event: KeyboardEvent) => boolean;
-  shouldUseNativeTaskControlTab: (view: EditorView, event: KeyboardEvent) => boolean;
+  handleNativeTaskControlKeyDown: (view: EditorView, event: KeyboardEvent) => boolean;
+  maybeToggleTaskListItem: (view: EditorView, pos: number, event: MouseEvent) => boolean;
   maybeOpenImage: (view: EditorView, event: MouseEvent) => boolean;
   maybeOpenLink: (view: EditorView, event: MouseEvent) => boolean;
   maybeEditActiveImage: (view: EditorView, event: MouseEvent, imageEditor: ImageEditorOverlay) => boolean;
@@ -320,6 +319,7 @@ export function createMarkBoundaryPlugin(options: {
     escapeBoundaryMark,
     getActiveImageInfo,
     getMarkInfo,
+    handleNativeTaskControlKeyDown,
     imageEditor,
     linkEditor,
     maybeEditActiveImage,
@@ -331,8 +331,6 @@ export function createMarkBoundaryPlugin(options: {
     onDestroyError,
     onInitializeError,
     onUpdateError,
-    scheduleTaskControlFocusAfterHistoryShortcut,
-    shouldUseNativeTaskControlTab,
     tableToolbar,
   } = options;
 
@@ -340,13 +338,12 @@ export function createMarkBoundaryPlugin(options: {
     props: {
       handleDOMEvents: {
         keydown(view, event) {
-          if (shouldUseNativeTaskControlTab(view, event)) {
+          if (handleNativeTaskControlKeyDown(view, event)) {
             // Returning true from handleDOMEvents skips ProseMirror's keymaps
-            // without cancelling the browser's native sequential focus move.
+            // without cancelling native button activation or sequential focus.
             return true;
           }
 
-          scheduleTaskControlFocusAfterHistoryShortcut(view, event);
           return false;
         },
         mousedown(view, event) {
@@ -373,10 +370,6 @@ export function createMarkBoundaryPlugin(options: {
       handleKeyDown(view, event) {
         if (!view.editable) {
           return false;
-        }
-
-        if (maybeToggleTaskListItem(view, view.state.selection.from, event)) {
-          return true;
         }
 
         if (event.key === "Enter" && convertFenceToCodeBlock(view)) {

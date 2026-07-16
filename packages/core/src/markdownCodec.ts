@@ -55,7 +55,7 @@ function createTaskControlIds() {
   nextTaskControlId += 1;
   return {
     content: `mdw-task-content-${nextTaskControlId}`,
-    state: `mdw-task-state-${nextTaskControlId}`,
+    label: `mdw-task-label-${nextTaskControlId}`,
   };
 }
 
@@ -110,23 +110,26 @@ const taskListItemSpec = listItemSpec
               "data-checked": checked ? "true" : "false",
             },
             [
-              "span",
+              "button",
               {
                 "aria-checked": checked ? "true" : "false",
-                "aria-labelledby": `${ids.state} ${ids.content}`,
+                "aria-disabled": "false",
+                "aria-labelledby": `${ids.label} ${ids.content}`,
                 "class": "mdw-task-checkbox",
                 "contenteditable": "false",
                 "data-mdw-task-control": "true",
                 "role": "checkbox",
                 "tabindex": "0",
+                "type": "button",
               },
               [
                 "span",
                 {
                   "class": "mdw-task-checkbox-state",
-                  "id": ids.state,
+                  "hidden": "",
+                  "id": ids.label,
                 },
-                checked ? "Completed task:" : "Incomplete task:",
+                "Task:",
               ],
             ],
             [

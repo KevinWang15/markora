@@ -2,6 +2,8 @@
 
 Run this checklist for release candidates that change input handling, editor DOM, overlays, tasks, tables, managed blocks, focus, or positioning. Keep one record per operating-system, browser, assistive-technology, input-method, and zoom combination.
 
+The automated Chromium/Firefox/WebKit keyboard, accessibility-tree, Shadow DOM, and axe suite is a prerequisite, not a completed run record. Implementation work must leave these boxes blank unless a tester actually performed the named operating-system, browser, assistive-technology, IME, and zoom combination.
+
 ## Required matrix
 
 | Platform | Browser | Assistive technology | Minimum input coverage |
@@ -56,23 +58,26 @@ Record exact versions. Add iOS Safari + VoiceOver and Android Chrome + TalkBack 
 
 ## Tasks
 
-- [ ] Reach every task checkbox by Tab and hear its task text and checked state.
+- [ ] Reach every task checkbox by Tab and hear its task text and checked state; toggling changes the state announcement without replacing the task-text name.
 - [ ] Toggle with Space, Enter, touch, and the screen reader's default activation command; each action changes state exactly once.
-- [ ] Confirm focus remains usable after toggling and Undo restores the prior state.
+- [ ] Confirm focus remains on the same logical control after toggling, Undo, and Redo, while the contenteditable selection remains unchanged.
+- [ ] Switch the editor to read-only and reconcile in a new task; its checkbox is announced disabled and is absent from sequential Tab order.
 - [ ] At 200% zoom and with touch exploration, confirm the entire 44-pixel target activates the intended task only.
 
 ## Link and image dialogs
 
-- [ ] Open each dialog from the host's keyboard command and hear its name; focus starts in the primary URL input.
+- [ ] Open each non-modal dialog from the host's keyboard command and hear its name; focus starts in the selected primary URL input while surrounding page content remains available.
 - [ ] Traverse every input and button in visual order.
 - [ ] Press Enter on Save, Cancel, Unlink, and Remove; the focused button's own action runs.
 - [ ] Press Escape from an input and from a button; the dialog closes without mutation and editor focus/selection returns.
+- [ ] Repeat Escape and a successful save while a capture-phase host handler moves focus elsewhere; the host target keeps focus and no stale dialog session reclaims it.
 - [ ] Enter an unsafe URL; hear an error tied to the invalid field, then correct it and confirm the error clears.
 - [ ] Repeat while the dialog is above, below, and partially constrained by the active visual viewport.
 
 ## Table toolbar
 
 - [ ] Enter the toolbar as one Tab stop and hear “Table controls.”
+- [ ] Hear “Column alignment” as the grouping context for left, center, and right alignment.
 - [ ] Use Left/Right, Home, and End to reach all eight controls without returning to the editor after every action.
 - [ ] Hear pressed/not-pressed state for left, center, and right alignment.
 - [ ] Insert/delete a row and column and confirm focus remains on a predictable surviving control.
@@ -114,4 +119,4 @@ Record exact versions. Add iOS Safari + VoiceOver and Android Chrome + TalkBack 
 
 ## Completion rule
 
-A checked box means the observed result matched [the embedded input and accessibility contract](./input-accessibility-certification.md). For any mismatch, mark the run `FAIL`, capture the smallest Markdown/host configuration that reproduces it, attach the browser/AT versions, and link an issue. A headless axe pass is supporting evidence, never a substitute for this record.
+A checked box means the named interaction was personally observed and matched [the embedded input and accessibility contract](./input-accessibility-certification.md). For any mismatch, mark the run `FAIL`, capture the smallest Markdown/host configuration that reproduces it, attach the browser/AT versions, and link an issue. A headless keyboard or axe pass is supporting evidence, never a substitute for this record.

@@ -98,8 +98,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-013 | DONE | S | Establish document-size, latency, memory, and bundle budgets |
 | EE-014 | DONE | M | Remove synchronous full-document serialization from hot typing paths |
 | EE-015 | DONE | L | Lazily activate CodeMirror blocks and reduce base bundle cost |
-| EE-016 | NEXT | M | Make task and overlay interactions keyboard and screen-reader complete |
-| EE-017 | QUEUED | M | Add deliberate Markdown, rich HTML, and plain-text clipboard behavior |
+| EE-016 | DONE | M | Make task and overlay interactions keyboard and screen-reader complete |
+| EE-017 | NEXT | M | Add deliberate Markdown, rich HTML, and plain-text clipboard behavior |
 | EE-018 | QUEUED | L | Add mature table resize, reorder, selection, and keyboard operations |
 | EE-019 | QUEUED | M | Add configurable auto-pairing, shortcuts, and code-language editing |
 | EE-020 | QUEUED | M | Tokenize styling and add dark, high-contrast, reduced-motion, RTL, and i18n support |
@@ -537,7 +537,7 @@ Avoid paying the full code-editor cost for every fence and every consumer.
 
 ### EE-016 — Complete keyboard and screen-reader interactions
 
-Status: `NEXT`
+Status: `DONE` (2026-07-17)
 
 #### Goal
 
@@ -551,9 +551,20 @@ Make the supported UI operable without pointer-coordinate assumptions.
 - Preserve contenteditable selection while interacting with controls.
 - Pass the automated and manual checks established in `EE-006`.
 
+#### Completion notes
+
+- Compatibility task items now render through a stable native `<button type="button" role="checkbox">` NodeView. The task text is its stable accessible name, checked state remains separate in `aria-checked`, read-only state uses native and ARIA disabled semantics, and checked/text updates, undo, and redo preserve the same control. Space, Enter, pointer, touch-compatible, and assistive-technology-style activation produce exactly one transaction without changing the ProseMirror selection or reclaiming focus from a synchronous host handoff.
+- The compatibility NodeView is owner-document and ShadowRoot safe, adds no per-item listeners or deferred refocus work, and yields to an explicit extension-provided `list_item` NodeView. Read-only reconciliation constructs an immediately disabled control instead of leaving a newly inserted task in the Tab order.
+- Link and image editors are explicitly named non-modal dialogs. Opening selects the primary URL, Enter follows native input/button behavior, Escape cancels, composition keys are ignored, validation remains associated with the invalid input, and outside-pointer dismissal preserves the chosen host target. Session/version guards keep synchronous command callbacks from closing a replacement dialog or restoring focus over an intervening host action; teardown is idempotent and releases the exact captured visual-viewport listeners.
+- The table UI is a named horizontal toolbar with a single roving Tab stop and a named column-alignment group. Arrow keys plus Home/End traverse all controls, alignment buttons expose pressed state, structural actions keep predictable surviving-button focus, and Escape or table deletion returns to the editor only when the host has not moved focus elsewhere. Primary pointer interaction preserves the contenteditable selection, while read-only transitions and destruction close the surface safely.
+- Retained tests cover exact transaction and selection behavior, native and assistive-technology-style task activation, read-only reconciliation, dialog validation/reentrancy/outside dismissal, table mutations, deep focus restoration, foreign DOM realms, document and Shadow DOM roots, and axe. The required production-preview matrix passes 109 cases in Chromium, Firefox, and WebKit with 14 intentional engine-specific skips.
+- The accessibility contract and manual VoiceOver/NVDA checklist now describe the delivered semantics and focus-handoff rules. Automated keyboard, accessibility-tree, and axe evidence deliberately does not mark an operating-system assistive-technology run complete; release candidates and embedding hosts must still record the required real AT matrix rather than treating headless automation as certification.
+- Performance and package gates remain within the `EE-013` failure budgets. The packed graph reports 811,335 raw / 223,571 gzip initial compatibility JavaScript, 1,890,063 raw / 562,393 gzip total JavaScript, and 16,827 raw / 3,260 gzip CSS; the minimal graph is unchanged. `pnpm perf:ci` passes all latency, memory, teardown, and bundle checks with zero retained nodes, listeners, or documents.
+- Final verification: `pnpm check` passes 866 tests plus every build, type, declaration, and Node ESM check; `pnpm build`, `pnpm pack:smoke`, and `pnpm perf:ci` pass; the required production-preview suite passes 109 cases with 14 intentional engine-specific skips; and `git diff --check` passes.
+
 ### EE-017 — Add deliberate clipboard semantics
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -659,6 +670,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-015` are complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, including the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, and lazy code-editor foundations.
+`EE-001` through `EE-016` are complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, and Gate C now has its keyboard and screen-reader interaction foundation. Completed work includes the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, lazy code-editor, and semantic embedded-control foundations.
 
-The next iteration is `EE-016 — Complete keyboard and screen-reader interactions`.
+The next iteration is `EE-017 — Add deliberate clipboard semantics`.

@@ -273,17 +273,17 @@ describe('task list accessibility', () => {
     const taskControl = taskItem?.querySelector<HTMLElement>('[data-mdw-task-control="true"]');
     expect(taskItem).toBeInstanceOf(HTMLElement);
     expect(taskItem?.getAttribute('role')).toBeNull();
+    expect(taskControl?.tagName).toBe('BUTTON');
+    expect(taskControl?.getAttribute('type')).toBe('button');
     expect(taskControl?.getAttribute('role')).toBe('checkbox');
     expect(taskControl?.getAttribute('aria-checked')).toBe('true');
+    expect(taskControl?.getAttribute('aria-disabled')).toBe('false');
+    expect(taskControl?.getAttribute('aria-label')).toBe('done');
+    expect(taskControl?.getAttribute('aria-labelledby')).toBeNull();
     expect(taskControl?.tabIndex).toBe(0);
-
-    const labelledBy = taskControl?.getAttribute('aria-labelledby')?.split(/\s+/) ?? [];
-    expect(labelledBy).toHaveLength(2);
-    expect(labelledBy.map((id) => editor.view.dom.ownerDocument.getElementById(id)?.textContent).join(' '))
-      .toBe('Completed task: done');
   });
 
-  it('toggles from the keyboard, keeps checkbox focus, and remains undoable', async () => {
+  it('keeps selection and native checkbox identity through activation, undo, and redo', async () => {
     const editor = createEditor({
       element: createHost(),
       markdown: '- [ ] todo',
@@ -291,17 +291,22 @@ describe('task list accessibility', () => {
     const getControl = () => editor.view.dom.querySelector<HTMLElement>('[data-mdw-task-control="true"]');
     const control = getControl();
     expect(control).not.toBeNull();
+    const initialSelection = editor.view.state.selection;
     control?.focus();
-    control?.dispatchEvent(new KeyboardEvent('keydown', {
+    const space = new KeyboardEvent('keydown', {
       bubbles: true,
       cancelable: true,
       key: ' ',
-    }));
-    await Promise.resolve();
+    });
+    control?.dispatchEvent(space);
+    control?.click();
 
+    expect(space.defaultPrevented).toBe(false);
     expect(editor.getMarkdown()).toBe('* [x] todo');
     expect(getControl()?.getAttribute('aria-checked')).toBe('true');
+    expect(getControl()).toBe(control);
     expect(document.activeElement).toBe(getControl());
+    expect(editor.view.state.selection.eq(initialSelection)).toBe(true);
 
     const undoEvent = new KeyboardEvent('keydown', {
       bubbles: true,
@@ -315,7 +320,9 @@ describe('task list accessibility', () => {
     expect(undoEvent.defaultPrevented).toBe(true);
     expect(editor.getMarkdown()).toBe('* [ ] todo');
     expect(getControl()?.getAttribute('aria-checked')).toBe('false');
+    expect(getControl()).toBe(control);
     expect(document.activeElement).toBe(getControl());
+    expect(editor.view.state.selection.eq(initialSelection)).toBe(true);
 
     const redoEvent = new KeyboardEvent('keydown', {
       bubbles: true,
@@ -330,7 +337,9 @@ describe('task list accessibility', () => {
     expect(redoEvent.defaultPrevented).toBe(true);
     expect(editor.getMarkdown()).toBe('* [x] todo');
     expect(getControl()?.getAttribute('aria-checked')).toBe('true');
+    expect(getControl()).toBe(control);
     expect(document.activeElement).toBe(getControl());
+    expect(editor.view.state.selection.eq(initialSelection)).toBe(true);
   });
 
   it('leaves Tab and Shift-Tab on task controls to native focus navigation', () => {
@@ -369,7 +378,8 @@ describe('task list accessibility', () => {
       editor.view.state.doc.content,
     ));
 
-    expect(container.textContent).toContain('Completed task:');
+    expect(container.textContent).toContain('Task:');
+    expect(container.querySelector<HTMLElement>('.mdw-task-checkbox-state')?.hidden).toBe(true);
     const reparsed = ProseMirrorDOMParser.fromSchema(editor.view.state.schema).parse(container);
     expect(reparsed.textContent).toBe('done');
     expect(reparsed.firstChild?.firstChild?.attrs.checked).toBe(true);

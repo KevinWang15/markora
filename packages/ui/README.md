@@ -6,9 +6,9 @@ Optional default overlays and table controls for `markora`.
 
 ## What it adds
 
-- link editor overlay
-- image editor overlay
-- table toolbar overlay
+- named non-modal link editor dialog
+- named non-modal image editor dialog
+- one-stop, roving-focus table toolbar
 - Shadow DOM-aware portal placement via `createDefaultUi({ portalRoot })`
 
 ## Install
@@ -55,6 +55,8 @@ const editor = createEditor({
 ## Notes
 
 - `markora-ui` is optional; `markora` remains fully usable without it
+- link and image dialogs select their primary URL on open, submit text inputs with Enter, cancel with Escape, ignore composition keys, and restore editor focus only when the host has not deliberately moved it elsewhere
+- the table toolbar uses Left/Right and Home/End navigation, exposes alignment through `aria-pressed`, preserves the editor selection while controls own focus, and returns focus with Escape or after deleting the table
 - `markora-ui` does not change parsing or serialization; those guarantees are defined by the [`markora` Markdown compatibility contract](https://github.com/KevinWang15/markora/blob/main/packages/core/MARKDOWN_COMPATIBILITY.md)
 - import `markora-ui/styles.css` whenever you use the default UI package
 - `markora-ui` declares `markora` as a peer dependency and is intended to track the same package version

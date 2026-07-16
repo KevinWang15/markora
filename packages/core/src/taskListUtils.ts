@@ -1,6 +1,13 @@
-import type { Node as ProseMirrorNode, Schema } from "prosemirror-model";
+import type { Schema } from "prosemirror-model";
 import type { EditorState } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
+
+type TaskControlFocusIntent = {
+  control: HTMLElement;
+  documentActiveElement: Element | null;
+  root: Document | ShadowRoot;
+  rootActiveElement: Element | null;
+};
 
 export function createTaskListHelpers(schema: Schema) {
   const taskControlSelector = '[data-mdw-task-control="true"]';
@@ -56,42 +63,84 @@ export function createTaskListHelpers(schema: Schema) {
     return true;
   }
 
-  function focusTaskControl(
+  function captureTaskControlFocusIntent(view: EditorView, control: HTMLElement): TaskControlFocusIntent {
+    const ownerDocument = view.dom.ownerDocument;
+    const ownerWindow = ownerDocument.defaultView;
+    const rootNode = control.getRootNode();
+    const root = ownerWindow && rootNode instanceof ownerWindow.ShadowRoot
+      ? rootNode
+      : ownerDocument;
+
+    return {
+      control,
+      documentActiveElement: ownerDocument.activeElement,
+      root,
+      rootActiveElement: root.activeElement,
+    };
+  }
+
+  function focusWasHandedOff(
     view: EditorView,
-    listItemPos: number,
-    shouldFocus?: (listItem: ProseMirrorNode) => boolean,
+    intent: TaskControlFocusIntent,
   ) {
-    queueMicrotask(() => {
-      if (view.isDestroyed || !view.editable) {
-        return;
-      }
+    const ownerDocument = view.dom.ownerDocument;
+    const ownerWindow = ownerDocument.defaultView;
+    const rootActiveElement = intent.root.activeElement;
+    const allowedRootElements = new Set<Element | null>([
+      null,
+      intent.control,
+      intent.rootActiveElement,
+      ownerDocument.body,
+    ]);
 
-      const currentListItem = view.state.doc.nodeAt(listItemPos);
+    if (
+      rootActiveElement?.isConnected
+      && !allowedRootElements.has(rootActiveElement)
+    ) {
+      return true;
+    }
 
-      if (!currentListItem || (shouldFocus && !shouldFocus(currentListItem))) {
-        return;
-      }
+    if (!(ownerWindow && intent.root instanceof ownerWindow.ShadowRoot)) {
+      return false;
+    }
 
-      let listItemDom: Node | null = null;
+    const documentActiveElement = ownerDocument.activeElement;
+    const allowedDocumentElements = new Set<Element | null>([
+      null,
+      intent.documentActiveElement,
+      intent.root.host,
+      ownerDocument.body,
+    ]);
 
-      try {
-        listItemDom = view.nodeDOM(listItemPos);
-      } catch {
-        return;
-      }
+    return Boolean(
+      documentActiveElement?.isConnected
+      && !allowedDocumentElements.has(documentActiveElement),
+    );
+  }
 
-      const ownerWindow = view.dom.ownerDocument.defaultView;
+  function hasInitialExternalFocus(view: EditorView, intent: TaskControlFocusIntent) {
+    const ownerDocument = view.dom.ownerDocument;
+    const ownerWindow = ownerDocument.defaultView;
+    const rootActiveElement = intent.rootActiveElement;
 
-      if (!(ownerWindow && listItemDom instanceof ownerWindow.HTMLElement)) {
-        return;
-      }
+    if (
+      rootActiveElement?.isConnected
+      && rootActiveElement !== ownerDocument.body
+      && !view.dom.contains(rootActiveElement)
+    ) {
+      return true;
+    }
 
-      const control = listItemDom.querySelector(taskControlSelector);
+    if (!(ownerWindow && intent.root instanceof ownerWindow.ShadowRoot)) {
+      return false;
+    }
 
-      if (control instanceof ownerWindow.HTMLElement) {
-        control.focus();
-      }
-    });
+    const documentActiveElement = intent.documentActiveElement;
+    return Boolean(
+      documentActiveElement?.isConnected
+      && documentActiveElement !== ownerDocument.body
+      && documentActiveElement !== intent.root.host,
+    );
   }
 
   function getTaskListItemForControl(view: EditorView, control: HTMLElement, fallbackPos: number) {
@@ -114,56 +163,36 @@ export function createTaskListHelpers(schema: Schema) {
     return listItem ? { ...listItem, resolvedPos } : null;
   }
 
-  function shouldUseNativeTaskControlTab(view: EditorView, event: KeyboardEvent) {
-    return event.key === "Tab"
-      && !event.altKey
-      && !event.ctrlKey
-      && !event.metaKey
-      && !!getOwnedTaskControl(view, event);
-  }
-
-  function scheduleTaskControlFocusAfterHistoryShortcut(view: EditorView, event: KeyboardEvent) {
-    if (!view.editable) {
+  function handleNativeTaskControlKeyDown(view: EditorView, event: KeyboardEvent) {
+    if (!getOwnedTaskControl(view, event)) {
       return false;
     }
 
-    const key = event.key.toLowerCase();
-    const isHistoryShortcut = !event.altKey
-      && (event.ctrlKey || event.metaKey)
-      && (key === "z" || (key === "y" && !event.shiftKey));
+    if (event.key === "Tab") {
+      return !event.altKey && !event.ctrlKey && !event.metaKey;
+    }
 
-    if (!isHistoryShortcut) {
+    if (event.key !== "Enter" && event.key !== " ") {
       return false;
     }
 
-    const control = getOwnedTaskControl(view, event);
-
-    if (!control) {
-      return false;
+    // A real button synthesizes one detail-zero click for Enter or Space.
+    // Keep ProseMirror's keymaps out of that native path, and suppress key
+    // repeat or modified activation before the browser can synthesize clicks.
+    if (
+      event.isComposing
+      || event.repeat
+      || event.altKey
+      || event.ctrlKey
+      || event.metaKey
+    ) {
+      event.preventDefault();
     }
 
-    const listItem = getTaskListItemForControl(view, control, view.state.selection.from);
-
-    if (!listItem) {
-      return false;
-    }
-
-    // History commands run synchronously later in the same keydown dispatch.
-    // Refocus in a microtask so nodeDOM resolves the control rendered by the
-    // resulting state, without taking ownership of the shortcut itself.
-    const previousChecked = listItem.node.attrs.checked;
-    const previousContent = listItem.node.content;
-    const previousType = listItem.node.type;
-    focusTaskControl(view, listItem.pos, (currentListItem) => (
-      currentListItem.type === previousType
-      && currentListItem.content.eq(previousContent)
-      && typeof currentListItem.attrs.checked === "boolean"
-      && currentListItem.attrs.checked !== previousChecked
-    ));
     return true;
   }
 
-  function maybeToggleTaskListItem(view: EditorView, pos: number, event: MouseEvent | KeyboardEvent) {
+  function maybeToggleTaskListItem(view: EditorView, pos: number, event: MouseEvent) {
     if (!view.editable) {
       return false;
     }
@@ -175,23 +204,7 @@ export function createTaskListHelpers(schema: Schema) {
       return false;
     }
 
-    let shouldRefocusControl = false;
-
-    if (event instanceof ownerWindow.KeyboardEvent) {
-      const isActivationKey = event.key === "Enter" || event.key === " " || event.key === "Spacebar";
-
-      if (!isActivationKey || event.altKey || event.ctrlKey || event.metaKey) {
-        return false;
-      }
-
-      event.preventDefault();
-
-      if (event.repeat) {
-        return true;
-      }
-
-      shouldRefocusControl = true;
-    } else if (event instanceof ownerWindow.MouseEvent) {
+    if (event instanceof ownerWindow.MouseEvent) {
       if (event.type === "click") {
         if (event.detail !== 0) {
           event.preventDefault();
@@ -199,7 +212,6 @@ export function createTaskListHelpers(schema: Schema) {
         }
 
         event.preventDefault();
-        shouldRefocusControl = true;
       } else if (
         event.type !== "mousedown"
         || event.button !== 0
@@ -220,14 +232,22 @@ export function createTaskListHelpers(schema: Schema) {
       return false;
     }
 
+    const focusIntent = captureTaskControlFocusIntent(view, control);
+    const preserveInitialHandoff = event.type === "click"
+      && event.detail === 0
+      && hasInitialExternalFocus(view, focusIntent);
     const handled = toggleTaskListItemAtResolvedPos(view, listItem.resolvedPos);
 
-    if (handled && !view.isDestroyed) {
-      if (shouldRefocusControl) {
-        focusTaskControl(view, listItem.pos);
-      } else {
-        view.focus();
-      }
+    if (
+      handled
+      && !view.isDestroyed
+      && view.editable
+      && control.isConnected
+      && view.dom.contains(control)
+      && !preserveInitialHandoff
+      && !focusWasHandedOff(view, focusIntent)
+    ) {
+      control.focus({ preventScroll: true });
     }
 
     return handled;
@@ -236,8 +256,7 @@ export function createTaskListHelpers(schema: Schema) {
   return {
     getTaskListItemAtResolvedPos,
     toggleTaskListItemAtResolvedPos,
+    handleNativeTaskControlKeyDown,
     maybeToggleTaskListItem,
-    scheduleTaskControlFocusAfterHistoryShortcut,
-    shouldUseNativeTaskControlTab,
   };
 }

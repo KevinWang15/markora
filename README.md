@@ -216,6 +216,8 @@ The implemented [extension system RFC](./docs/extension-system-rfc.md) defines t
 
 Hosts preparing a release should also review the [embedded input and accessibility contract](./docs/input-accessibility-certification.md) and run the [assistive-technology checklist](./docs/assistive-technology-checklist.md) on their supported platform matrix.
 
+Compatibility task controls are stable native buttons with checkbox semantics. The optional link/image UI uses named non-modal dialogs, and its table toolbar has one roving Tab stop; all preserve an explicit host focus handoff. The real VoiceOver/NVDA checklist remains a host release obligation even when the automated browser and axe gates pass.
+
 ## Development
 
 ```bash

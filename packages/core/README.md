@@ -324,6 +324,7 @@ A typical integration has four parts:
 Host-facing behavior to keep in mind:
 
 - `ariaLabel` or `ariaLabelledBy` gives the inner editor a host-specific accessible name
+- compatibility task items expose a stable native button with checkbox semantics, a task-text accessible name, separate checked state, exact-once Space/Enter activation, and native disabled behavior in read-only mode
 - `editor.focus()` targets the outer ProseMirror surface; `editor.blur()` blurs whichever owned ProseMirror or CodeMirror surface is active, and lazy activation or boundary-exit work does not reclaim focus after that blur or after a host control takes it
 - `editor.commands.reconcileMarkdown(markdown)` applies an authoritative host snapshot while mapping selection/history and preserving plugin state
 - `editor.commands.resetMarkdown(markdown)` explicitly rebuilds editor state; deprecated `setMarkdown()` remains its hard-reset alias

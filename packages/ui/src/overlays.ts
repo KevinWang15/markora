@@ -56,13 +56,14 @@ function getViewportBounds(doc: Document, win: Window) {
 }
 
 function addViewportListeners(win: Window, listener: () => void) {
-  win.visualViewport?.addEventListener("resize", listener);
-  win.visualViewport?.addEventListener("scroll", listener);
-}
+  const visualViewport = win.visualViewport;
+  visualViewport?.addEventListener("resize", listener);
+  visualViewport?.addEventListener("scroll", listener);
 
-function removeViewportListeners(win: Window, listener: () => void) {
-  win.visualViewport?.removeEventListener("resize", listener);
-  win.visualViewport?.removeEventListener("scroll", listener);
+  return () => {
+    visualViewport?.removeEventListener("resize", listener);
+    visualViewport?.removeEventListener("scroll", listener);
+  };
 }
 
 function isEventInside(event: Event, element: HTMLElement | null, NodeCtor: typeof Node) {
@@ -75,6 +76,51 @@ function isEventInside(event: Event, element: HTMLElement | null, NodeCtor: type
   }
 
   return event.target instanceof NodeCtor && element.contains(event.target);
+}
+
+function descendIntoActiveShadowRoot(activeElement: Element | null, win: BrowserWindow) {
+  const visited = new Set<Element>();
+
+  while (activeElement instanceof win.HTMLElement && activeElement.shadowRoot?.activeElement) {
+    if (visited.has(activeElement)) {
+      break;
+    }
+
+    visited.add(activeElement);
+    activeElement = activeElement.shadowRoot.activeElement;
+  }
+
+  return activeElement;
+}
+
+function getDeepActiveElement(dom: HTMLElement, doc: Document, win: BrowserWindow): Element | null {
+  const root = dom.getRootNode();
+
+  if (root instanceof win.ShadowRoot && root.activeElement) {
+    return descendIntoActiveShadowRoot(root.activeElement, win);
+  }
+
+  return descendIntoActiveShadowRoot(doc.activeElement, win);
+}
+
+function canRestoreEditorFocus(dom: HTMLElement, doc: Document, win: BrowserWindow) {
+  const activeElement = getDeepActiveElement(dom, doc, win);
+
+  return (
+    !activeElement
+    || activeElement === doc.body
+    || activeElement === doc.documentElement
+    || dom.contains(activeElement)
+  );
+}
+
+function restoreEditorFocus(view: EditorView, dom: HTMLElement, doc: Document, win: BrowserWindow) {
+  if (view.isDestroyed || !view.editable || !canRestoreEditorFocus(dom, doc, win)) {
+    return false;
+  }
+
+  view.focus();
+  return true;
 }
 
 function positionOverlay(
@@ -159,6 +205,7 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
   dom.style.display = "none";
   dom.setAttribute("role", "dialog");
   dom.setAttribute("aria-label", "Edit link");
+  dom.setAttribute("aria-modal", "false");
 
   const input = doc.createElement("input");
   input.className = "mdw-link-editor-input";
@@ -189,6 +236,8 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
 
   let activeView: EditorView | null = null;
   let activeMarker: HTMLElement | null = null;
+  let activeSession = 0;
+  let destroyed = false;
 
   const reposition = () => {
     if (!activeMarker) {
@@ -205,13 +254,34 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
 
   const close = (refocusEditor: boolean) => {
     const view = activeView;
+    const shouldRestoreFocus = Boolean(refocusEditor && view && canRestoreEditorFocus(dom, doc, win));
     activeView = null;
     activeMarker = null;
     dom.hidden = true;
     dom.style.display = "none";
 
-    if (refocusEditor && view) {
-      view.focus();
+    if (shouldRestoreFocus && view) {
+      restoreEditorFocus(view, dom, doc, win);
+    }
+  };
+
+  const isCurrentSession = (view: EditorView, session: number) => (
+    activeView === view && activeSession === session
+  );
+
+  const completeAction = (view: EditorView, session: number, refocusEditor: boolean) => {
+    if (activeView && !isCurrentSession(view, session)) {
+      return;
+    }
+
+    const shouldRestoreFocus = refocusEditor && canRestoreEditorFocus(dom, doc, win);
+
+    if (isCurrentSession(view, session)) {
+      close(false);
+    }
+
+    if (shouldRestoreFocus) {
+      restoreEditorFocus(view, dom, doc, win);
     }
   };
 
@@ -246,26 +316,37 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
   };
 
   saveButton.addEventListener("click", () => {
-    if (!activeView || !activeView.editable) {
+    if (!activeView || activeView.isDestroyed || !activeView.editable) {
       close(false);
       return;
     }
-    if (updateLinkHref(activeView, input.value) === false) {
+    const view = activeView;
+    const session = activeSession;
+    const updated = updateLinkHref(view, input.value);
+
+    if (!isCurrentSession(view, session)) {
+      completeAction(view, session, updated);
+      return;
+    }
+
+    if (!updated) {
       input.setAttribute("aria-invalid", "true");
       errorMessage.hidden = false;
       input.focus();
       return;
     }
     clearValidationError();
-    close(true);
+    completeAction(view, session, true);
   });
   unlinkButton.addEventListener("click", () => {
-    if (!activeView || !activeView.editable) {
+    if (!activeView || activeView.isDestroyed || !activeView.editable) {
       close(false);
       return;
     }
-    removeActiveLink(activeView);
-    close(true);
+    const view = activeView;
+    const session = activeSession;
+    removeActiveLink(view);
+    completeAction(view, session, true);
   });
   cancelButton.addEventListener("click", () => close(true));
   dom.addEventListener("keydown", (event) => {
@@ -288,17 +369,18 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
   doc.addEventListener("mousedown", handleDocumentMouseDown, true);
   win.addEventListener("resize", handleWindowChange);
   win.addEventListener("scroll", handleWindowChange, true);
-  addViewportListeners(win, handleWindowChange);
+  const removeVisualViewportListeners = addViewportListeners(win, handleWindowChange);
 
   return {
     open(view, marker, href) {
-      if (!view.editable) {
+      if (destroyed || view.isDestroyed || !view.editable) {
         close(false);
         return;
       }
 
       activeView = view;
       activeMarker = marker;
+      activeSession += 1;
       input.value = href;
       clearValidationError();
       dom.hidden = false;
@@ -309,11 +391,16 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
     },
     close,
     destroy() {
+      if (destroyed) {
+        return;
+      }
+
+      destroyed = true;
       close(false);
       doc.removeEventListener("mousedown", handleDocumentMouseDown, true);
       win.removeEventListener("resize", handleWindowChange);
       win.removeEventListener("scroll", handleWindowChange, true);
-      removeViewportListeners(win, handleWindowChange);
+      removeVisualViewportListeners();
       dom.remove();
     },
   };
@@ -331,6 +418,7 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   dom.style.display = "none";
   dom.setAttribute("role", "dialog");
   dom.setAttribute("aria-label", "Edit image");
+  dom.setAttribute("aria-modal", "false");
 
   const srcInput = doc.createElement("input");
   srcInput.className = "mdw-image-editor-input";
@@ -373,6 +461,8 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
 
   let activeView: EditorView | null = null;
   let activeMarker: HTMLElement | null = null;
+  let activeSession = 0;
+  let destroyed = false;
 
   const reposition = () => {
     if (!activeMarker) return;
@@ -386,11 +476,35 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
 
   const close = (refocusEditor: boolean) => {
     const view = activeView;
+    const shouldRestoreFocus = Boolean(refocusEditor && view && canRestoreEditorFocus(dom, doc, win));
     activeView = null;
     activeMarker = null;
     dom.hidden = true;
     dom.style.display = "none";
-    if (refocusEditor && view) view.focus();
+
+    if (shouldRestoreFocus && view) {
+      restoreEditorFocus(view, dom, doc, win);
+    }
+  };
+
+  const isCurrentSession = (view: EditorView, session: number) => (
+    activeView === view && activeSession === session
+  );
+
+  const completeAction = (view: EditorView, session: number, refocusEditor: boolean) => {
+    if (activeView && !isCurrentSession(view, session)) {
+      return;
+    }
+
+    const shouldRestoreFocus = refocusEditor && canRestoreEditorFocus(dom, doc, win);
+
+    if (isCurrentSession(view, session)) {
+      close(false);
+    }
+
+    if (shouldRestoreFocus) {
+      restoreEditorFocus(view, dom, doc, win);
+    }
   };
 
   const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -419,26 +533,41 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   };
 
   saveButton.addEventListener("click", () => {
-    if (!activeView || !activeView.editable) {
+    if (!activeView || activeView.isDestroyed || !activeView.editable) {
       close(false);
       return;
     }
-    if (updateActiveImage(activeView, { src: srcInput.value, alt: altInput.value, title: titleInput.value }) === false) {
+    const view = activeView;
+    const session = activeSession;
+    const updated = updateActiveImage(view, {
+      src: srcInput.value,
+      alt: altInput.value,
+      title: titleInput.value,
+    });
+
+    if (!isCurrentSession(view, session)) {
+      completeAction(view, session, updated);
+      return;
+    }
+
+    if (!updated) {
       srcInput.setAttribute("aria-invalid", "true");
       errorMessage.hidden = false;
       srcInput.focus();
       return;
     }
     clearValidationError();
-    close(true);
+    completeAction(view, session, true);
   });
   removeButton.addEventListener("click", () => {
-    if (!activeView || !activeView.editable) {
+    if (!activeView || activeView.isDestroyed || !activeView.editable) {
       close(false);
       return;
     }
-    removeActiveImage(activeView);
-    close(true);
+    const view = activeView;
+    const session = activeSession;
+    removeActiveImage(view);
+    completeAction(view, session, true);
   });
   cancelButton.addEventListener("click", () => close(true));
   dom.addEventListener("keydown", (event) => {
@@ -461,17 +590,18 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   doc.addEventListener("mousedown", handleDocumentMouseDown, true);
   win.addEventListener("resize", handleWindowChange);
   win.addEventListener("scroll", handleWindowChange, true);
-  addViewportListeners(win, handleWindowChange);
+  const removeVisualViewportListeners = addViewportListeners(win, handleWindowChange);
 
   return {
     open(view, marker, imageInfo) {
-      if (!view.editable) {
+      if (destroyed || view.isDestroyed || !view.editable) {
         close(false);
         return;
       }
 
       activeView = view;
       activeMarker = marker;
+      activeSession += 1;
       srcInput.value = typeof imageInfo.node.attrs.src === "string" ? imageInfo.node.attrs.src : "";
       altInput.value = typeof imageInfo.node.attrs.alt === "string" ? imageInfo.node.attrs.alt : "";
       titleInput.value = typeof imageInfo.node.attrs.title === "string" ? imageInfo.node.attrs.title : "";
@@ -484,11 +614,16 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
     },
     close,
     destroy() {
+      if (destroyed) {
+        return;
+      }
+
+      destroyed = true;
       close(false);
       doc.removeEventListener("mousedown", handleDocumentMouseDown, true);
       win.removeEventListener("resize", handleWindowChange);
       win.removeEventListener("scroll", handleWindowChange, true);
-      removeViewportListeners(win, handleWindowChange);
+      removeVisualViewportListeners();
       dom.remove();
     },
   };
@@ -528,6 +663,15 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
 
   let activeView: EditorView | null = null;
   let activeMarker: HTMLElement | null = null;
+  let activeContextVersion = 0;
+  let destroyed = false;
+  let focusRestorationVersion = 0;
+
+  const restoreTableEditorFocus = (view: EditorView) => {
+    if (restoreEditorFocus(view, dom, doc, win)) {
+      focusRestorationVersion += 1;
+    }
+  };
 
   const createIcon = (paths: string[], viewBox = "0 0 24 24") => {
     const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -666,8 +810,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
 
   const close = (refocusIfToolbarFocused = true) => {
     const view = activeView;
-    const root = dom.getRootNode();
-    const activeElement = root instanceof win.ShadowRoot ? root.activeElement : doc.activeElement;
+    const activeElement = getDeepActiveElement(dom, doc, win);
     const hadToolbarFocus = activeElement instanceof win.Node && dom.contains(activeElement);
     activeView = null;
     activeMarker = null;
@@ -675,7 +818,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     dom.style.display = "none";
 
     if (refocusIfToolbarFocused && hadToolbarFocus && view) {
-      view.focus();
+      restoreTableEditorFocus(view);
     }
   };
 
@@ -691,7 +834,9 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       }
     }
 
-    event.preventDefault();
+    if (event.button === 0) {
+      event.preventDefault();
+    }
   };
 
   const handleFocusIn = (event: FocusEvent) => {
@@ -703,11 +848,19 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (isComposingKeyboardEvent(event)) {
+      return;
+    }
+
     const currentIndex = toolbarButtons.indexOf(event.target as HTMLButtonElement);
 
     if (event.key === "Escape") {
       event.preventDefault();
-      activeView?.focus();
+      const view = activeView;
+
+      if (view) {
+        restoreTableEditorFocus(view);
+      }
       return;
     }
 
@@ -739,6 +892,8 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
 
   const alignGroup = doc.createElement("div");
   alignGroup.className = "mdw-table-toolbar-group";
+  alignGroup.setAttribute("role", "group");
+  alignGroup.setAttribute("aria-label", "Column alignment");
   alignGroup.append(alignLeftButton, alignCenterButton, alignRightButton);
   dom.append(addColumnButton, removeColumnButton, addRowButton, removeRowButton, alignGroup, removeButton);
   portalRoot.append(dom);
@@ -746,21 +901,63 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   dom.addEventListener("mousedown", handleMouseDown);
   dom.addEventListener("focusin", handleFocusIn);
   dom.addEventListener("keydown", handleKeyDown);
-  addColumnButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; appendTableColumn(view); });
-  removeColumnButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; removeTableColumn(view); });
-  addRowButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; appendTableRow(view); });
-  removeRowButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; removeTableRow(view); });
-  alignLeftButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; setTableColumnAlignment(view, "left"); });
-  alignCenterButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; setTableColumnAlignment(view, "center"); });
-  alignRightButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; setTableColumnAlignment(view, "right"); });
-  removeButton.addEventListener("click", () => { const view = activeView; if (!view?.editable) return; removeActiveTable(view); view.focus(); });
+  const runTableAction = (action: (view: EditorView) => void) => {
+    const view = activeView;
+
+    if (!view || view.isDestroyed || !view.editable) {
+      close();
+      return;
+    }
+
+    action(view);
+  };
+
+  addColumnButton.addEventListener("click", () => runTableAction(appendTableColumn));
+  removeColumnButton.addEventListener("click", () => runTableAction(removeTableColumn));
+  addRowButton.addEventListener("click", () => runTableAction(appendTableRow));
+  removeRowButton.addEventListener("click", () => runTableAction(removeTableRow));
+  alignLeftButton.addEventListener("click", () => runTableAction(
+    (view) => setTableColumnAlignment(view, "left"),
+  ));
+  alignCenterButton.addEventListener("click", () => runTableAction(
+    (view) => setTableColumnAlignment(view, "center"),
+  ));
+  alignRightButton.addEventListener("click", () => runTableAction(
+    (view) => setTableColumnAlignment(view, "right"),
+  ));
+  removeButton.addEventListener("click", () => {
+    const view = activeView;
+
+    if (!view || view.isDestroyed || !view.editable) {
+      close();
+      return;
+    }
+
+    const shouldRestoreFocus = canRestoreEditorFocus(dom, doc, win);
+    const contextVersion = activeContextVersion;
+    const marker = activeMarker;
+    const restorationVersion = focusRestorationVersion;
+    removeActiveTable(view);
+
+    if (activeContextVersion !== contextVersion) {
+      return;
+    }
+
+    if (activeView === view && activeMarker === marker) {
+      close(false);
+    }
+
+    if (shouldRestoreFocus && restorationVersion === focusRestorationVersion) {
+      restoreTableEditorFocus(view);
+    }
+  });
   win.addEventListener("resize", handleWindowChange);
   win.addEventListener("scroll", handleWindowChange, true);
-  addViewportListeners(win, handleWindowChange);
+  const removeVisualViewportListeners = addViewportListeners(win, handleWindowChange);
 
   return {
     update(view) {
-      if (!view.editable) {
+      if (destroyed || view.isDestroyed || !view.editable) {
         close();
         return;
       }
@@ -775,6 +972,11 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
         close();
         return;
       }
+
+      if (activeView !== view || activeMarker !== marker) {
+        activeContextVersion += 1;
+      }
+
       activeView = view;
       activeMarker = marker;
       dom.hidden = false;
@@ -783,13 +985,18 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       reposition();
     },
     destroy() {
+      if (destroyed) {
+        return;
+      }
+
+      destroyed = true;
       close(false);
       dom.removeEventListener("mousedown", handleMouseDown);
       dom.removeEventListener("focusin", handleFocusIn);
       dom.removeEventListener("keydown", handleKeyDown);
       win.removeEventListener("resize", handleWindowChange);
       win.removeEventListener("scroll", handleWindowChange, true);
-      removeViewportListeners(win, handleWindowChange);
+      removeVisualViewportListeners();
       dom.remove();
     },
   };

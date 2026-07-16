@@ -1,6 +1,6 @@
 # Embedded input and accessibility contract
 
-This document defines the input behavior certified by `EE-006`, the typed host setup added by `EE-007`, the headless resource/upload obligations added by `EE-012`, and the passive/lazy code-block behavior added by `EE-015` for Markora in an embedded host. It is a baseline contract, not a claim that a headless browser can replace testing with real input methods or assistive technology.
+This document defines the input behavior certified by `EE-006`, the typed host setup added by `EE-007`, the headless resource/upload obligations added by `EE-012`, the passive/lazy code-block behavior added by `EE-015`, and the semantic embedded controls completed by `EE-016` for Markora in an embedded host. It is a baseline contract, not a claim that a headless browser can replace testing with real input methods or assistive technology.
 
 ## Host setup required for the baseline
 
@@ -85,25 +85,28 @@ Core is headless and deliberately creates no upload progress widget. A host that
 ### Tasks
 
 - A task remains an HTML list item, so list structure and editable task text are preserved.
-- Its separate checkbox control is at least 44 by 44 CSS pixels, is reachable by Tab, is named from the task text, and exposes `aria-checked`.
+- Its separate checkbox is a native button with checkbox semantics. It is at least 44 by 44 CSS pixels, is reachable by Tab, is named only from the current task text (or `Task` when empty), and exposes checked state separately through `aria-checked`.
+- Checked-state, task-text, undo, and redo updates retain the same live control. Read-only tasks use native and ARIA disabled state and leave the sequential Tab order, including tasks introduced by host reconciliation while read-only.
 - Tab and Shift-Tab use native sequential focus order and never invoke the editor's list indent/outdent shortcuts.
 - Primary pointer activation happens before selection-driven layout changes can move the control.
-- Space and Enter toggle exactly once, keep usable focus, and create an undoable document transaction; keyboard undo/redo restores the replacement checkbox's focus when that same task state changes.
+- Space, Enter, pointer activation, and an assistive technology's default activation command toggle exactly once, keep the model selection unchanged, and create one undoable document transaction. A synchronous host focus handoff wins over task refocusing.
 
 ### Link and image editors
 
 - Each overlay is a named non-modal dialog. Opening moves focus to and selects the primary URL input.
 - Enter from a text input saves; native Enter/Space behavior on Save, Cancel, Unlink, and Remove activates the focused button itself.
-- Escape from any child cancels and restores editor focus.
+- Escape from any child cancels and restores editor focus and selection unless a capture-phase host action deliberately moved focus elsewhere.
 - Enter and Escape are ignored by the dialog while an IME composition is active.
 - Invalid URLs retain focus, set `aria-invalid`, and expose an associated alert message; entering a new value clears the error.
 - Outside-pointer dismissal does not steal focus from the element the user chose.
+- Synchronous save/remove callbacks may close or replace a dialog. A replacement session remains open, and delayed cleanup never restores focus over that newer session, a destroyed/read-only editor, or an intervening host focus target. The same rules apply in document, foreign-document, open-ShadowRoot, and closed-ShadowRoot portals.
 - Host `openUrl` behavior must preserve an equivalent accessible navigation affordance; Ctrl/Cmd-click is an enhancement, not a replacement for an ordinary labelled link. Hosts that replace image loading should preserve meaningful `alt` text and expose a useful failure state without leaking authentication details.
 
 ### Table controls
 
-- The table toolbar is a named `toolbar` with one Tab stop. Left/Right arrows move between buttons; Home/End move to the first/last button; Escape returns focus to the editor.
+- The table toolbar is a named horizontal `toolbar` with one Tab stop. Its three alignment controls form a named `Column alignment` group. Left/Right arrows wrap between buttons, Home/End move to the first/last button, and Escape returns focus to the editor.
 - Alignment buttons expose `aria-pressed`. Non-destructive operations retain toolbar focus; deleting the table returns focus to the editor.
+- Toolbar pointer and focus movement preserve the ProseMirror selection. Row/column mutations move the model selection only according to their documented table-command result, retain a predictable surviving control, and never override an intervening host focus handoff.
 - Every editor-owned toolbar target is at least 44 by 44 CSS pixels for coarse pointers.
 - GFM and typed pipe-table headers expose column-header semantics and `scope="col"`. Explicit `scope="row"` or `scope="col"` from pasted HTML is preserved while that table is edited, and column insertion does not turn mixed body rows into column headers. GFM Markdown cannot encode row-header scope, so serialization followed by reload normalizes that extra HTML-only semantic information.
 
@@ -113,7 +116,7 @@ Core is headless and deliberately creates no upload progress widget. A host that
 - From a boundary, Enter inserts an adjacent paragraph, text input inserts a paragraph containing that text, Backspace follows the documented remove/insert behavior, and the inward arrow re-enters the managed block.
 - CodeMirror owns editing and selection while focused; boundary exit returns focus to the outer ProseMirror surface only while focus remains inside the composite editor, and preserves an intervening host focus or blur handoff.
 - Preserved-source Edit buttons are real buttons and invoke only the host source-edit hook.
-- Visual boundary position is currently stronger than screen-reader announcement. Rich live announcements and complete mixed-bidi physical-arrow behavior remain tracked in `EE-016` and `EE-020`; the manual checklist records current AT output rather than assuming it.
+- Visual boundary position is currently stronger than screen-reader announcement. Rich live announcements and complete mixed-bidi physical-arrow behavior remain tracked in `EE-020`; the manual checklist records current AT output rather than assuming it.
 
 ## Mobile viewport and zoom expectations
 
@@ -124,4 +127,4 @@ Core is headless and deliberately creates no upload progress widget. A host that
 
 ## Automated accessibility gate
 
-The Playwright matrix runs axe against production-built fixtures covering headings, a task, link, image, table and toolbar, a passive code-fence shell, active CodeMirror, and preserved source. Axe is supplemented by explicit keyboard, focus, accessible-name/state, target-size, composition, selection, and teardown assertions. Automatic results do not waive the VoiceOver and NVDA checklist in [assistive-technology-checklist.md](./assistive-technology-checklist.md).
+The Playwright matrix runs axe against production-built fixtures covering headings, a task, link, image, table and toolbar, a passive code-fence shell, active CodeMirror, and preserved source. Axe is supplemented by explicit keyboard, exact-transaction, focus-handoff, accessible-name/state, target-size, composition, selection, read-only, reentrancy, Shadow DOM, and teardown assertions in Chromium, Firefox, and WebKit. Automatic results do not waive or pre-check the VoiceOver and NVDA runs in [assistive-technology-checklist.md](./assistive-technology-checklist.md).

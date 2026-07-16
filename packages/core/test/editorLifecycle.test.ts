@@ -292,10 +292,11 @@ describe("production editor options", () => {
       markdown: "---\ntitle: Demo\n---\n\n* [ ] task",
       onEditOpaqueMarkdown: edits,
     }));
-    const task = editor.view.dom.querySelector<HTMLElement>('[data-mdw-task-control="true"]')!;
+    const task = editor.view.dom.querySelector<HTMLButtonElement>('[data-mdw-task-control="true"]')!;
     const opaqueEdit = editor.view.dom.querySelector<HTMLButtonElement>(".mdw-opaque-edit")!;
 
     expect(task.getAttribute("aria-disabled")).toBe("true");
+    expect(task.disabled).toBe(true);
     expect(task.tabIndex).toBe(-1);
     expect(opaqueEdit.disabled).toBe(true);
     task.click();
@@ -305,6 +306,7 @@ describe("production editor options", () => {
 
     editor.updateOptions({ editable: true });
     expect(task.getAttribute("aria-disabled")).toBe("false");
+    expect(task.disabled).toBe(false);
     expect(task.tabIndex).toBe(0);
     expect(opaqueEdit.disabled).toBe(false);
     opaqueEdit.click();
@@ -320,6 +322,25 @@ describe("production editor options", () => {
     expect(opaqueEdit.disabled).toBe(true);
     opaqueEdit.click();
     expect(nextEdits).toHaveBeenCalledTimes(1);
+  });
+
+  it("constructs reconciled task controls with native read-only semantics", () => {
+    const editor = track(createEditor({
+      editable: false,
+      element: createHost(),
+      markdown: "ordinary",
+    }));
+
+    expect(editor.commands.reconcileMarkdown("* [ ] inserted while read-only")).toBe(true);
+    const task = editor.view.dom.querySelector<HTMLButtonElement>('[data-mdw-task-control="true"]');
+    expect(task).not.toBeNull();
+    expect(task?.getAttribute("aria-label")).toBe("inserted while read-only");
+    expect(task?.getAttribute("aria-disabled")).toBe("true");
+    expect(task?.disabled).toBe(true);
+    expect(task?.tabIndex).toBe(-1);
+
+    task?.click();
+    expect(editor.getMarkdown()).toBe("* [ ] inserted while read-only");
   });
 
   it("swaps runtime callbacks after flushing pending output through the old callback", () => {

@@ -120,6 +120,76 @@ afterEach(() => {
 });
 
 describe('createDefaultUi', () => {
+  it('exposes named non-modal dialogs, selects the primary value, and submits with Enter', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('span');
+    document.body.append(hostElement, marker);
+    const linkUpdates: string[] = [];
+    const imageUpdates: Array<{ src: string; alt: string | null; title: string | null }> = [];
+    const focus = vi.fn();
+    const controllers = createControllers(hostElement, undefined, {
+      updateActiveImage(_view, attrs) {
+        imageUpdates.push(attrs);
+        return true;
+      },
+      updateLinkHref(_view, href) {
+        linkUpdates.push(href);
+        return true;
+      },
+    });
+    const view = { ...createView(), focus };
+
+    controllers.linkEditor.open(view, marker, 'https://example.com/docs');
+    const linkDialog = document.querySelector<HTMLElement>('.mdw-link-editor')!;
+    const linkInput = linkDialog.querySelector<HTMLInputElement>('[aria-label="Link URL"]')!;
+
+    expect(linkDialog.getAttribute('role')).toBe('dialog');
+    expect(linkDialog.getAttribute('aria-label')).toBe('Edit link');
+    expect(linkDialog.getAttribute('aria-modal')).toBe('false');
+    expect(document.activeElement).toBe(linkInput);
+    expect([linkInput.selectionStart, linkInput.selectionEnd]).toEqual([0, linkInput.value.length]);
+
+    linkInput.value = 'https://example.com/guide';
+    linkInput.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter',
+    }));
+
+    expect(linkUpdates).toEqual(['https://example.com/guide']);
+    expect(linkDialog.hidden).toBe(true);
+    expect(focus).toHaveBeenCalledOnce();
+
+    controllers.imageEditor.open(view, marker, {
+      node: { attrs: { alt: 'Diagram', src: 'diagram.png', title: 'Architecture' } },
+    });
+    const imageDialog = document.querySelector<HTMLElement>('.mdw-image-editor')!;
+    const srcInput = imageDialog.querySelector<HTMLInputElement>('[aria-label="Image URL"]')!;
+
+    expect(imageDialog.getAttribute('role')).toBe('dialog');
+    expect(imageDialog.getAttribute('aria-label')).toBe('Edit image');
+    expect(imageDialog.getAttribute('aria-modal')).toBe('false');
+    expect(document.activeElement).toBe(srcInput);
+    expect([srcInput.selectionStart, srcInput.selectionEnd]).toEqual([0, srcInput.value.length]);
+
+    srcInput.value = 'updated.png';
+    srcInput.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter',
+    }));
+
+    expect(imageUpdates).toEqual([{
+      alt: 'Diagram',
+      src: 'updated.png',
+      title: 'Architecture',
+    }]);
+    expect(imageDialog.hidden).toBe(true);
+    expect(focus).toHaveBeenCalledTimes(2);
+
+    destroyControllers(controllers);
+  });
+
   it('keeps editing overlays closed and inert while the editor is read-only', () => {
     const hostElement = document.createElement('div');
     const marker = document.createElement('table');
@@ -183,6 +253,51 @@ describe('createDefaultUi', () => {
     expect(linkEditor.hidden).toBe(true);
     expect(imageEditor.hidden).toBe(true);
     expect(tableToolbar.hidden).toBe(true);
+
+    editable = true;
+    controllers.linkEditor.open(view, marker, 'https://example.com');
+    const linkInput = linkEditor.querySelector<HTMLInputElement>('[aria-label="Link URL"]')!;
+    linkInput.focus();
+    editable = false;
+    linkInput.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Escape',
+    }));
+    expect(linkEditor.hidden).toBe(true);
+
+    destroyControllers(controllers);
+  });
+
+  it('closes media dialogs on outside pointer intent without treating their marker as outside', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('span');
+    const outsideButton = document.createElement('button');
+    document.body.append(hostElement, marker, outsideButton);
+    const focus = vi.fn();
+    const controllers = createControllers(hostElement);
+    const view = { ...createView(), focus };
+    const linkDialog = document.querySelector<HTMLElement>('.mdw-link-editor')!;
+    const imageDialog = document.querySelector<HTMLElement>('.mdw-image-editor')!;
+
+    controllers.linkEditor.open(view, marker, '/docs');
+    marker.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, composed: true }));
+    expect(linkDialog.hidden).toBe(false);
+
+    outsideButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, composed: true }));
+    expect(linkDialog.hidden).toBe(true);
+    expect(focus).not.toHaveBeenCalled();
+
+    controllers.imageEditor.open(view, marker, { node: { attrs: { src: 'image.png' } } });
+    imageDialog.querySelector('button')?.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      composed: true,
+    }));
+    expect(imageDialog.hidden).toBe(false);
+
+    outsideButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, composed: true }));
+    expect(imageDialog.hidden).toBe(true);
+    expect(focus).not.toHaveBeenCalled();
 
     destroyControllers(controllers);
   });
@@ -267,6 +382,117 @@ describe('createDefaultUi', () => {
 
     expect(linkUpdates).toEqual(['https://example.com/updated']);
     expect(imageUpdates).toEqual(['updated.png']);
+
+    destroyControllers(controllers);
+  });
+
+  it('uses the owner realm and deep Shadow DOM focus when restoring dialog focus', () => {
+    const foreignWindow = trackWindow(new JSDOM('<!doctype html><html><body></body></html>').window as unknown as Window);
+    const shadowHost = foreignWindow.document.createElement('div');
+    const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
+    const hostElement = foreignWindow.document.createElement('div');
+    const marker = foreignWindow.document.createElement('span');
+    const outsideButton = foreignWindow.document.createElement('button');
+    shadowRoot.append(hostElement, marker);
+    foreignWindow.document.body.append(shadowHost, outsideButton);
+    const focus = vi.fn();
+    const controllers = createControllers(hostElement);
+    const view = { ...createView(), focus };
+
+    controllers.linkEditor.open(view, marker, '/docs');
+    const dialog = shadowRoot.querySelector<HTMLElement>('.mdw-link-editor')!;
+    const input = dialog.querySelector<HTMLInputElement>('[aria-label="Link URL"]')!;
+
+    expect(shadowRoot.activeElement).toBe(input);
+    input.dispatchEvent(new foreignWindow.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Escape',
+    }));
+    expect(focus).toHaveBeenCalledOnce();
+
+    controllers.linkEditor.open(view, marker, '/docs');
+    outsideButton.focus();
+    controllers.linkEditor.close(true);
+
+    expect(foreignWindow.document.activeElement).toBe(outsideButton);
+    expect(focus).toHaveBeenCalledOnce();
+
+    destroyControllers(controllers);
+  });
+
+  it('restores focus from a closed Shadow DOM portal', () => {
+    const shadowHost = document.createElement('div');
+    const shadowRoot = shadowHost.attachShadow({ mode: 'closed' });
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('span');
+    shadowRoot.append(hostElement, marker);
+    document.body.append(shadowHost);
+    const focus = vi.fn();
+    const controllers = createControllers(hostElement);
+    const view = { ...createView(), focus };
+
+    controllers.imageEditor.open(view, marker, { node: { attrs: { src: 'image.png' } } });
+    const dialog = shadowRoot.querySelector<HTMLElement>('.mdw-image-editor')!;
+    const input = dialog.querySelector<HTMLInputElement>('[aria-label="Image URL"]')!;
+
+    expect(shadowRoot.activeElement).toBe(input);
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Escape',
+    }));
+
+    expect(dialog.hidden).toBe(true);
+    expect(focus).toHaveBeenCalledOnce();
+
+    destroyControllers(controllers);
+  });
+
+  it('roves table-toolbar focus safely in a foreign Shadow DOM realm', () => {
+    const foreignWindow = trackWindow(new JSDOM('<!doctype html><html><body></body></html>').window as unknown as Window);
+    const shadowHost = foreignWindow.document.createElement('div');
+    const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
+    const hostElement = foreignWindow.document.createElement('div');
+    const marker = foreignWindow.document.createElement('table');
+    shadowRoot.append(hostElement, marker);
+    foreignWindow.document.body.append(shadowHost);
+    const focus = vi.fn();
+    const controllers = createControllers(hostElement, undefined, {
+      getTableContext() {
+        return { cell: { attrs: { align: 'right' } }, tablePos: 0 };
+      },
+      normalizeTableAlignment(value) {
+        return value === 'right' ? 'right' : null;
+      },
+    });
+    const view = {
+      ...createView(),
+      focus,
+      nodeDOM() {
+        return marker;
+      },
+    };
+    controllers.tableToolbar.update(view);
+
+    const toolbar = shadowRoot.querySelector<HTMLElement>('.mdw-table-toolbar')!;
+    const buttons = Array.from(toolbar.querySelectorAll<HTMLButtonElement>('button'));
+    buttons[0]!.focus();
+    buttons[0]!.dispatchEvent(new foreignWindow.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'ArrowRight',
+    }));
+
+    expect(shadowRoot.activeElement).toBe(buttons[1]);
+    expect(toolbar.querySelector('[aria-label="Align right"]')?.getAttribute('aria-pressed')).toBe('true');
+
+    buttons[1]!.dispatchEvent(new foreignWindow.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Escape',
+    }));
+    expect(focus).toHaveBeenCalledOnce();
 
     destroyControllers(controllers);
   });
@@ -490,6 +716,128 @@ describe('createDefaultUi', () => {
     destroyControllers(controllers);
   });
 
+  it('restores media-dialog focus through synchronous controller updates without stealing host focus', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('span');
+    const hostButton = document.createElement('button');
+    document.body.append(hostElement, marker, hostButton);
+    const focus = vi.fn();
+    let controllers: ReturnType<ReturnType<typeof createDefaultUi>>;
+    let focusHostDuringUpdate = false;
+
+    controllers = createControllers(hostElement, undefined, {
+      removeActiveImage() {
+        controllers.imageEditor.close(false);
+      },
+      removeActiveLink() {
+        controllers.linkEditor.close(false);
+      },
+      updateLinkHref() {
+        if (focusHostDuringUpdate) {
+          hostButton.focus();
+        }
+        return true;
+      },
+    });
+    const view = { ...createView(), focus };
+
+    controllers.linkEditor.open(view, marker, '/docs');
+    const linkDialog = document.querySelector<HTMLElement>('.mdw-link-editor')!;
+    const unlinkButton = Array.from(linkDialog.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Unlink')!;
+    unlinkButton.focus();
+    unlinkButton.click();
+
+    expect(linkDialog.hidden).toBe(true);
+    expect(focus).toHaveBeenCalledOnce();
+
+    controllers.imageEditor.open(view, marker, { node: { attrs: { src: 'image.png' } } });
+    const imageDialog = document.querySelector<HTMLElement>('.mdw-image-editor')!;
+    const removeButton = Array.from(imageDialog.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Remove')!;
+    removeButton.focus();
+    removeButton.click();
+
+    expect(imageDialog.hidden).toBe(true);
+    expect(focus).toHaveBeenCalledTimes(2);
+
+    controllers.linkEditor.open(view, marker, '/docs');
+    const linkInput = linkDialog.querySelector<HTMLInputElement>('[aria-label="Link URL"]')!;
+    focusHostDuringUpdate = true;
+    linkInput.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter',
+    }));
+
+    expect(linkDialog.hidden).toBe(true);
+    expect(document.activeElement).toBe(hostButton);
+    expect(focus).toHaveBeenCalledTimes(2);
+
+    controllers.imageEditor.open(view, marker, { node: { attrs: { src: 'image.png' } } });
+    hostButton.focus();
+    controllers.imageEditor.close(true);
+
+    expect(imageDialog.hidden).toBe(true);
+    expect(document.activeElement).toBe(hostButton);
+    expect(focus).toHaveBeenCalledTimes(2);
+
+    destroyControllers(controllers);
+  });
+
+  it('does not close or refocus over a replacement media-dialog session', () => {
+    const hostElement = document.createElement('div');
+    const firstMarker = document.createElement('span');
+    const replacementMarker = document.createElement('span');
+    document.body.append(hostElement, firstMarker, replacementMarker);
+    const focus = vi.fn();
+    let controllers: ReturnType<ReturnType<typeof createDefaultUi>>;
+    const view = { ...createView(), focus };
+
+    controllers = createControllers(hostElement, undefined, {
+      updateActiveImage() {
+        controllers.imageEditor.open(view, replacementMarker, {
+          node: { attrs: { alt: 'Replacement', src: 'replacement.png' } },
+        });
+        return true;
+      },
+      updateLinkHref() {
+        controllers.linkEditor.open(view, replacementMarker, '/replacement');
+        return true;
+      },
+    });
+
+    controllers.linkEditor.open(view, firstMarker, '/first');
+    const linkDialog = document.querySelector<HTMLElement>('.mdw-link-editor')!;
+    const linkInput = linkDialog.querySelector<HTMLInputElement>('[aria-label="Link URL"]')!;
+    linkInput.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter',
+    }));
+
+    expect(linkDialog.hidden).toBe(false);
+    expect(linkInput.value).toBe('/replacement');
+    expect(document.activeElement).toBe(linkInput);
+    expect(focus).not.toHaveBeenCalled();
+
+    controllers.imageEditor.open(view, firstMarker, { node: { attrs: { src: 'first.png' } } });
+    const imageDialog = document.querySelector<HTMLElement>('.mdw-image-editor')!;
+    const imageInput = imageDialog.querySelector<HTMLInputElement>('[aria-label="Image URL"]')!;
+    imageInput.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter',
+    }));
+
+    expect(imageDialog.hidden).toBe(false);
+    expect(imageInput.value).toBe('replacement.png');
+    expect(document.activeElement).toBe(imageInput);
+    expect(focus).not.toHaveBeenCalled();
+
+    destroyControllers(controllers);
+  });
+
   it('keeps media editors open when a URL update is rejected', () => {
     const hostElement = document.createElement('div');
     const marker = document.createElement('span');
@@ -576,17 +924,29 @@ describe('createDefaultUi', () => {
     const imageSave = Array.from(document.querySelectorAll<HTMLButtonElement>('.mdw-image-editor button'))
       .find((button) => button.textContent === 'Save');
     const insertColumn = document.querySelector<HTMLButtonElement>('.mdw-table-toolbar [aria-label="Insert column"]');
+    const linkDialog = document.querySelector<HTMLElement>('.mdw-link-editor')!;
+    const imageDialog = document.querySelector<HTMLElement>('.mdw-image-editor')!;
+    const tableToolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
 
+    controllers.linkEditor.destroy();
+    controllers.imageEditor.destroy();
+    controllers.tableToolbar.destroy();
     controllers.linkEditor.destroy();
     controllers.imageEditor.destroy();
     controllers.tableToolbar.destroy();
     linkSave?.click();
     imageSave?.click();
     insertColumn?.click();
+    controllers.linkEditor.open(view, marker, 'https://example.com/reopened');
+    controllers.imageEditor.open(view, marker, { node: { attrs: { src: 'reopened.png' } } });
+    controllers.tableToolbar.update(view);
 
     expect(linkUpdates).toBe(0);
     expect(imageUpdates).toBe(0);
     expect(tableUpdates).toBe(0);
+    expect(linkDialog.isConnected).toBe(false);
+    expect(imageDialog.isConnected).toBe(false);
+    expect(tableToolbar.isConnected).toBe(false);
   });
 
   it('keeps link and image editors inside a scrolled narrow viewport', () => {
@@ -641,6 +1001,7 @@ describe('createDefaultUi', () => {
     visualViewport.offsetLeft = 20;
     visualViewport.offsetTop = 30;
     visualViewport.width = 280;
+    const removeViewportListener = vi.spyOn(visualViewport, 'removeEventListener');
     Object.defineProperty(foreignWindow, 'visualViewport', { configurable: true, value: visualViewport });
 
     const hostElement = foreignWindow.document.createElement('div');
@@ -669,7 +1030,12 @@ describe('createDefaultUi', () => {
       expect(imageEditor.style.left).toBe('32px');
     }
 
+    Object.defineProperty(foreignWindow, 'visualViewport', {
+      configurable: true,
+      value: new foreignWindow.EventTarget(),
+    });
     destroyControllers(controllers);
+    expect(removeViewportListener).toHaveBeenCalledTimes(6);
   });
 
   it('clamps and flips the table toolbar within a narrow viewport', () => {
@@ -713,6 +1079,124 @@ describe('createDefaultUi', () => {
     destroyControllers(controllers);
   });
 
+  it('preserves the contenteditable selection and toolbar focus across table mutations', () => {
+    const hostElement = document.createElement('div');
+    hostElement.contentEditable = 'true';
+    const paragraph = document.createElement('p');
+    const text = document.createTextNode('selected text');
+    const marker = document.createElement('table');
+    paragraph.append(text);
+    hostElement.append(paragraph, marker);
+    document.body.append(hostElement);
+    const range = document.createRange();
+    range.setStart(text, 1);
+    range.setEnd(text, 9);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+
+    let alignment: 'left' | 'center' | 'right' = 'left';
+    let columnInsertions = 0;
+    let controllers: ReturnType<ReturnType<typeof createDefaultUi>>;
+    const view = {
+      ...createView(),
+      nodeDOM() {
+        return marker;
+      },
+    };
+    controllers = createControllers(hostElement, undefined, {
+      appendTableColumn() {
+        columnInsertions += 1;
+        controllers.tableToolbar.update(view);
+      },
+      getTableContext() {
+        return { cell: { attrs: { align: alignment } }, tablePos: 0 };
+      },
+      normalizeTableAlignment(value) {
+        return value === 'left' || value === 'center' || value === 'right' ? value : null;
+      },
+      setTableColumnAlignment(_view, value) {
+        alignment = value;
+        controllers.tableToolbar.update(view);
+      },
+    });
+    controllers.tableToolbar.update(view);
+
+    const toolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
+    const insertColumn = toolbar.querySelector<HTMLButtonElement>('[aria-label="Insert column"]')!;
+    const alignCenter = toolbar.querySelector<HTMLButtonElement>('[aria-label="Align center"]')!;
+    const mouseDown = new MouseEvent('mousedown', { bubbles: true, button: 0, cancelable: true });
+    insertColumn.dispatchEvent(mouseDown);
+
+    expect(mouseDown.defaultPrevented).toBe(true);
+    expect(document.getSelection()?.toString()).toBe('elected ');
+
+    insertColumn.focus();
+    insertColumn.click();
+    expect(columnInsertions).toBe(1);
+    expect(document.activeElement).toBe(insertColumn);
+
+    alignCenter.focus();
+    alignCenter.click();
+    expect(document.activeElement).toBe(alignCenter);
+    expect(alignCenter.getAttribute('aria-pressed')).toBe('true');
+    expect(toolbar.querySelector('[aria-label="Align left"]')?.getAttribute('aria-pressed')).toBe('false');
+
+    destroyControllers(controllers);
+  });
+
+  it('restores focus after deleting a table unless the command moved it to a host control', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('table');
+    const hostButton = document.createElement('button');
+    document.body.append(hostElement, marker, hostButton);
+    let hasTable = true;
+    let focusHostDuringDelete = false;
+    let controllers: ReturnType<ReturnType<typeof createDefaultUi>>;
+    const focus = vi.fn();
+    const view = {
+      ...createView(),
+      focus,
+      nodeDOM() {
+        return marker;
+      },
+    };
+    controllers = createControllers(hostElement, undefined, {
+      getTableContext() {
+        return hasTable ? { cell: { attrs: {} }, tablePos: 0 } : null;
+      },
+      removeActiveTable() {
+        hasTable = false;
+
+        if (focusHostDuringDelete) {
+          hostButton.focus();
+        }
+
+        controllers.tableToolbar.update(view);
+      },
+    });
+
+    controllers.tableToolbar.update(view);
+    const toolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
+    const deleteTable = toolbar.querySelector<HTMLButtonElement>('[aria-label="Delete table"]')!;
+    deleteTable.focus();
+    deleteTable.click();
+
+    expect(toolbar.hidden).toBe(true);
+    expect(focus).toHaveBeenCalledOnce();
+
+    hasTable = true;
+    focusHostDuringDelete = true;
+    controllers.tableToolbar.update(view);
+    deleteTable.focus();
+    deleteTable.click();
+
+    expect(toolbar.hidden).toBe(true);
+    expect(document.activeElement).toBe(hostButton);
+    expect(focus).toHaveBeenCalledOnce();
+
+    destroyControllers(controllers);
+  });
+
   it('exposes pressed alignment state and roves table-toolbar focus', () => {
     const hostElement = document.createElement('div');
     const marker = document.createElement('table');
@@ -751,6 +1235,18 @@ describe('createDefaultUi', () => {
     const deleteTable = toolbar.querySelector<HTMLButtonElement>('[aria-label="Delete table"]')!;
 
     expect(toolbar.getAttribute('aria-orientation')).toBe('horizontal');
+    expect(toolbar.getAttribute('aria-label')).toBe('Table controls');
+    expect(toolbar.querySelector('[role="group"]')?.getAttribute('aria-label')).toBe('Column alignment');
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Insert column',
+      'Delete column',
+      'Insert row',
+      'Delete row',
+      'Align left',
+      'Align center',
+      'Align right',
+      'Delete table',
+    ]);
     expect(buttons.map((button) => button.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1, -1]);
     expect(alignLeft.getAttribute('aria-pressed')).toBe('false');
     expect(alignCenter.getAttribute('aria-pressed')).toBe('true');
@@ -761,7 +1257,22 @@ describe('createDefaultUi', () => {
     expect(document.activeElement).toBe(buttons[1]);
     expect(buttons.map((button) => button.tabIndex)).toEqual([-1, 0, -1, -1, -1, -1, -1, -1]);
 
-    buttons[1]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'End' }));
+    buttons[1]!.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      isComposing: true,
+      key: 'ArrowRight',
+    }));
+    expect(document.activeElement).toBe(buttons[1]);
+
+    buttons[1]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowLeft' }));
+    expect(document.activeElement).toBe(buttons[0]);
+    buttons[0]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowLeft' }));
+    expect(document.activeElement).toBe(deleteTable);
+
+    deleteTable.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Home' }));
+    expect(document.activeElement).toBe(buttons[0]);
+    buttons[0]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'End' }));
     expect(document.activeElement).toBe(deleteTable);
     deleteTable.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Home' }));
     expect(document.activeElement).toBe(buttons[0]);
