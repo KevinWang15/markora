@@ -63,6 +63,7 @@ export type MarkdownEditorRuntimeContributions = Readonly<{
   nodeViews: Readonly<Record<string, NodeViewConstructor>>;
   clipboard: Plugin | null;
   nestedClipboard: MarkdownEditorNestedClipboardPipeline | null;
+  takeClipboardFailure: () => MarkdownEditorExtensionError | null;
   uiActions: readonly MarkdownEditorCompiledUiAction[];
 }>;
 
@@ -703,6 +704,7 @@ export function createMarkdownEditorExtensionAssembly(
       contribution: string;
       message: string;
     },
+    report = true,
   ) => {
     const failure = normalizeExtensionFailure(cause, {
       code: "EXTENSION_RUNTIME_FAILED",
@@ -711,7 +713,8 @@ export function createMarkdownEditorExtensionAssembly(
       extension: optionsForFailure.owner,
       contribution: optionsForFailure.contribution,
     });
-    options.reportError(failure);
+    if (report) options.reportError(failure);
+    return failure;
   };
   const normalizeNodeViewFailure = (
     cause: unknown,
@@ -1318,10 +1321,20 @@ export function createMarkdownEditorExtensionAssembly(
     const nestedHandlers = orderedHandlers.filter(
       (item) => item.contribution.surface !== "outer",
     );
+    let outerClipboardFailure: MarkdownEditorExtensionError | null = null;
+    const beginClipboard = () => {
+      outerClipboardFailure = null;
+    };
+    const takeClipboardFailure = () => {
+      const failure = outerClipboardFailure;
+      outerClipboardFailure = null;
+      return failure;
+    };
     const applyStringTransforms = (
       items: typeof orderedTransforms,
       kind: "html" | "text",
       initialValue: string,
+      captureFailure = false,
     ) => {
       let value = initialValue;
 
@@ -1339,12 +1352,13 @@ export function createMarkdownEditorExtensionAssembly(
 
           value = nextValue;
         } catch (cause) {
-          reportBrowserFailure(cause, {
+          const failure = reportBrowserFailure(cause, {
             phase: "clipboard",
             owner: item.owner,
             contribution: item.qualifiedId,
             message: `Clipboard transform "${item.qualifiedId}" failed.`,
-          });
+          }, !captureFailure);
+          if (captureFailure) outerClipboardFailure ??= failure;
           break;
         }
       }
@@ -1392,12 +1406,15 @@ export function createMarkdownEditorExtensionAssembly(
       ? new Plugin({
           props: {
             transformPastedText(text) {
-              return applyStringTransforms(outerTransforms, "text", text);
+              beginClipboard();
+              return applyStringTransforms(outerTransforms, "text", text, true);
             },
             transformPastedHTML(html) {
-              return applyStringTransforms(outerTransforms, "html", html);
+              beginClipboard();
+              return applyStringTransforms(outerTransforms, "html", html, true);
             },
             transformPasted(slice) {
+              if (outerClipboardFailure) return slice;
               let value = slice;
 
               for (const item of outerTransforms) {
@@ -1414,12 +1431,12 @@ export function createMarkdownEditorExtensionAssembly(
 
                   value = nextValue;
                 } catch (cause) {
-                  reportBrowserFailure(cause, {
+                  outerClipboardFailure ??= reportBrowserFailure(cause, {
                     phase: "clipboard",
                     owner: item.owner,
                     contribution: item.qualifiedId,
                     message: `Clipboard transform "${item.qualifiedId}" failed.`,
-                  });
+                  }, false);
                   break;
                 }
               }
@@ -1427,6 +1444,11 @@ export function createMarkdownEditorExtensionAssembly(
               return value;
             },
             handlePaste(activeView, event) {
+              const failure = takeClipboardFailure();
+              if (failure) {
+                options.reportError(failure);
+                return true;
+              }
               return runClipboardHandlers(
                 outerHandlers,
                 "paste",
@@ -1435,6 +1457,11 @@ export function createMarkdownEditorExtensionAssembly(
               );
             },
             handleDrop(activeView, event) {
+              const failure = takeClipboardFailure();
+              if (failure) {
+                options.reportError(failure);
+                return true;
+              }
               return runClipboardHandlers(
                 outerHandlers,
                 "drop",
@@ -1540,6 +1567,7 @@ export function createMarkdownEditorExtensionAssembly(
       nodeViews: Object.freeze(nodeViews),
       clipboard,
       nestedClipboard,
+      takeClipboardFailure,
       uiActions: Object.freeze(uiActions),
     });
     publishedUiActions = contributions.uiActions;

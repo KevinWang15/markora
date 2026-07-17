@@ -14,6 +14,7 @@ import {
 } from "./codeBlockLanguages";
 import type { MarkdownEditorNestedClipboardPipeline } from "./extensionAssembly";
 import { rejectFileTransferEvent } from "./fileTransferGuard";
+import { isolateClipboardHistory, nestedClipboardText } from "./clipboardSemantics";
 
 type CodeBlockViewInstance = {
   readonly composing: boolean;
@@ -78,69 +79,6 @@ function containsNode(container: Node, value: unknown) {
   } catch {
     return false;
   }
-}
-
-const clipboardBlockElements = new Set([
-  "ADDRESS",
-  "ARTICLE",
-  "ASIDE",
-  "BLOCKQUOTE",
-  "DIV",
-  "H1",
-  "H2",
-  "H3",
-  "H4",
-  "H5",
-  "H6",
-  "HEADER",
-  "LI",
-  "MAIN",
-  "NAV",
-  "OL",
-  "P",
-  "PRE",
-  "SECTION",
-  "TABLE",
-  "TR",
-  "UL",
-]);
-
-function htmlClipboardToText(ownerDocument: Document, html: string) {
-  const template = ownerDocument.createElement("template");
-  template.innerHTML = html;
-
-  const readNode = (node: Node): string => {
-    if (node.nodeType === 3) {
-      return node.nodeValue ?? "";
-    }
-
-    if (node.nodeType !== 1 && node.nodeType !== 11) {
-      return "";
-    }
-
-    if (node instanceof ownerDocument.defaultView!.HTMLElement && node.tagName === "BR") {
-      return "\n";
-    }
-
-    let value = "";
-
-    for (const child of node.childNodes) {
-      value += readNode(child);
-    }
-
-    if (
-      node instanceof ownerDocument.defaultView!.HTMLElement
-      && clipboardBlockElements.has(node.tagName)
-      && value
-      && !value.endsWith("\n")
-    ) {
-      value += "\n";
-    }
-
-    return value;
-  };
-
-  return readNode(template.content).replace(/\n$/, "");
 }
 
 // Returns a new class per call so each instance captures its own schema and
@@ -286,7 +224,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
     }
 
     get composing() {
-      return this.cm.composing;
+      return this.cm.compositionStarted;
     }
 
     private languageBadge: HTMLElement;
@@ -442,12 +380,54 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
     stopEvent(event: Event) {
       const target = event.target;
       const isInside = containsNode(this.cm.dom, target);
+      const isClipboard = event.type === "copy" || event.type === "cut";
+      const ownsClipboard = isClipboard && containsNode(this.dom, target);
+
+      if (isClipboard && (isInside || ownsClipboard)) {
+        const selectionRoot = this.getEditorRoot() as Document | (ShadowRoot & {
+          getSelection?: Document["getSelection"];
+        });
+        const domSelection = selectionRoot.getSelection?.() ?? this.ownerDocument.getSelection();
+        const blockPos = this.getPos();
+        const codeStart = blockPos + 1;
+        const codeEnd = blockPos + this.node.nodeSize - 1;
+        const modelSelection = this.outerView.state.selection;
+        const outsideCode = modelSelection.from < codeStart || modelSelection.to > codeEnd;
+        const containsWholeBlock = modelSelection.from <= blockPos
+          && modelSelection.to >= blockPos + this.node.nodeSize;
+        const crossesDom = Boolean(domSelection) && (
+          containsNode(this.cm.dom, domSelection!.anchorNode)
+            !== containsNode(this.cm.dom, domSelection!.focusNode)
+        );
+
+        if (crossesDom || (outsideCode && !containsWholeBlock)) {
+          let text = domSelection?.toString() ?? "";
+          const inner = this.cm.state.selection.main;
+          const innerText = this.cm.state.sliceDoc(inner.from, inner.to);
+          if (innerText && !text.includes(innerText)) {
+            text = modelSelection.from < codeStart ? `${text}${innerText}` : `${innerText}${text}`;
+          }
+          const clipboardEvent = event as ClipboardEvent;
+          try {
+            clipboardEvent.clipboardData?.clearData();
+            clipboardEvent.clipboardData?.setData("text/plain", text);
+          } catch {
+            // A cross-surface native cut must never mutate the NodeView DOM.
+          }
+          event.preventDefault();
+          return true;
+        }
+
+        if (outsideCode) {
+          return false;
+        }
+      }
 
       if (isInside && (event.type === "mousedown" || event.type === "pointerdown" || event.type === "touchstart")) {
         this.claimInnerSelection();
       }
 
-      return isInside;
+      return isInside || ownsClipboard;
     }
 
     ignoreMutation() {
@@ -1045,7 +1025,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
       this.runWhileUpdating(() => this.outerView.dispatch(tr));
     }
 
-    private forwardUpdate() {
+    private forwardUpdate(clipboardEdit = false) {
       if (this.updating || !this.cm.hasFocus) {
         return;
       }
@@ -1079,6 +1059,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
         newText ? this.outerView.state.schema.text(newText) : Fragment.empty,
       );
       tr.setSelection(TextSelection.create(tr.doc, pos + 1 + selection.anchor, pos + 1 + selection.head));
+      if (clipboardEdit) isolateClipboardHistory(tr);
       this.runWhileUpdating(() => this.outerView.dispatch(tr));
     }
 
@@ -1182,19 +1163,13 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
         return true;
       }
 
-      return this.maybeInsertTransformedHtml(kind, event);
+      return this.maybeInsertClipboardText(kind, event);
     }
 
-    private maybeInsertTransformedHtml(
+    private maybeInsertClipboardText(
       kind: "drop" | "paste",
       event: ClipboardEvent | DragEvent,
     ) {
-      const transformHtml = nestedClipboard?.transformHtml;
-
-      if (!transformHtml) {
-        return false;
-      }
-
       let transfer: DataTransfer | null;
 
       try {
@@ -1209,28 +1184,19 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
         return false;
       }
 
-      let html: string;
+      const text = nestedClipboardText(
+        this.ownerDocument,
+        transfer,
+        nestedClipboard?.transformHtml,
+        nestedClipboard?.transformText,
+        true,
+      );
 
-      try {
-        html = transfer.getData("text/html");
-      } catch {
-        return false;
-      }
+      if (text == null) return false;
 
-      if (!html) {
-        return false;
-      }
-
-      const transformedHtml = transformHtml(html);
-
-      if (transformedHtml === html) {
-        return false;
-      }
-
-      let text = htmlClipboardToText(this.ownerDocument, transformedHtml);
-
-      if (nestedClipboard?.transformText) {
-        text = nestedClipboard.transformText(text);
+      if (!text) {
+        event.preventDefault();
+        return true;
       }
 
       if (!this.canEdit) {
@@ -1350,7 +1316,11 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
             this.claimInnerSelection();
           }
 
-          this.forwardUpdate();
+          this.forwardUpdate(update.transactions.some((transaction) => (
+            transaction.isUserEvent("input.paste")
+            || transaction.isUserEvent("delete.cut")
+            || transaction.isUserEvent("input.drop")
+          )));
         }),
       ];
     }

@@ -20,6 +20,9 @@ test("@required host uploads are ordered, observable, and one undo step", async 
 
   const result = await dispatchTransfer(labPage, id, {
     event: "paste",
+    html: "<strong>must not accompany files</strong>",
+    markdown: "**must not accompany files**",
+    plain: "must not accompany files",
     files: [
       { contents: "first", name: "first.txt", type: "text/plain" },
       { contents: "second", name: "second.txt", type: "text/plain" },

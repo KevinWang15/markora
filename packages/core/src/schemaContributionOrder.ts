@@ -8,6 +8,7 @@ export type MarkdownEditorOrderedSchemaMap<TSpec> = Readonly<{
     value: TSpec,
   ): MarkdownEditorOrderedSchemaMap<TSpec>;
   addToEnd(key: string, value: TSpec): MarkdownEditorOrderedSchemaMap<TSpec>;
+  update(key: string, value: TSpec): MarkdownEditorOrderedSchemaMap<TSpec>;
   forEach(callback: (name: string, value: TSpec) => void): void;
 }>;
 
@@ -15,6 +16,17 @@ export type MarkdownEditorOwnedSchemaEntry<TSpec> = Readonly<{
   owner: string;
   entry: MarkdownEditorSchemaEntry<TSpec>;
 }>;
+
+export function codeBlockDomAttrs(dom: Node | string) {
+  if (typeof dom === "string" || dom.nodeType !== 1) return { params: "" };
+  const element = dom as Element;
+  const internal = element.getAttribute("data-params");
+  if (internal != null) return { params: internal };
+  const language = element.querySelector("code")?.getAttribute("class")?.match(
+    /(?:^|\s)(?:lang|language)-([A-Za-z0-9_+-]{1,64})(?:\s|$)/,
+  );
+  return { params: language?.[1] ?? "" };
+}
 
 export type MarkdownEditorSchemaOrderFailure = Readonly<{
   code: string;

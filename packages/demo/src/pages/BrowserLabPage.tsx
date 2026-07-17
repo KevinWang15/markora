@@ -89,6 +89,7 @@ export type BrowserLabCommandRequest =
   | { type: BrowserLabNoArgumentCommand }
   | { type: "insertImage"; attrs: { alt?: string | null; src: string; title?: string | null } }
   | { type: "insertTable"; options?: MarkdownEditorTableInsertOptions }
+  | { type: "pasteMarkdown" | "pastePlainText"; text: string }
   | { type: "setCodeBlock"; options?: MarkdownEditorCodeBlockOptions }
   | { type: "setHeading"; level: MarkdownEditorHeadingLevel }
   | { type: "setLink"; href: string }
@@ -123,7 +124,9 @@ export type BrowserLabExtensionSnapshot = {
 export type BrowserLabCopyResult = {
   defaultPrevented: boolean;
   html: string;
+  markdown: string;
   plain: string;
+  types: string[];
 };
 
 export type BrowserLabUpdateResult = {
@@ -146,7 +149,7 @@ export type BrowserLabTransferSpec = {
   html?: string;
   markdown?: string;
   plain?: string;
-  target?: "code-mirror" | "prosemirror";
+  target?: "code-mirror" | "prosemirror" | "static-code";
 };
 
 export type BrowserLabTransferResult = {
@@ -356,6 +359,8 @@ function runBrowserLabCommand(editor: MarkdownEditor, request: BrowserLabCommand
     case "insertImage": return editor.commands.insertImage(request.attrs);
     case "insertTable": return editor.commands.insertTable(request.options);
     case "liftListItem": return editor.commands.liftListItem();
+    case "pasteMarkdown": return editor.commands.pasteMarkdown(request.text);
+    case "pastePlainText": return editor.commands.pastePlainText(request.text);
     case "redo": return editor.commands.redo();
     case "removeImage": return editor.commands.removeImage();
     case "removeLink": return editor.commands.removeLink();
@@ -387,6 +392,8 @@ function canRunBrowserLabCommand(editor: MarkdownEditor, request: BrowserLabComm
     case "insertImage": return editor.state.can.insertImage();
     case "insertTable": return editor.state.can.insertTable(request.options);
     case "liftListItem": return editor.state.can.liftListItem();
+    case "pasteMarkdown": return editor.state.can.pasteMarkdown();
+    case "pastePlainText": return editor.state.can.pastePlainText();
     case "redo": return editor.state.can.redo();
     case "removeImage": return editor.state.can.removeImage();
     case "removeLink": return editor.state.can.removeLink();
@@ -872,7 +879,9 @@ export function BrowserLabPage() {
         return {
           defaultPrevented: event.defaultPrevented,
           html: transfer.getData("text/html"),
+          markdown: transfer.getData("text/markdown"),
           plain: transfer.getData("text/plain"),
+          types: Array.from(transfer.types),
         };
       },
       destroy,
@@ -1085,7 +1094,9 @@ export function BrowserLabPage() {
         const mounted = requireEditor(editors, id);
         const target = spec.target === "code-mirror"
           ? mounted.editor.view.dom.querySelector<HTMLElement>(".cm-content")
-          : mounted.editor.view.dom;
+          : spec.target === "static-code"
+            ? mounted.editor.view.dom.querySelector<HTMLElement>(".mdw-code-block-static-code")
+            : mounted.editor.view.dom;
 
         if (!target) {
           throw new Error(`Browser lab editor \"${id}\" has no ${spec.target ?? "prosemirror"} transfer target.`);

@@ -493,12 +493,13 @@ Runtime factories receive an immutable context containing the final schema, code
 
 The compiler uses fixed lanes so extensions cannot precede kernel policy:
 
-1. Kernel read-only, configured asset-transfer, and import-sanitization policy.
+1. Kernel read-only, configured asset-transfer, and initial import-sanitization policy.
 2. Ordered clipboard transforms and structured input rules.
 3. Ordered extension behavior plugins.
-4. History.
-5. Ordered extension and built-in keymaps.
-6. Base ProseMirror keymap.
+4. Kernel MIME selection plus the final imported-content sanitizer.
+5. History.
+6. Ordered extension and built-in keymaps.
+7. Base ProseMirror keymap.
 
 The stable tokenizer anchors and optional tokenizer rule IDs are published above. `EE-010` keeps the default table/task/CodeMirror/opaque runtime behavior in named compatibility adapters rather than pretending their legacy plugin fragments are additive public contributions. They therefore expose no false runtime contribution IDs: their kernel lanes remain fixed, while public extension contributions order against one another inside the documented lanes. A later adapter migration must publish stable IDs before allowing third-party edges to target it. Structured key bindings form a first-`true` chain. A contribution that needs internal fallback, such as table `Tab` before list indentation, should declare one command that performs that chain rather than relying on accidental plugin order.
 
@@ -512,6 +513,10 @@ Clipboard contributions distinguish transformations from handlers:
 - paste and drop handlers short-circuit on the first `true` result;
 - every hook declares whether it applies to the outer ProseMirror surface, a nested code surface, or both;
 - hooks are synchronous in v1.
+
+For an outer browser paste without HTML, the kernel recognizes `text/markdown` only after file policy and raw DOM handlers have had their fixed precedence. It then runs the ordered text transforms, parses with the finalized per-editor codec, runs slice transforms including raw-plugin props and the final sanitizer, and invokes the ordinary paste-handler chain exactly once before one default transaction. Rich HTML remains on ProseMirror's detached schema-parser path and outranks Markdown because it may carry internal slice context or semantics Markdown cannot encode. Plain input is never auto-detected as Markdown. The typed `pasteMarkdown()` and `pastePlainText()` host commands run the corresponding transform/parse/sanitize path without inventing a browser event.
+
+Outbound copy is a separate contract. The kernel first honors ProseMirror `transformCopied`, then derives semantic HTML, canonical Markdown, and human-readable plain text from that returned slice. Inbound extension text/HTML/slice transforms and paste handlers do not run on copy. A raw plugin that contributes `transformCopied` is trusted application code and remains responsible for the validity of any attrs it introduces.
 
 Kernel file rejection/configured upload, URL sanitization, and read-only checks run outside extension precedence. A structured clipboard contribution cannot intercept a file before the configured asset hook or upload a file inside nested CodeMirror, and an extension slice transform runs before the final built-in link/image sanitizer. A trusted handler or raw plugin that dispatches its own arbitrary transaction is not rewritten by that import clamp and remains responsible for validated attrs. The host's asynchronous upload callback is outside the extension contribution graph: it is supplied once through `CreateEditorOptions.resources.assets`, and its successful URL is sanitized before one mapped, undoable insertion transaction.
 

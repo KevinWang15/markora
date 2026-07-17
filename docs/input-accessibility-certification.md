@@ -1,6 +1,6 @@
 # Embedded input and accessibility contract
 
-This document defines the input behavior certified by `EE-006`, the typed host setup added by `EE-007`, the headless resource/upload obligations added by `EE-012`, the passive/lazy code-block behavior added by `EE-015`, and the semantic embedded controls completed by `EE-016` for Markora in an embedded host. It is a baseline contract, not a claim that a headless browser can replace testing with real input methods or assistive technology.
+This document defines the input behavior certified by `EE-006`, the typed host setup added by `EE-007`, the headless resource/upload obligations added by `EE-012`, the passive/lazy code-block behavior added by `EE-015`, the semantic embedded controls completed by `EE-016`, and the deliberate clipboard semantics added by `EE-017` for Markora in an embedded host. It is a baseline contract, not a claim that a headless browser can replace testing with real input methods or assistive technology.
 
 ## Host setup required for the baseline
 
@@ -50,20 +50,38 @@ Markora relies on ProseMirror and CodeMirror's native composition pipelines. Pro
 | ProseMirror-internal rich slice | The schema-backed rich slice wins and preserves supported structure. Imported links and images pass through Markora's URL sanitizer. |
 | External `text/html` plus `text/plain` | HTML wins. Supported paragraphs, marks, lists, tables, links, and images are schema-parsed; unsupported or unsafe DOM is discarded rather than executed. |
 | `text/plain` | Text is inserted literally. One or more line breaks divide paragraphs; runs of blank lines therefore normalize to a single block boundary. Markdown-looking punctuation is escaped on serialization when needed to preserve literal semantics. |
-| `text/markdown` plus `text/plain` | The plain-text representation is used and remains literal. Markora does not yet opt into parsing Markdown from the clipboard. |
-| `text/markdown` only | No Markdown-specific behavior is promised. Deliberate MIME precedence, paste-as-Markdown, and Markdown copy output belong to `EE-017`. |
+| `text/html` plus `text/markdown` | HTML wins, including private ProseMirror slice context and HTML-only table header scope. Explicit `pasteMarkdown()` intentionally chooses the normalized Markdown representation instead. |
+| `text/markdown` plus `text/plain` | Markdown wins and is parsed semantically through the compiled per-editor dialect, extension transforms, and final URL sanitizer. |
+| `text/markdown` only | Parsed as semantic Markdown. Inside either code surface it remains literal source text. Legacy `text/x-markdown` is accepted as an inbound fallback. |
+| Ctrl/Cmd-Shift-V or `commands.pastePlainText(text)` | Uses plain text literally even when rich representations exist. The host command replaces the retained model selection and returns focus only after a successful edit. |
+| `commands.pasteMarkdown(text)` | Parses the already-read string as Markdown. The host owns clipboard permission and UI; the command is synchronous, one-step undoable, and unavailable read-only or during composition. |
+| Outer copy/cut | Attempts semantic `text/html`, canonical `text/markdown`, and useful `text/plain` synchronously. Copy works read-only without mutation. Cut writes the same data before one undoable deletion; read-only cut does not delete. |
 | External text/HTML drop | The drop is schema-parsed at the browser-reported document position and is one undoable edit. |
 | File-bearing paste, dragover, or drop in ProseMirror | Native file insertion/navigation and mixed-transfer text insertion are always prevented. Without `resources.assets`, files are consumed without reading bytes. With the hook, policy-accepted files start host uploads and are inserted only after the complete remaining batch succeeds. Rejected/failed attempts do not change the document. Unrelated host-page listeners remain under the host's control. |
-| Nested-code text paste/drop, in the passive shell or active CodeMirror | Consumes text only. Rich HTML formatting is not interpreted inside a code block; configured nested-code transforms may derive replacement text. |
+| Nested-code text paste/drop, in the passive shell or active CodeMirror | Consumes literal code only. Plain text wins unless a configured HTML transform changes rich input; without plain text, Markdown source wins over HTML-derived text. Configured nested-code transforms retain their declared order. |
 | File-bearing paste, dragover, or drop in nested code | Always rejected, even when `resources.assets` is configured. Nested code remains a plain-text surface and never uploads files. |
 
 Before CodeMirror activates, the permanent code-fence shell is a native
 `<code>` element within the named outer textbox, not a second interactive
 textbox. Paste/drop applies the same nested-code text transforms and file
 rejection policy through an outer-document transaction. Native selection,
-copy, and page search operate on its exact text without forcing activation;
+copy, and page search operate on its exact text without forcing activation.
+Passive copy is raw `text/plain`; passive cut owns the DOM event so the shell
+cannot mutate outside ProseMirror, then performs one mapped outer transaction.
+Active CodeMirror retains its native plain and empty-selection linewise
+clipboard behavior. Selecting the complete block through the outer surface
+adds fenced Markdown and semantic HTML. Activation after a passive cut is an
+editing-state detail and does not change its single-history-step guarantee;
 activation mounts the advanced editor from the same ProseMirror document text
 rather than parsing copied HTML.
+
+Firefox and WebKit can expose different DOM, CodeMirror, and ProseMirror
+endpoints for a pointer range dragged across an active code editor and the
+outer editor, especially in Shadow DOM. Markora treats this split-owner range
+as a plain-text, copy-only safety boundary: `cut` is prevented without changing
+the document. The projected copied substring remains browser-dependent. Exact
+destructive selection must stay inside one editing surface, or select the
+complete code block through the outer surface.
 
 The outer upload contract is explicitly host-controlled. Its defaults accept AVIF, GIF, JPEG, PNG, and WebP, at most 10,485,760 bytes per file and 10 files per transfer. Upload progress does not mutate the document. Successful multi-file results enter in transfer order as one undoable transaction; a failure prevents partial insertion and remains available for retry or cancellation. Read-only and active-composition transfers are rejected before the host uploader runs. A hard reset aborts uploads with cancellation events, while destruction aborts silently during teardown.
 

@@ -117,6 +117,26 @@ File paste/drop remains blocked unless `resources.assets` is configured. Its def
 
 See the package [resource and asset contract](./packages/core/README.md#resources-links-images-and-asset-uploads) for callback, privacy, cleanup, read-only, reset, and teardown semantics.
 
+## Clipboard interoperability
+
+Normal outer-editor paste uses a deliberate fidelity order: file-bearing transfers go to the configured asset policy; rich HTML wins when present; otherwise `text/markdown` is parsed through the editor's compiled dialect; otherwise `text/plain` stays literal. Rich HTML is parsed into the schema in a detached document and then sanitized, rather than inserted into the live host DOM. Ctrl/Cmd-Shift-V keeps the conventional plain-text behavior.
+
+An embedded host can offer explicit actions without reading or writing through the version-coupled ProseMirror view:
+
+```ts
+await navigator.clipboard.readText().then((text) => {
+  editor.commands.pasteMarkdown(text); // Parse as Markdown.
+});
+
+pastePlainButton.addEventListener("click", () => {
+  editor.commands.pastePlainText(hostClipboardText); // Keep syntax literal.
+});
+```
+
+The host owns Clipboard API permission and UI. Both commands replace the retained model selection, create one undo step, use origin `"command"`, and return `false` when empty, read-only, composing, or otherwise unavailable. Matching `editor.state.can.pasteMarkdown()` and `pastePlainText()` queries are side-effect free.
+
+Copy and cut synchronously offer semantic `text/html`, canonical `text/markdown`, and human-readable `text/plain` when the browser's event clipboard permits them. The HTML retains private ProseMirror slice context for faithful same-editor paste, while task items use portable disabled checkbox markup instead of live editor controls. A failed custom-MIME write does not prevent HTML/plain copy. Cut performs one undoable deletion after writing the representations; read-only cut behaves as copy. Nested active and passive code editors remain literal plain-code surfaces, while selecting a whole code block in the outer editor includes its fence and language in Markdown output. Firefox and WebKit can expose contradictory native ranges when a drag crosses a live CodeMirror/outer-editor boundary; Markora suppresses destructive cut for that split range, so users should cut within one surface or select the whole code block through the outer editor.
+
 ## Host toolbars and command state
 
 The headless API covers inline marks, links and images, paragraphs and headings, blockquotes, bullet/ordered/task lists, list indentation, hard breaks and rules, fenced code blocks, tables, and undo/redo. Build host UI from `editor.state` and refresh it from the `state` event, which also catches stored-mark changes that do not modify the document:

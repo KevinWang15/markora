@@ -11,6 +11,7 @@ import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
 import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
 import { createCodeBlockViewClass } from "./codeBlockView";
 import { createChangeEmitter } from "./changeEmitter";
+import { createClipboardSemantics } from "./clipboardSemantics";
 import { normalizeMarkdownEditorChangeMode } from "./changeMode";
 import { createHostIdleScheduler } from "./idleScheduler";
 import { createAssetUploadController } from "./assetUploads";
@@ -1259,6 +1260,17 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     resources,
     schema,
   });
+  const clipboard = createClipboardSemantics({
+    codec,
+    reportBrowserError(error) {
+      if (error instanceof MarkdownEditorExtensionError) {
+        reportExtensionError(error);
+      } else {
+        reportUnhandled(error);
+      }
+    },
+    takeExtensionFailure: extensionAssembly.contributions.takeClipboardFailure,
+  });
 
   const plugins = [
     new Plugin({
@@ -1333,6 +1345,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       getActiveLineMarker,
     }),
     ...extensionAssembly.contributions.plugins,
+    clipboard.plugin,
     // Clamp the final slice after both structured transforms and raw extension
     // plugins so extension precedence cannot reintroduce unsafe URLs.
     codec.createImportedContentSanitizerPlugin(),
@@ -1499,7 +1512,11 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }
   };
 
-  const canRunInteractiveCommand = () => runtimeOptions.editable && !view.composing;
+  const canRunInteractiveCommand = () => (
+    runtimeOptions.editable
+    && !view.composing
+    && !CodeBlockView.isComposing()
+  );
 
   const runCommand = (command: EditorCommand) => {
     assertActive("run an editor command");
@@ -1792,6 +1809,18 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
   const editorStateApi: MarkdownEditorState = {
     can: {
+      pasteMarkdown() {
+        return runStateQuery(
+          "query whether Markdown can be pasted",
+          canRunInteractiveCommand,
+        );
+      },
+      pastePlainText() {
+        return runStateQuery(
+          "query whether plain text can be pasted",
+          canRunInteractiveCommand,
+        );
+      },
       toggleMark(mark) {
         assertActive("query whether a mark can be toggled");
         return canRunInteractiveCommand() && toggleMarkCommands[mark](view.state);
@@ -2032,6 +2061,16 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     reconcileMarkdown: reconcileMarkdownValue,
     resetMarkdown: resetMarkdownValue,
     setMarkdown: setMarkdownValue,
+    pasteMarkdown(markdown) {
+      return runReportedExtensionOperation(
+        () => runCommand(clipboard.pasteMarkdown(markdown)),
+      );
+    },
+    pastePlainText(text) {
+      return runReportedExtensionOperation(
+        () => runCommand(clipboard.pastePlainText(text)),
+      );
+    },
     toggleMark(mark) {
       return runToggleMark(mark);
     },

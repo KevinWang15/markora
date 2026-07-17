@@ -35,6 +35,7 @@ import {
 } from "./resourcePolicy";
 import { createReadonlySet } from "./readonlySet";
 import {
+  codeBlockDomAttrs,
   compileMarkdownEditorSchemaEntries,
   type MarkdownEditorOrderedSchemaMap,
 } from "./schemaContributionOrder";
@@ -178,7 +179,16 @@ export function createMinimalMarkdownCodec(
   extensions: readonly ResolvedMarkdownEditorExtension[] = [],
   resources: NormalizedMarkdownEditorResources = normalizeMarkdownEditorResources(undefined),
 ): MarkdownEditorCodec {
-  const foundationNodes = commonMarkSchema.spec.nodes as MarkdownEditorOrderedSchemaMap<NodeSpec>;
+  const baseNodes = commonMarkSchema.spec.nodes as MarkdownEditorOrderedSchemaMap<NodeSpec>;
+  const codeBlock = baseNodes.get("code_block")!;
+  const foundationNodes = baseNodes.update("code_block", {
+    ...codeBlock,
+    parseDOM: [{
+      tag: "pre",
+      preserveWhitespace: "full",
+      getAttrs: codeBlockDomAttrs,
+    }],
+  });
   const foundationMarks = commonMarkSchema.spec.marks as MarkdownEditorOrderedSchemaMap<MarkSpec>;
   const nodeEntries = extensions.flatMap(({ definition }) => (
     (definition.schema?.nodes ?? []).map((entry) => ({

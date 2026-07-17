@@ -19,6 +19,7 @@ import {
 } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { createChangeEmitter } from "./changeEmitter";
+import { createClipboardSemantics } from "./clipboardSemantics";
 import { normalizeMarkdownEditorChangeMode } from "./changeMode";
 import { createHostIdleScheduler } from "./idleScheduler";
 import { buildReconciledDocumentTransaction } from "./documentUpdate";
@@ -753,6 +754,17 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     resources,
     schema: codec.schema,
   });
+  const clipboard = createClipboardSemantics({
+    codec,
+    reportBrowserError(error) {
+      if (error instanceof MarkdownEditorExtensionError) {
+        reportExtensionError(error);
+      } else {
+        reportUnhandled(error);
+      }
+    },
+    takeExtensionFailure: extensionAssembly.contributions.takeClipboardFailure,
+  });
   const ImageView = createImageViewClass({
     imageNodeType: codec.schema.nodes.image,
     onError: handleResourceError,
@@ -794,6 +806,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         ? [extensionAssembly.contributions.inputRules]
         : []),
       ...extensionAssembly.contributions.plugins,
+      clipboard.plugin,
       // Clamp the final slice after both structured transforms and raw extension
       // plugins so extension precedence cannot reintroduce unsafe URLs.
       codec.createImportedContentSanitizerPlugin(),
@@ -1291,6 +1304,16 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     reconcileMarkdown,
     resetMarkdown,
     setMarkdown: resetMarkdown,
+    pasteMarkdown(markdown) {
+      return runReportedExtensionOperation(
+        () => runCommand(clipboard.pasteMarkdown(markdown)),
+      );
+    },
+    pastePlainText(text) {
+      return runReportedExtensionOperation(
+        () => runCommand(clipboard.pastePlainText(text)),
+      );
+    },
     toggleMark(mark) {
       return runCommand(markCommands[mark]);
     },
@@ -1345,6 +1368,18 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   };
   const state: MarkdownEditorState = {
     can: {
+      pasteMarkdown() {
+        return runStateQuery(
+          "query whether Markdown can be pasted",
+          canRunInteractiveCommand,
+        );
+      },
+      pastePlainText() {
+        return runStateQuery(
+          "query whether plain text can be pasted",
+          canRunInteractiveCommand,
+        );
+      },
       toggleMark(mark) {
         assertActive("query whether a mark can be toggled");
         return canRunInteractiveCommand() && markCommands[mark](view.state);

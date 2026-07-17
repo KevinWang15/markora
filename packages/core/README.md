@@ -111,6 +111,42 @@ const editor = createEditor({
 
 The omitted `onChangeMode` uses the production default, `"idle"`: rapid document changes coalesce, and full Markdown serialization does not run in the synchronous input path. Use `"animationFrame"` only for the prior once-per-frame behavior or `"immediate"` when an integration deliberately requires same-stack serialization and callback delivery.
 
+## Clipboard semantics
+
+The outer editor chooses one inbound representation in this order:
+
+1. A transfer containing any file is wholly owned by `resources.assets`; accompanying HTML, Markdown, and plain text are never inserted.
+2. Explicit plain paste, including Ctrl/Cmd-Shift-V, uses `text/plain` literally.
+3. Otherwise `text/html` wins. This retains internal ProseMirror slice context and HTML-only semantics such as table row-header scope.
+4. Without HTML, `text/markdown` is parsed with this editor's finalized codec and extension syntax.
+5. Otherwise `text/plain` remains literal.
+
+Supported HTML is schema-parsed in a detached document, passed through ordered extension transforms, and clamped by the final built-in link/image URL sanitizer. Common `<pre><code class="language-ts">` and `lang-ts` language metadata is retained, as are leading task-list checkbox inputs. Unsupported elements and attributes do not become live host DOM. Raw HTML recognized inside explicit Markdown follows the documented inert opaque-source policy; exported Markdown remains untrusted input to downstream renderers.
+
+For host-owned paste buttons or menus, pass an already-read string to the typed commands:
+
+```ts
+if (editor.state.can.pasteMarkdown()) {
+  editor.commands.pasteMarkdown(markdownText);
+}
+
+editor.commands.pastePlainText(literalText);
+```
+
+Markora does not request Clipboard API permission. The embedding host owns asynchronous clipboard reads, user activation, denial UI, and fallbacks. A successful command replaces the retained ProseMirror selection, focuses the editor, has origin `"command"`, and contributes one undo step. Empty input, read-only mode, and active composition return `false`; non-string programmer input throws `TypeError`.
+
+For a non-empty outer selection, copy and cut synchronously attempt these event representations:
+
+- `text/html`: semantic schema HTML with internal `data-pm-slice` context; task items contain disabled portable checkbox inputs, not editor buttons or generated IDs;
+- `text/markdown`: canonical Markdown from the same compiled codec, including extension serializers;
+- `text/plain`: human-readable text with list/task markers, hard line breaks, tab-separated table cells, and exact code text.
+
+`transformCopied` runs before all three representations are derived. Inbound extension clipboard transforms are not reused on outbound data. Failure to write the optional Markdown MIME leaves HTML/plain copy working. Copy is read-only safe and does not change history or selection. Cut writes first and then performs one `"user"` transaction with `uiEvent: "cut"`; in read-only mode it writes without deleting.
+
+Active CodeMirror and passive code shells remain literal code surfaces: plain text wins unless a configured nested HTML transform explicitly changes the rich representation; otherwise Markdown is preferred to HTML-derived text when plain text is absent. Their native source selection copies plain code so CodeMirror's linewise copy/cut behavior remains intact. Selecting a complete code block through the outer ProseMirror surface produces fenced `text/markdown`. Nested code always rejects files.
+
+A native drag that spans a live CodeMirror DOM owner and the surrounding ProseMirror DOM is not a portable destructive selection: Firefox and WebKit expose mutually inconsistent DOM, CodeMirror, and document-model endpoints, including in Shadow DOM. Markora therefore owns such a cut as plain-text copy and suppresses deletion rather than risk DOM/model divergence. The browser-projected copied substring can vary on that boundary. For exact or destructive behavior, select within the active code editor, within the outer editor, or select the complete code block through the outer surface.
+
 ## Resources, links, images, and asset uploads
 
 `CreateEditorOptions.resources` is a creation-only, per-editor policy boundary. It lets the embedding host decide which URLs may be stored in Markdown, how stored URLs resolve at use time, how modifier-click navigation works, how images are fetched, and whether pasted or dropped files may become Markdown. Storage, authentication, and upload transport remain host responsibilities.
@@ -328,6 +364,7 @@ Host-facing behavior to keep in mind:
 - `editor.focus()` targets the outer ProseMirror surface; `editor.blur()` blurs whichever owned ProseMirror or CodeMirror surface is active, and lazy activation or boundary-exit work does not reclaim focus after that blur or after a host control takes it
 - `editor.commands.reconcileMarkdown(markdown)` applies an authoritative host snapshot while mapping selection/history and preserving plugin state
 - `editor.commands.resetMarkdown(markdown)` explicitly rebuilds editor state; deprecated `setMarkdown()` remains its hard-reset alias
+- `editor.commands.pasteMarkdown(text)` and `pastePlainText(text)` give host-owned clipboard UI an explicit parsing choice without reaching through `editor.view`
 - `editor.subscribe("state", ...)` refreshes host controls for every accepted state transition, including stored-mark-only changes; `update` remains the document-change-only signal and `onTransaction` the ProseMirror-aware compatibility hook
 - `resources` configures stored and runtime URL policy, image loading/privacy, link opening, and optional paste/drop upload; `editor.assets` controls retained upload attempts
 - `editor.subscribe("asset", ...)` drives host-owned progress, cancellation, retry, failure, and completion UI without polling Markdown
@@ -366,6 +403,7 @@ The headless command surface operates on the current model selection; a host doe
 | Area | Commands | Activity checks |
 | --- | --- | --- |
 | Host Markdown | `reconcileMarkdown`, `resetMarkdown`, deprecated `setMarkdown` | — |
+| Clipboard | `pasteMarkdown`, `pastePlainText` | `pasteMarkdown`, `pastePlainText` |
 | Inline and media | `toggleMark`, `setLink`, `removeLink`, `insertImage`, `removeImage` | `mark`, generic `node` |
 | Text and blocks | `setParagraph`, `setHeading`, `toggleBlockquote`, `insertHardBreak`, `insertHorizontalRule`, `setCodeBlock` | `paragraph`, `heading`, `blockquote`, `hardBreak`, `horizontalRule`, `codeBlock`, generic `node` |
 | Lists and tasks | `toggleBulletList`, `toggleOrderedList`, `sinkListItem`, `liftListItem`, `toggleTaskList`, `setTaskChecked` | `bulletList`, `orderedList`, `taskList`, `taskChecked`, generic `node` |

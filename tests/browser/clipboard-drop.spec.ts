@@ -32,12 +32,15 @@ test("@required file-bearing paste and drop are safely rejected everywhere", asy
     name: "local-secret.txt",
     type: "text/plain",
   };
+  await editorLocator(labPage, id).locator(".cm-content").click();
 
   for (const target of ["prosemirror", "code-mirror"] as const) {
     for (const event of ["paste", "dragover", "drop"] as const) {
       const result = await dispatchTransfer(labPage, id, {
         event,
         files: [file],
+        html: "<strong>mixed rich text must also be rejected</strong>",
+        markdown: "**mixed Markdown must also be rejected**",
         plain: "mixed text must also be rejected",
         target,
       });
@@ -128,7 +131,7 @@ test("rich HTML table headers keep scope and mixed rows receive body cells", asy
   ].join("\n"));
 });
 
-test("plain and Markdown-looking text paste remain literal", async ({ labPage }) => {
+test("Markdown MIME pastes semantically while plain Markdown-looking text remains literal", async ({ labPage }) => {
   const id = "plain-paste";
   await mountEditor(labPage, { id, markdown: "" });
   await focusParagraphEnd(labPage, id);
@@ -141,8 +144,8 @@ test("plain and Markdown-looking text paste remain literal", async ({ labPage })
   });
   expect(markdownResult.defaultPrevented).toBe(true);
   await settleEditor(labPage, id);
-  expect(await getMarkdown(labPage, id)).toBe("\\# Literal heading\n\n\\*\\*literal strong\\*\\*");
-  await expect(editorLocator(labPage, id).locator("h1, strong")).toHaveCount(0);
+  expect(await getMarkdown(labPage, id)).toBe("# Literal heading\n\n**literal strong**");
+  await expect(editorLocator(labPage, id).locator("h1, strong")).toHaveCount(2);
 
   await resetEditor(labPage, id, "");
   await focusParagraphEnd(labPage, id);

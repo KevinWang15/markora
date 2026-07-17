@@ -99,8 +99,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-014 | DONE | M | Remove synchronous full-document serialization from hot typing paths |
 | EE-015 | DONE | L | Lazily activate CodeMirror blocks and reduce base bundle cost |
 | EE-016 | DONE | M | Make task and overlay interactions keyboard and screen-reader complete |
-| EE-017 | NEXT | M | Add deliberate Markdown, rich HTML, and plain-text clipboard behavior |
-| EE-018 | QUEUED | L | Add mature table resize, reorder, selection, and keyboard operations |
+| EE-017 | DONE | M | Add deliberate Markdown, rich HTML, and plain-text clipboard behavior |
+| EE-018 | NEXT | L | Add mature table resize, reorder, selection, and keyboard operations |
 | EE-019 | QUEUED | M | Add configurable auto-pairing, shortcuts, and code-language editing |
 | EE-020 | QUEUED | M | Tokenize styling and add dark, high-contrast, reduced-motion, RTL, and i18n support |
 | EE-021 | QUEUED | L | Ship optional front matter, footnote, math, callout, TOC, HTML, and diagram extensions |
@@ -564,7 +564,7 @@ Make the supported UI operable without pointer-coordinate assumptions.
 
 ### EE-017 — Add deliberate clipboard semantics
 
-Status: `NEXT`
+Status: `DONE` (2026-07-17)
 
 #### Goal
 
@@ -578,9 +578,20 @@ Interoperate predictably with rich editors, code editors, and Markdown tools.
 - Preserve code, tables, lists, links, whitespace, and line breaks across supported clipboard paths.
 - Route pasted files through `EE-012` asset hooks.
 
+#### Completion notes
+
+- Both compatibility and minimal entries now expose typed `commands.pasteMarkdown(text)` and `pastePlainText(text)` operations with matching side-effect-free `state.can` queries. They replace the retained selection, focus after a successful edit, use the existing command origin, wait for outer or active-CodeMirror composition, and form an isolated undo step. Markdown-looking literal text remains model-stable after serialization.
+- Automatic outer paste has an explicit policy: file-bearing transfers remain wholly owned by the `EE-012` asset gate; explicit plain paste stays literal; rich HTML wins otherwise; Markdown MIME is parsed only when HTML is absent; and ordinary plain text is never guessed to be Markdown. The compiled codec, ordered extension transforms, paste handlers, and final URL sanitizer run once in their documented lanes, with structured transform failures reported once and aborted without partial insertion.
+- Supported detached HTML import retains paragraphs, marks, links, images, lists and portable leading task checkboxes, tables and header scope, code blocks, and conservative `language-*`/`lang-*` fence metadata in both package entries. Hostile raw HTML remains inert or discarded according to the opaque-source and URL policies; no clipboard HTML is attached to the live host DOM for parsing.
+- Outer copy/cut offers semantic HTML with private slice context, canonical Markdown, and useful plain text with task/list markers, line breaks, tab-separated table cells, and exact code text. Task HTML uses portable disabled checkbox inputs instead of live controls or generated IDs. Optional custom-MIME write failure leaves HTML/plain copy intact, and cut deletes only after a successful base write in one isolated history step.
+- Active CodeMirror and passive code shells share literal text/Markdown/HTML fallback semantics, nested extension ordering, file rejection, and isolated history. Native single-surface CodeMirror behavior remains intact. Firefox/WebKit split-owner drag ranges are explicitly a copy-only safety boundary: Markora prevents native cross-surface cut mutation rather than allowing DOM/model divergence, and the stable Firefox document/Shadow regression is retained.
+- The production-preview suite covers typed commands, rich/Markdown/plain precedence, semantic copy/cut, CDP-observed synchronous clipboard representations, hostile Markdown, URL clamps, file routing, public extensions, active/passive code copy/cut/paste, composition, document/Shadow roots, and split-cut safety. The complete required Chromium/Firefox/WebKit matrix passes 141 cases with 18 intentional engine/capability skips; the Firefox split-cut case also passed three repeated runs.
+- Bundle growth was reduced through shared nested-transfer parsing, shared code-language DOM parsing, and portable schema HTML. `pnpm pack:smoke` passes at 820,593 raw / 225,857 gzip initial compatibility JavaScript, 1,899,595 raw / 564,692 gzip total JavaScript, and 690,669 raw / 194,743 gzip minimal JavaScript, without moving any failure ceiling. `pnpm perf:ci` passes every 100 KiB, 500 KiB, and 1 MiB timing, hot-path, memory, bounded-editor, and zero-retention check.
+- Final verification: `pnpm check` passes 890 tests plus every build, type, declaration, browser-type, and Node ESM check; the required browser suite passes 141 cases with 18 intentional skips; `pnpm pack:smoke`, `pnpm perf:ci`, and `git diff --check` pass.
+
 ### EE-018 — Mature table editing
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -670,6 +681,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-016` are complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, and Gate C now has its keyboard and screen-reader interaction foundation. Completed work includes the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, lazy code-editor, and semantic embedded-control foundations.
+`EE-001` through `EE-017` are complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, and Gate C now has its keyboard/screen-reader and deliberate clipboard foundations. Completed work includes the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, lazy code-editor, semantic embedded-control, and rich/Markdown/plain clipboard foundations.
 
-The next iteration is `EE-017 — Add deliberate clipboard semantics`.
+The next iteration is `EE-018 — Mature table editing`.

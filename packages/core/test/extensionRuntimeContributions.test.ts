@@ -381,6 +381,9 @@ describe("extension runtime contribution lanes", () => {
     editor.view.someProp("transformPasted", (transform) => {
       transformed = transform(transformed, editor.view);
     });
+    editor.view.someProp("handlePaste", (handler) => (
+      handler(editor.view, new Event("paste") as ClipboardEvent, transformed)
+    ));
 
     expect(transformed).toBe(Slice.empty);
     expect(errors).toEqual([expect.objectContaining({
@@ -964,6 +967,9 @@ describe("extension runtime contribution lanes", () => {
     editor.view.someProp("transformPastedText", (transform) => {
       transformed = transform(transformed, false, editor.view);
     });
+    editor.view.someProp("handlePaste", (handler) => (
+      handler(editor.view, new Event("paste") as ClipboardEvent, Slice.empty)
+    ));
 
     expect(transformed).toBe("source");
     expect(events).toEqual([{

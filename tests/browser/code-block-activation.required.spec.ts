@@ -430,10 +430,17 @@ test("@required passive code-block drag keeps the native range and does not acti
     element.dispatchEvent(event);
     return {
       defaultPrevented: event.defaultPrevented,
+      plain: transfer.getData("text/plain"),
       selection: element.ownerDocument.getSelection()?.toString() ?? "",
+      types: Array.from(transfer.types),
     };
   });
-  expect(nativeCopy).toEqual({ defaultPrevented: false, selection: target });
+  expect(nativeCopy).toEqual({
+    defaultPrevented: true,
+    plain: target,
+    selection: target,
+    types: ["text/plain"],
+  });
   await settleEditor(labPage, id);
   expect((await snapshotEditor(labPage, id)).codeBlocks).toMatchObject({
     active: 0,

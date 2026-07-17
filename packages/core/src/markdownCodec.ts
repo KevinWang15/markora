@@ -23,6 +23,7 @@ import {
 } from "./markdownContributionCompiler";
 import { createReadonlySet } from "./readonlySet";
 import {
+  codeBlockDomAttrs,
   compileMarkdownEditorSchemaEntries,
   type MarkdownEditorOrderedSchemaMap,
 } from "./schemaContributionOrder";
@@ -49,14 +50,25 @@ type MarkdownSerializerStateWithInternals = MarkdownSerializerState & {
 const listItemSpec = baseSchema.spec.nodes.get("list_item");
 const codeBlockSpec = baseSchema.spec.nodes.get("code_block");
 const headingSpec = baseSchema.spec.nodes.get("heading");
-let nextTaskControlId = 0;
 
-function createTaskControlIds() {
-  nextTaskControlId += 1;
-  return {
-    content: `mdw-task-content-${nextTaskControlId}`,
-    label: `mdw-task-label-${nextTaskControlId}`,
-  };
+function firstMeaningfulChild(node: Node) {
+  let child = node.firstChild;
+  while (child && (child.nodeType === 8 || (child.nodeType === 3 && !child.textContent?.trim()))) {
+    child = child.nextSibling;
+  }
+  return child;
+}
+
+function leadingTaskCheckbox(item: HTMLElement) {
+  let child = firstMeaningfulChild(item);
+  if (child && isHTMLElementNode(child) && child.nodeName === "P") {
+    child = firstMeaningfulChild(child);
+  }
+  return child && isHTMLElementNode(child)
+    && child.nodeName === "INPUT"
+    && child.getAttribute("type")?.toLowerCase() === "checkbox"
+    ? child as HTMLInputElement
+    : null;
 }
 
 const nonSelectableCodeBlockSpec = codeBlockSpec
@@ -64,6 +76,11 @@ const nonSelectableCodeBlockSpec = codeBlockSpec
       ...codeBlockSpec,
       selectable: false,
       createGapCursor: true,
+      parseDOM: [{
+        tag: "pre",
+        preserveWhitespace: "full" as const,
+        getAttrs: codeBlockDomAttrs,
+      }],
     }
   : undefined;
 const taskListItemSpec = listItemSpec
@@ -89,11 +106,12 @@ const taskListItemSpec = listItemSpec
             const task = dom.getAttribute("data-task");
             const checked = dom.getAttribute("data-checked");
 
-            if (task !== "true") {
-              return { checked: null };
+            if (task === "true") {
+              return { checked: checked === "true" };
             }
 
-            return { checked: checked === "true" };
+            const checkbox = leadingTaskCheckbox(dom);
+            return { checked: checkbox ? checkbox.checked : null };
           },
         },
       ],
@@ -101,8 +119,6 @@ const taskListItemSpec = listItemSpec
         const checked = node.attrs.checked;
 
         if (typeof checked === "boolean") {
-          const ids = createTaskControlIds();
-
           return [
             "li",
             {
@@ -110,36 +126,14 @@ const taskListItemSpec = listItemSpec
               "data-checked": checked ? "true" : "false",
             },
             [
-              "button",
+              "input",
               {
-                "aria-checked": checked ? "true" : "false",
-                "aria-disabled": "false",
-                "aria-labelledby": `${ids.label} ${ids.content}`,
-                "class": "mdw-task-checkbox",
-                "contenteditable": "false",
-                "data-mdw-task-control": "true",
-                "role": "checkbox",
-                "tabindex": "0",
-                "type": "button",
+                ...(checked ? { checked: "" } : {}),
+                disabled: "",
+                type: "checkbox",
               },
-              [
-                "span",
-                {
-                  "class": "mdw-task-checkbox-state",
-                  "hidden": "",
-                  "id": ids.label,
-                },
-                "Task:",
-              ],
             ],
-            [
-              "div",
-              {
-                "class": "mdw-task-content",
-                "id": ids.content,
-              },
-              0,
-            ],
+            ["div", 0],
           ] as const;
         }
 
@@ -796,7 +790,9 @@ for (const { definition } of resolvedExtensions) {
   }
 }
 
-const markdownSerializer = new MarkdownSerializer(serializerNodes, serializerMarks);
+const markdownSerializer = new MarkdownSerializer(serializerNodes, serializerMarks, {
+  escapeExtraCharacters: /<(?=\/?[A-Za-z]|[!?])/g,
+});
 
 function stripTaskPrefixFromInline(fragment: Fragment, count: number) {
   let remaining = count;

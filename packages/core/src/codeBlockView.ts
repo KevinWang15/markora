@@ -4,6 +4,7 @@ import type { EditorView } from "prosemirror-view";
 import type { CodeBlockLanguageRegistry } from "./codeBlockLanguages";
 import type { MarkdownEditorNestedClipboardPipeline } from "./extensionAssembly";
 import { rejectFileTransferEvent } from "./fileTransferGuard";
+import { isolateClipboardHistory, nestedClipboardText } from "./clipboardSemantics";
 
 type BrowserWindow = Window & typeof globalThis;
 
@@ -48,6 +49,7 @@ type CodeBlockViewConstructor = new (
 ) => CodeBlockViewInstance;
 
 type CodeBlockViewClass = CodeBlockViewConstructor & {
+  isComposing(): boolean;
   setEditable(editable: boolean): void;
 };
 
@@ -110,69 +112,6 @@ let activeModulePromise: Promise<typeof import("./activeCodeBlockView")> | null 
 function loadActiveCodeBlockModule() {
   activeModulePromise ??= import("./activeCodeBlockView");
   return activeModulePromise;
-}
-
-const clipboardBlockElements = new Set([
-  "ADDRESS",
-  "ARTICLE",
-  "ASIDE",
-  "BLOCKQUOTE",
-  "DIV",
-  "H1",
-  "H2",
-  "H3",
-  "H4",
-  "H5",
-  "H6",
-  "HEADER",
-  "LI",
-  "MAIN",
-  "NAV",
-  "OL",
-  "P",
-  "PRE",
-  "SECTION",
-  "TABLE",
-  "TR",
-  "UL",
-]);
-
-function htmlClipboardToText(ownerDocument: Document, html: string) {
-  const template = ownerDocument.createElement("template");
-  template.innerHTML = html;
-
-  const readNode = (node: Node): string => {
-    if (node.nodeType === 3) {
-      return node.nodeValue ?? "";
-    }
-
-    if (node.nodeType !== 1 && node.nodeType !== 11) {
-      return "";
-    }
-
-    if (node instanceof ownerDocument.defaultView!.HTMLElement && node.tagName === "BR") {
-      return "\n";
-    }
-
-    let value = "";
-
-    for (const child of node.childNodes) {
-      value += readNode(child);
-    }
-
-    if (
-      node instanceof ownerDocument.defaultView!.HTMLElement
-      && clipboardBlockElements.has(node.tagName)
-      && value
-      && !value.endsWith("\n")
-    ) {
-      value += "\n";
-    }
-
-    return value;
-  };
-
-  return readNode(template.content).replace(/\n$/, "");
 }
 
 function getOwnerWindow(view: EditorView): BrowserWindow {
@@ -618,6 +557,10 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
   };
 
   class CodeBlockView implements ManagedCodeBlockInstance {
+    static isComposing() {
+      return [...instances].some((instance) => instance.activeView?.composing);
+    }
+
     static setEditable(editable: boolean) {
       for (const instance of [...instances]) {
         instance.applyEditable(editable);
@@ -821,6 +764,14 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
       if (
         this.activeView
+        && (event.type === "copy" || event.type === "cut")
+        && containsNode(this.dom, target)
+      ) {
+        return this.activeView.stopEvent(event);
+      }
+
+      if (
+        this.activeView
         && containsNode(this.activeHost, target)
       ) {
         return this.activeView.stopEvent(event);
@@ -867,7 +818,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       }
 
       if (event.type === "copy" || event.type === "cut") {
-        return true;
+        return this.handleStaticCopy(event as ClipboardEvent);
       }
 
       return false;
@@ -1644,44 +1595,21 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         return true;
       }
 
-      let html = "";
+      const text = nestedClipboardText(
+        this.outerView.dom.ownerDocument,
+        transfer,
+        nestedClipboard?.transformHtml,
+        nestedClipboard?.transformText,
+      );
 
-      try {
-        html = transfer.getData("text/html");
-      } catch {
-        // Protected transfer stores may reject reads.
-      }
-
-      let text = "";
-
-      try {
-        text = transfer.getData("text/plain");
-      } catch {
-        // Protected transfer stores may reject reads.
-      }
-
-      if (html && nestedClipboard?.transformHtml) {
-        const transformedHtml = nestedClipboard.transformHtml(html);
-
-        if (transformedHtml !== html) {
-          text = htmlClipboardToText(this.outerView.dom.ownerDocument, transformedHtml);
-        } else if (!text) {
-          text = htmlClipboardToText(this.outerView.dom.ownerDocument, html);
-        }
-      } else if (!text && html) {
-        text = htmlClipboardToText(this.outerView.dom.ownerDocument, html);
-      }
-
-      if (nestedClipboard?.transformText) {
-        text = nestedClipboard.transformText(text);
-      }
+      if (text == null) return false;
 
       if (!this.canEdit) {
         event.preventDefault();
         return true;
       }
 
-      if (!text && !html) {
+      if (!text) {
         event.preventDefault();
         return true;
       }
@@ -1715,8 +1643,53 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       ));
       tr.setSelection(TextSelection.create(tr.doc, cursor));
       tr.setMeta("uiEvent", kind);
+      isolateClipboardHistory(tr);
       event.preventDefault();
       this.outerView.dispatch(tr.scrollIntoView());
+      return true;
+    }
+
+    private handleStaticCopy(event: ClipboardEvent) {
+      const blockPos = this.getPos();
+      const codeStart = blockPos + 1;
+      const codeEnd = blockPos + this.node.nodeSize - 1;
+      const selection = this.outerView.state.selection;
+
+      if (selection.from < codeStart || selection.to > codeEnd) {
+        return false;
+      }
+
+      const from = Math.max(codeStart, Math.min(codeEnd, selection.from));
+      const to = Math.max(codeStart, Math.min(codeEnd, selection.to));
+
+      if (from >= to) {
+        event.preventDefault();
+        return true;
+      }
+
+      const text = this.node.textContent.slice(from - codeStart, to - codeStart);
+      let wrote = false;
+
+      try {
+        if (event.clipboardData) {
+          event.clipboardData.clearData();
+          event.clipboardData.setData("text/plain", text);
+          wrote = true;
+        }
+      } catch {
+        // The event is still owned so native DOM cut cannot mutate the shell.
+      }
+
+      event.preventDefault();
+
+      if (event.type === "cut" && this.canEdit && wrote) {
+        const tr = this.outerView.state.tr.delete(from, to);
+        tr.setSelection(TextSelection.create(tr.doc, Math.min(from, tr.doc.content.size)));
+        tr.setMeta("uiEvent", "cut");
+        isolateClipboardHistory(tr);
+        this.outerView.dispatch(tr.scrollIntoView());
+      }
+
       return true;
     }
   }

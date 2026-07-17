@@ -91,6 +91,10 @@ const update: UpdateEditorOptions = {
 handle.commands.increment();
 const count: number = handle.state.count();
 editor.commands.toggleMark("strike");
+editor.commands.pasteMarkdown("# Pasted");
+editor.commands.pastePlainText("# Literal");
+editor.state.can.pasteMarkdown();
+editor.state.can.pastePlainText();
 editor.commands.setHeading(2);
 editor.commands.toggleBlockquote();
 editor.commands.toggleBulletList();

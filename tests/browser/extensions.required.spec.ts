@@ -1,12 +1,16 @@
 import AxeBuilder from "@axe-core/playwright";
 import {
+  copyEditorSelection,
   dispatchTransfer,
   destroyEditorOnly,
   editorLocator,
   expect,
+  focusEditor,
   getExtensionSnapshot,
   getMarkdown,
   mountEditor,
+  resetEditor,
+  runEditorCommand,
   settleEditor,
   test,
   updateEditorOptions,
@@ -92,6 +96,35 @@ test("@required public extensions parse, render, edit, serialize, handle keys, a
   await expect(labPage.getByRole("button", { name: "Wrap selection in warning callout" })).toBeDisabled();
 });
 
+test("@required public extension nodes and marks round-trip through clipboard Markdown", async ({ labPage }) => {
+  const id = "extension-clipboard-roundtrip";
+  await mountEditor(labPage, {
+    extensionMode: "public-example",
+    id,
+    initialSelection: "all",
+    markdown: EXTERNAL_MARKDOWN,
+  });
+
+  const copied = await copyEditorSelection(labPage, id);
+  expect(copied.defaultPrevented).toBe(true);
+  expect(copied.markdown).toBe(NORMALIZED_EXTERNAL_MARKDOWN);
+  expect(copied.html).toContain('data-demo-callout="warning"');
+  expect(copied.html).toContain('data-demo-highlight="true"');
+
+  await resetEditor(labPage, id, "");
+  await focusEditor(labPage, id, "end");
+  expect(await runEditorCommand(labPage, id, {
+    type: "pasteMarkdown",
+    text: copied.markdown,
+  })).toBe(true);
+  await settleEditor(labPage, id);
+
+  const editor = editorLocator(labPage, id);
+  await expect(editor.locator("[data-demo-callout-node-view=true]")).toContainText("Ship carefully today.");
+  await expect(editor.locator("mark[data-demo-highlight=true]")).toHaveText("bright");
+  expect(await getMarkdown(labPage, id)).toBe(NORMALIZED_EXTERNAL_MARKDOWN);
+});
+
 test("@required contributed NodeView and host-rendered UI action are accessible and keyboard operable", async ({ labPage }) => {
   const id = "extension-accessibility";
   await mountEditor(labPage, {
@@ -136,7 +169,30 @@ test("@required contributed NodeView and host-rendered UI action are accessible 
   expect(violations).toEqual([]);
 });
 
-test("@required clipboard contributions reach nested CodeMirror with exact surface policy", async ({ labPage }) => {
+test("@required clipboard contributions reach active and passive code with exact surface policy", async ({ labPage }) => {
+  const passiveId = "extension-passive-clipboard";
+  await mountEditor(labPage, {
+    extensionMode: "public-example",
+    id: passiveId,
+    markdown: "```text\ncode-start\n```",
+  });
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "code-start", "end"),
+    passiveId,
+  )).toBe(true);
+  const passivePaste = await dispatchTransfer(labPage, passiveId, {
+    event: "paste",
+    plain: " NESTEDCLIPBOARDINPUT BOTHCLIPBOARDINPUT",
+    target: "static-code",
+  });
+  expect(passivePaste.defaultPrevented).toBe(true);
+  await settleEditor(labPage, passiveId);
+  expect(await getMarkdown(labPage, passiveId)).toBe([
+    "```text",
+    "code-start nested-then-both-output both-clipboard-output",
+    "```",
+  ].join("\n"));
+
   const id = "extension-nested-clipboard";
   await mountEditor(labPage, {
     extensionMode: "public-example",

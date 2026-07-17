@@ -104,7 +104,7 @@ export type LabTransferSpec = {
   html?: string;
   markdown?: string;
   plain?: string;
-  target?: "code-mirror" | "prosemirror";
+  target?: "code-mirror" | "prosemirror" | "static-code";
 };
 
 type BrowserFailure = {

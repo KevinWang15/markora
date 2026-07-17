@@ -378,8 +378,10 @@ describe('task list accessibility', () => {
       editor.view.state.doc.content,
     ));
 
-    expect(container.textContent).toContain('Task:');
-    expect(container.querySelector<HTMLElement>('.mdw-task-checkbox-state')?.hidden).toBe(true);
+    const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(checkbox?.checked).toBe(true);
+    expect(checkbox?.disabled).toBe(true);
+    expect(container.textContent).not.toContain('Task:');
     const reparsed = ProseMirrorDOMParser.fromSchema(editor.view.state.schema).parse(container);
     expect(reparsed.textContent).toBe('done');
     expect(reparsed.firstChild?.firstChild?.attrs.checked).toBe(true);

@@ -121,6 +121,14 @@ These transformations are intentional and happen on import/export even when the 
 
 Interior spaces in ordinary text are generally retained. Leading/trailing paragraph spaces, trailing spaces that carry no hard-break meaning, marker indentation, and escape spelling are not lexical data in this contract.
 
+## Clipboard import and export boundary
+
+Normal paste prefers rich HTML over `text/markdown` because an internal HTML slice can retain schema information that canonical Markdown cannot encode, such as a table body row header. If HTML is absent, `text/markdown` enters through the same per-editor parser, extension codec, and URL sanitizer as other Markdown parsing boundaries. Plain text is never auto-detected as Markdown. Ctrl/Cmd-Shift-V and `commands.pastePlainText()` keep Markdown-looking punctuation literal; `commands.pasteMarkdown()` makes the opposite choice explicit.
+
+Supported external HTML is converted through schema DOM rules. Paragraphs, marks, lists and portable task checkboxes, links, images, code blocks, and tables become the corresponding document nodes. A `language-*` or `lang-*` class on a `<pre><code>` child supplies a conservative code-fence info token. Unsupported DOM, executable attributes, and unsafe built-in URLs are discarded; raw HTML supplied through Markdown is preserved only through the inert opaque-source rules above. This is still not a publishing sanitizer.
+
+Outer copy exposes semantic HTML, canonical Markdown, and a human-readable plain representation when the event clipboard accepts them. Canonical Markdown is the fidelity representation for code fences/languages, table alignment, list/task state, links, images, marks, opaque source, and extension syntax. HTML additionally carries private slice context for same-editor structure. Plain text is intended for human-readable destinations and can omit syntax-only information such as link destinations or code-fence language. Nested code selection is deliberately plain source; select the complete outer code block when fenced Markdown is required. A browser-native range split across active CodeMirror and outer ProseMirror is a safety boundary: Markora emits browser-projected plain text and prevents destructive cut because Firefox/WebKit do not expose one consistent cross-owner range.
+
 ## URL and embedded-content policy
 
 `CreateEditorOptions.resources` defines one per-editor stored-URL policy. Markora applies its final sanitizer after Markdown parsing, rich paste (including extension clipboard and raw-plugin slice transforms), input rules, built-in UI and commands, asset-upload results, and runtime URL resolution. A host-approved custom scheme therefore reaches the final policy instead of being discarded by Markdown-it's fixed allowlist, while an earlier paste contribution cannot bypass the clamp.

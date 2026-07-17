@@ -101,6 +101,8 @@ export type MarkdownEditorCommands = {
   resetMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => void;
   /** @deprecated Use resetMarkdown() for an explicit hard reset, or reconcileMarkdown() for ordinary host updates. */
   setMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => void;
+  pasteMarkdown: (markdown: string) => boolean;
+  pastePlainText: (text: string) => boolean;
   toggleMark: (mark: MarkdownEditorMark) => boolean;
   setLink: (href: string) => boolean;
   removeLink: () => boolean;
@@ -131,6 +133,8 @@ export type MarkdownEditorCommands = {
 
 export type MarkdownEditorState = {
   can: {
+    pasteMarkdown: () => boolean;
+    pastePlainText: () => boolean;
     toggleMark: (mark: MarkdownEditorMark) => boolean;
     setLink: () => boolean;
     removeLink: () => boolean;

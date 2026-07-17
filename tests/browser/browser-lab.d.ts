@@ -57,6 +57,7 @@ type BrowserLabCommandRequest =
   | { type: BrowserLabNoArgumentCommand }
   | { type: "insertImage"; attrs: { alt?: string | null; src: string; title?: string | null } }
   | { type: "insertTable"; options?: { columns?: number; rows?: number } }
+  | { type: "pasteMarkdown" | "pastePlainText"; text: string }
   | { type: "setCodeBlock"; options?: { language?: string | null } }
   | { type: "setHeading"; level: 1 | 2 | 3 | 4 | 5 | 6 }
   | { type: "setLink"; href: string }
@@ -144,7 +145,13 @@ interface Window {
     can(id: string, request: BrowserLabCommandRequest): boolean;
     clearEvents(id: string): void;
     command(id: string, request: BrowserLabCommandRequest): boolean;
-    copySelection(id: string): { defaultPrevented: boolean; html: string; plain: string };
+    copySelection(id: string): {
+      defaultPrevented: boolean;
+      html: string;
+      markdown: string;
+      plain: string;
+      types: string[];
+    };
     destroy(id: string): boolean;
     destroyEditor(id: string): boolean;
     destroyAll(): void;
@@ -154,7 +161,7 @@ interface Window {
       html?: string;
       markdown?: string;
       plain?: string;
-      target?: "code-mirror" | "prosemirror";
+      target?: "code-mirror" | "prosemirror" | "static-code";
     }): { defaultPrevented: boolean; fileCount: number; types: string[] };
     dispatchViewportEvent(type: "resize" | "scroll"): void;
     events(id: string): {
