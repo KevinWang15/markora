@@ -82,5 +82,17 @@ export type {
   CodeBlockLanguageRegistry,
   CodeBlockLanguageSupport,
 } from "./codeBlockLanguages";
-export type { EditorUiFactory } from "./uiTypes";
+export type {
+  CodeBlockLanguageEditRequest,
+  CodeBlockLanguageEditorOverlay,
+  EditorUiFactory,
+} from "./uiTypes";
+export type {
+  MarkdownEditorShortcutBinding,
+  MarkdownEditorShortcutMap,
+} from "./shortcutConfig";
+export type {
+  MarkdownEditorAutoPair,
+  MarkdownEditorTypingOptions,
+} from "./typingErgonomics";
 export type { OpaqueMarkdownEditRequest, OpaqueMarkdownKind } from "./opaqueMarkdown";

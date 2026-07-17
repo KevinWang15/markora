@@ -170,6 +170,55 @@ describe("extension runtime contribution lanes", () => {
     expect(calls).toEqual(["first:false", "second:true"]);
   });
 
+  it("remaps, disables, canonicalizes, and composition-gates qualified extension shortcuts", () => {
+    const calls: string[] = [];
+    const first = runtimeExtension("acme-key-config", () => ({
+      keymaps: [{
+        id: "first",
+        key: "Control-j",
+        create: () => () => {
+          calls.push("first");
+          return false;
+        },
+      }, {
+        id: "second",
+        key: "Ctrl-j",
+        create: () => () => {
+          calls.push("second");
+          return true;
+        },
+      }, {
+        id: "disabled",
+        key: "Ctrl-d",
+        create: () => () => {
+          calls.push("disabled");
+          return true;
+        },
+      }],
+    }));
+    const editor = track(createEditor({
+      element: host(),
+      extensions: [first],
+      shortcuts: {
+        "acme-key-config/disabled": false,
+        "acme-key-config/first": "Alt-k",
+        "acme-key-config/second": "a-k",
+      },
+    }));
+
+    const dispatch = (init: KeyboardEventInit) => editor.view.dom.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
+    );
+    dispatch({ ctrlKey: true, key: "j" });
+    dispatch({ ctrlKey: true, key: "d" });
+    expect(calls).toEqual([]);
+
+    dispatch({ altKey: true, isComposing: true, key: "k" });
+    expect(calls).toEqual([]);
+    dispatch({ altKey: true, key: "k" });
+    expect(calls).toEqual(["first", "second"]);
+  });
+
   it("runs public keymaps before compatibility and base keymaps", () => {
     let calls = 0;
     const extension = runtimeExtension("acme-key-override", () => ({

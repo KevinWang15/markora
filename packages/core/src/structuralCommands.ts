@@ -17,6 +17,7 @@ import {
   type EditorState,
   type Transaction,
 } from "prosemirror-state";
+import { normalizeCodeBlockInfo } from "./codeBlockMarkdown";
 import type {
   MarkdownEditorCodeBlockOptions,
   MarkdownEditorHeadingLevel,
@@ -71,13 +72,7 @@ function normalizeCodeBlockOptions(
     throw new TypeError("Code block language must be a string or null.");
   }
 
-  const normalized = language.trim();
-
-  if (normalized.length > 128 || /[\r\n`]/u.test(normalized)) {
-    throw new RangeError("Code block language must be at most 128 characters and contain no line breaks or backticks.");
-  }
-
-  return Object.freeze({ language: normalized });
+  return Object.freeze({ language: normalizeCodeBlockInfo(language) });
 }
 
 function findAncestor($pos: ResolvedPos, nodeType: NodeType | undefined): AncestorInfo | null {

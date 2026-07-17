@@ -442,6 +442,33 @@
   background: #f0f3f6;
 }
 
+.mdw-host button.mdw-code-block-language {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  text-align: start;
+  font: inherit;
+  cursor: pointer;
+  appearance: none;
+}
+
+.mdw-host button.mdw-code-block-language:hover:not(:disabled) {
+  color: #0969da;
+  background: #e7f1ff;
+}
+
+.mdw-host button.mdw-code-block-language:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid #0969da;
+  outline-offset: -2px;
+}
+
+.mdw-host button.mdw-code-block-language:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
 .mdw-host .mdw-code-block-editor {
   overflow: hidden;
   background: #ffffff;

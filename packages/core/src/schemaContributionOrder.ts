@@ -1,3 +1,4 @@
+import { sanitizeCodeBlockDomInfo } from "./codeBlockMarkdown";
 import type { MarkdownEditorSchemaEntry } from "./extensionApi";
 
 export type MarkdownEditorOrderedSchemaMap<TSpec> = Readonly<{
@@ -20,7 +21,7 @@ export type MarkdownEditorOwnedSchemaEntry<TSpec> = Readonly<{
 export function codeBlockDomAttrs(dom: Node | string) {
   if (typeof dom === "string" || dom.nodeType !== 1) return { params: "" };
   const element = dom as Element;
-  const internal = element.getAttribute("data-params");
+  const internal = sanitizeCodeBlockDomInfo(element.getAttribute("data-params"));
   if (internal != null) return { params: internal };
   const language = element.querySelector("code")?.getAttribute("class")?.match(
     /(?:^|\s)(?:lang|language)-([A-Za-z0-9_+-]{1,64})(?:\s|$)/,

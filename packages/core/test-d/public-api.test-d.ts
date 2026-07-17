@@ -5,6 +5,8 @@ import {
   getMarkdownEditorTransactionOrigin,
   setMarkdownEditorTransactionOrigin,
   type CodeBlockLanguageRegistry,
+  type CodeBlockLanguageEditRequest,
+  type CodeBlockLanguageEditorOverlay,
   type CreateEditorOptions,
   type EditorUiFactory,
   type MarkdownEditor,
@@ -28,6 +30,7 @@ import {
   type MarkdownEditorAssetUploadResult,
   type MarkdownEditorSelectionSnapshot,
   type MarkdownEditorSelectionTarget,
+  type MarkdownEditorShortcutMap,
   type MarkdownEditorState,
   type MarkdownEditorStateEvent,
   type MarkdownEditorTableAlignment,
@@ -38,6 +41,7 @@ import {
   type MarkdownEditorTableOperationErrorEvent,
   type MarkdownEditorTableResizeOptions,
   type MarkdownEditorTableRowMoveDirection,
+  type MarkdownEditorTypingOptions,
   type MarkdownEditorUi,
   type MarkdownEditorUnsubscribe,
   type OpaqueMarkdownEditRequest,
@@ -51,6 +55,15 @@ declare const hostElement: HTMLElement;
 
 const domAttributes: MarkdownEditorDomAttributes = { "data-editor": "document" };
 const initialSelection: MarkdownEditorSelectionTarget = { anchor: 1, head: 2 };
+const shortcuts: MarkdownEditorShortcutMap = {
+  "@markora/core/bold": "Alt-b",
+  "acme-extension/action": ["Ctrl-j", "Alt-j"],
+  "@markora/core/italic": false,
+};
+const typing: MarkdownEditorTypingOptions = {
+  autoPairs: ["parentheses", "double-quotes", "strong-asterisks"],
+  wrapSelection: true,
+};
 const options: CreateEditorOptions = {
   ariaLabel: "Document body",
   attributes: domAttributes,
@@ -95,6 +108,8 @@ const options: CreateEditorOptions = {
       },
     },
   },
+  shortcuts,
+  typing,
 };
 const editor = createEditor(options);
 const typedEditor: MarkdownEditor = editor;
@@ -323,6 +338,7 @@ editor.ui?.createTable();
 editor.ui?.editLink();
 editor.ui?.editImage();
 editor.ui?.editTable();
+editor.ui?.editCodeBlockLanguage();
 editor.destroy();
 
 const registry: CodeBlockLanguageRegistry = {
@@ -341,9 +357,27 @@ const uiFactory: EditorUiFactory = (_options) => {
   void linkUpdated;
   void imageUpdated;
 
+  const codeBlockLanguageEditor: CodeBlockLanguageEditorOverlay = {
+    open(editorView, marker, request: CodeBlockLanguageEditRequest) {
+      const language: string = request.language;
+      const updated: boolean = request.update(language);
+      request.cancel();
+      void editorView;
+      void marker;
+      void updated;
+      return true;
+    },
+    close() {},
+    isComposing() {
+      return false;
+    },
+    destroy() {},
+  };
+
   return {
     enabled: true,
     clearSelectionAnchor() {},
+    codeBlockLanguageEditor,
     createSelectionAnchor() {
       return hostElement;
     },

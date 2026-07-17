@@ -89,6 +89,7 @@ function createTableContext(overrides: Partial<{
 
 function destroyControllers(controllers: ReturnType<ReturnType<typeof createDefaultUi>>) {
   controllers.clearSelectionAnchor();
+  controllers.codeBlockLanguageEditor?.destroy();
   controllers.linkEditor.destroy();
   controllers.imageEditor.destroy();
   controllers.tableToolbar.destroy();
@@ -153,6 +154,120 @@ afterEach(() => {
 });
 
 describe('createDefaultUi', () => {
+  it('edits exact code-fence info with accessible, IME-safe trigger focus', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('button');
+    marker.type = 'button';
+    document.body.append(hostElement, marker);
+    const updates: string[] = [];
+    const controllers = createControllers(hostElement);
+    const languageEditor = controllers.codeBlockLanguageEditor!;
+    const view = createView();
+
+    expect(languageEditor.open(view, marker, {
+      language: 'lang`variant metadata=true',
+      update(nextLanguage) {
+        updates.push(nextLanguage);
+        return true;
+      },
+    })).toBe(true);
+
+    const dialog = document.querySelector<HTMLElement>('.mdw-code-language-editor')!;
+    const input = dialog.querySelector<HTMLInputElement>(
+      '[aria-label="Code block language or fence info"]',
+    )!;
+    expect(dialog.getAttribute('role')).toBe('dialog');
+    expect(dialog.getAttribute('aria-modal')).toBe('false');
+    expect(input.value).toBe('lang`variant metadata=true');
+    expect(document.activeElement).toBe(input);
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, input.value.length]);
+
+    input.value = 'typescript\0strict=true';
+    Array.from(dialog.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Save')
+      ?.click();
+    expect(updates).toEqual([]);
+    expect(dialog.hidden).toBe(false);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+
+    input.value = 'typescript strict=true';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter',
+    }));
+    Array.from(dialog.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Save')
+      ?.click();
+    expect(updates).toEqual([]);
+    expect(languageEditor.isComposing?.()).toBe(true);
+    expect(dialog.hidden).toBe(false);
+
+    input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter',
+    }));
+    expect(updates).toEqual(['typescript strict=true']);
+    expect(dialog.hidden).toBe(true);
+    expect(document.activeElement).toBe(marker);
+
+    const hostButton = document.createElement('button');
+    document.body.append(hostButton);
+    expect(languageEditor.open(view, marker, {
+      language: 'old',
+      update() {
+        hostButton.focus();
+        return true;
+      },
+    })).toBe(true);
+    input.value = 'new';
+    Array.from(dialog.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Save')
+      ?.click();
+    expect(dialog.hidden).toBe(true);
+    expect(document.activeElement).toBe(hostButton);
+
+    expect(languageEditor.open(view, marker, {
+      language: 'old',
+      update() {
+        return false;
+      },
+    })).toBe(true);
+    input.value = 'new';
+    Array.from(dialog.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Save')
+      ?.click();
+    expect(dialog.hidden).toBe(false);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(document.getElementById(input.getAttribute('aria-errormessage')!)?.hidden).toBe(false);
+
+    destroyControllers(controllers);
+  });
+
+  it('cleans up a code-language open invalidated during focus reentrancy', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('button');
+    document.body.append(hostElement, marker);
+    const controllers = createControllers(hostElement);
+    const languageEditor = controllers.codeBlockLanguageEditor!;
+    const input = document.querySelector<HTMLInputElement>(
+      '.mdw-code-language-editor-input',
+    )!;
+    input.addEventListener('focus', () => marker.remove(), { once: true });
+
+    expect(languageEditor.open(createView(), marker, {
+      language: 'ts',
+      update: () => true,
+    })).toBe(false);
+    expect(document.querySelector<HTMLElement>('.mdw-code-language-editor')?.hidden).toBe(true);
+
+    destroyControllers(controllers);
+  });
+
   it('exposes named non-modal dialogs, selects the primary value, and submits with Enter', () => {
     const hostElement = document.createElement('div');
     const marker = document.createElement('span');
@@ -344,11 +459,13 @@ describe('createDefaultUi', () => {
     const anchor = controllers.createSelectionAnchor(createView());
 
     expect(foreignWindow.document.body.querySelector('.mdw-link-editor')).not.toBeNull();
+    expect(foreignWindow.document.body.querySelector('.mdw-code-language-editor')).not.toBeNull();
     expect(foreignWindow.document.body.querySelector('.mdw-image-editor')).not.toBeNull();
     expect(foreignWindow.document.body.querySelector('.mdw-table-toolbar')).not.toBeNull();
     expect(anchor).not.toBeNull();
     expect(foreignWindow.document.body.contains(anchor)).toBe(true);
     expect(document.body.querySelector('.mdw-link-editor')).toBeNull();
+    expect(document.body.querySelector('.mdw-code-language-editor')).toBeNull();
     expect(document.body.querySelector('.mdw-image-editor')).toBeNull();
     expect(document.body.querySelector('.mdw-table-toolbar')).toBeNull();
 
@@ -366,6 +483,7 @@ describe('createDefaultUi', () => {
     const anchor = controllers.createSelectionAnchor(createView());
 
     expect(shadowRoot.querySelector('.mdw-link-editor')).not.toBeNull();
+    expect(shadowRoot.querySelector('.mdw-code-language-editor')).not.toBeNull();
     expect(shadowRoot.querySelector('.mdw-image-editor')).not.toBeNull();
     expect(shadowRoot.querySelector('.mdw-table-toolbar')).not.toBeNull();
     expect(anchor?.getRootNode()).toBe(shadowRoot);
@@ -482,6 +600,42 @@ describe('createDefaultUi', () => {
     destroyControllers(controllers);
   });
 
+  it('keeps code-language controls live through closed Shadow DOM pointer retargeting', async () => {
+    const shadowHost = document.createElement('div');
+    const shadowRoot = shadowHost.attachShadow({ mode: 'closed' });
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('button');
+    shadowRoot.append(hostElement, marker);
+    document.body.append(shadowHost);
+    const controllers = createControllers(hostElement);
+    const updates: string[] = [];
+    const view = createView();
+
+    expect(controllers.codeBlockLanguageEditor?.open(view, marker, {
+      language: 'ts',
+      update(nextLanguage) {
+        updates.push(nextLanguage);
+        return true;
+      },
+    })).toBe(true);
+    const dialog = shadowRoot.querySelector<HTMLElement>('.mdw-code-language-editor')!;
+    const input = dialog.querySelector<HTMLInputElement>(
+      '[aria-label="Code block language or fence info"]',
+    )!;
+    const save = Array.from(dialog.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Save')!;
+    input.value = 'typescript';
+    save.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, composed: true }));
+    await Promise.resolve();
+
+    expect(dialog.hidden).toBe(false);
+    save.click();
+    expect(updates).toEqual(['typescript']);
+    expect(dialog.hidden).toBe(true);
+
+    destroyControllers(controllers);
+  });
+
   it('roves table-toolbar focus safely in a foreign Shadow DOM realm', () => {
     const foreignWindow = trackWindow(new JSDOM('<!doctype html><html><body></body></html>').window as unknown as Window);
     const shadowHost = foreignWindow.document.createElement('div');
@@ -542,6 +696,7 @@ describe('createDefaultUi', () => {
     const anchor = controllers.createSelectionAnchor(createView());
 
     expect(portalRoot.querySelector('.mdw-link-editor')).not.toBeNull();
+    expect(portalRoot.querySelector('.mdw-code-language-editor')).not.toBeNull();
     expect(portalRoot.querySelector('.mdw-image-editor')).not.toBeNull();
     expect(portalRoot.querySelector('.mdw-table-toolbar')).not.toBeNull();
     expect(shadowRoot.querySelector('.mdw-link-editor')).toBeNull();
@@ -1068,7 +1223,7 @@ describe('createDefaultUi', () => {
       value: new foreignWindow.EventTarget(),
     });
     destroyControllers(controllers);
-    expect(removeViewportListener).toHaveBeenCalledTimes(8);
+    expect(removeViewportListener).toHaveBeenCalledTimes(10);
   });
 
   it('clamps and flips the table toolbar within a narrow viewport', () => {

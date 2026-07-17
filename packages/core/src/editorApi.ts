@@ -17,6 +17,8 @@ import type {
   MarkdownEditorAssets,
   MarkdownEditorResourceOptions,
 } from "./resourceApi";
+import type { MarkdownEditorShortcutMap } from "./shortcutConfig";
+import type { MarkdownEditorTypingOptions } from "./typingErgonomics";
 
 export type MarkdownEditorDomAttributes = Readonly<Record<string, string>>;
 
@@ -57,6 +59,10 @@ export type CreateEditorOptions = {
   onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
   placeholder?: string;
   resources?: MarkdownEditorResourceOptions;
+  /** Creation-time overrides for built-in and qualified extension keymaps. */
+  shortcuts?: MarkdownEditorShortcutMap;
+  /** Creation-time, opt-in typing assistance. */
+  typing?: MarkdownEditorTypingOptions;
   ui?: EditorUiFactory;
 };
 
@@ -212,6 +218,7 @@ export type MarkdownEditorState = {
 
 export type MarkdownEditorUi = {
   createTable: () => boolean;
+  editCodeBlockLanguage: () => boolean;
   editLink: () => boolean;
   editImage: () => boolean;
   editTable: () => boolean;

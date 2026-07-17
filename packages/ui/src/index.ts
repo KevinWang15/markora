@@ -1,5 +1,10 @@
 import type { EditorUiFactory, MarkdownEditor } from "markora";
-import { createImageEditorOverlay, createLinkEditorOverlay, createTableToolbarOverlay } from "./overlays";
+import {
+  createCodeBlockLanguageEditorOverlay,
+  createImageEditorOverlay,
+  createLinkEditorOverlay,
+  createTableToolbarOverlay,
+} from "./overlays";
 import { setViewportPosition } from "./positioning";
 
 type EditorView = MarkdownEditor["view"];
@@ -32,6 +37,11 @@ export function createDefaultUi(config: { portalRoot?: PortalRoot } = {}): Edito
       portalRoot,
       removeActiveLink: options.removeActiveLink,
       updateLinkHref: options.updateLinkHref,
+      win,
+    });
+    const codeBlockLanguageEditor = createCodeBlockLanguageEditorOverlay({
+      doc: ownerDocument,
+      portalRoot,
       win,
     });
     const imageEditor = createImageEditorOverlay({
@@ -86,6 +96,7 @@ export function createDefaultUi(config: { portalRoot?: PortalRoot } = {}): Edito
     return {
       enabled: true,
       clearSelectionAnchor,
+      codeBlockLanguageEditor,
       createSelectionAnchor,
       imageEditor,
       linkEditor,

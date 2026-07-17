@@ -11,6 +11,7 @@ import {
   type ParseSpec,
 } from "prosemirror-markdown";
 import { Plugin } from "prosemirror-state";
+import { codeBlockFenceTokenAttrs, serializeCodeBlock } from "./codeBlockMarkdown";
 import {
   MarkdownEditorExtensionError,
   isValidMarkdownEditorLocalId,
@@ -632,6 +633,10 @@ registerMarkdownEditorTokenizerRules(
 
 const foundationMarkdownTokens: Record<string, ParseSpec> = {
   ...defaultMarkdownParser.tokens,
+  fence: {
+    ...defaultMarkdownParser.tokens.fence,
+    getAttrs: codeBlockFenceTokenAttrs,
+  },
   table: { block: "table" },
   thead: { ignore: true },
   tbody: { ignore: true },
@@ -692,6 +697,7 @@ const serializerNodes: Record<
   (typeof defaultMarkdownSerializer.nodes)[string]
 > = {
     ...defaultMarkdownSerializer.nodes,
+    code_block: serializeCodeBlock,
     raw_block(state: MarkdownSerializerState, node: ProseMirrorNode) {
       const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
       state.text(source, false);

@@ -442,7 +442,7 @@ The command contract is designed for toolbar and keyboard integrations:
 - `state.can.*` performs a pure dry run. It does not dispatch, focus, add history, or emit an event. It returns `false` in read-only mode, while an IME composition is active, when a feature is absent, when the selection is inapplicable, or when the operation would be a no-op.
 - `state.isActive.*` remains available and accurate in read-only mode and during composition.
 - A successful interactive command focuses the outer editor. A successful built-in interactive document-changing command other than undo/redo is one transaction with origin `"command"` and contributes one undoable history step. A successful stored-mark-only command emits `state` with `docChanged: false` and does not emit `update`.
-- A command that returns `false` does not focus the editor, mutate history, or emit state/update/change activity. Invalid programmer arguments still throw instead of returning `false`: heading levels are integers from 1 through 6; table dimensions are integers from 1 through 100; table insertion sides are `"before"` or `"after"`; row directions are `"up"` or `"down"`; column directions are `"left"` or `"right"`; task values are Boolean; alignments are `"left"`, `"center"`, `"right"`, or `null`; and a code-block language is a string or `null`, trimmed on input, with a normalized limit of 128 characters and no line break or backtick.
+- A command that returns `false` does not focus the editor, mutate history, or emit state/update/change activity. Invalid programmer arguments still throw instead of returning `false`: heading levels are integers from 1 through 6; table dimensions are integers from 1 through 100; table insertion sides are `"before"` or `"after"`; row directions are `"up"` or `"down"`; column directions are `"left"` or `"right"`; task values are Boolean; alignments are `"left"`, `"center"`, `"right"`, or `null`; and a code-block language is a string or `null`, trimmed on input, with a normalized limit of 128 characters and no NUL or line-break character. Backticks are legal in the complete fence info string; serialization uses a safe tilde fence for them.
 
 The root compatibility preset supports tasks and tables. Tasks are deliberately flat: task items are direct bullet-list children, new tasks are unchecked, and `sinkListItem()`/`liftListItem()` return `false` for them rather than creating unsupported nesting. `setTaskChecked(checked)` applies only to task items and returns `false` when the item is already in the requested state.
 
@@ -455,6 +455,29 @@ Cell rectangles can be selected by pointer drag, Shift-click from a table caret 
 Valid GFM output requires a rectangular table, column headers in the first row, unmerged cells, and one paragraph of supported inline content per cell. `editor.state.tableIssues()` scans every live table and returns frozen diagnostics for `"ragged-row"`, `"missing-column-header"`, `"merged-cell"`, `"multi-block-cell"`, and `"row-header-scope"`. Each issue includes the table document position and zero-based row and nullable column coordinates. The query is observational: it does not repair or reject a document, and it is not a general Markdown preflight validator. Call it before persistence when HTML paste, extensions, or advanced `editor.view` transactions may have introduced structures that GFM cannot encode.
 
 `markora/minimal` and the root entry with `createMinimalMarkdownEditorPreset()` expose the same typed methods, so shared host toolbar code does not need a different interface. Because tasks and tables are absent from that schema, their commands and matching `can`/`isActive` checks consistently return `false`, while `tableIssues()` returns an empty frozen list. The minimal preset still supports paragraphs, headings, blockquotes, ordinary bullet and ordered lists (including indent/lift), hard breaks, horizontal rules, and plain code blocks.
+
+## Typing ergonomics and keymaps
+
+`CreateEditorOptions.typing` is a copied, creation-time policy. `autoPairs` accepts `parentheses`, `square-brackets`, `braces`, `single-quotes`, `double-quotes`, `emphasis-asterisks`, `emphasis-underscores`, `strong-asterisks`, `strong-underscores`, `inline-code`, and `strikethrough`. It defaults to an empty list. `wrapSelection` defaults to `true`; set it to `false` to leave non-empty selections to the browser/editor's ordinary text-input behavior.
+
+Only generated closers receive skip and empty-pair Backspace behavior. That provenance maps through ordinary edits and undo/redo but is retired after consumption, deletion, reset, or a divergent history branch. Quotes avoid apostrophe-like word interiors, Markdown delimiters use flanking checks, escaped openers remain literal, cross-block/node/table selections are not transformed, and every automated document change is one normal history transaction. All transformations and configurable keymaps reject active composition, including keyboard events marked `isComposing` or key code 229.
+
+Markdown marker assistance is disabled in code marks and code blocks. The lazy CodeMirror runtime independently receives only configured bracket and quote pairs, preserving its initial-bundle boundary. `markora/minimal` supports the same policy for schema features it contains; for example, selecting `strikethrough` has no effect when the minimal schema omits the strike mark.
+
+`CreateEditorOptions.shortcuts` is a copied, creation-time policy that maps stable action IDs to one key, an ordered key array, or `false`. The built-in IDs are:
+
+- `@markora/core/bold`
+- `@markora/core/italic`
+- `@markora/core/inline-code`
+- `@markora/core/strikethrough`
+- `@markora/core/hard-break` (compatibility entry)
+- `@markora/core/table-toolbar` (compatibility entry)
+- `@markora/core/undo`
+- `@markora/core/redo`
+
+Compatibility-entry defaults are bold `Mod-b`, italic `Mod-i`, inline code `Mod-e`, strikethrough `Mod-Shift-x`, hard break `Shift-Enter`, table toolbar `Alt-F10`, undo `Mod-z`, and redo `Shift-Mod-z` plus `Mod-y`. The independently bundled `markora/minimal` contributes the bold, italic, inline-code, undo, and redo defaults; its strikethrough action has no default binding, and it has no hard-break or table-toolbar contribution.
+
+An extension keymap's ID is its qualified contribution ID, such as `@acme/editor/toggle-note`. Remapping occurs after extension resolution, retains contribution ordering and first-true chaining, and canonicalizes equivalent modifier spellings. Unknown IDs are retained so one host policy can be assembled before optional extensions are resolved. A remapped or disabled built-in consumes its former default key instead of allowing native contenteditable behavior to leak through. Configured undo/redo bindings also drive active CodeMirror blocks; other action shortcuts remain outer-editor keymaps.
 
 ## Reconciled updates and hard resets
 
@@ -539,7 +562,7 @@ editor.updateOptions({
 
 The method accepts `editable`, `placeholder`, `attributes`, `ariaLabel`, `ariaLabelledBy`, `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Nullable fields clear their current value. `onChangeMode` accepts `"idle"` (the default), `"animationFrame"`, or `"immediate"`. Changing `onChange` or `onChangeMode` first flushes pending output once through the previous listener, then installs the new listener/mode. Callback and presentation changes do not rebuild EditorState or emit an `update` event.
 
-`element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `codeBlockLanguages`, `resources`, `extensionPreset`, and `extensions` are creation-only. Use `commands.reconcileMarkdown()` for ordinary host snapshots or `commands.resetMarkdown()` for an explicit state replacement.
+`element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `typing`, `shortcuts`, `codeBlockLanguages`, `resources`, `extensionPreset`, and `extensions` are creation-only. Use `commands.reconcileMarkdown()` for ordinary host snapshots or `commands.resetMarkdown()` for an explicit state replacement.
 
 ## Typed events
 
@@ -609,6 +632,8 @@ After destruction:
 ### Migration note
 
 Existing one-argument `onChange` and two-argument `onTransaction` callbacks remain source-compatible because the context parameters are trailing. Omitted `onChangeMode` now selects `"idle"`; integrations that require the previous same-stack callback and exception behavior must set `onChangeMode: "immediate"`, while those requiring the prior once-per-frame batching can set `"animationFrame"`. `setMarkdown()` remains callable but is deprecated; replace it with `resetMarkdown()` when the hard reset was intentional, or with `reconcileMarkdown()` for ordinary controlled/external updates. Prefer `editor.focus()`, `editor.blur()`, `editor.updateOptions()`, and typed subscriptions over direct view mutation. Integrations that hand-build structural `MarkdownEditor` mocks must add the new commands and lifecycle members or type the mock as `Pick<MarkdownEditor, ...>`.
+
+EE-019 leaves existing typing behavior unchanged when `typing` and `shortcuts` are omitted: auto-pairs remain off and the established default key bindings remain active. Existing `EditorUiControllers` implementations remain source-compatible because `codeBlockLanguageEditor` is optional, while structural `MarkdownEditorUi` mocks must add `editCodeBlockLanguage()`. Code-block info commands now accept backticks; serialization may lengthen the fence or choose a tilde fence to preserve the complete info string safely.
 
 The unified resource policy preserves the prior rejection of protocol-relative and unlisted schemes while intentionally tightening other URL behavior. Existing documents or commands that depend on embedded credentials, backslashes, embedded whitespace/control characters, unrestricted image `data:` forms, or data payloads above the published limits now lose the unsafe link mark or image at an import/insertion boundary. Configure explicit custom protocols, credential opt-in, MIME types, and limits only after reviewing the host threat model. `javascript:` and `vbscript:` remain impossible to enable. Integrations that structurally mock `MarkdownEditor` must also add `assets`, and event-name switches must handle `"asset"` plus resource callback errors.
 
@@ -735,6 +760,8 @@ const editor = createEditor({
 
 Markora invokes language loaders only after a block activates and installs their CodeMirror extensions after the current outer-editor update completes. Multiple blocks in the same editor share the cached result for a language. A block removed, deactivated, or superseded before deferred work starts does not apply stale support. Runtime chunk/construction failures emit `"code-block-runtime-load-failed"`; grammar failures emit `"code-block-language-load-failed"`. Both are recoverable error events and leave exact plain source available.
 
+With `markora-ui`, the language label is an accessible button and `editor.ui?.editCodeBlockLanguage()` opens the same non-modal editor. It edits the exact complete info string, not only a guessed first language token. Saving changes only `code_block.attrs.params`, keeps the code body and selection, preserves an already-active CodeMirror instance, and reconfigures highlighting through the existing cancelable loader path. A request becomes stale after cancellation, supersession, any body/metadata edit, reset, removal, undo, a read-only transition, or teardown; updates are temporarily rejected during composition, so an overlay cannot overwrite newer state. Headless hosts can continue to call `editor.commands.setCodeBlock({ language })`; custom UI factories may provide the optional `codeBlockLanguageEditor` controller and must call `request.cancel()` when they dismiss a request without saving.
+
 ## API highlights
 
 - `editor.getMarkdown()` returns the current normalized Markdown serialization
@@ -747,7 +774,7 @@ Markora invokes language loaders only after a block activates and installs their
 - `editor.commands` covers inline/media editing, paragraphs and headings, blockquotes, ordinary and task lists, breaks and rules, code blocks, tables, and undo/redo
 - `editor.state.can.*` and `editor.state.isActive.*` expose host-friendly capability and activity checks
 - `editor.getToolbarState()` remains available for toolbar integrations that prefer a compatibility snapshot
-- `editor.ui?.editLink()` and `editor.ui?.editImage()` are the optional namespaced UI entry points when overlays are attached
+- `editor.ui?.editLink()`, `editImage()`, and `editCodeBlockLanguage()` are optional namespaced UI entry points when overlays are attached
 - `CreateEditorOptions.resources` owns URL/image/navigation/upload policy and `editor.assets` exposes upload cancellation, retry, and snapshots
 - `editor.subscribe(...)` exposes typed focus, blur, state, selection, update, asset, and recoverable error events
 - `editor.updateOptions(...)` updates dynamic presentation, editable state, and callbacks without rebuilding EditorState

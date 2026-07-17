@@ -33,6 +33,7 @@ import { createMarkdownEditorExtensionAssembly } from "./extensionAssembly";
 import { MarkdownEditorExtensionError } from "./extensionApi";
 import { runInitialMarkdownParse } from "./extensionErrorBoundary";
 import { createMinimalMarkdownCodec } from "./minimalMarkdownCodec";
+import { normalizeCodeBlockInfo } from "./codeBlockMarkdown";
 import type {
   CreateEditorOptions,
   MarkdownEditor,
@@ -81,6 +82,14 @@ export type {
   ToolbarState,
   UpdateEditorOptions,
 } from "./editorApi";
+export type {
+  MarkdownEditorShortcutBinding,
+  MarkdownEditorShortcutMap,
+} from "./shortcutConfig";
+export type {
+  MarkdownEditorAutoPair,
+  MarkdownEditorTypingOptions,
+} from "./typingErgonomics";
 import { createImageViewClass } from "./imageView";
 import type { MarkdownEditorResourceErrorPhase } from "./resourceApi";
 import {
@@ -96,8 +105,27 @@ import { createTableEditing, isTableCellSelection } from "./tableEditing";
 import { getTableFidelityIssues } from "./tableFidelity";
 import { getTableSelectionContext as getSharedTableSelectionContext } from "./tableCommands";
 import type { TableCellInfo } from "./tableTypes";
-import type { ActiveImageInfo, EditorUiControllers, ImageEditorOverlay, LinkEditorOverlay, TableToolbarOverlay, TableUiContext } from "./uiTypes";
+import type {
+  ActiveImageInfo,
+  CodeBlockLanguageEditorOverlay,
+  EditorUiControllers,
+  ImageEditorOverlay,
+  LinkEditorOverlay,
+  TableToolbarOverlay,
+  TableUiContext,
+} from "./uiTypes";
 import { createNoopUiControllers } from "./uiTypes";
+import {
+  createMarkdownEditorShortcutKeymap,
+  normalizeMarkdownEditorShortcuts,
+} from "./shortcutConfig";
+import {
+  createAutoPairPlugin,
+  createTrackedHistoryCommand,
+  MARKDOWN_EDITOR_HISTORY_ACTION_META,
+  normalizeMarkdownEditorTypingOptions,
+  type MarkdownEditorHistoryAction,
+} from "./typingErgonomics";
 import { createTaskListHelpers } from "./taskListUtils";
 import { createTaskListItemViewClass } from "./taskListItemView";
 import { createStructuralCommandSet } from "./structuralCommands";
@@ -159,6 +187,13 @@ type ActiveListItemInfo = {
   from: number;
   to: number;
 };
+
+type CodeBlockLanguageEditTarget = Readonly<{
+  getPos: () => number;
+  marker: HTMLElement;
+  node: ProseMirrorNode;
+  view: EditorView;
+}>;
 
 
 type BrowserWindow = Window & typeof globalThis;
@@ -823,6 +858,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     extensions,
     initialSelection,
     markdown = "",
+    shortcuts: shortcutOptions,
+    typing: typingOptions,
     ui,
   } = options;
   const ownerWindow = element.ownerDocument.defaultView as BrowserWindow | null;
@@ -831,6 +868,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     throw new Error("Markora requires a window-backed document.");
   }
 
+  const shortcuts = normalizeMarkdownEditorShortcuts(shortcutOptions);
+  const typing = normalizeMarkdownEditorTypingOptions(typingOptions);
   const resources = normalizeMarkdownEditorResources(options.resources);
   let handleResourceError: (
     error: unknown,
@@ -1044,6 +1083,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     resolution: extensionResolution,
     codec,
     ownerDocument: element.ownerDocument,
+    shortcuts,
     reservedNodeViews: usesCompatibilityPreset
       ? ["code_block", "image", "raw_block", "raw_inline"]
       : ["image"],
@@ -1056,13 +1096,15 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     const markType = schema.marks[name];
     return markType ? toggleMark(markType) : () => false;
   };
+  const trackedUndo = createTrackedHistoryCommand(undo, "undo");
+  const trackedRedo = createTrackedHistoryCommand(redo, "redo");
   const commands = {
     toggleBold: createToggleMarkCommand("strong"),
     toggleItalic: createToggleMarkCommand("em"),
     toggleCode: createToggleMarkCommand("code"),
     toggleStrike: createToggleMarkCommand("strike"),
-    undo,
-    redo,
+    undo: trackedUndo,
+    redo: trackedRedo,
   } satisfies Record<string, EditorCommand>;
   const pendingLanguageLoadErrors: Array<{ error: unknown; language: string }> = [];
   const pluginInitializationErrors: unknown[] = [];
@@ -1086,9 +1128,26 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       activeViewErrorCollector = previousCollector;
     }
   };
+  let uiControllers!: EditorUiControllers;
+  let codeBlockLanguageEditor: CodeBlockLanguageEditorOverlay | null = null;
+  let imageEditor!: ImageEditorOverlay;
+  let linkEditor!: LinkEditorOverlay;
+  let tableToolbar!: TableToolbarOverlay;
+  let uiEnabled = false;
+  let uiFactoryReturned = false;
+  let codeBlockLanguageEditVersion = 0;
+  let codeBlockHistoryAction: MarkdownEditorHistoryAction | null = null;
+  let openCodeBlockLanguageEditor = (_target: CodeBlockLanguageEditTarget) => false;
   const CodeBlockView = createCodeBlockViewClass({
+    getOnEditLanguage: () => (
+      uiEnabled && codeBlockLanguageEditor ? openCodeBlockLanguageEditor : null
+    ),
+    getHistoryAction: () => codeBlockHistoryAction,
+    historyCommands: { redo: trackedRedo, undo: trackedUndo },
     languageRegistry: codeBlockLanguages,
     nestedClipboard: extensionAssembly.contributions.nestedClipboard,
+    shortcuts,
+    typing,
     onActivationError(error, language, delivery) {
       const deliver = () => {
         if (
@@ -1177,13 +1236,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     getOnEdit: () => runtimeOptions.onEditOpaqueMarkdown,
     nodeType: schema.nodes.raw_inline,
   });
-  let uiControllers!: EditorUiControllers;
-  let imageEditor!: ImageEditorOverlay;
-  let linkEditor!: LinkEditorOverlay;
-  let tableToolbar!: TableToolbarOverlay;
-  let uiEnabled = false;
-  let uiFactoryReturned = false;
-
   let releaseHostOwnership: () => void;
 
   const canRunUiAction = (targetView: EditorView) => (
@@ -1287,13 +1339,142 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }) ?? createNoopUiControllers();
     uiFactoryReturned = true;
     uiEnabled = Boolean(uiControllers.enabled);
+    codeBlockLanguageEditor = uiControllers.codeBlockLanguageEditor ?? null;
     imageEditor = uiControllers.imageEditor;
     linkEditor = uiControllers.linkEditor;
     tableToolbar = uiControllers.tableToolbar;
+    openCodeBlockLanguageEditor = (target) => {
+      const controller = codeBlockLanguageEditor;
+
+      if (
+        !controller
+        || !uiEnabled
+        || target.view !== view
+        || target.node.type !== schema.nodes.code_block
+        || !target.marker.isConnected
+        || !canRunUiMutation(target.view)
+        || controller.isComposing?.()
+      ) {
+        return false;
+      }
+
+      let capturedPos: number;
+
+      try {
+        capturedPos = target.getPos();
+      } catch {
+        return false;
+      }
+
+      if (
+        !Number.isInteger(capturedPos)
+        || capturedPos < 0
+        || capturedPos > target.view.state.doc.content.size
+        || target.view.state.doc.nodeAt(capturedPos) !== target.node
+      ) {
+        return false;
+      }
+
+      const capturedNode = target.node;
+      const editVersion = ++codeBlockLanguageEditVersion;
+      const language = typeof capturedNode.attrs.params === "string"
+        ? capturedNode.attrs.params
+        : "";
+      const request = Object.freeze({
+        language,
+        cancel() {
+          if (editVersion === codeBlockLanguageEditVersion) {
+            codeBlockLanguageEditVersion += 1;
+          }
+        },
+        update(nextLanguage: string) {
+          if (
+            typeof nextLanguage !== "string"
+            || editVersion !== codeBlockLanguageEditVersion
+            || !canRunUiMutation(target.view)
+            || controller.isComposing?.()
+          ) {
+            return false;
+          }
+
+          let normalized: string;
+          let pos: number;
+
+          try {
+            normalized = normalizeCodeBlockInfo(nextLanguage);
+            pos = target.getPos();
+          } catch {
+            return false;
+          }
+
+          if (
+            !Number.isInteger(pos)
+            || pos < 0
+            || pos > target.view.state.doc.content.size
+          ) {
+            return false;
+          }
+
+          let currentNode: ProseMirrorNode | null;
+
+          try {
+            currentNode = target.view.state.doc.nodeAt(pos);
+          } catch {
+            return false;
+          }
+
+          if (currentNode !== capturedNode || currentNode.type !== schema.nodes.code_block) {
+            return false;
+          }
+
+          const currentLanguage = typeof currentNode.attrs.params === "string"
+            ? currentNode.attrs.params
+            : "";
+
+          if (normalized === currentLanguage) {
+            return true;
+          }
+
+          const transaction = target.view.state.tr.setNodeMarkup(
+            pos,
+            undefined,
+            { ...currentNode.attrs, params: normalized },
+            currentNode.marks,
+          );
+          setBuiltinMarkdownEditorTransactionOrigin(transaction, "command");
+          target.view.dispatch(transaction);
+          return true;
+        },
+      });
+
+      let opened: boolean;
+
+      try {
+        opened = controller.open(target.view, target.marker, request) === true;
+      } catch (error) {
+        if (editVersion === codeBlockLanguageEditVersion) {
+          codeBlockLanguageEditVersion += 1;
+        }
+
+        throw error;
+      }
+
+      if (!opened && editVersion === codeBlockLanguageEditVersion) {
+        codeBlockLanguageEditVersion += 1;
+      }
+
+      return opened;
+    };
   } catch (error) {
     const cleanupErrors = [error];
 
     if (uiFactoryReturned) {
+      try {
+        codeBlockLanguageEditor?.destroy();
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError);
+      }
+
       for (const controllerName of ["linkEditor", "imageEditor", "tableToolbar"] as const) {
         try {
           uiControllers[controllerName].destroy();
@@ -1362,6 +1543,40 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     tableClipboard: advancedTables.clipboard,
     takeExtensionFailure: extensionAssembly.contributions.takeClipboardFailure,
   });
+  const builtinTypingShortcuts = createTypingShortcuts({ schema, getAncestorInfo, resources });
+  const inputRulePlugins = [
+    builtinTypingShortcuts,
+    ...(extensionAssembly.contributions.inputRules
+      ? [extensionAssembly.contributions.inputRules]
+      : []),
+  ];
+  const autoPairPlugin = createAutoPairPlugin({
+    inputRulePlugins,
+    schema,
+    typing,
+  });
+  const shortcutKeymap = createMarkdownEditorShortcutKeymap([
+    {
+      command: (state, dispatch) => insertHardBreak(schema, state, dispatch),
+      defaultKeys: ["Shift-Enter"],
+      id: "@markora/core/hard-break",
+    },
+    {
+      command: (_state, _dispatch, activeView) => Boolean(
+        activeView
+        && canRunUiMutation(activeView)
+        && (tableToolbar.focus?.(activeView) ?? false),
+      ),
+      defaultKeys: ["Alt-F10"],
+      id: "@markora/core/table-toolbar",
+    },
+    { command: commands.toggleBold, defaultKeys: ["Mod-b"], id: "@markora/core/bold" },
+    { command: commands.toggleItalic, defaultKeys: ["Mod-i"], id: "@markora/core/italic" },
+    { command: commands.toggleCode, defaultKeys: ["Mod-e"], id: "@markora/core/inline-code" },
+    { command: commands.toggleStrike, defaultKeys: ["Mod-Shift-x"], id: "@markora/core/strikethrough" },
+    { command: commands.undo, defaultKeys: ["Mod-z"], id: "@markora/core/undo" },
+    { command: commands.redo, defaultKeys: ["Shift-Mod-z", "Mod-y"], id: "@markora/core/redo" },
+  ], shortcuts);
 
   const plugins = [
     new Plugin({
@@ -1379,10 +1594,11 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     ...(extensionAssembly.contributions.clipboard
       ? [extensionAssembly.contributions.clipboard]
       : []),
-    createTypingShortcuts({ schema, getAncestorInfo, resources }),
+    builtinTypingShortcuts,
     ...(extensionAssembly.contributions.inputRules
       ? [extensionAssembly.contributions.inputRules]
       : []),
+    ...(autoPairPlugin ? [autoPairPlugin] : []),
     createHeadingEditingPlugin({ schema, convertPipeTable, updateHeadingLevel }),
     createHorizontalRulePlugin({
       schema,
@@ -1444,23 +1660,13 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     ...(extensionAssembly.contributions.keymap
       ? [extensionAssembly.contributions.keymap]
       : []),
+    ...(shortcutKeymap ? [shortcutKeymap] : []),
     keymap({
       Enter: chainCommands(splitListItem(listItemType), liftEmptyBlock),
-      "Shift-Enter": (state, dispatch) => insertHardBreak(schema, state, dispatch),
       Tab: (state, dispatch, view) => moveTableCell(view!, 1) || sinkListItem(listItemType)(state, dispatch, view),
       "Shift-Tab": (state, dispatch, view) => moveTableCell(view!, -1) || liftListItem(listItemType)(state, dispatch, view),
       ArrowUp: (_state, _dispatch, view) => moveTableCellVertical(view!, -1),
       ArrowDown: (_state, _dispatch, view) => moveTableCellVertical(view!, 1),
-      "Alt-F10": (_state, _dispatch, view) => (
-        canRunUiMutation(view!) && (tableToolbar.focus?.(view!) ?? false)
-      ),
-      "Mod-b": commands.toggleBold,
-      "Mod-i": commands.toggleItalic,
-      "Mod-e": commands.toggleCode,
-      "Mod-Shift-x": commands.toggleStrike,
-      "Mod-z": commands.undo,
-      "Shift-Mod-z": commands.redo,
-      "Mod-y": commands.redo,
     }),
     ...advancedTables.plugins,
     keymap(baseKeymap),
@@ -1839,6 +2045,59 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
     imageEditor.open(view, marker, imageInfo);
     return true;
+  };
+
+  const editCodeBlockLanguageValue = () => {
+    assertActive("edit a code block language");
+
+    if (!codeBlockLanguageEditor || !uiEnabled || !canRunUiMutation(view)) {
+      return false;
+    }
+
+    const { selection } = view.state;
+    let node: ProseMirrorNode | null = null;
+    let pos = -1;
+
+    if (
+      selection instanceof NodeSelection
+      && selection.node.type === schema.nodes.code_block
+    ) {
+      node = selection.node;
+      pos = selection.from;
+    } else {
+      for (let depth = selection.$from.depth; depth > 0; depth -= 1) {
+        const candidate = selection.$from.node(depth);
+
+        if (candidate.type !== schema.nodes.code_block) continue;
+        const candidatePos = selection.$from.before(depth);
+
+        if (selection.to <= candidatePos + candidate.nodeSize - 1) {
+          node = candidate;
+          pos = candidatePos;
+        }
+        break;
+      }
+    }
+
+    if (!node || pos < 0) {
+      return false;
+    }
+
+    const nodeDom = view.nodeDOM(pos) as (Node & ParentNode) | null;
+    const marker = nodeDom && typeof nodeDom.querySelector === "function"
+      ? nodeDom.querySelector<HTMLElement>("button.mdw-code-block-language")
+      : null;
+
+    if (!marker) {
+      return false;
+    }
+
+    return openCodeBlockLanguageEditor({
+      getPos: () => pos,
+      marker,
+      node,
+      view,
+    });
   };
 
   const createTableValue = () => {
@@ -2386,6 +2645,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
           runWithViewErrorCollector(errors, () => destroyProseMirrorView(view));
         }
       },
+      () => codeBlockLanguageEditor?.destroy(),
       () => linkEditor.destroy(),
       () => imageEditor.destroy(),
       () => tableToolbar.destroy(),
@@ -2471,7 +2731,20 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         const previousState = activeView.state;
         const nextState = previousState.apply(transaction);
         const callbackErrors: unknown[] = [];
-        runWithViewErrorCollector(callbackErrors, () => activeView.updateState(nextState));
+        const transactionHistoryAction = transaction.getMeta(
+          MARKDOWN_EDITOR_HISTORY_ACTION_META,
+        );
+        const previousHistoryAction = codeBlockHistoryAction;
+        codeBlockHistoryAction = transactionHistoryAction === "redo"
+          || transactionHistoryAction === "undo"
+          ? transactionHistoryAction
+          : null;
+
+        try {
+          runWithViewErrorCollector(callbackErrors, () => activeView.updateState(nextState));
+        } finally {
+          codeBlockHistoryAction = previousHistoryAction;
+        }
 
         if (lifecycle === "active" && !activeView.isDestroyed) {
           try {
@@ -2735,8 +3008,16 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }
 
     if (changesEditable && !runtimeOptions.editable) {
+      codeBlockLanguageEditVersion += 1;
+
       try {
         uiControllers.clearSelectionAnchor();
+      } catch (error) {
+        optionErrors.push(error);
+      }
+
+      try {
+        codeBlockLanguageEditor?.close(false);
       } catch (error) {
         optionErrors.push(error);
       }
@@ -2756,6 +3037,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     state: editorStateApi,
     ui: uiEnabled ? {
       createTable: createTableValue,
+      editCodeBlockLanguage: editCodeBlockLanguageValue,
       editLink: editLinkValue,
       editImage: editImageValue,
       editTable: editTableValue,
@@ -2845,6 +3127,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         () => uiControllers.clearSelectionAnchor(),
         () => { cleanupErrors.push(...extensionAssembly.cleanupSetup()); },
         () => runWithViewErrorCollector(cleanupErrors, () => destroyProseMirrorView(view)),
+        () => codeBlockLanguageEditor?.destroy(),
         () => linkEditor.destroy(),
         () => imageEditor.destroy(),
         () => tableToolbar.destroy(),

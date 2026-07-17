@@ -83,6 +83,15 @@ import {
   sanitizeResourceUrl,
 } from "./resourcePolicy";
 import { createResourceOpenPlugin } from "./resourceInteractions";
+import {
+  createMarkdownEditorShortcutKeymap,
+  normalizeMarkdownEditorShortcuts,
+} from "./shortcutConfig";
+import {
+  createAutoPairPlugin,
+  createTrackedHistoryCommand,
+  normalizeMarkdownEditorTypingOptions,
+} from "./typingErgonomics";
 
 function destroyProseMirrorView(view: EditorView) {
   const input = (view as EditorView & {
@@ -511,6 +520,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   }
 
   assertEditorHostAvailable(element);
+  const shortcuts = normalizeMarkdownEditorShortcuts(options.shortcuts);
+  const typing = normalizeMarkdownEditorTypingOptions(options.typing);
   const resources = normalizeMarkdownEditorResources(options.resources);
 
   const runtimeOptions: EditorRuntimeOptions = {
@@ -717,6 +728,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     resolution: extensionResolution,
     codec,
     ownerDocument: element.ownerDocument,
+    shortcuts,
     reservedNodeViews: ["image"],
     reportError: reportExtensionError,
   });
@@ -734,6 +746,23 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       ? toggleMark(codec.schema.marks.strike)
       : () => false,
   };
+  const trackedUndo = createTrackedHistoryCommand(undo, "undo");
+  const trackedRedo = createTrackedHistoryCommand(redo, "redo");
+  const autoPairPlugin = createAutoPairPlugin({
+    inputRulePlugins: extensionAssembly.contributions.inputRules
+      ? [extensionAssembly.contributions.inputRules]
+      : [],
+    schema: codec.schema,
+    typing,
+  });
+  const shortcutKeymap = createMarkdownEditorShortcutKeymap([
+    { command: markCommands.strong, defaultKeys: ["Mod-b"], id: "@markora/core/bold" },
+    { command: markCommands.em, defaultKeys: ["Mod-i"], id: "@markora/core/italic" },
+    { command: markCommands.code, defaultKeys: ["Mod-e"], id: "@markora/core/inline-code" },
+    { command: markCommands.strike, defaultKeys: [], id: "@markora/core/strikethrough" },
+    { command: trackedUndo, defaultKeys: ["Mod-z"], id: "@markora/core/undo" },
+    { command: trackedRedo, defaultKeys: ["Shift-Mod-z", "Mod-y"], id: "@markora/core/redo" },
+  ], shortcuts);
   let plugins: readonly Plugin[];
   const assertActive = (operation: string) => {
     if (lifecycle !== "active" || view.isDestroyed) {
@@ -805,6 +834,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       ...(extensionAssembly.contributions.inputRules
         ? [extensionAssembly.contributions.inputRules]
         : []),
+      ...(autoPairPlugin ? [autoPairPlugin] : []),
       ...extensionAssembly.contributions.plugins,
       clipboard.plugin,
       // Clamp the final slice after both structured transforms and raw extension
@@ -814,14 +844,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       ...(extensionAssembly.contributions.keymap
         ? [extensionAssembly.contributions.keymap]
         : []),
-      keymap({
-        "Mod-b": markCommands.strong,
-        "Mod-i": markCommands.em,
-        "Mod-e": markCommands.code,
-        "Mod-z": undo,
-        "Shift-Mod-z": redo,
-        "Mod-y": redo,
-      }),
+      ...(shortcutKeymap ? [shortcutKeymap] : []),
       keymap(baseKeymap),
     ];
   } catch (error) {
@@ -1375,8 +1398,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       return runCommand(structuralCommandSet.commands.setTableColumnAlignment(alignment));
     },
     deleteTable: () => runCommand(structuralCommandSet.commands.deleteTable),
-    undo: () => runCommand(undo),
-    redo: () => runCommand(redo),
+    undo: () => runCommand(trackedUndo),
+    redo: () => runCommand(trackedRedo),
   };
   const state: MarkdownEditorState = {
     tableIssues() {

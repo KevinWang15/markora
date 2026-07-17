@@ -25,7 +25,7 @@ const OVERLAY_GAP = 8;
 const VIEWPORT_MARGIN = 12;
 let nextOverlayMessageId = 0;
 
-function createOverlayMessageId(kind: "image" | "link" | "table") {
+function createOverlayMessageId(kind: "code-language" | "image" | "link" | "table") {
   nextOverlayMessageId += 1;
   return `mdw-${kind}-editor-error-${nextOverlayMessageId}`;
 }
@@ -182,6 +182,23 @@ export type LinkEditorOverlay = {
   destroy: () => void;
 };
 
+export type CodeBlockLanguageEditRequest = Readonly<{
+  language: string;
+  cancel?: () => void;
+  update: (nextLanguage: string) => boolean;
+}>;
+
+export type CodeBlockLanguageEditorOverlay = {
+  open: (
+    view: EditorView,
+    marker: HTMLElement,
+    request: CodeBlockLanguageEditRequest,
+  ) => boolean;
+  close: (refocusTrigger: boolean) => void;
+  isComposing: () => boolean;
+  destroy: () => void;
+};
+
 export type ImageEditorOverlay = {
   open: (view: EditorView, marker: HTMLElement, imageInfo: ActiveImageInfoLike) => void;
   close: (refocusEditor: boolean) => void;
@@ -194,6 +211,287 @@ export type TableToolbarOverlay = {
   focus: (view: EditorView) => boolean;
   destroy: () => void;
 };
+
+export function createCodeBlockLanguageEditorOverlay(
+  options: OverlayEnvironment,
+): CodeBlockLanguageEditorOverlay {
+  const { doc, portalRoot, win } = options;
+  const NodeCtor = win.Node;
+  const dom = doc.createElement("div");
+  dom.className = "mdw-code-language-editor";
+  dom.hidden = true;
+  dom.style.display = "none";
+  dom.setAttribute("role", "dialog");
+  dom.setAttribute("aria-label", "Edit code block language");
+  dom.setAttribute("aria-modal", "false");
+
+  const input = doc.createElement("input");
+  input.className = "mdw-code-language-editor-input";
+  input.type = "text";
+  input.maxLength = 128;
+  input.placeholder = "Language or fence info";
+  input.setAttribute("aria-label", "Code block language or fence info");
+
+  const errorMessage = doc.createElement("div");
+  errorMessage.className = "mdw-editor-error";
+  errorMessage.hidden = true;
+  errorMessage.id = createOverlayMessageId("code-language");
+  errorMessage.setAttribute("role", "alert");
+  input.setAttribute("aria-describedby", errorMessage.id);
+  input.setAttribute("aria-errormessage", errorMessage.id);
+
+  const saveButton = doc.createElement("button");
+  saveButton.type = "button";
+  saveButton.textContent = "Save";
+
+  const cancelButton = doc.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.textContent = "Cancel";
+
+  const actions = doc.createElement("div");
+  actions.className = "mdw-code-language-editor-actions";
+  actions.append(saveButton, cancelButton);
+  dom.append(input, errorMessage, actions);
+  portalRoot.append(dom);
+
+  let activeMarker: HTMLElement | null = null;
+  let activeRequest: CodeBlockLanguageEditRequest | null = null;
+  let activeView: EditorView | null = null;
+  let composing = false;
+  let destroyed = false;
+  let session = 0;
+  const closedShadowPortal = portalRoot instanceof win.ShadowRoot
+    && portalRoot.mode === "closed";
+  const internalMouseDownEvents = new WeakSet<Event>();
+
+  const clearError = () => {
+    input.removeAttribute("aria-invalid");
+    errorMessage.hidden = true;
+    errorMessage.textContent = "";
+  };
+
+  const showError = (message: string) => {
+    input.setAttribute("aria-invalid", "true");
+    errorMessage.textContent = message;
+    errorMessage.hidden = false;
+    input.focus();
+  };
+
+  const reposition = () => {
+    if (!activeMarker) {
+      return;
+    }
+
+    try {
+      positionOverlay(dom, activeMarker.getBoundingClientRect(), doc, win, "below");
+    } catch {
+      // The code block may have been replaced while its editor was open.
+    }
+  };
+
+  const restoreTrigger = (view: EditorView | null, marker: HTMLElement | null) => {
+    if (!canRestoreEditorFocus(dom, doc, win)) {
+      return;
+    }
+
+    if (
+      marker?.isConnected
+      && !marker.hasAttribute("disabled")
+      && typeof marker.focus === "function"
+    ) {
+      marker.focus();
+      return;
+    }
+
+    if (view) {
+      restoreEditorFocus(view, dom, doc, win);
+    }
+  };
+
+  const close = (refocusTrigger: boolean) => {
+    const marker = activeMarker;
+    const request = activeRequest;
+    const view = activeView;
+    activeMarker = null;
+    activeRequest = null;
+    activeView = null;
+    composing = false;
+    session += 1;
+    dom.hidden = true;
+    dom.style.display = "none";
+    clearError();
+    request?.cancel?.();
+
+    if (refocusTrigger) {
+      restoreTrigger(view, marker);
+    }
+  };
+
+  const save = () => {
+    if (composing) {
+      input.focus();
+      return;
+    }
+
+    const view = activeView;
+    const request = activeRequest;
+    const currentSession = session;
+
+    if (!view || !request || view.isDestroyed || !view.editable) {
+      close(false);
+      return;
+    }
+
+    const nextLanguage = input.value;
+
+    if (nextLanguage.length > 128 || /[\0\r\n]/u.test(nextLanguage)) {
+      showError("Fence info must be at most 128 characters with no NUL or line-break characters.");
+      return;
+    }
+
+    if (!request.update(nextLanguage)) {
+      if (session === currentSession && activeRequest === request) {
+        showError("The code block changed. Close this editor and try again.");
+      }
+      return;
+    }
+
+    if (session === currentSession && activeRequest === request) {
+      close(true);
+    }
+  };
+
+  const handleDocumentMouseDown = (event: MouseEvent) => {
+    if (
+      dom.hidden
+      || isEventInside(event, dom, NodeCtor)
+      || isEventInside(event, activeMarker, NodeCtor)
+    ) {
+      return;
+    }
+
+    if (!closedShadowPortal) {
+      close(false);
+      return;
+    }
+
+    const currentSession = session;
+    win.queueMicrotask(() => {
+      if (
+        session === currentSession
+        && !dom.hidden
+        && !internalMouseDownEvents.has(event)
+      ) {
+        close(false);
+      }
+    });
+  };
+
+  const handlePortalMouseDown = (event: Event) => {
+    if (
+      isEventInside(event, dom, NodeCtor)
+      || isEventInside(event, activeMarker, NodeCtor)
+    ) {
+      internalMouseDownEvents.add(event);
+    }
+  };
+
+  const handleWindowChange = () => {
+    if (!dom.hidden) {
+      reposition();
+    }
+  };
+
+  saveButton.addEventListener("click", save);
+  cancelButton.addEventListener("click", () => close(true));
+  input.addEventListener("input", clearError);
+  input.addEventListener("compositionstart", () => {
+    composing = true;
+  });
+  input.addEventListener("compositionend", () => {
+    composing = false;
+  });
+  dom.addEventListener("keydown", (event) => {
+    if (composing || isComposingKeyboardEvent(event)) {
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close(true);
+    } else if (event.key === "Enter" && event.target === input) {
+      event.preventDefault();
+      save();
+    }
+  });
+  doc.addEventListener("mousedown", handleDocumentMouseDown, true);
+  if (closedShadowPortal) {
+    portalRoot.addEventListener("mousedown", handlePortalMouseDown, true);
+  }
+  win.addEventListener("resize", handleWindowChange);
+  win.addEventListener("scroll", handleWindowChange, true);
+  const removeVisualViewportListeners = addViewportListeners(win, handleWindowChange);
+
+  return {
+    open(view, marker, request) {
+      if (destroyed || view.isDestroyed || !view.editable || !marker.isConnected) {
+        close(false);
+        return false;
+      }
+
+      activeRequest?.cancel?.();
+      activeMarker = marker;
+      activeRequest = request;
+      activeView = view;
+      composing = false;
+      session += 1;
+      const currentSession = session;
+      input.value = request.language;
+      clearError();
+      dom.hidden = false;
+      dom.style.display = "flex";
+      reposition();
+      input.focus();
+      input.select();
+      const opened = (
+        !destroyed
+        && session === currentSession
+        && activeRequest === request
+        && activeView === view
+        && activeMarker === marker
+        && !dom.hidden
+        && view.editable
+        && marker.isConnected
+      );
+
+      if (!opened && session === currentSession && activeRequest === request) {
+        close(false);
+      }
+
+      return opened;
+    },
+    close,
+    isComposing() {
+      return composing;
+    },
+    destroy() {
+      if (destroyed) {
+        return;
+      }
+
+      destroyed = true;
+      close(false);
+      doc.removeEventListener("mousedown", handleDocumentMouseDown, true);
+      if (closedShadowPortal) {
+        portalRoot.removeEventListener("mousedown", handlePortalMouseDown, true);
+      }
+      win.removeEventListener("resize", handleWindowChange);
+      win.removeEventListener("scroll", handleWindowChange, true);
+      removeVisualViewportListeners();
+      dom.remove();
+    },
+  };
+}
 
 export function createLinkEditorOverlay(options: OverlayEnvironment & {
   updateLinkHref: (view: EditorView, href: string) => boolean;

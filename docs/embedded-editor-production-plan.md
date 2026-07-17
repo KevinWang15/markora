@@ -101,8 +101,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-016 | DONE | M | Make task and overlay interactions keyboard and screen-reader complete |
 | EE-017 | DONE | M | Add deliberate Markdown, rich HTML, and plain-text clipboard behavior |
 | EE-018 | DONE | L | Add mature table resize, reorder, selection, and keyboard operations |
-| EE-019 | NEXT | M | Add configurable auto-pairing, shortcuts, and code-language editing |
-| EE-020 | QUEUED | M | Tokenize styling and add dark, high-contrast, reduced-motion, RTL, and i18n support |
+| EE-019 | DONE | M | Add configurable auto-pairing, shortcuts, and code-language editing |
+| EE-020 | NEXT | M | Tokenize styling and add dark, high-contrast, reduced-motion, RTL, and i18n support |
 | EE-021 | QUEUED | L | Ship optional front matter, footnote, math, callout, TOC, HTML, and diagram extensions |
 
 Sizes are relative planning aids: `S` is a focused change, `M` spans several related surfaces, and `L` requires an architectural or multi-stage implementation.
@@ -618,7 +618,7 @@ Move beyond basic insertion/deletion/alignment toward a production table workflo
 
 ### EE-019 — Add configurable typing ergonomics
 
-Status: `NEXT`
+Status: `DONE` (2026-07-17)
 
 #### Goal
 
@@ -632,9 +632,20 @@ Provide Typora-like typing assistance without hard-coding product preferences.
 - Expose a configurable shortcut/keymap layer through the extension system.
 - Verify IME and undo behavior for every automatic transformation.
 
+#### Completion notes
+
+- `CreateEditorOptions.typing` is a copied, opt-in policy for braces, parentheses, square brackets, quotes, emphasis/strong markers, inline code, and strikethrough. Compatible selections wrap literally or toggle the matching semantic mark. Generated closer provenance is bounded, maps through ordinary edits and undo/redo, survives inactive CodeMirror teardown/reactivation and metadata-only code-block changes, and is retired on consumption, deletion, reset, or divergent edits so pre-existing source punctuation is never skipped or pair-deleted.
+- Outer ProseMirror typing and the lazy active CodeMirror adapter share the configured bracket/quote rules while respecting their different schemas. Both are read-only and composition safe, cooperate with input rules, preserve one-step history, and keep pair provenance across backspace, undo/redo, offscreen deactivation, and later activation. Markdown-marker assistance remains disabled in code.
+- `CreateEditorOptions.shortcuts` remaps stable qualified built-in IDs and qualified extension keymap IDs with a string, ordered array, or `false`. Resolution preserves contribution order and first-true chaining, canonicalizes modifier aliases, consumes removed default bindings to prevent native contenteditable fallthrough, and applies configured undo/redo keys inside active CodeMirror blocks.
+- The code-block language badge is now an accessible action backed by `editor.ui.editCodeBlockLanguage()` and an optional host `codeBlockLanguageEditor`. The default non-modal editor changes the exact complete fence info string while preserving body, selection, history, and an already-active CodeMirror instance. Cancellation, supersession, node edits/removal, read-only transitions, composition, thrown/rejected opens, focus reentrancy, closed Shadow DOM retargeting, and teardown all invalidate stale requests safely.
+- Code-fence serialization now lengthens the delimiter beyond body runs and chooses tildes when info contains a backtick. Normalization rejects source states that CommonMark cannot represent exactly, and language registry lookup ignores inherited object properties. The independently bundled minimal entry retains the same typing, shortcut, and safe-serialization policy without importing the UI, CodeMirror, or Lezer runtime.
+- The required production-preview matrix passes 158 cases with 22 intentional engine/capability skips across Chromium, Firefox, and WebKit. Retained coverage exercises real keyboard input in document and Shadow roots, selection wrapping, generated-pair deletion/undo/reactivation, shortcut remap/disable and CodeMirror history keys, exact language metadata, read-only/focus behavior, and Chromium CDP IME composition.
+- `pnpm pack:smoke` passes at 918,441 raw / 250,699 gzip initial compatibility JavaScript, 1,084,626 / 340,391 lazy JavaScript, 2,003,067 / 591,090 total JavaScript, 19,261 / 3,568 CSS, and 154 static modules. Minimal remains one 722,201 / 202,812 static chunk with 132 modules and unchanged 4,728 / 1,218 CSS. Only crossed failure ceilings were raised; all warnings and passing lazy/minimal-CSS ceilings remain unchanged so the reviewed cost stays visible.
+- Final verification: `pnpm check` passes 964 tests plus every build, type, declaration, browser-type, and Node ESM check; `pnpm test:browser:required` passes 158 cases with 22 intentional skips; `pnpm pack:smoke`, `pnpm perf:ci`, and `git diff --check` pass. The performance run passes every 100 KiB, 500 KiB, and 1 MiB latency, hot-path, bounded-editor, memory, teardown, and zero-retention check.
+
 ### EE-020 — Add a theme, localization, and RTL contract
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -692,6 +703,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-018` are complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, and Gate C now has its keyboard/screen-reader, deliberate clipboard, and mature table foundations. Completed work includes the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, lazy code-editor, semantic embedded-control, rich/Markdown/plain clipboard, and production table-editing foundations.
+`EE-001` through `EE-019` are complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, and Gate C now has its keyboard/screen-reader, deliberate clipboard, mature table, and configurable typing foundations. Completed work includes the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, lazy code-editor, semantic embedded-control, rich/Markdown/plain clipboard, production table-editing, and host-configurable typing/keymap foundations.
 
-The next iteration is `EE-019 — Add configurable typing ergonomics`.
+The next iteration is `EE-020 — Add a theme, localization, and RTL contract`.

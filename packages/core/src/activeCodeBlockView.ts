@@ -1,10 +1,17 @@
-import { Compartment, EditorSelection, EditorState as CodeMirrorState, type Extension } from "@codemirror/state";
+import {
+  Compartment,
+  EditorSelection,
+  EditorState as CodeMirrorState,
+  MapMode,
+  StateEffect,
+  StateField,
+  type Extension,
+} from "@codemirror/state";
 import { EditorView as CodeMirrorView, keymap as codeMirrorKeymap, drawSelection, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import { indentOnInput, syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import { Fragment, type Node as ProseMirrorNode, type Schema } from "prosemirror-model";
-import { redo, undo } from "prosemirror-history";
-import { Selection, TextSelection } from "prosemirror-state";
+import { Selection, TextSelection, type Command } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import { ManagedBlockCursor } from "./managedBlockCursor";
 import {
@@ -15,12 +22,24 @@ import {
 import type { MarkdownEditorNestedClipboardPipeline } from "./extensionAssembly";
 import { rejectFileTransferEvent } from "./fileTransferGuard";
 import { isolateClipboardHistory, nestedClipboardText } from "./clipboardSemantics";
+import {
+  resolveMarkdownEditorShortcutKeys,
+  type NormalizedMarkdownEditorShortcutMap,
+} from "./shortcutConfig";
+import {
+  canOpenMarkdownEditorAutoPair,
+  type MarkdownEditorCodeAutoPairSnapshot,
+  type MarkdownEditorHistoryAction,
+  type NormalizedMarkdownEditorAutoPair,
+  type NormalizedMarkdownEditorTypingOptions,
+} from "./typingErgonomics";
 
 type CodeBlockViewInstance = {
   readonly composing: boolean;
   dom: HTMLElement;
   readonly hasFocus: boolean;
-  update: (node: ProseMirrorNode) => boolean;
+  getGeneratedAutoPairs: () => readonly MarkdownEditorCodeAutoPairSnapshot[];
+  update: (node: ProseMirrorNode, historyAction?: MarkdownEditorHistoryAction | null) => boolean;
   setEditable: (editable: boolean) => void;
   selectNode: () => void;
   deselectNode: () => void;
@@ -41,6 +60,7 @@ type CodeBlockViewConstructor = new (
   outerView: EditorView,
   getPos: () => number,
   mount?: ActiveCodeBlockMount,
+  generatedAutoPairs?: readonly MarkdownEditorCodeAutoPairSnapshot[],
 ) => CodeBlockViewInstance;
 
 type CodeBlockViewClass = CodeBlockViewConstructor & {
@@ -49,8 +69,11 @@ type CodeBlockViewClass = CodeBlockViewConstructor & {
 
 type CreateCodeBlockViewClassOptions = {
   schema: Schema;
+  historyCommands: Readonly<{ redo: Command; undo: Command }>;
   languageRegistry?: CodeBlockLanguageRegistry;
   nestedClipboard?: MarkdownEditorNestedClipboardPipeline | null;
+  shortcuts: NormalizedMarkdownEditorShortcutMap;
+  typing: NormalizedMarkdownEditorTypingOptions;
   moveBeforeManagedBlock: (view: EditorView, blockPos: number) => boolean;
   onDestroyError?: (error: unknown) => void;
   onLanguageLoadError?: (
@@ -64,6 +87,282 @@ type CreateCodeBlockViewClassOptions = {
 type BrowserWindow = Window & typeof globalThis;
 
 const DEBUG_CODE_BLOCK_CURSOR = false;
+
+type GeneratedCloserEffect = MarkdownEditorCodeAutoPairSnapshot;
+
+type GeneratedCloserIdentity = Readonly<Pick<GeneratedCloserEffect, "close" | "position">>;
+
+type GeneratedCloser = GeneratedCloserEffect;
+
+const addGeneratedCloser = StateEffect.define<GeneratedCloserEffect>({
+  map(value, mapping) {
+    const openPosition = mapping.mapPos(value.openPosition, -1, MapMode.TrackAfter);
+    const position = mapping.mapPos(value.position, -1, MapMode.TrackAfter);
+    return openPosition == null || position == null
+      ? undefined
+      : { ...value, openPosition, position };
+  },
+});
+
+const removeGeneratedCloser = StateEffect.define<GeneratedCloserIdentity>();
+const syncGeneratedClosers = StateEffect.define<MarkdownEditorHistoryAction | null>();
+
+function generatedCloserIsValid(
+  doc: CodeMirrorState["doc"],
+  value: GeneratedCloser,
+) {
+  return doc.sliceString(value.openPosition, value.openPosition + value.open.length) === value.open
+    && doc.sliceString(value.position, value.position + value.close.length) === value.close;
+}
+
+const generatedCloserState = StateField.define<readonly GeneratedCloser[]>({
+  create: () => Object.freeze([]),
+  update(previous, transaction) {
+    let next = previous;
+    const historySync = transaction.effects.find((effect) => effect.is(syncGeneratedClosers));
+
+    if (transaction.docChanged) {
+      if (historySync && historySync.value == null) {
+        next = [];
+      } else {
+        next = previous.flatMap((value) => {
+          if (!value.active && !historySync) return [];
+          const positionsAreMappable = value.openPosition <= transaction.startState.doc.length
+            && value.position <= transaction.startState.doc.length;
+          const openPosition = positionsAreMappable
+            ? transaction.changes.mapPos(
+                value.openPosition,
+                1,
+                MapMode.TrackAfter,
+              )
+            : null;
+          const position = positionsAreMappable
+            ? transaction.changes.mapPos(
+                value.position,
+                1,
+                MapMode.TrackAfter,
+              )
+            : null;
+
+          if (openPosition != null && position != null) {
+            const mapped = { ...value, active: true, openPosition, position };
+            if (generatedCloserIsValid(transaction.newDoc, mapped)) return [mapped];
+          }
+
+          if (historySync) {
+            const original = { ...value, active: true };
+            if (generatedCloserIsValid(transaction.newDoc, original)) return [original];
+            return [{ ...value, active: false }];
+          }
+
+          return [];
+        });
+      }
+    }
+
+    for (const effect of transaction.effects) {
+      if (effect.is(removeGeneratedCloser)) {
+        next = next.filter((value) => (
+          value.position !== effect.value.position || value.close !== effect.value.close
+        ));
+      } else if (effect.is(addGeneratedCloser)) {
+        next = [...next, effect.value];
+      }
+    }
+
+    return Object.freeze(next.length > 64 ? next.slice(-64) : next);
+  },
+});
+
+function isCodeAutoPair(pair: NormalizedMarkdownEditorAutoPair) {
+  return pair.autoClose && (pair.kind === "bracket" || pair.kind === "quote");
+}
+
+function hasGeneratedCloser(
+  state: CodeMirrorState,
+  position: number,
+  close: string,
+) {
+  const tracked = state.field(generatedCloserState, false);
+  return tracked?.some((value) => (
+    value.active && value.position === position && value.close === close
+  )) ?? false;
+}
+
+function findGeneratedCloser(
+  state: CodeMirrorState,
+  position: number,
+  close: string,
+) {
+  return state.field(generatedCloserState, false)?.find((value) => (
+    value.active && value.position === position && value.close === close
+  ));
+}
+
+function skipGeneratedCloser(state: CodeMirrorState, close: string) {
+  let rejected = false;
+  const changes = state.changeByRange((range) => {
+    if (
+      range.empty
+      && state.sliceDoc(range.head, range.head + close.length) === close
+      && hasGeneratedCloser(state, range.head, close)
+    ) {
+      return {
+        effects: removeGeneratedCloser.of({ close, position: range.head }),
+        range: EditorSelection.cursor(range.head + close.length),
+      };
+    }
+
+    rejected = true;
+    return { range };
+  });
+
+  return rejected ? null : state.update(changes, {
+    scrollIntoView: true,
+    userEvent: "input.type",
+  });
+}
+
+function insertGeneratedPair(
+  state: CodeMirrorState,
+  pair: NormalizedMarkdownEditorAutoPair,
+  wrapSelection: boolean,
+) {
+  let rejected = false;
+  const changes = state.changeByRange((range) => {
+    if (!range.empty) {
+      if (!wrapSelection) {
+        rejected = true;
+        return { range };
+      }
+
+      return {
+        changes: [
+          { from: range.from, insert: pair.open },
+          { from: range.to, insert: pair.close },
+        ],
+        effects: addGeneratedCloser.of({
+          active: true,
+          close: pair.close,
+          open: pair.open,
+          openPosition: range.from,
+          position: range.to + pair.open.length,
+        }),
+        range: EditorSelection.range(
+          range.anchor + pair.open.length,
+          range.head + pair.open.length,
+        ),
+      };
+    }
+
+    if (!canOpenMarkdownEditorAutoPair(
+      pair,
+      state.sliceDoc(0, range.head),
+      state.sliceDoc(range.head),
+    )) {
+      rejected = true;
+      return { range };
+    }
+
+    return {
+      changes: { from: range.head, insert: `${pair.open}${pair.close}` },
+      effects: addGeneratedCloser.of({
+        active: true,
+        close: pair.close,
+        open: pair.open,
+        openPosition: range.head,
+        position: range.head + pair.open.length,
+      }),
+      range: EditorSelection.cursor(range.head + pair.open.length),
+    };
+  });
+
+  return rejected ? null : state.update(changes, {
+    scrollIntoView: true,
+    userEvent: "input.type",
+  });
+}
+
+function createCodeAutoPairExtensions(
+  pairs: readonly NormalizedMarkdownEditorAutoPair[],
+  wrapSelection: boolean,
+): Extension[] {
+  if (pairs.length === 0) return [];
+
+  return [
+    generatedCloserState,
+    CodeMirrorView.inputHandler.of((view, from, to, text) => {
+      if (view.compositionStarted || view.state.readOnly || text.length !== 1) return false;
+
+      const selection = view.state.selection.main;
+      if (selection.from !== from || selection.to !== to) return false;
+
+      const closingPair = pairs.find((pair) => (
+        pair.close === text && hasGeneratedCloser(view.state, selection.from, text)
+      ));
+      const transaction = closingPair
+        ? skipGeneratedCloser(view.state, closingPair.close)
+        : (() => {
+            const openingPair = pairs.find((pair) => pair.trigger === text);
+            return openingPair
+              ? insertGeneratedPair(view.state, openingPair, wrapSelection)
+              : null;
+          })();
+
+      if (!transaction) return false;
+      view.dispatch(transaction);
+      return true;
+    }),
+  ];
+}
+
+function deleteGeneratedPair(
+  view: CodeMirrorView,
+  pairs: readonly NormalizedMarkdownEditorAutoPair[],
+) {
+  if (view.compositionStarted || view.state.readOnly) return false;
+
+  let rejected = false;
+  const changes = view.state.changeByRange((range) => {
+    const pair = range.empty ? pairs.find((candidate) => (
+      view.state.sliceDoc(range.head - candidate.open.length, range.head) === candidate.open
+      && view.state.sliceDoc(range.head, range.head + candidate.close.length) === candidate.close
+      && hasGeneratedCloser(view.state, range.head, candidate.close)
+    )) : undefined;
+    const tracked = pair
+      ? findGeneratedCloser(view.state, range.head, pair.close)
+      : undefined;
+
+    if (
+      !pair
+      || !tracked
+    ) {
+      rejected = true;
+      return { range };
+    }
+
+    const from = range.head - pair.open.length;
+
+    if (tracked.open !== pair.open || tracked.openPosition !== from) {
+      return {
+        changes: { from, to: range.head },
+        range: EditorSelection.cursor(from),
+      };
+    }
+
+    return {
+      changes: { from, to: range.head + pair.close.length },
+      range: EditorSelection.cursor(from),
+    };
+  });
+
+  if (rejected) return false;
+  view.dispatch(view.state.update(changes, {
+    scrollIntoView: true,
+    userEvent: "delete.backward",
+  }));
+  return true;
+}
 
 function containsNode(container: Node, value: unknown) {
   if (
@@ -86,13 +385,68 @@ function containsNode(container: Node, value: unknown) {
 export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClassOptions): CodeBlockViewClass {
   const {
     schema,
+    historyCommands,
     languageRegistry,
     nestedClipboard,
     moveBeforeManagedBlock,
     onDestroyError,
     onLanguageLoadError,
     setManagedBlockBoundarySelection,
+    shortcuts,
+    typing,
   } = options;
+  const codeAutoPairs = typing.autoPairs.filter(isCodeAutoPair);
+  const codeAutoPairExtensions = createCodeAutoPairExtensions(
+    codeAutoPairs,
+    typing.wrapSelection,
+  );
+  const historyCandidatesByKey = new Map<string, Command[]>();
+  const blockedHistoryKeys = new Set<string>();
+
+  for (const contribution of [
+    {
+      command: historyCommands.undo,
+      defaultKeys: ["Mod-z"],
+      id: "@markora/core/undo",
+    },
+    {
+      command: historyCommands.redo,
+      defaultKeys: ["Shift-Mod-z", "Mod-y"],
+      id: "@markora/core/redo",
+    },
+  ] as const) {
+    const resolvedKeys = resolveMarkdownEditorShortcutKeys(
+      shortcuts,
+      contribution.id,
+      contribution.defaultKeys,
+    );
+
+    for (const key of resolvedKeys) {
+      const candidates = historyCandidatesByKey.get(key) ?? [];
+      candidates.push(contribution.command);
+      historyCandidatesByKey.set(key, candidates);
+    }
+
+    for (const defaultKey of resolveMarkdownEditorShortcutKeys(
+      Object.freeze({}),
+      contribution.id,
+      contribution.defaultKeys,
+    )) {
+      if (!resolvedKeys.includes(defaultKey)) blockedHistoryKeys.add(defaultKey);
+    }
+  }
+
+  for (const key of blockedHistoryKeys) {
+    if (!historyCandidatesByKey.has(key)) {
+      historyCandidatesByKey.set(key, []);
+    }
+  }
+
+  const codeHistoryBindings = [...historyCandidatesByKey].map(([key, commands]) => ({
+    blocked: blockedHistoryKeys.has(key),
+    commands,
+    key,
+  }));
   const languageResolver = createCodeBlockLanguageResolver(languageRegistry);
   const instances = new Set<CodeBlockView>();
 
@@ -246,6 +600,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
       private outerView: EditorView,
       private getPos: () => number,
       mount?: ActiveCodeBlockMount,
+      generatedAutoPairs: readonly MarkdownEditorCodeAutoPairSnapshot[] = [],
     ) {
       const ownerDocument = this.ownerDocument;
       this.editable = outerView.editable;
@@ -269,6 +624,15 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
         }),
         parent: editorHost,
       });
+      const restoredAutoPairs = generatedAutoPairs.filter((value) => (
+        !value.active || generatedCloserIsValid(this.cm.state.doc, value)
+      ));
+
+      if (restoredAutoPairs.length > 0) {
+        this.cm.dispatch({
+          effects: restoredAutoPairs.map((value) => addGeneratedCloser.of(value)),
+        });
+      }
       this.cm.contentDOM.setAttribute("aria-label", "Code block editor");
 
       try {
@@ -287,7 +651,14 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
       }
     }
 
-    update(node: ProseMirrorNode) {
+    getGeneratedAutoPairs() {
+      return Object.freeze([...(this.cm.state.field(generatedCloserState, false) ?? [])]);
+    }
+
+    update(
+      node: ProseMirrorNode,
+      historyAction: MarkdownEditorHistoryAction | null = null,
+    ) {
       if (node.type !== schema.nodes.code_block) {
         return false;
       }
@@ -302,6 +673,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
         this.runWhileUpdating(() => {
           this.cm.dispatch({
             changes: { from: 0, to: this.cm.state.doc.length, insert: node.textContent },
+            effects: syncGeneratedClosers.of(historyAction),
           });
         });
       }
@@ -1063,8 +1435,8 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
       this.runWhileUpdating(() => this.outerView.dispatch(tr));
     }
 
-    private applyOuterHistory(command: typeof undo | typeof redo) {
-      if (!this.canEdit) {
+    private applyOuterHistory(command: Command) {
+      if (!this.canEdit || this.cm.compositionStarted || this.outerView.composing) {
         return false;
       }
 
@@ -1076,7 +1448,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
 
       this.parkOuterFocusForTransfer();
 
-      const applied = command(this.outerView.state, this.outerView.dispatch);
+      const applied = command(this.outerView.state, this.outerView.dispatch, this.outerView);
 
       if (!applied) {
         this.finishOuterFocusTransfer(transferVersion);
@@ -1259,6 +1631,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
         syntaxHighlighting(defaultHighlightStyle),
         this.languageCompartment.of([]),
         this.editableCompartment.of(this.getEditableExtensions(this.editable)),
+        ...codeAutoPairExtensions,
         codeMirrorKeymap.of([
           {
             key: "Enter",
@@ -1290,20 +1663,16 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
           },
           {
             key: "Backspace",
-            run: () => this.forwardManagedBoundaryKey("Backspace") || this.maybeUnwrapCodeBlockAtStart(),
+            run: () => (
+              this.forwardManagedBoundaryKey("Backspace")
+              || this.maybeUnwrapCodeBlockAtStart()
+              || deleteGeneratedPair(this.cm, codeAutoPairs)
+            ),
           },
-          {
-            key: "Mod-z",
-            run: () => this.applyOuterHistory(undo),
-          },
-          {
-            key: "Shift-Mod-z",
-            run: () => this.applyOuterHistory(redo),
-          },
-          {
-            key: "Mod-y",
-            run: () => this.applyOuterHistory(redo),
-          },
+          ...codeHistoryBindings.map(({ blocked, commands, key }) => ({
+            key,
+            run: () => commands.some((command) => this.applyOuterHistory(command)) || blocked,
+          })),
           ...defaultKeymap,
           indentWithTab,
         ]),

@@ -13,6 +13,26 @@ export type LinkEditorOverlay = {
   destroy: () => void;
 };
 
+export type CodeBlockLanguageEditRequest = Readonly<{
+  /** The exact fenced-code info string stored on the code block. */
+  language: string;
+  /** Invalidates this request when a custom surface closes without saving. */
+  cancel: () => void;
+  /** Applies a replacement only while this edit request is still current. */
+  update: (nextLanguage: string) => boolean;
+}>;
+
+export type CodeBlockLanguageEditorOverlay = {
+  open: (
+    view: EditorView,
+    marker: HTMLElement,
+    request: CodeBlockLanguageEditRequest,
+  ) => boolean;
+  close: (refocusTrigger: boolean) => void;
+  isComposing?: () => boolean;
+  destroy: () => void;
+};
+
 export type ImageEditorOverlay = {
   open: (view: EditorView, marker: HTMLElement, imageInfo: ActiveImageInfo) => void;
   close: (refocusEditor: boolean) => void;
@@ -46,6 +66,8 @@ export type EditorUiControllers = {
   enabled: boolean;
   clearSelectionAnchor: () => void;
   createSelectionAnchor: (view: EditorView) => HTMLElement | null;
+  /** Optional so existing custom UI factories remain source-compatible. */
+  codeBlockLanguageEditor?: CodeBlockLanguageEditorOverlay;
   imageEditor: ImageEditorOverlay;
   linkEditor: LinkEditorOverlay;
   tableToolbar: TableToolbarOverlay;

@@ -29,7 +29,7 @@ const apiRows = [
   ["editor.commands.moveTableRow(direction) / moveTableColumn(direction)", "Moves the selected rows or columns while keeping the header row pinned."],
   ["editor.commands.deleteTableRow() / deleteTableColumn() / setTableColumnAlignment() / deleteTable()", "Deletes or aligns the selected table structure without requiring the optional UI."],
   ["editor.state.tableIssues()", "Reports table shapes that cannot be represented faithfully as GFM pipe tables."],
-  ["editor.ui?.createTable() / editLink() / editImage() / editTable()", "Optional namespaced UI entry points when overlays are attached."],
+  ["editor.ui?.createTable() / editLink() / editImage() / editCodeBlockLanguage() / editTable()", "Optional namespaced UI entry points when overlays are attached."],
   ["editor.commands.undo() / editor.commands.redo()", "Runs history commands."],
   ["editor.destroy()", "Idempotently flushes pending output and releases the editor, nested code views, optional UI, listeners, and subscriptions."],
 ] as const;
@@ -59,6 +59,27 @@ const editor = createEditor({
     custom: async () => [
       // Return CodeMirror extensions for your custom fenced language.
     ],
+  },
+});`;
+
+const typingErgonomicsCode = `const editor = createEditor({
+  element: hostElement,
+  typing: {
+    autoPairs: [
+      "parentheses",
+      "square-brackets",
+      "double-quotes",
+      "emphasis-asterisks",
+      "strong-asterisks",
+      "inline-code",
+      "strikethrough",
+    ],
+    wrapSelection: true,
+  },
+  shortcuts: {
+    "@markora/core/bold": "Alt-b",
+    "@markora/core/italic": false,
+    "@acme/editor/toggle-note": ["Mod-Shift-n", "Alt-n"],
   },
 });`;
 
@@ -216,6 +237,19 @@ type MarkdownEditorChangeContext = {
 
 type MarkdownEditorChangeMode = "idle" | "animationFrame" | "immediate";
 
+type MarkdownEditorShortcutBinding = false | string | readonly string[];
+type MarkdownEditorShortcutMap = Readonly<Record<string, MarkdownEditorShortcutBinding>>;
+
+type MarkdownEditorAutoPair =
+  | "braces" | "double-quotes" | "emphasis-asterisks" | "emphasis-underscores"
+  | "inline-code" | "parentheses" | "single-quotes" | "square-brackets"
+  | "strikethrough" | "strong-asterisks" | "strong-underscores";
+
+type MarkdownEditorTypingOptions = Readonly<{
+  autoPairs?: readonly MarkdownEditorAutoPair[];
+  wrapSelection?: boolean;
+}>;
+
 type CreateEditorOptions = {
   element: HTMLElement;
   markdown?: string;
@@ -234,6 +268,8 @@ type CreateEditorOptions = {
   ) => void;
   onChangeMode?: MarkdownEditorChangeMode;
   onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
+  shortcuts?: MarkdownEditorShortcutMap;
+  typing?: MarkdownEditorTypingOptions;
   ui?: EditorUiFactory;
   codeBlockLanguages?: CodeBlockLanguageRegistry;
 };`;
@@ -521,6 +557,7 @@ export function ApiPage() {
             <li><code>onChangeMode</code> supports default <code>"idle"</code>, once-per-frame <code>"animationFrame"</code>, and same-stack <code>"immediate"</code> delivery.</li>
             <li><code>onEditOpaqueMarkdown</code> opens a host-owned source editor for inert unsupported syntax.</li>
             <li><code>resources</code> configures stored URL policy, resolution/open/load hooks, image privacy, and optional file uploads. It is creation-only because it defines document validity.</li>
+            <li><code>typing</code> opts into generated-delimiter pairing and selection wrapping; <code>shortcuts</code> remaps or disables stable built-in and qualified extension keymap IDs.</li>
             <li><code>ui</code> and <code>codeBlockLanguages</code> are optional extension points.</li>
           </ul>
         </article>
@@ -695,7 +732,7 @@ export function ApiPage() {
 
       <section className="panel doc-panel">
         <span className="card-kicker">Keyboard shortcuts</span>
-        <h2>Keys and input rules the editor handles out of the box.</h2>
+        <h2>Use defaults or supply an embedded-product keymap.</h2>
         <p>
           <code>Mod</code> is <code>Cmd</code> on macOS and <code>Ctrl</code> on other platforms.
           {" "}Input rules trigger as you type and match the pattern.
@@ -711,6 +748,7 @@ export function ApiPage() {
             </Fragment>
           ))}
         </div>
+        <CodeBlock code={typingErgonomicsCode} language="ts" title="Typing and shortcut policy" />
       </section>
 
       <section className="panel doc-panel">

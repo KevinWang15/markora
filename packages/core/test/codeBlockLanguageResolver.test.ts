@@ -14,6 +14,19 @@ function deferredExtension() {
 }
 
 describe("code-block language resolver", () => {
+  it.each(["constructor", "__proto__"])(
+    "does not resolve inherited object key %j as a language extension",
+    (language) => {
+      const resolver = createCodeBlockLanguageResolver();
+      const subscription = resolver.subscribe(language, {
+        onRejected: () => false,
+        onResolved: () => undefined,
+      });
+
+      expect(subscription).toEqual({ status: "missing" });
+    },
+  );
+
   it("does not accumulate subscribers or host-promise handlers after cancellation", async () => {
     let hostThenCalls = 0;
     const neverSettlingHostPromise = {

@@ -128,41 +128,41 @@
   "bundle": {
     "root": {
       "initialJs": {
-        "rawBytes": { "warning": 810000, "failure": 900000 },
-        "gzipBytes": { "warning": 225000, "failure": 250000 }
+        "rawBytes": { "warning": 810000, "failure": 930000 },
+        "gzipBytes": { "warning": 225000, "failure": 255000 }
       },
       "lazyJs": {
         "rawBytes": { "warning": 1090000, "failure": 1120000 },
         "gzipBytes": { "warning": 345000, "failure": 355000 }
       },
       "totalJs": {
-        "rawBytes": { "warning": 1880000, "failure": 1980000 },
-        "gzipBytes": { "warning": 560000, "failure": 590000 }
+        "rawBytes": { "warning": 1880000, "failure": 2020000 },
+        "gzipBytes": { "warning": 560000, "failure": 600000 }
       },
       "css": {
-        "rawBytes": { "warning": 16750, "failure": 18750 },
-        "gzipBytes": { "warning": 3300, "failure": 3550 }
+        "rawBytes": { "warning": 16750, "failure": 19500 },
+        "gzipBytes": { "warning": 3300, "failure": 3650 }
       },
-      "staticModuleCount": { "warning": 148, "failure": 151 }
+      "staticModuleCount": { "warning": 148, "failure": 154 }
     },
     "minimal": {
       "initialJs": {
-        "rawBytes": { "warning": 690000, "failure": 705000 },
-        "gzipBytes": { "warning": 194000, "failure": 200000 }
+        "rawBytes": { "warning": 690000, "failure": 730000 },
+        "gzipBytes": { "warning": 194000, "failure": 205000 }
       },
       "lazyJs": {
         "rawBytes": { "warning": 0, "failure": 0 },
         "gzipBytes": { "warning": 0, "failure": 0 }
       },
       "totalJs": {
-        "rawBytes": { "warning": 690000, "failure": 705000 },
-        "gzipBytes": { "warning": 194000, "failure": 200000 }
+        "rawBytes": { "warning": 690000, "failure": 730000 },
+        "gzipBytes": { "warning": 194000, "failure": 205000 }
       },
       "css": {
         "rawBytes": { "warning": 4800, "failure": 5000 },
         "gzipBytes": { "warning": 1250, "failure": 1350 }
       },
-      "staticModuleCount": { "warning": 128, "failure": 129 }
+      "staticModuleCount": { "warning": 128, "failure": 132 }
     }
   }
 }

@@ -1,5 +1,4 @@
 import { InputRule, inputRules } from "prosemirror-inputrules";
-import { keymap } from "prosemirror-keymap";
 import { Slice } from "prosemirror-model";
 import { Plugin, Transaction, type Command, type EditorState } from "prosemirror-state";
 import type { EditorView, NodeView, NodeViewConstructor } from "prosemirror-view";
@@ -35,6 +34,12 @@ import type {
 import type { MarkdownEditorCodec } from "./markdownCodec";
 import { setMarkdownEditorTransactionOrigin } from "./transactionOrigin";
 import type { MarkdownEditor } from "./editorApi";
+import {
+  createCompositionSafeMarkdownEditorKeymap,
+  resolveMarkdownEditorShortcutKeys,
+  type NormalizedMarkdownEditorShortcutMap,
+} from "./shortcutConfig";
+import { MARKDOWN_EDITOR_APPLIED_INPUT_RULE_META } from "./typingErgonomics";
 
 type RuntimeInstance = {
   resolved: ResolvedMarkdownEditorExtension;
@@ -83,6 +88,7 @@ type CreateMarkdownEditorExtensionAssemblyOptions = Readonly<{
   resolution: MarkdownEditorExtensionResolution;
   codec: MarkdownEditorCodec;
   ownerDocument: Document;
+  shortcuts: NormalizedMarkdownEditorShortcutMap;
   reservedNodeViews?: readonly string[];
   reportError(
     error: MarkdownEditorExtensionError,
@@ -1008,6 +1014,13 @@ export function createMarkdownEditorExtensionAssembly(
               throw new TypeError("An extension input rule must return a Transaction or null.");
             }
 
+            if (transaction) {
+              transaction.setMeta(MARKDOWN_EDITOR_APPLIED_INPUT_RULE_META, {
+                from: end,
+                text: match[0].slice(-1),
+              });
+            }
+
             return transaction;
           } catch (cause) {
             reportBrowserFailure(cause, {
@@ -1079,6 +1092,16 @@ export function createMarkdownEditorExtensionAssembly(
       { errorPhase: "input", contributionKind: "Keymap" },
     );
     const keyCommands = orderedKeymaps.map((item) => {
+      if (typeof item.contribution.key !== "string" || !item.contribution.key.trim()) {
+        throw assemblyError({
+          code: "EXTENSION_INVALID_DEFINITION",
+          phase: "input",
+          message: "Extension keymap bindings must use a non-empty key name.",
+          extension: item.owner,
+          contribution: item.qualifiedId,
+        });
+      }
+
       const command = invokeFactory(
         item.owner,
         item.qualifiedId,
@@ -1099,14 +1122,18 @@ export function createMarkdownEditorExtensionAssembly(
       return {
         contribution: item.qualifiedId,
         owner: item.owner,
-        key: item.contribution.key,
+        keys: resolveMarkdownEditorShortcutKeys(
+          options.shortcuts,
+          item.qualifiedId,
+          [item.contribution.key],
+        ),
         command,
       };
     });
     const bindings: Record<string, Command> = {};
 
-    for (const { contribution, key, owner } of keyCommands) {
-      if (typeof key !== "string" || !key.trim()) {
+    for (const { contribution, keys, owner } of keyCommands) {
+      if (keys.some((key) => typeof key !== "string" || !key.trim())) {
         throw assemblyError({
           code: "EXTENSION_INVALID_DEFINITION",
           phase: "input",
@@ -1116,12 +1143,14 @@ export function createMarkdownEditorExtensionAssembly(
         });
       }
 
-      if (!bindings[key]) {
+      for (const key of keys) {
+        if (bindings[key]) continue;
+
         bindings[key] = (state, dispatch, activeView) => {
+          if (activeView?.composing) return false;
+
           for (const candidate of keyCommands) {
-            if (candidate.key !== key) {
-              continue;
-            }
+            if (!candidate.keys.includes(key)) continue;
 
             try {
               const handled = candidate.command(state, dispatch, activeView);
@@ -1563,7 +1592,7 @@ export function createMarkdownEditorExtensionAssembly(
     contributions = Object.freeze({
       inputRules: inputRuleValues.length > 0 ? inputRules({ rules: inputRuleValues }) : null,
       plugins: Object.freeze(pluginValues),
-      keymap: Object.keys(bindings).length > 0 ? keymap(bindings) : null,
+      keymap: createCompositionSafeMarkdownEditorKeymap(bindings),
       nodeViews: Object.freeze(nodeViews),
       clipboard,
       nestedClipboard,

@@ -104,7 +104,9 @@ export function createCodeBlockLanguageResolver(languageRegistry?: CodeBlockLang
       return addPendingSubscriber(cached, subscriber);
     }
 
-    const support = registry[normalized];
+    const support = Object.prototype.hasOwnProperty.call(registry, normalized)
+      ? registry[normalized]
+      : undefined;
 
     if (!support) {
       return { status: "missing" };

@@ -99,6 +99,11 @@ type BrowserLabTestSpec = {
   portal?: "body" | "default" | "local" | "positioned" | "transformed";
   root?: "document" | "shadow";
   resourceMode?: "custom-protocol" | "deny-images" | "immediate-upload" | "proxy-images";
+  shortcuts?: Record<string, false | string | readonly string[]>;
+  typing?: {
+    autoPairs?: readonly ("braces" | "double-quotes" | "emphasis-asterisks" | "emphasis-underscores" | "inline-code" | "parentheses" | "single-quotes" | "square-brackets" | "strikethrough" | "strong-asterisks" | "strong-underscores")[];
+    wrapSelection?: boolean;
+  };
 };
 
 type BrowserLabResourceLog = {
@@ -177,7 +182,7 @@ interface Window {
     listenerSnapshot(id?: string): { total: number; byTargetAndType: Record<string, number> };
     mount(spec: BrowserLabTestSpec): BrowserLabTestSnapshot;
     mountedIds(): string[];
-    openUi(id: string, kind: "image" | "link" | "table" | "table-create"): boolean;
+    openUi(id: string, kind: "code-language" | "image" | "link" | "table" | "table-create"): boolean;
     pendingOpaqueEdit(id: string): { kind: string; source: string } | null;
     ready: true;
     reconcile(

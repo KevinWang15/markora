@@ -37,7 +37,7 @@ Opaque HTML is shown as text and never executed inside the editor, but serialize
 npm install markora markora-ui
 ```
 
-`markora-ui` is optional. Install it when you want the built-in link, image, and table overlays.
+`markora-ui` is optional. Install it when you want the built-in link, image, code-fence metadata, and table overlays.
 
 ## Quick start
 
@@ -79,6 +79,37 @@ editor.destroy();
 ```
 
 `ariaLabel` or `ariaLabelledBy` gives the inner editor its host-specific accessible name. `onChange` uses the default `"idle"` mode: document changes coalesce and full Markdown serialization stays out of the synchronous typing path. Idle delivery waits for 300 ms without another document change and retains a five-second first-change deadline, so ordinary typing bursts produce one latest snapshot without starving a continuously edited draft. Use the synchronous `update` event for dirty state and host UI, and call `getMarkdown()` only at an explicit snapshot boundary. Initial autofocus and selection are configured through `createEditor()` and are not replayed to subscriptions added after creation.
+
+## Typing assistance and shortcuts
+
+Typing assistance is explicit and creation-time, so an embedding product chooses its own conventions:
+
+```ts
+const editor = createEditor({
+  element: hostElement,
+  typing: {
+    autoPairs: [
+      "parentheses",
+      "square-brackets",
+      "double-quotes",
+      "emphasis-asterisks",
+      "strong-asterisks",
+      "inline-code",
+      "strikethrough",
+    ],
+    wrapSelection: true,
+  },
+  shortcuts: {
+    "@markora/core/bold": "Alt-b",
+    "@markora/core/italic": false,
+    "@acme/editor/toggle-note": ["Mod-Shift-n", "Alt-n"],
+  },
+});
+```
+
+Auto-pairing is off by default. Enabled pairs remember which closing delimiter Markora generated, so existing source punctuation is never skipped or pair-deleted. Compatible selections are wrapped (or receive the corresponding semantic Markdown mark), and every automatic change participates in normal undo/redo. Pairing and shortcuts stay inert during IME composition. Markdown markers stay literal inside code; active CodeMirror fences receive only the configured bracket and quote pairs.
+
+Built-in shortcut IDs are `@markora/core/bold`, `@markora/core/italic`, `@markora/core/inline-code`, `@markora/core/strikethrough`, `@markora/core/hard-break`, `@markora/core/table-toolbar`, `@markora/core/undo`, and `@markora/core/redo`. Extension keymaps use their qualified contribution ID. A string replaces the default binding, an array supplies an ordered set, and `false` disables it. Remapping or disabling a built-in consumes its former default key so native contenteditable behavior cannot leak through; configured undo/redo bindings also apply inside active CodeMirror blocks.
 
 ## Host-controlled resources and uploads
 
@@ -190,7 +221,7 @@ editor.updateOptions({
 });
 ```
 
-`updateOptions()` also accepts `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Replacing `onChange` or its batching mode first flushes pending output once through the previous listener, then installs the new configuration. `onChangeMode` is `"idle"` by default; `"animationFrame"` retains once-per-frame delivery, and `"immediate"` is the explicit compatibility mode for same-stack serialization and callback delivery. `element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `codeBlockLanguages`, `resources`, and extension configuration are creation-only.
+`updateOptions()` also accepts `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Replacing `onChange` or its batching mode first flushes pending output once through the previous listener, then installs the new configuration. `onChangeMode` is `"idle"` by default; `"animationFrame"` retains once-per-frame delivery, and `"immediate"` is the explicit compatibility mode for same-stack serialization and callback delivery. `element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `typing`, `shortcuts`, `codeBlockLanguages`, `resources`, and extension configuration are creation-only.
 
 `focus`, `blur`, `state`, `selection`, `update`, `asset`, and `error` subscriptions return idempotent unsubscribe functions. State, selection, and update events are synchronous and expose host-facing selection snapshots plus a change `origin`; `state` fires for every accepted state transition and adds `docChanged` and `selectionChanged`, while `selection` and `update` are limited to those respective changes. Focus and blur each cross one microtask boundary so host callbacks run outside nested editor focus internals and movement within the composite surface does not produce a false boundary. Asset events describe upload lifecycle without requiring Markdown serialization or a document transaction. Update events do not serialize Markdown. Use the default idle `onChange(markdown, context)` for coalesced normalized output, or call `getMarkdown()` synchronously only when a save/export boundary needs the latest snapshot. `onTransaction(transaction, view, context)` remains available for advanced ProseMirror-aware integrations.
 
@@ -199,7 +230,7 @@ editor.updateOptions({
 ## Architecture notes
 
 - `markora` is headless by default: it owns parsing, serialization, commands, state, and embedded code-block editing
-- `markora-ui` adds the repo's default link editor, image editor, table creation/dimension dialog, and table toolbar overlays
+- `markora-ui` adds the repo's default link, image, and code-fence metadata editors plus the table creation/dimension dialog and table toolbar overlays
 - Code fences keep an exact selectable/searchable source shell in the document; CodeMirror activates near the viewport or for caret/edit interactions, while native range selection can remain on the shell and host-extensible `codeBlockLanguages` loaders run only after activation
 - `editor.commands.reconcileMarkdown(markdown)` is the ordinary authoritative host-update path; it preserves editor state and is silent by default
 - `editor.commands.resetMarkdown(markdown)` is an explicit hard reset that resets selection and clears history/plugin state; deprecated `setMarkdown()` remains a hard-reset alias

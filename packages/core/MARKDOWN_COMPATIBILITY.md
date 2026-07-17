@@ -1,6 +1,6 @@
 # Markdown dialect and fidelity contract
 
-Status: current `markora` `0.0.x` contract, updated and verified for `EE-018` on 2026-07-17.
+Status: current `markora` `0.0.x` contract, updated and verified for `EE-019` on 2026-07-17.
 
 This contract applies to Markdown passed through `createEditor({ markdown })`, `editor.commands.reconcileMarkdown()`, or `editor.commands.resetMarkdown()` and returned by `editor.getMarkdown()` or `onChange`. Deprecated `setMarkdown()` uses the same parsing boundary as `resetMarkdown()`.
 
@@ -40,7 +40,7 @@ Syntax outside both the supported dialect and the recognized opaque shapes can s
 | Bullet lists | Ordinary lists using one marker style, including supported nested blocks | Normalized to `*` markers. Adjacent lists separated only by a different marker are a known limitation. |
 | Ordered lists | Period or parenthesis delimiters with a start of 1 or greater | Normalized to period delimiters and explicit sequential numbering. A start of `0` is not supported reliably. |
 | Task lists | Flat `[ ]`, `[x]`, or `[X]` items directly inside a bullet list | Normalized to `* [ ]` and `* [x]`. Nested lists or additional blocks inside task items are not supported reliably. |
-| Code blocks | Indented blocks and backtick or tilde fences, with an optional info string | Code text and the info string are semantic content. Output uses a safe backtick fence; the original fence character and length are not retained. |
+| Code blocks | Indented blocks and backtick or tilde fences, with an optional info string | Code text and the complete normalized info string are semantic content. Surrounding info whitespace is trimmed on import and command input. Output uses a fence longer than delimiter runs in the body, choosing tildes when the info contains a backtick; the original fence character and length are otherwise not retained. NUL/CR/LF cannot occur in info, and raw NUL/CR code text injected through advanced transactions cannot be serialized exactly. |
 | Emphasis and strong | CommonMark `*`/`_` and `**`/`__` forms | Normalized to `*emphasis*` and `**strong**`. |
 | Inline code | CommonMark code spans | Code text is semantic content; delimiter length and padding normalize as needed. |
 | Strikethrough | `~~text~~` | Markora/GFM-style extension with normalized `~~` markers. |
@@ -49,7 +49,7 @@ Syntax outside both the supported dialect and the recognized opaque shapes can s
 | Images | Inline and reference images with alt text and optional titles | Normalized to inline image syntax after the per-editor URL policy. The default `data:` subset and limits are described below. |
 | Pipe tables | Rectangular header/delimiter/body tables, optional outer pipes, alignment colons, and supported inline cell content | Normalized to outer pipes and `---` dividers. Default, left, center, and right alignment are retained. Literal pipes, including pipes in code spans, must be escaped. The semantic round-trip promise requires one unmerged cell with one paragraph per grid position and column headers in the first row. |
 
-Code-block language loading affects only the embedded CodeMirror experience. Any fenced info string is accepted as generic code metadata even when no language package or renderer exists.
+Code-block language loading affects only the embedded CodeMirror experience. Registry lookup does not constrain a syntactically valid normalized info string, so metadata remains generic even when no language package or renderer exists. Serialization rejects non-normalized surrounding info whitespace or NUL/line-break characters injected through advanced transactions instead of silently changing them.
 
 ## Opaque source preservation
 
@@ -110,7 +110,7 @@ These transformations are intentional and happen on import/export even when the 
 | Ordered `3)` delimiter | `3.` |
 | Task `[X]` | `[x]` |
 | Setext heading or closing ATX hashes | Opening ATX hashes |
-| Tilde or indented code block | Backtick fence |
+| Tilde or indented code block | A safe backtick fence, except an info string containing a backtick requires a safe tilde fence |
 | `_em_` and `__strong__` | `*em*` and `**strong**` |
 | Reference link or image | Inline destination and title at every use |
 | Unused reference definition | Removed |

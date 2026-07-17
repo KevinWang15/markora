@@ -267,7 +267,10 @@ describe("public command and state surface", () => {
 
     expect(() => editor.state.can.setHeading(0 as 1)).toThrow(RangeError);
     expect(() => editor.commands.setCodeBlock({ language: "bad\nlang" })).toThrow(RangeError);
-    expect(() => editor.state.isActive.codeBlock({ language: "`bad" })).toThrow(RangeError);
+    expect(() => editor.commands.setCodeBlock({ language: "bad\rlang" })).toThrow(RangeError);
+    expect(editor.commands.setCodeBlock({ language: "lang`variant" })).toBe(true);
+    expect(editor.state.isActive.codeBlock({ language: "lang`variant" })).toBe(true);
+    expect(editor.getMarkdown()).toBe("~~~lang`variant\nconst value = 1\n~~~");
 
     editor.destroy();
   });

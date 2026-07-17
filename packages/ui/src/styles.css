@@ -1,4 +1,5 @@
-.mdw-link-editor {
+.mdw-link-editor,
+.mdw-code-language-editor {
   position: absolute;
   z-index: 30;
   display: flex;
@@ -16,7 +17,8 @@
   overflow: auto;
 }
 
-.mdw-link-editor-input {
+.mdw-link-editor-input,
+.mdw-code-language-editor-input {
   width: 100%;
   min-height: 44px;
   padding: 8px 10px;
@@ -27,6 +29,7 @@
 }
 
 .mdw-link-editor-input[aria-invalid="true"],
+.mdw-code-language-editor-input[aria-invalid="true"],
 .mdw-image-editor-input[aria-invalid="true"] {
   border-color: #cf222e;
   box-shadow: 0 0 0 3px rgba(207, 34, 46, 0.12);
@@ -38,13 +41,15 @@
   line-height: 1.4;
 }
 
-.mdw-link-editor-actions {
+.mdw-link-editor-actions,
+.mdw-code-language-editor-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.mdw-link-editor-actions button {
+.mdw-link-editor-actions button,
+.mdw-code-language-editor-actions button {
   min-height: 44px;
   padding: 6px 10px;
   border: 1px solid #d0d7de;
@@ -248,13 +253,16 @@
   }
 
   .mdw-link-editor-input,
+  .mdw-code-language-editor-input,
   .mdw-image-editor-input,
   .mdw-link-editor-actions button,
+  .mdw-code-language-editor-actions button,
   .mdw-image-editor-actions button {
     min-height: 44px;
   }
 
   .mdw-link-editor-actions button,
+  .mdw-code-language-editor-actions button,
   .mdw-image-editor-actions button {
     min-width: 44px;
   }

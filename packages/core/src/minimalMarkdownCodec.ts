@@ -17,6 +17,7 @@ import {
   type NodeSpec,
 } from "prosemirror-model";
 import { Plugin } from "prosemirror-state";
+import { codeBlockFenceTokenAttrs, serializeCodeBlock } from "./codeBlockMarkdown";
 import {
   MarkdownEditorExtensionError,
   isValidMarkdownEditorLocalId,
@@ -281,13 +282,20 @@ export function createMinimalMarkdownCodec(
     minimalTokenizerFoundationAnchors,
   );
   const parserTokens = compileMarkdownEditorParserTokens({
-    foundationTokens: defaultMarkdownParser.tokens,
+    foundationTokens: {
+      ...defaultMarkdownParser.tokens,
+      fence: {
+        ...defaultMarkdownParser.tokens.fence,
+        getAttrs: codeBlockFenceTokenAttrs,
+      },
+    },
     schema,
     extensions,
     qualifyToken,
   });
   const serializerNodes: Record<string, (typeof defaultMarkdownSerializer.nodes)[string]> = {
     ...defaultMarkdownSerializer.nodes,
+    code_block: serializeCodeBlock,
   };
   const serializerMarks: Record<string, (typeof defaultMarkdownSerializer.marks)[string]> = {
     ...defaultMarkdownSerializer.marks,

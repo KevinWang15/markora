@@ -65,6 +65,11 @@ export type LabEditorSpec = {
   portal?: "body" | "default" | "local" | "positioned" | "transformed";
   root?: "document" | "shadow";
   resourceMode?: "custom-protocol" | "deny-images" | "immediate-upload" | "proxy-images";
+  shortcuts?: Record<string, false | string | readonly string[]>;
+  typing?: {
+    autoPairs?: readonly ("braces" | "double-quotes" | "emphasis-asterisks" | "emphasis-underscores" | "inline-code" | "parentheses" | "single-quotes" | "square-brackets" | "strikethrough" | "strong-asterisks" | "strong-underscores")[];
+    wrapSelection?: boolean;
+  };
 };
 
 export type LabSnapshot = {
@@ -262,7 +267,7 @@ export async function getTableIssues(page: Page, id: string) {
 export async function openEditorUi(
   page: Page,
   id: string,
-  kind: "image" | "link" | "table" | "table-create",
+  kind: "code-language" | "image" | "link" | "table" | "table-create",
 ) {
   return page.evaluate(
     ({ editorId, uiKind }) => window.__MARKORA_BROWSER_LAB__!.openUi(editorId, uiKind),

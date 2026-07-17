@@ -7,6 +7,7 @@ import {
   type MarkdownEditorMark,
   type MarkdownEditorSelectionSnapshot,
   type MarkdownEditorSelectionTarget,
+  type MarkdownEditorShortcutMap,
   type MarkdownEditorTableAlignment,
   type MarkdownEditorTableColumnMoveDirection,
   type MarkdownEditorTableInsertOptions,
@@ -14,6 +15,7 @@ import {
   type MarkdownEditorTableIssue,
   type MarkdownEditorTableResizeOptions,
   type MarkdownEditorTableRowMoveDirection,
+  type MarkdownEditorTypingOptions,
   type OpaqueMarkdownEditRequest,
   type UpdateEditorOptions,
 } from "markora";
@@ -45,6 +47,8 @@ export type BrowserLabEditorSpec = {
   portal?: BrowserLabPortal;
   root?: BrowserLabRoot;
   resourceMode?: "custom-protocol" | "deny-images" | "immediate-upload" | "proxy-images";
+  shortcuts?: MarkdownEditorShortcutMap;
+  typing?: MarkdownEditorTypingOptions;
 };
 
 export type BrowserLabUpdateOptions = Pick<
@@ -217,7 +221,7 @@ export type BrowserLabApi = {
   listenerSnapshot: (id?: string) => ListenerSnapshot;
   mount: (spec: BrowserLabEditorSpec) => BrowserLabSnapshot;
   mountedIds: () => string[];
-  openUi: (id: string, kind: "image" | "link" | "table" | "table-create") => boolean;
+  openUi: (id: string, kind: "code-language" | "image" | "link" | "table" | "table-create") => boolean;
   pendingOpaqueEdit: (id: string) => Pick<OpaqueMarkdownEditRequest, "kind" | "source"> | null;
   ready: true;
   reconcile: (
@@ -268,7 +272,7 @@ type MountedEditor = {
   transactionCount: number;
 };
 
-const OVERLAY_SELECTOR = ".mdw-link-editor, .mdw-image-editor, .mdw-table-size-editor, .mdw-table-toolbar";
+const OVERLAY_SELECTOR = ".mdw-link-editor, .mdw-image-editor, .mdw-code-language-editor, .mdw-table-size-editor, .mdw-table-toolbar";
 const EVENT_NAMES: MarkdownEditorEventName[] = ["focus", "blur", "selection", "state", "update", "error", "asset"];
 
 function createEventCounts(): Record<MarkdownEditorEventName, number> {
@@ -694,6 +698,8 @@ export function BrowserLabPage() {
         },
         placeholder: spec.placeholder,
         resources: createBrowserLabResources(mounted, spec.resourceMode),
+        shortcuts: spec.shortcuts,
+        typing: spec.typing,
         ui: mounted.explicitPortalRoot
           ? createDefaultUi({ portalRoot: mounted.explicitPortalRoot })
           : createDefaultUi(),
@@ -1053,6 +1059,7 @@ export function BrowserLabPage() {
       },
       openUi(id, kind) {
         const ui = requireEditor(editors, id).editor.ui;
+        if (kind === "code-language") return Boolean(ui?.editCodeBlockLanguage());
         if (kind === "link") return Boolean(ui?.editLink());
         if (kind === "image") return Boolean(ui?.editImage());
         if (kind === "table-create") return Boolean(ui?.createTable());

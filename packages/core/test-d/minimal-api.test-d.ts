@@ -12,6 +12,8 @@ import {
   type MarkdownEditorChangeOrigin,
   type MarkdownEditorCodeBlockRuntimeErrorEvent,
   type MarkdownEditorExtensionHandle,
+  type MarkdownEditorShortcutMap,
+  type MarkdownEditorTypingOptions,
   type ToolbarState,
   type UpdateEditorOptions,
 } from "../src/minimal";
@@ -62,6 +64,12 @@ const options: CreateEditorOptions = {
       },
     },
   },
+  shortcuts: {
+    "@markora/core/bold": "Alt-b",
+  } satisfies MarkdownEditorShortcutMap,
+  typing: {
+    autoPairs: ["parentheses", "inline-code"],
+  } satisfies MarkdownEditorTypingOptions,
 };
 const editor: MarkdownEditor = createEditor(options);
 const changeMode: MarkdownEditorChangeMode = "idle";

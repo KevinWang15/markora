@@ -1,10 +1,16 @@
 import { type Node as ProseMirrorNode, type Schema } from "prosemirror-model";
-import { TextSelection } from "prosemirror-state";
+import { TextSelection, type Command } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import type { CodeBlockLanguageRegistry } from "./codeBlockLanguages";
 import type { MarkdownEditorNestedClipboardPipeline } from "./extensionAssembly";
 import { rejectFileTransferEvent } from "./fileTransferGuard";
 import { isolateClipboardHistory, nestedClipboardText } from "./clipboardSemantics";
+import type { NormalizedMarkdownEditorShortcutMap } from "./shortcutConfig";
+import type {
+  MarkdownEditorCodeAutoPairSnapshot,
+  MarkdownEditorHistoryAction,
+  NormalizedMarkdownEditorTypingOptions,
+} from "./typingErgonomics";
 
 type BrowserWindow = Window & typeof globalThis;
 
@@ -12,11 +18,12 @@ type ActiveCodeBlockView = {
   readonly composing: boolean;
   readonly dom: HTMLElement;
   readonly hasFocus: boolean;
+  getGeneratedAutoPairs(): readonly MarkdownEditorCodeAutoPairSnapshot[];
   destroy(): void;
   setEditable(editable: boolean): void;
   setSelection(anchor: number, head: number): void;
   stopEvent(event: Event): boolean;
-  update(node: ProseMirrorNode): boolean;
+  update(node: ProseMirrorNode, historyAction?: MarkdownEditorHistoryAction | null): boolean;
 };
 
 type ActiveCodeBlockViewClass = new (
@@ -28,6 +35,7 @@ type ActiveCodeBlockViewClass = new (
     editorHost: HTMLElement;
     languageBadge: HTMLElement;
   },
+  generatedAutoPairs?: readonly MarkdownEditorCodeAutoPairSnapshot[],
 ) => ActiveCodeBlockView;
 
 type CodeBlockViewInstance = {
@@ -58,10 +66,22 @@ type ErrorDelivery = {
   isCurrent(): boolean;
 };
 
+type CodeBlockLanguageEditTarget = Readonly<{
+  getPos: () => number;
+  marker: HTMLElement;
+  node: ProseMirrorNode;
+  view: EditorView;
+}>;
+
 type CreateCodeBlockViewClassOptions = {
   schema: Schema;
   languageRegistry?: CodeBlockLanguageRegistry;
   nestedClipboard?: MarkdownEditorNestedClipboardPipeline | null;
+  getOnEditLanguage?: () => ((target: CodeBlockLanguageEditTarget) => boolean) | null;
+  getHistoryAction: () => MarkdownEditorHistoryAction | null;
+  historyCommands: Readonly<{ redo: Command; undo: Command }>;
+  shortcuts: NormalizedMarkdownEditorShortcutMap;
+  typing: NormalizedMarkdownEditorTypingOptions;
   moveBeforeManagedBlock(view: EditorView, blockPos: number): boolean;
   onActivationError?(
     error: unknown,
@@ -248,6 +268,9 @@ function readTransfer(event: ClipboardEvent | DragEvent) {
 export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOptions): CodeBlockViewClass {
   const {
     schema,
+    getOnEditLanguage,
+    getHistoryAction,
+    historyCommands,
     languageRegistry,
     nestedClipboard,
     moveBeforeManagedBlock,
@@ -255,6 +278,8 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     onDestroyError,
     onLanguageLoadError,
     setManagedBlockBoundarySelection,
+    shortcuts,
+    typing,
   } = options;
   const instances = new Set<CodeBlockView>();
   const instancesByDom = new Map<HTMLElement, CodeBlockView>();
@@ -276,6 +301,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     activeViewClassPromise ??= loadActiveCodeBlockModule().then((module) => {
       if (!activeViewClass) {
         activeViewClass = module.createActiveCodeBlockViewClass({
+          historyCommands,
           languageRegistry,
           moveBeforeManagedBlock,
           nestedClipboard,
@@ -283,6 +309,8 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
           onLanguageLoadError,
           schema,
           setManagedBlockBoundarySelection,
+          shortcuts,
+          typing,
         });
       }
 
@@ -572,6 +600,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     readonly outerViewForManager: EditorView;
     private readonly activeHost: HTMLElement;
     private readonly languageBadge: HTMLElement;
+    private readonly onEditLanguage: ((target: CodeBlockLanguageEditTarget) => boolean) | null;
     private readonly staticGutter: HTMLElement;
     private readonly staticView: HTMLElement;
     private activeView: ActiveCodeBlockView | null = null;
@@ -583,6 +612,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     private focusOnActivation = false;
     private focusAfterComposition = false;
     private focusRetryHandle: number | null = null;
+    private generatedAutoPairs: readonly MarkdownEditorCodeAutoPairSnapshot[] = Object.freeze([]);
     private nearViewport = false;
     private pointerActivationHandle: number | null = null;
     private pendingPointerPosition: number | null = null;
@@ -600,13 +630,20 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       const ownerDocument = outerView.dom.ownerDocument;
       this.outerViewForManager = outerView;
       this.editable = outerView.editable;
+      this.onEditLanguage = getOnEditLanguage?.() ?? null;
       this.dom = ownerDocument.createElement("div");
       this.dom.className = "mdw-code-block";
       this.dom.setAttribute("data-mdw-code-block-state", "inactive");
 
-      this.languageBadge = ownerDocument.createElement("div");
+      this.languageBadge = ownerDocument.createElement(this.onEditLanguage ? "button" : "div");
       this.languageBadge.className = "mdw-code-block-language";
       this.languageBadge.contentEditable = "false";
+
+      if (this.onEditLanguage) {
+        this.languageBadge.setAttribute("type", "button");
+        this.languageBadge.addEventListener("click", this.handleLanguageClick);
+        this.syncLanguageButtonState();
+      }
 
       const editorHost = ownerDocument.createElement("div");
       editorHost.className = "mdw-code-block-editor";
@@ -666,6 +703,25 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         return false;
       }
 
+      // Attribute-only replacements, such as editing the fence info, cannot
+      // invalidate generated closer provenance.
+      if (!this.activeView && node !== this.node && node.textContent !== this.node.textContent) {
+        if (getHistoryAction()) {
+          this.generatedAutoPairs = Object.freeze(this.generatedAutoPairs.map((value) => ({
+            ...value,
+            active: node.textContent.slice(
+              value.openPosition,
+              value.openPosition + value.open.length,
+            ) === value.open && node.textContent.slice(
+              value.position,
+              value.position + value.close.length,
+            ) === value.close,
+          })));
+        } else {
+          this.generatedAutoPairs = Object.freeze([]);
+        }
+      }
+
       this.applyEditable(this.outerView.editable);
       this.node = node;
       this.refreshLanguageBadge();
@@ -701,7 +757,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         this.cancelPendingActivation();
       }
 
-      if (this.activeView && !this.activeView.update(node)) {
+      if (this.activeView && !this.activeView.update(node, getHistoryAction())) {
         return false;
       }
 
@@ -761,6 +817,10 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
     stopEvent(event: Event) {
       const target = event.target;
+
+      if (this.onEditLanguage && containsNode(this.languageBadge, target)) {
+        return true;
+      }
 
       if (
         this.activeView
@@ -855,6 +915,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       }
 
       this.destroyed = true;
+      this.languageBadge.removeEventListener("click", this.handleLanguageClick);
       this.activationVersion += 1;
       this.cancelDeactivation();
       this.cancelFocusRetry();
@@ -1072,6 +1133,34 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
       this.editable = editable;
       this.activeView?.setEditable(editable);
+      this.syncLanguageButtonState(editable);
+    }
+
+    private readonly handleLanguageClick = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (
+        !this.onEditLanguage
+        || !this.canEdit
+        || this.outerView.composing
+        || this.activeView?.composing
+      ) {
+        return;
+      }
+
+      this.onEditLanguage({
+        getPos: this.getPos,
+        marker: this.languageBadge,
+        node: this.node,
+        view: this.outerView,
+      });
+    };
+
+    private syncLanguageButtonState(editable = this.canEdit) {
+      if (this.languageBadge.tagName === "BUTTON") {
+        (this.languageBadge as HTMLButtonElement).disabled = !editable;
+      }
     }
 
     private refreshLanguageBadge() {
@@ -1084,6 +1173,13 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
       this.presentedLanguage = language;
       this.languageBadge.textContent = language || "plain text";
+
+      if (this.onEditLanguage) {
+        this.languageBadge.setAttribute(
+          "aria-label",
+          `Edit code block language: ${language || "plain text"}`,
+        );
+      }
     }
 
     private refreshStaticGutter() {
@@ -1198,7 +1294,8 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
             dom: this.dom,
             editorHost: this.activeHost,
             languageBadge: this.languageBadge,
-          });
+          }, this.generatedAutoPairs);
+          this.generatedAutoPairs = Object.freeze([]);
           this.activeView = activeView;
           this.setState("active");
           noteActive(this, true);
@@ -1524,6 +1621,13 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       if (!activeView) {
         this.activeHost.replaceChildren();
         return;
+      }
+
+      try {
+        this.generatedAutoPairs = activeView.getGeneratedAutoPairs();
+      } catch (error) {
+        this.generatedAutoPairs = Object.freeze([]);
+        onDestroyError?.(error);
       }
 
       activeView.destroy();
