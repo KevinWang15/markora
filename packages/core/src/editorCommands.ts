@@ -225,7 +225,14 @@ export function createTypingShortcuts(options: {
 export function insertHardBreak(schema: Schema, state: EditorState, dispatch?: (tr: import("prosemirror-state").Transaction) => void) {
   const hardBreak = schema.nodes.hard_break;
 
-  if (!hardBreak) {
+  if (
+    !hardBreak
+    || !state.selection.$from.parent.canReplaceWith(
+      state.selection.$from.index(),
+      state.selection.$from.index(),
+      hardBreak,
+    )
+  ) {
     return false;
   }
 

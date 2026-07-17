@@ -161,24 +161,74 @@ Text with a reference.[^note]
 [^note]: Footnote text.
 ```
 
-- A reference is `[^label]` outside code, HTML, math, and escaped text.
+- A reference is `[^label]` outside code, HTML, math, escaped text, and image
+  descriptions. A reference inside an ordinary Markdown link label remains
+  semantic and retains its surrounding link, but its marker is noninteractive;
+  the outer link exclusively owns pointer and keyboard activation.
+- Footnote-looking syntax in an image description remains literal and
+  canonicalizes through the image's plain alt text rather than creating a
+  semantic reference.
 - A definition begins at a block boundary with `[^label]:`.
-- The label is the trimmed, non-empty text between `[^` and `]`; `]` and line
-  endings are forbidden. Matching is case-sensitive after trimming.
+- The label is the non-empty text between `[^` and `]`, normalized with
+  JavaScript `String.prototype.trim()`. After trimming, the deliberate safe
+  allowlist accepts only Unicode letters, combining marks, and numbers; ASCII
+  space; `_`, `-`, `.`, `/`, `:`, and `#`; and ASCII single and double quotes
+  (`'` and `"`). All other characters are invalid, including U+0000, brackets,
+  backslash, backtick, and HTML or math delimiters such as `<`, `>`, and `$`.
+  Matching is exact, without Unicode normalization or case folding. Markdown-it
+  changes U+0000 to U+FFFD before recognition; because U+FFFD is outside the
+  grammar, that source stays literal and remains stable after canonical
+  serialization and reparse.
 - A definition's first supported block may begin after the colon. Further
-  supported blocks use four-space continuation indentation.
+  supported blocks use four literal ASCII spaces of continuation indentation;
+  a tab is not a substitute for those spaces. An empty definition is supported
+  as an empty paragraph. A definition marker within a definition body remains
+  literal content and does not create a nested semantic definition.
 - Repeated references are supported and receive deterministic back-reference
   order based on document order.
 - An unresolved reference and every duplicate definition remain represented and
   serialize canonically. The first definition in document order resolves the
-  label; duplicates and unresolved labels are exposed as non-destructive state
-  diagnostics.
+  label and is the only definition that owns back-reference relationships.
+  Every later definition receives its own duplicate diagnostic and exposes no
+  back-reference controls; its duplicate status is visible text plus diagnostic
+  color, never color alone. Every unresolved reference receives its own
+  non-destructive state diagnostic.
 - GitHub-style inline footnotes such as `^[text]` are not accepted in version 1.
 
 References serialize as `[^label]`. Definitions serialize at their model
 position with `[^label]: ` on the first line and canonical four-space
 continuations. Rendering may collect definitions visually, but visual placement
 does not reorder Markdown or mutate the document.
+
+Definition mutation always names an occurrence, defaulting to the first. Rename
+requires an explicit reference policy: `preserve` changes only that definition,
+while `rename` also changes every reference carrying the old label. Removal
+likewise requires `preserve`, which leaves matching references in place, or
+`remove`, which removes every matching reference with the targeted definition.
+Any remaining or newly created collision stays represented under the ordinary
+first-definition and diagnostic rules.
+
+Markdown and rich paste preserve label collisions rather than silently merging,
+discarding, or renaming definitions. Whole-definition copy is semantic. A
+selection inside a definition body is closed into a self-contained definition
+slice with the same label, so its Markdown and semantic HTML do not become an
+ambiguous bare fragment. The same closure applies when a blockquote or list
+contains the definition. Pasting a whole semantic definition from a cursor
+inside another definition lifts it to a sibling after the containing definition.
+Any other rich paste or raw transaction that would create a nested
+`footnote_definition`, or a code-marked semantic `footnote_reference`, is
+rejected atomically.
+
+Footnotes have no renderer callback or renderer dependency. Their semantic DOM
+is constructed in the editor's owner document without HTML-string sinks or
+network work. Opaque editor-scoped IDs, rather than authored labels, connect
+references to the primary definition and its back-references across multiple
+editors and open Shadow DOM. Duplicate status uses visible text in addition to
+color. Standalone unresolved references consume Enter and Space without moving
+selection or scrolling the page; link-contained markers are noninteractive and
+leave activation to their outer link. Rich clipboard HTML always emits a
+reference as noninteractive semantic note text without `tabindex`; only the live
+NodeView may promote a resolved standalone marker to an interactive link.
 
 ### Inline and block math — GitHub form
 
@@ -478,8 +528,12 @@ references/definitions, math nodes, alerts, TOCs, HTML atoms, and diagrams.
 They verify:
 
 - no full-document serialization or renderer call enters synchronous typing;
-- TOC/footnote document indexes update incrementally or within an approved
-  measured bound;
+- ordinary non-footnote edits use the footnote index's ordered, position-only
+  remap and retain its render identity, so retained footnote controls are not
+  repainted; structural footnote edits rebuild within an approved measured
+  bound;
+- TOC document indexes update incrementally or within an approved measured
+  bound;
 - block renderers activate near the viewport rather than for every offscreen
   node;
 - concurrency and output bounds hold under renderer pressure;

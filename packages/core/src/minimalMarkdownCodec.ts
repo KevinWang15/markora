@@ -38,6 +38,7 @@ import { createReadonlySet } from "./readonlySet";
 import {
   codeBlockDomAttrs,
   compileMarkdownEditorSchemaEntries,
+  constrainMarkdownHeadingContent,
   type MarkdownEditorOrderedSchemaMap,
 } from "./schemaContributionOrder";
 import { createMarkdownEditorSourceEnvironment } from "./markdownSource";
@@ -216,13 +217,13 @@ export function createMinimalMarkdownCodec(
       entry,
     }))
   ));
-  const nodes = compileMarkdownEditorSchemaEntries({
+  const nodes = constrainMarkdownHeadingContent(compileMarkdownEditorSchemaEntries({
     foundation: foundationNodes,
     entries: nodeEntries,
     kind: "node",
     missingTargetCode: "EXTENSION_MISSING_DEPENDENCY",
     fail: (failure) => codecError({ phase: "schema", ...failure }),
-  });
+  }));
   const marks = compileMarkdownEditorSchemaEntries({
     foundation: foundationMarks,
     entries: markEntries,

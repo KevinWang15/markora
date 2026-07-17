@@ -21,6 +21,7 @@ import {
   type UpdateEditorOptions,
 } from "markora";
 import { createEditor as createMinimalEditor } from "markora/minimal";
+import { NodeSelection, TextSelection, type Selection } from "markora/extension-api";
 import {
   createFrontmatterExtension,
   type FrontmatterEditRequest,
@@ -29,6 +30,14 @@ import {
   type FrontmatterSnapshot,
 } from "markora-extension-frontmatter";
 import "markora-extension-frontmatter/styles.css";
+import {
+  createFootnotesExtension,
+  type FootnoteDefinitionTarget,
+  type FootnotesExtension,
+  type FootnotesMessageOverrides,
+  type FootnotesSnapshot,
+} from "markora-extension-footnotes";
+import "markora-extension-footnotes/styles.css";
 import { createDefaultUi, type DefaultUiMessageOverrides } from "markora-ui";
 import { useEffect, useRef } from "react";
 import { createGlobalListenerLedger, type ListenerSnapshot } from "../browser-lab/listenerLedger";
@@ -39,6 +48,9 @@ import {
 
 export type BrowserLabRoot = "document" | "shadow";
 export type BrowserLabPortal = "body" | "default" | "local" | "positioned" | "transformed";
+export type BrowserLabFootnotesMessages = Partial<
+  Record<keyof FootnotesMessageOverrides, string>
+>;
 
 export type BrowserLabEditorSpec = {
   ariaLabel?: string;
@@ -49,7 +61,8 @@ export type BrowserLabEditorSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "frontmatter" | "public-example";
+  extensionMode?: "footnotes" | "frontmatter" | "public-example";
+  footnotesMessages?: BrowserLabFootnotesMessages;
   frontmatterMessages?: FrontmatterMessageOverrides;
   id: string;
   initialSelection?: MarkdownEditorSelectionTarget;
@@ -167,6 +180,31 @@ export type BrowserLabFrontmatterCommandRequest =
   | { type: "remove" }
   | { type: "update"; source: string };
 
+export type BrowserLabFootnotesCommandRequest =
+  | { type: "insertDefinition" | "insertReference"; label: string }
+  | { type: "navigateToDefinition" | "navigateToReference"; label: string; occurrence?: number }
+  | {
+      type: "removeDefinition";
+      target: FootnoteDefinitionTarget;
+      references: "preserve" | "remove";
+    }
+  | {
+      type: "renameDefinition";
+      target: FootnoteDefinitionTarget;
+      nextLabel: string;
+      references: "preserve" | "rename";
+    };
+
+export type BrowserLabFootnoteSelectionRequest = Readonly<{
+  content?: Readonly<{
+    from?: number;
+    to?: number;
+  }>;
+  kind: "definition" | "reference";
+  label: string;
+  occurrence?: number;
+}>;
+
 export type BrowserLabReconcileResult = {
   changed: boolean;
   snapshot: BrowserLabSnapshot;
@@ -241,6 +279,8 @@ export type BrowserLabApi = {
   frontmatterEditRemove: (id: string) => boolean;
   frontmatterEditUpdate: (id: string, source: string) => boolean;
   frontmatterSnapshot: (id: string) => FrontmatterSnapshot | null;
+  footnotesCommand: (id: string, request: BrowserLabFootnotesCommandRequest) => boolean;
+  footnotesSnapshot: (id: string) => FootnotesSnapshot;
   focus: (id: string, selection?: MarkdownEditorSelectionTarget) => void;
   getMarkdown: (id: string) => string;
   isDestroyed: (id: string) => boolean;
@@ -265,6 +305,7 @@ export type BrowserLabApi = {
   ) => BrowserLabSnapshot;
   resourceLog: (id: string) => BrowserLabResourceLog;
   reset: (id: string, markdown: string) => string;
+  selectFootnote: (id: string, request: BrowserLabFootnoteSelectionRequest) => boolean;
   selectText: (id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number) => boolean;
   settle: (id?: string) => Promise<void>;
   snapshot: (id: string) => BrowserLabSnapshot;
@@ -290,7 +331,8 @@ type MountedEditor = {
   eventLog: BrowserLabEventRecord[];
   eventUnsubscribes: Map<MarkdownEditorEventName, () => void>;
   extensionActions?: HTMLElement;
-  extensionMode?: "frontmatter" | "public-example";
+  extensionMode?: "footnotes" | "frontmatter" | "public-example";
+  footnotesExtension: FootnotesExtension | null;
   frontmatterEditRequest: FrontmatterEditRequest | null;
   frontmatterExtension: FrontmatterExtension | null;
   explicitPortalRoot?: HTMLElement | ShadowRoot;
@@ -555,6 +597,14 @@ function requireFrontmatterHandle(mounted: MountedEditor) {
   return mounted.editor.extensions.get(mounted.frontmatterExtension);
 }
 
+function requireFootnotesHandle(mounted: MountedEditor) {
+  if (!mounted.footnotesExtension) {
+    throw new Error(`Browser lab editor "${mounted.id}" has no footnotes extension.`);
+  }
+
+  return mounted.editor.extensions.get(mounted.footnotesExtension);
+}
+
 function cloneEditorStyles(shadowRoot: ShadowRoot) {
   for (const style of document.head.querySelectorAll<HTMLLinkElement | HTMLStyleElement>('link[rel="stylesheet"], style')) {
     shadowRoot.append(style.cloneNode(true));
@@ -716,11 +766,25 @@ export function BrowserLabPage() {
             },
           })
         : null;
+      mounted.footnotesExtension = extensionMode === "footnotes"
+        ? createFootnotesExtension({
+            messages: spec.footnotesMessages
+              ? Object.fromEntries(
+                  Object.entries(spec.footnotesMessages).map(([key, message]) => [
+                    key,
+                    () => message,
+                  ]),
+                ) as FootnotesMessageOverrides
+              : undefined,
+          })
+        : null;
       const extensions = extensionMode === "public-example"
         ? publicExampleExtensions
         : mounted.frontmatterExtension
           ? [mounted.frontmatterExtension]
-          : undefined;
+          : mounted.footnotesExtension
+            ? [mounted.footnotesExtension]
+            : undefined;
       const existingOverlays = new Set(
         mounted.portalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR),
       );
@@ -926,6 +990,7 @@ export function BrowserLabPage() {
           eventUnsubscribes: new Map(),
           extensionMode: spec.extensionMode,
           explicitPortalRoot,
+          footnotesExtension: null,
           frontmatterEditRequest: null,
           frontmatterExtension: null,
           host,
@@ -1063,6 +1128,46 @@ export function BrowserLabPage() {
       frontmatterSnapshot(id) {
         return requireFrontmatterHandle(requireEditor(editors, id)).state.getSnapshot();
       },
+      footnotesCommand(id, request) {
+        const mounted = requireEditor(editors, id);
+        const commands = requireFootnotesHandle(mounted).commands;
+        let handled: boolean;
+
+        switch (request.type) {
+          case "insertDefinition":
+            handled = commands.insertDefinition(request.label);
+            break;
+          case "insertReference":
+            handled = commands.insertReference(request.label);
+            break;
+          case "navigateToDefinition":
+            handled = commands.navigateToDefinition(request.label, request.occurrence);
+            break;
+          case "navigateToReference":
+            handled = commands.navigateToReference(request.label, request.occurrence);
+            break;
+          case "removeDefinition":
+            handled = commands.removeDefinition(request.target, {
+              references: request.references,
+            });
+            break;
+          case "renameDefinition":
+            handled = commands.renameDefinition(request.target, request.nextLabel, {
+              references: request.references,
+            });
+            break;
+        }
+
+        if (handled) {
+          mounted.editor.flushChange();
+          mounted.output.textContent = mounted.editor.getMarkdown();
+        }
+
+        return handled;
+      },
+      footnotesSnapshot(id) {
+        return requireFootnotesHandle(requireEditor(editors, id)).state.getSnapshot();
+      },
       focus(id, selection) {
         requireEditor(editors, id).editor.focus(selection);
       },
@@ -1127,6 +1232,71 @@ export function BrowserLabPage() {
           changed,
           snapshot: readSnapshot(mounted),
         };
+      },
+      selectFootnote(id, request) {
+        const mounted = requireEditor(editors, id);
+        const handle = requireFootnotesHandle(mounted);
+        const occurrence = request.occurrence ?? 1;
+
+        if (!Number.isInteger(occurrence) || occurrence < 1) {
+          return false;
+        }
+
+        const snapshot = request.kind === "definition"
+          ? handle.state.getDefinition({ label: request.label, occurrence })
+          : handle.state.getReferences(request.label)[occurrence - 1] ?? null;
+
+        if (!snapshot) {
+          return false;
+        }
+
+        const view = mounted.editor.view;
+        const node = view.state.doc.nodeAt(snapshot.position);
+        const expectedType = request.kind === "definition"
+          ? "footnote_definition"
+          : "footnote_reference";
+
+        if (!node || node.type.name !== expectedType || view.composing) {
+          return false;
+        }
+
+        let selection: Selection = NodeSelection.create(view.state.doc, snapshot.position);
+
+        if (request.content) {
+          if (request.kind !== "definition") {
+            return false;
+          }
+
+          const from = request.content.from ?? 0;
+          const to = request.content.to ?? node.content.size;
+
+          if (
+            !Number.isInteger(from)
+            || !Number.isInteger(to)
+            || from < 0
+            || to < from
+            || to > node.content.size
+          ) {
+            return false;
+          }
+
+          const contentStart = snapshot.position + 1;
+          const contentEnd = contentStart + node.content.size;
+          selection = TextSelection.between(
+            view.state.doc.resolve(contentStart + from),
+            view.state.doc.resolve(contentStart + to),
+          );
+
+          if (selection.from < contentStart || selection.to > contentEnd) {
+            return false;
+          }
+        }
+
+        if (!selection.eq(view.state.selection)) {
+          view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
+        }
+        view.focus();
+        return true;
       },
       selectText(id, text, mode = "all", occurrence = 0) {
         if (!text || occurrence < 0) {

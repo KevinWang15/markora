@@ -688,8 +688,8 @@ and verification decisions are frozen in the
 | --- | --- | --- |
 | Foundation | DONE | Exact-source claim points plus optional-package build, type, pack, browser, and bundle gates |
 | YAML front matter | DONE | `markora-extension-frontmatter` |
-| Footnotes | NEXT | `markora-extension-footnotes` |
-| Inline and block math | QUEUED | `markora-extension-math` |
+| Footnotes | DONE | `markora-extension-footnotes` |
+| Inline and block math | NEXT | `markora-extension-math` |
 | GitHub-style alerts | QUEUED | `markora-extension-alerts` |
 | Generated TOC | QUEUED | `markora-extension-toc` |
 | Sanitized raw HTML | QUEUED | `markora-extension-html` |
@@ -744,6 +744,59 @@ and verification decisions are frozen in the
   `pnpm perf:ci`, syntax checking of the release harness, and `git diff --check`
   pass. Every 100 KiB, 500 KiB, and 1 MiB latency, memory, teardown, and
   zero-retention performance gate remains green.
+- `markora-extension-footnotes` provides semantic reference and block-definition
+  nodes in both root and minimal editors, canonical multiline serialization,
+  exact case-sensitive safe labels, repeated-reference and duplicate-definition
+  snapshots, typed insert/rename/remove/navigation commands, one-step history,
+  composition/read-only guards, and whole-document invariants. Contributed
+  inline nodes are valid in headings while unrepresentable heading hard breaks
+  remain rejected by schema and command guards.
+- Context recognition is bounded and deterministic across escaped markers,
+  images, links, code spans/blocks, HTML, inline/display math, blockquotes,
+  nested lists, and definition bodies. Overlapping inline constructs use the
+  earliest valid opener; a provisional context pass, chained math discovery,
+  final context rescan, and narrowly scoped Markdown-it shield preserve that
+  ownership without changing ordinary Markdown fallback. Invalid labels and
+  nested definition markers remain literal, and imported NUL is retained as the
+  parser's literal U+FFFD replacement rather than silently folded or normalized.
+- Localized logical-property NodeViews expose editor-scoped accessible
+  relationships, visible duplicate status in addition to color, forced-color
+  and reduced-motion behavior, bounded keyboard navigation, and read-only
+  operation. A standalone resolved live reference is interactive; an unresolved
+  reference consumes activation safely; a marker inside a link is noninteractive
+  and leaves pointer/keyboard ownership to the outer link. Rich clipboard HTML
+  uses truthful noninteractive note semantics, while Markdown/plain output and
+  whole or nested partial definition copies remain self-contained and collision
+  safe on paste.
+- The index rebuilds only when footnote structure changes. Position-only
+  transactions map the immutable snapshot in stable order, retain render
+  identity, avoid NodeView repaint, and resolve navigation against current
+  positions. Chromium DevTools Protocol medians for ordinary typing with
+  500/1,000/2,000/4,000 references plus definitions improved from
+  43.2/90.9/218.7/616.7 ms to 10.4/19.3/39.4/108.0 ms in root and from
+  38.9/91.3/215.2/574.3 ms to 8.4/19.6/36.8/101.6 ms in minimal. The remaining
+  O(N) snapshot-position remap at very large counts is recorded as a scaling
+  risk, not a release blocker; the retained browser gate mounts and reconciles
+  1,000 references plus 1,000 definitions within its five-second bound.
+- The packed feature graph is one 127,247 raw / 32,403 gzip JavaScript chunk
+  with no lazy chunks, plus 3,762 raw / 932 gzip CSS and 98 static modules. The
+  deliberately retained 116,000 raw / 29,000 gzip warning lines still expose
+  the size debt. Only the crossed JavaScript failure ceilings move from
+  125,000 / 32,000 to 140,000 / 36,000; CSS, module, lazy, and all warning
+  ceilings remain unchanged.
+- Final verification for footnotes: package tests pass 55 cases in root and
+  minimal; `pnpm check` passes all builds, declaration/API checks, Node ESM
+  smokes, browser types, and 1,067 unit tests; the focused browser matrix passes
+  18/18 across Chromium, Firefox, and WebKit; and
+  `pnpm test:browser:required` passes 201 cases with 24 intentional capability
+  skips. `pnpm pack:smoke`, `pnpm perf:ci`, release-harness syntax/JSON checks,
+  and `git diff --check` pass. Every performance threshold through 1 MiB is
+  green. Independent review additionally passes 500 randomized canonical
+  round trips and adversarial scanner bounds, with no release blocker found.
+- A separate pre-existing core follow-up remains: Markdown-it's default
+  `maxNesting: 20` can drop content at roughly ten nested list items in both
+  codecs. It is unrelated to the footnote scanner and must be resolved as a
+  core Markdown fidelity issue rather than hidden inside this package milestone.
 
 #### Recommended order
 
@@ -781,8 +834,20 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-020` are complete. The `EE-021` extension foundation and YAML front-matter package are also complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, and Gate C now has keyboard/screen-reader, deliberate clipboard, mature table, configurable typing, theme, localization, bidirectional-text, and independently packaged advanced-syntax foundations. Completed work includes the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, lazy code-editor, semantic embedded-control, rich/Markdown/plain clipboard, production table-editing, host-configurable typing/keymap, design-system/internationalization, exact-source extension, and front-matter foundations.
+`EE-001` through `EE-020` are complete. The `EE-021` extension foundation,
+YAML front-matter package, and footnotes package are also complete. Gate A's
+content-safety requirements and Gate B's production-embed requirements are
+satisfied, and Gate C now has keyboard/screen-reader, deliberate clipboard,
+mature table, configurable typing, theme, localization, bidirectional-text, and
+independently packaged advanced-syntax foundations. Completed work includes the
+browser, complex-input, accessibility, host-lifecycle, external-update,
+extension-kernel, headless command/state, host-controlled resource,
+performance-budget, responsive-snapshot, lazy code-editor, semantic
+embedded-control, rich/Markdown/plain clipboard, production table-editing,
+host-configurable typing/keymap, design-system/internationalization,
+exact-source extension, front-matter, and footnote foundations.
 
 The current iteration is `EE-021 — Ship advanced syntax as optional extensions`.
-Its foundation and YAML front-matter package are complete; footnotes are next,
-and the remaining six feature packages are queued.
+Its foundation, YAML front-matter package, and footnotes package are complete;
+inline and block math are next, and the remaining five feature packages are
+queued.

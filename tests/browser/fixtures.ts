@@ -38,6 +38,9 @@ export type LabEventRecord = {
 type BrowserLabWindowApi = NonNullable<Window["__MARKORA_BROWSER_LAB__"]>;
 export type LabCommandRequest = Parameters<BrowserLabWindowApi["command"]>[1];
 export type LabActiveRequest = Parameters<BrowserLabWindowApi["active"]>[1];
+export type LabFootnotesCommandRequest = Parameters<BrowserLabWindowApi["footnotesCommand"]>[1];
+export type LabFootnoteSelectionRequest = Parameters<BrowserLabWindowApi["selectFootnote"]>[1];
+export type LabFootnotesSnapshot = ReturnType<BrowserLabWindowApi["footnotesSnapshot"]>;
 export type LabTableIssue = ReturnType<BrowserLabWindowApi["tableIssues"]>[number];
 
 export type LabUpdateOptions = {
@@ -57,7 +60,26 @@ export type LabEditorSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "frontmatter" | "public-example";
+  extensionMode?: "footnotes" | "frontmatter" | "public-example";
+  footnotesMessages?: Partial<Record<
+    | "backReferenceLabel"
+    | "backReferenceText"
+    | "definitionLabel"
+    | "definitionSourceLabel"
+    | "definitionText"
+    | "duplicateDefinitionDiagnostic"
+    | "duplicateDefinitionLabel"
+    | "invalidDocumentDiagnostic"
+    | "invalidReferenceContextDiagnostic"
+    | "nestedDefinitionDiagnostic"
+    | "referenceLabel"
+    | "referenceSourceLabel"
+    | "referenceText"
+    | "referencesLabel"
+    | "unresolvedReferenceDiagnostic"
+    | "unresolvedReferenceLabel",
+    string
+  >>;
   frontmatterMessages?: Partial<{
     aliasLimitDiagnostic: string;
     customTagDiagnostic: string;
@@ -387,6 +409,39 @@ export async function getExtensionSnapshot(page: Page, id: string) {
     (editorId) => window.__MARKORA_BROWSER_LAB__!.extensionSnapshot(editorId),
     id,
   ) as Promise<LabExtensionSnapshot>;
+}
+
+export async function runFootnotesCommand(
+  page: Page,
+  id: string,
+  request: LabFootnotesCommandRequest,
+) {
+  return page.evaluate(
+    ({ editorId, nextRequest }) => (
+      window.__MARKORA_BROWSER_LAB__!.footnotesCommand(editorId, nextRequest)
+    ),
+    { editorId: id, nextRequest: request },
+  );
+}
+
+export async function getFootnotesSnapshot(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.footnotesSnapshot(editorId),
+    id,
+  ) as Promise<LabFootnotesSnapshot>;
+}
+
+export async function selectFootnote(
+  page: Page,
+  id: string,
+  request: LabFootnoteSelectionRequest,
+) {
+  return page.evaluate(
+    ({ editorId, nextRequest }) => (
+      window.__MARKORA_BROWSER_LAB__!.selectFootnote(editorId, nextRequest)
+    ),
+    { editorId: id, nextRequest: request },
+  );
 }
 
 export async function resetEditor(page: Page, id: string, markdown: string) {

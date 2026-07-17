@@ -182,6 +182,25 @@
         "gzipBytes": { "warning": 800, "failure": 1000 }
       },
       "staticModuleCount": { "warning": 97, "failure": 105 }
+    },
+    "footnotes": {
+      "initialJs": {
+        "rawBytes": { "warning": 116000, "failure": 140000 },
+        "gzipBytes": { "warning": 29000, "failure": 36000 }
+      },
+      "lazyJs": {
+        "rawBytes": { "warning": 0, "failure": 0 },
+        "gzipBytes": { "warning": 0, "failure": 0 }
+      },
+      "totalJs": {
+        "rawBytes": { "warning": 116000, "failure": 140000 },
+        "gzipBytes": { "warning": 29000, "failure": 36000 }
+      },
+      "css": {
+        "rawBytes": { "warning": 3900, "failure": 4600 },
+        "gzipBytes": { "warning": 975, "failure": 1150 }
+      },
+      "staticModuleCount": { "warning": 100, "failure": 110 }
     }
   }
 }

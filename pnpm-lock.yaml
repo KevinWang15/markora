@@ -160,6 +160,12 @@ importers:
         specifier: ^6.2.1
         version: 6.4.1
 
+  packages/extension-footnotes:
+    devDependencies:
+      markora:
+        specifier: workspace:*
+        version: link:../core
+
   packages/extension-frontmatter:
     devDependencies:
       markora:

@@ -477,6 +477,11 @@ function createInsertLeafCommand(schema: Schema, name: "hard_break" | "horizonta
     if (name === "hard_break" && (
       !state.selection.$from.sameParent(state.selection.$to)
       || !state.selection.$from.parent.inlineContent
+      || !state.selection.$from.parent.canReplaceWith(
+        state.selection.$from.index(),
+        state.selection.$to.indexAfter(),
+        nodeType,
+      )
     )) {
       return false;
     }

@@ -26,6 +26,7 @@ import { createReadonlySet } from "./readonlySet";
 import {
   codeBlockDomAttrs,
   compileMarkdownEditorSchemaEntries,
+  constrainMarkdownHeadingContent,
   type MarkdownEditorOrderedSchemaMap,
 } from "./schemaContributionOrder";
 import {
@@ -54,7 +55,6 @@ type MarkdownSerializerStateWithInternals = MarkdownSerializerState & {
 
 const listItemSpec = baseSchema.spec.nodes.get("list_item");
 const codeBlockSpec = baseSchema.spec.nodes.get("code_block");
-const headingSpec = baseSchema.spec.nodes.get("heading");
 
 function firstMeaningfulChild(node: Node) {
   let child = node.firstChild;
@@ -438,7 +438,6 @@ function createSchemaNodes(messages: MarkdownEditorMessages) {
     nonSelectableCodeBlockSpec ? baseSchema.spec.nodes.update("code_block", nonSelectableCodeBlockSpec) : baseSchema.spec.nodes
   )
     .update("list_item", taskListItemSpec ?? listItemSpec!)
-    .update("heading", headingSpec ? { ...headingSpec, content: "(text | image | raw_inline)*" } : headingSpec!)
     .addBefore("image", "raw_inline", createRawInlineSpec(messages))
     .addToEnd("raw_block", createRawBlockSpec(messages))
     .addToEnd("table", tableNodeSpecs.table)
@@ -573,13 +572,13 @@ export function createCompatibilityMarkdownCodec(
       entry,
     }))
   ));
-  const nodes = compileMarkdownEditorSchemaEntries({
+  const nodes = constrainMarkdownHeadingContent(compileMarkdownEditorSchemaEntries({
     foundation: foundationNodes,
     entries: nodeEntries,
     kind: "node",
     missingTargetCode: "EXTENSION_MISSING_DEPENDENCY",
     fail: (failure) => extensionCodecError({ phase: "schema", ...failure }),
-  });
+  }));
   const marks = compileMarkdownEditorSchemaEntries({
     foundation: foundationMarks,
     entries: markEntries,

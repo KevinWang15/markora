@@ -91,7 +91,26 @@ type BrowserLabTestSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "frontmatter" | "public-example";
+  extensionMode?: "footnotes" | "frontmatter" | "public-example";
+  footnotesMessages?: Partial<Record<
+    | "backReferenceLabel"
+    | "backReferenceText"
+    | "definitionLabel"
+    | "definitionSourceLabel"
+    | "definitionText"
+    | "duplicateDefinitionDiagnostic"
+    | "duplicateDefinitionLabel"
+    | "invalidDocumentDiagnostic"
+    | "invalidReferenceContextDiagnostic"
+    | "nestedDefinitionDiagnostic"
+    | "referenceLabel"
+    | "referenceSourceLabel"
+    | "referenceText"
+    | "referencesLabel"
+    | "unresolvedReferenceDiagnostic"
+    | "unresolvedReferenceLabel",
+    string
+  >>;
   frontmatterMessages?: Partial<{
     aliasLimitDiagnostic: string;
     customTagDiagnostic: string;
@@ -232,6 +251,58 @@ type BrowserLabFrontmatterSnapshot = {
   source: string;
 };
 
+type BrowserLabFootnoteDefinitionTarget = {
+  label: string;
+  occurrence?: number;
+};
+
+type BrowserLabFootnotesCommandRequest =
+  | { type: "insertDefinition" | "insertReference"; label: string }
+  | { type: "navigateToDefinition" | "navigateToReference"; label: string; occurrence?: number }
+  | {
+      type: "removeDefinition";
+      target: BrowserLabFootnoteDefinitionTarget;
+      references: "preserve" | "remove";
+    }
+  | {
+      type: "renameDefinition";
+      target: BrowserLabFootnoteDefinitionTarget;
+      nextLabel: string;
+      references: "preserve" | "rename";
+    };
+
+type BrowserLabFootnoteSelectionRequest = {
+  content?: { from?: number; to?: number };
+  kind: "definition" | "reference";
+  label: string;
+  occurrence?: number;
+};
+
+type BrowserLabFootnotesSnapshot = {
+  definitions: ReadonlyArray<{
+    duplicate: boolean;
+    label: string;
+    number: number;
+    occurrence: number;
+    position: number;
+    referencePositions: readonly number[];
+  }>;
+  diagnostics: ReadonlyArray<{
+    code: "duplicate-definition" | "unresolved-reference";
+    label: string;
+    message: string;
+    occurrence: number;
+    position: number;
+  }>;
+  references: ReadonlyArray<{
+    definitionPosition: number | null;
+    label: string;
+    number: number;
+    occurrence: number;
+    position: number;
+  }>;
+};
+
 interface Window {
   __MARKORA_BROWSER_LAB__?: {
     active(id: string, request: BrowserLabActiveRequest): boolean;
@@ -267,6 +338,8 @@ interface Window {
     frontmatterEditRemove(id: string): boolean;
     frontmatterEditUpdate(id: string, source: string): boolean;
     frontmatterSnapshot(id: string): BrowserLabFrontmatterSnapshot | null;
+    footnotesCommand(id: string, request: BrowserLabFootnotesCommandRequest): boolean;
+    footnotesSnapshot(id: string): BrowserLabFootnotesSnapshot;
     focus(id: string, selection?: BrowserLabSelectionTarget): void;
     getMarkdown(id: string): string;
     isDestroyed(id: string): boolean;
@@ -288,6 +361,7 @@ interface Window {
     ): BrowserLabTestSnapshot;
     resourceLog(id: string): BrowserLabResourceLog;
     reset(id: string, markdown: string): string;
+    selectFootnote(id: string, request: BrowserLabFootnoteSelectionRequest): boolean;
     selectText(id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number): boolean;
     settle(id?: string): Promise<void>;
     snapshot(id: string): BrowserLabTestSnapshot;

@@ -11,6 +11,7 @@
   "dependencies": {
     "markora": "workspace:*",
     "markora-extension-frontmatter": "workspace:*",
+    "markora-extension-footnotes": "workspace:*",
     "markora-ui": "workspace:*",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

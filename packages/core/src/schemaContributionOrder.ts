@@ -18,6 +18,42 @@ export type MarkdownEditorOwnedSchemaEntry<TSpec> = Readonly<{
   entry: MarkdownEditorSchemaEntry<TSpec>;
 }>;
 
+/**
+ * Headings accept contributed inline syntax, but CommonMark cannot represent
+ * a hard break inside an ATX heading. Build the expression from the final
+ * compiled node set so optional inline nodes stay valid without admitting the
+ * one foundation node whose serializer would silently change document shape.
+ */
+export function constrainMarkdownHeadingContent<TSpec extends {
+  content?: string;
+  group?: string;
+}>(nodes: MarkdownEditorOrderedSchemaMap<TSpec>) {
+  const heading = nodes.get("heading");
+
+  if (!heading) {
+    return nodes;
+  }
+
+  const headingInlineNodes: string[] = [];
+  nodes.forEach((name, spec) => {
+    if (
+      name !== "hard_break"
+      && spec.group?.split(/\s+/u).includes("inline")
+    ) {
+      headingInlineNodes.push(name);
+    }
+  });
+
+  if (headingInlineNodes.length === 0) {
+    return nodes;
+  }
+
+  return nodes.update("heading", {
+    ...heading,
+    content: `(${headingInlineNodes.join(" | ")})*`,
+  });
+}
+
 export function codeBlockDomAttrs(dom: Node | string) {
   if (typeof dom === "string" || dom.nodeType !== 1) return { params: "" };
   const element = dom as Element;

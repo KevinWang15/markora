@@ -38,7 +38,28 @@ let tarballRoot;
 let tempRoot;
 let availableMeasurements = null;
 const availablePackages = [];
-const bundleGraphNames = Object.freeze(["root", "minimal", "frontmatter"]);
+const extensionBundleSpecs = Object.freeze([
+  Object.freeze({
+    cssSelectors: Object.freeze([".mdw-frontmatter"]),
+    graphName: "frontmatter",
+    label: "Front matter",
+    packageName: "markora-extension-frontmatter",
+  }),
+  Object.freeze({
+    cssSelectors: Object.freeze([
+      ".mdw-footnote-reference",
+      ".mdw-footnote-definition",
+    ]),
+    graphName: "footnotes",
+    label: "Footnotes",
+    packageName: "markora-extension-footnotes",
+  }),
+]);
+const bundleGraphNames = Object.freeze([
+  "root",
+  "minimal",
+  ...extensionBundleSpecs.map(({ graphName }) => graphName),
+]);
 
 function readValueArgument(args, index, name) {
   const value = args[index + 1];
@@ -527,10 +548,9 @@ function assertPackedPackage(packageInfo, extensionCssContract) {
 function assertPackedProvenance(
   rootReport,
   minimalReport,
-  frontmatterReport,
   rootMeasurement,
   minimalMeasurement,
-  frontmatterMeasurement,
+  extensionBundles,
 ) {
   assertPackedModule(rootReport, "/node_modules/markora/dist/index.js", "Packed markora root entry");
   assertPackedModule(rootReport, "/node_modules/markora/dist/styles.css", "Packed markora stylesheet");
@@ -538,16 +558,38 @@ function assertPackedProvenance(
   assertPackedModule(rootReport, "/node_modules/markora-ui/dist/styles.css", "Packed markora-ui stylesheet");
   assertPackedModule(minimalReport, "/node_modules/markora/dist/minimal.js", "Packed markora minimal entry");
   assertPackedModule(minimalReport, "/node_modules/markora/dist/minimal.css", "Packed minimal stylesheet");
-  assertPackedModule(
-    frontmatterReport,
-    "/node_modules/markora-extension-frontmatter/dist/index.js",
-    "Packed front matter extension entry",
-  );
-  assertPackedModule(
-    frontmatterReport,
-    "/node_modules/markora-extension-frontmatter/dist/styles.css",
-    "Packed front matter extension stylesheet",
-  );
+  for (const { measurement, report, spec } of extensionBundles) {
+    assertPackedModule(
+      report,
+      `/node_modules/${spec.packageName}/dist/index.js`,
+      `Packed ${spec.label.toLowerCase()} extension entry`,
+    );
+    assertPackedModule(
+      report,
+      `/node_modules/${spec.packageName}/dist/styles.css`,
+      `Packed ${spec.label.toLowerCase()} extension stylesheet`,
+    );
+
+    if (
+      measurement.css.fileCount !== 1
+      || measurement.initialJs.chunkCount !== 1
+      || measurement.lazyJs.chunkCount !== 0
+      || measurement.totalJs.chunkCount !== 1
+    ) {
+      throw new Error(
+        `Packed ${spec.label.toLowerCase()} must emit one explicit stylesheet `
+        + "and no lazy JavaScript chunks.",
+      );
+    }
+
+    for (const selector of spec.cssSelectors) {
+      if (!report.cssSource.includes(selector)) {
+        throw new Error(
+          `Packed ${spec.label.toLowerCase()} stylesheet omitted public selector ${selector}.`,
+        );
+      }
+    }
+  }
 
   if (minimalMeasurement.lazyJs.chunkCount !== 0) {
     throw new Error(
@@ -560,21 +602,6 @@ function assertPackedProvenance(
     throw new Error(
       "Packed root and minimal consumers must each emit exactly one production stylesheet.",
     );
-  }
-
-  if (
-    frontmatterMeasurement.css.fileCount !== 1
-    || frontmatterMeasurement.initialJs.chunkCount !== 1
-    || frontmatterMeasurement.lazyJs.chunkCount !== 0
-    || frontmatterMeasurement.totalJs.chunkCount !== 1
-  ) {
-    throw new Error(
-      "Packed front matter must emit one explicit stylesheet and no lazy JavaScript chunks.",
-    );
-  }
-
-  if (!frontmatterReport.cssSource.includes(".mdw-frontmatter")) {
-    throw new Error("Packed front matter stylesheet omitted its public root selector.");
   }
 
   for (const selector of [
@@ -709,7 +736,11 @@ function assertBundleIsolation(rootReport, minimalReport) {
       "/node_modules/markora-extension-",
     ));
 
-    if (leakedModules.length > 0 || report.cssSource.includes(".mdw-frontmatter")) {
+    const leakedSelectors = extensionBundleSpecs.flatMap(({ cssSelectors }) => (
+      cssSelectors.filter((selector) => report.cssSource.includes(selector))
+    ));
+
+    if (leakedModules.length > 0 || leakedSelectors.length > 0) {
       throw new Error(
         `${report.label} included optional advanced-syntax package code or CSS by default.`,
       );
@@ -718,7 +749,7 @@ function assertBundleIsolation(rootReport, minimalReport) {
 
 }
 
-function assertFrontmatterBundleIsolation(report) {
+function assertExtensionBundleIsolation(report, spec) {
   const forbiddenFragments = [
     "/node_modules/markora/dist/index.js",
     "/node_modules/markora/dist/minimal.js",
@@ -737,7 +768,7 @@ function assertFrontmatterBundleIsolation(report) {
     .map((moduleId) => ({ fragment, moduleId })));
 
   if (leaks.length > 0) {
-    throw new Error(`Front matter feature bundle reached forbidden modules:\n${leaks
+    throw new Error(`${spec.label} feature bundle reached forbidden modules:\n${leaks
       .map(({ fragment, moduleId }) => `- ${fragment}: ${moduleId}`)
       .join("\n")}`);
   }
@@ -746,18 +777,21 @@ function assertFrontmatterBundleIsolation(report) {
     moduleIdIncludes(moduleId, "/node_modules/markora-extension-")
     && !moduleIdIncludes(
       moduleId,
-      "/node_modules/markora-extension-frontmatter/",
+      `/node_modules/${spec.packageName}/`,
     )
   ));
   if (siblingExtensions.length > 0) {
-    throw new Error(`Front matter feature bundle reached sibling optional packages:\n${siblingExtensions.join("\n")}`);
+    throw new Error(
+      `${spec.label} feature bundle reached sibling optional packages:\n`
+      + siblingExtensions.join("\n"),
+    );
   }
 
   if (!report.staticModuleIds.some((moduleId) => moduleIdIncludes(
     moduleId,
     "/node_modules/markora/dist/extension-api.js",
   ))) {
-    throw new Error("Front matter feature bundle omitted the packed extension API entry.");
+    throw new Error(`${spec.label} feature bundle omitted the packed extension API entry.`);
   }
 }
 
@@ -776,11 +810,13 @@ function printBundleMeasurement(label, measurement) {
   ].join("\n"));
 }
 
-function printBundleMeasurements(rootMeasurement, minimalMeasurement, frontmatterMeasurement) {
+function printBundleMeasurements(measurements) {
   console.log("Packed production bundle graph (per-file gzip level 9):");
-  printBundleMeasurement("markora", rootMeasurement);
-  printBundleMeasurement("markora/minimal", minimalMeasurement);
-  printBundleMeasurement("markora-extension-frontmatter", frontmatterMeasurement);
+  printBundleMeasurement("markora", measurements.root);
+  printBundleMeasurement("markora/minimal", measurements.minimal);
+  for (const spec of extensionBundleSpecs) {
+    printBundleMeasurement(spec.packageName, measurements[spec.graphName]);
+  }
 }
 
 const bundleBudgetMetrics = Object.freeze([
@@ -1006,6 +1042,8 @@ function writeMeasurementReport({
       optionalExtensionsAbsentFromBaseline: true,
       frontmatterHasNoLazyChunks: measurements.frontmatter.lazyJs.chunkCount === 0,
       frontmatterHasNoRendererEngine: true,
+      footnotesHasNoLazyChunks: measurements.footnotes.lazyJs.chunkCount === 0,
+      footnotesHasNoRendererEngine: true,
       packedEntriesAndStylesResolved: true,
       packedPackageVersionsMatched: true,
       rootAndMinimalGraphsIndependent: true,
@@ -1051,17 +1089,28 @@ const frontmatterPackage = packPackage(join(
   "packages/extension-frontmatter",
 ));
 rememberPackage(frontmatterPackage);
+currentPhase = "footnotes-package";
+const footnotesPackage = packPackage(join(
+  rootDir,
+  "packages/extension-footnotes",
+));
+rememberPackage(footnotesPackage);
 
 currentPhase = "packed-dependency-isolation";
 copyWorkspaceDependencies();
 unpackPackage(corePackage.name, corePackage.tarballPath);
 unpackPackage(uiPackage.name, uiPackage.tarballPath);
 unpackPackage(frontmatterPackage.name, frontmatterPackage.tarballPath);
+unpackPackage(footnotesPackage.name, footnotesPackage.tarballPath);
 assertPackedPackage(corePackage);
 assertPackedPackage(uiPackage);
 assertPackedPackage(frontmatterPackage, {
   rootSelector: ".mdw-frontmatter",
   tokenPrefix: "--mdw-frontmatter-",
+});
+assertPackedPackage(footnotesPackage, {
+  rootSelector: ".mdw-footnote-reference",
+  tokenPrefix: "--mdw-footnotes-",
 });
 
 currentPhase = "consumer-generation";
@@ -1314,6 +1363,27 @@ export const packedFrontmatterSurface = [
 ].join(":");
 `);
 
+writeFileSync(join(smokeAppDir, "src/footnotes.js"), `import {
+  createFootnotesExtension,
+  defaultFootnotesMessages,
+  footnoteDiagnosticCodes,
+} from "markora-extension-footnotes";
+import "markora-extension-footnotes/styles.css";
+
+export const packedFootnotesDefinitions = [
+  createFootnotesExtension(),
+  createFootnotesExtension({
+    messages: { referenceText: (number) => "F" + number },
+  }),
+];
+
+export const packedFootnotesSurface = [
+  defaultFootnotesMessages.referenceText(1),
+  footnoteDiagnosticCodes.join(","),
+  ...packedFootnotesDefinitions.map(({ name, version }) => name + "@" + version),
+].join(":");
+`);
+
 writeFileSync(join(smokeAppDir, "src/api.ts"), `import {
   MarkdownEditorDestroyedError,
   createEditor,
@@ -1366,6 +1436,23 @@ import {
   type FrontmatterSnapshot,
 } from "markora-extension-frontmatter";
 import {
+  createFootnotesExtension,
+  defaultFootnotesMessages,
+  footnoteDiagnosticCodes,
+  type FootnoteDefinitionSnapshot,
+  type FootnoteDefinitionTarget,
+  type FootnoteDiagnostic,
+  type FootnoteDiagnosticCode,
+  type FootnoteReferenceSnapshot,
+  type FootnoteRemoveOptions,
+  type FootnoteRenameOptions,
+  type FootnotesExtension,
+  type FootnotesExtensionOptions,
+  type FootnotesMessageOverrides,
+  type FootnotesMessages,
+  type FootnotesSnapshot,
+} from "markora-extension-footnotes";
+import {
   packedCalloutExtension,
   packedHighlightExtension,
 } from "./extensions";
@@ -1387,13 +1474,23 @@ const rootFrontmatterExtension: FrontmatterExtension =
   createFrontmatterExtension(frontmatterOptions);
 const minimalFrontmatterExtension: FrontmatterExtension =
   createFrontmatterExtension();
+const footnotesMessageOverrides: FootnotesMessageOverrides = {
+  referenceText: (number) => "F" + number,
+};
+const footnotesOptions: FootnotesExtensionOptions = {
+  messages: footnotesMessageOverrides,
+};
+const rootFootnotesExtension: FootnotesExtension =
+  createFootnotesExtension(footnotesOptions);
+const minimalFootnotesExtension: FootnotesExtension =
+  createFootnotesExtension();
 
 const editor = createEditor({
   ariaLabel: "Packed editor",
   autofocus: true,
   editable: true,
   element,
-  extensions: [rootFrontmatterExtension],
+  extensions: [rootFrontmatterExtension, rootFootnotesExtension],
   initialSelection: "end",
   onChange(markdown, context) {
     const origin: MarkdownEditorChangeOrigin = context.origin;
@@ -1428,6 +1525,7 @@ const externalExtensions: readonly AnyMarkdownEditorExtension[] = [
   packedCalloutExtension,
   packedHighlightExtension,
   minimalFrontmatterExtension,
+  minimalFootnotesExtension,
 ];
 const minimalEditor = createMinimalEditor({
   element,
@@ -1454,6 +1552,8 @@ const minimalCommands: MinimalMarkdownEditorCommands = minimalEditor.commands;
 const minimalState: MinimalMarkdownEditorState = minimalEditor.state;
 const rootFrontmatterHandle = editor.extensions.get(rootFrontmatterExtension);
 const minimalFrontmatterHandle = minimalEditor.extensions.get(minimalFrontmatterExtension);
+const rootFootnotesHandle = editor.extensions.get(rootFootnotesExtension);
+const minimalFootnotesHandle = minimalEditor.extensions.get(minimalFootnotesExtension);
 const rootFrontmatterSnapshot: FrontmatterSnapshot | null =
   rootFrontmatterHandle.state.getSnapshot();
 const frontmatterMessages: FrontmatterMessages = defaultFrontmatterMessages;
@@ -1464,12 +1564,53 @@ const insertedFrontmatter: boolean = rootFrontmatterHandle.commands.insert(
 const updatedFrontmatter: boolean = minimalFrontmatterHandle.commands.update(
   "---\\ntitle: Minimal\\n---",
 );
+const footnoteTarget: FootnoteDefinitionTarget = { label: "note", occurrence: 1 };
+const footnoteRenameOptions: FootnoteRenameOptions = { references: "rename" };
+const footnoteRemoveOptions: FootnoteRemoveOptions = { references: "preserve" };
+const footnotesSnapshot: FootnotesSnapshot = rootFootnotesHandle.state.getSnapshot();
+const footnoteDefinition: FootnoteDefinitionSnapshot | null =
+  rootFootnotesHandle.state.getDefinition(footnoteTarget);
+const footnoteReferences: readonly FootnoteReferenceSnapshot[] =
+  rootFootnotesHandle.state.getReferences("note");
+const footnoteDiagnostics: readonly FootnoteDiagnostic[] =
+  rootFootnotesHandle.state.getDiagnostics();
+const footnoteDiagnosticCode: FootnoteDiagnosticCode = footnoteDiagnosticCodes[0];
+const footnotesMessages: FootnotesMessages = defaultFootnotesMessages;
+const insertedFootnoteReference: boolean =
+  rootFootnotesHandle.commands.insertReference("note");
+const insertedFootnoteDefinition: boolean =
+  minimalFootnotesHandle.commands.insertDefinition("note");
+const navigatedToFootnoteDefinition: boolean =
+  rootFootnotesHandle.commands.navigateToDefinition("note", 1);
+const navigatedToFootnoteReference: boolean =
+  rootFootnotesHandle.commands.navigateToReference("note", 1);
+const renamedFootnote: boolean = rootFootnotesHandle.commands.renameDefinition(
+  footnoteTarget,
+  "renamed",
+  footnoteRenameOptions,
+);
+const removedFootnote: boolean = minimalFootnotesHandle.commands.removeDefinition(
+  footnoteTarget,
+  footnoteRemoveOptions,
+);
 const closedTransaction: Transaction = closeHistory(transaction);
 void rootFrontmatterSnapshot;
 void frontmatterMessages;
 void frontmatterMaximum;
 void insertedFrontmatter;
 void updatedFrontmatter;
+void footnotesSnapshot;
+void footnoteDefinition;
+void footnoteReferences;
+void footnoteDiagnostics;
+void footnoteDiagnosticCode;
+void footnotesMessages;
+void insertedFootnoteReference;
+void insertedFootnoteDefinition;
+void navigatedToFootnoteDefinition;
+void navigatedToFootnoteReference;
+void renamedFootnote;
+void removedFootnote;
 void closedTransaction;
 
 function exerciseStructuralSurface(
@@ -1653,6 +1794,14 @@ void unavailableSourceSlice;
 rootFrontmatterHandle.commands.update(42);
 // @ts-expect-error Front matter messages reject undeclared keys.
 createFrontmatterExtension({ messages: { unknownLabel: "Unknown" } });
+// @ts-expect-error Footnote labels must be strings.
+rootFootnotesHandle.commands.insertReference(42);
+// @ts-expect-error Footnote rename requires an explicit reference policy.
+rootFootnotesHandle.commands.renameDefinition(footnoteTarget, "renamed", {});
+// @ts-expect-error Footnote remove policies cannot invent orphan behavior.
+minimalFootnotesHandle.commands.removeDefinition(footnoteTarget, { references: "rename" });
+// @ts-expect-error Footnote messages reject undeclared keys.
+createFootnotesExtension({ messages: { unknownLabel: () => "Unknown" } });
 `);
 
 writeFileSync(join(smokeAppDir, "tsconfig.json"), `${JSON.stringify({
@@ -1715,21 +1864,31 @@ if (!ownerWindow.Range.prototype.getBoundingClientRect) {
   ownerWindow.Range.prototype.getBoundingClientRect = () => new ownerWindow.DOMRect();
 }
 
-const [{ createEditor }, { createEditor: createMinimalEditor }, frontmatter] = await Promise.all([
+const [
+  { createEditor },
+  { createEditor: createMinimalEditor },
+  frontmatter,
+  footnotes,
+] = await Promise.all([
   import("markora"),
   import("markora/minimal"),
   import("markora-extension-frontmatter"),
+  import("markora-extension-footnotes"),
 ]);
 const SOURCE = "\\uFEFF---\\r\\ntitle: Packed\\r\\nanchor: &base value\\r\\ncopy: *base\\r\\n...";
+const OPTIONAL_EXTENSION_NAMES = new Set([
+  "markora-extension-frontmatter",
+  "markora-extension-footnotes",
+]);
 
 for (const [label, create] of [["root", createEditor], ["minimal", createMinimalEditor]]) {
   const element = ownerWindow.document.createElement("div");
   ownerWindow.document.body.append(element);
   const baseline = create({ element, markdown: "Body" });
   if (baseline.extensions.manifest.extensions.some(({ name }) => (
-    name === "markora-extension-frontmatter"
+    OPTIONAL_EXTENSION_NAMES.has(name)
   ))) {
-    throw new Error("Packed " + label + " baseline unexpectedly installed front matter.");
+    throw new Error("Packed " + label + " baseline unexpectedly installed an optional extension.");
   }
   baseline.destroy();
   element.replaceChildren();
@@ -1756,6 +1915,58 @@ for (const [label, create] of [["root", createEditor], ["minimal", createMinimal
     throw new Error("Packed front matter " + label + " consumer history failed.");
   }
   editor.destroy();
+  element.replaceChildren();
+
+  const footnotesDefinition = footnotes.createFootnotesExtension({
+    messages: { referenceText: (number) => "F" + number },
+  });
+  const footnotesEditor = create({
+    element,
+    extensions: [footnotesDefinition],
+    markdown: "Body",
+  });
+  const footnotesHandle = footnotesEditor.extensions.get(footnotesDefinition);
+  footnotesEditor.focus("end");
+  if (
+    !footnotesHandle.commands.insertReference("note")
+    || !footnotesHandle.commands.insertDefinition("note")
+    || footnotesEditor.getMarkdown() !== "Body[^note]\\n\\n[^note]: "
+  ) {
+    throw new Error("Packed footnotes " + label + " insertion commands failed.");
+  }
+  const snapshot = footnotesHandle.state.getSnapshot();
+  if (
+    snapshot.references.length !== 1
+    || snapshot.definitions.length !== 1
+    || snapshot.diagnostics.length !== 0
+    || footnotesHandle.state.getReferences("note").length !== 1
+    || footnotesHandle.state.getDefinition({ label: "note" })?.label !== "note"
+    || !footnotesEditor.extensions.manifest.extensions.some(({ name }) => (
+      name === "markora-extension-footnotes"
+    ))
+  ) {
+    throw new Error("Packed footnotes " + label + " consumer lost indexed or manifest state.");
+  }
+  if (
+    !footnotesHandle.commands.renameDefinition(
+      { label: "note" },
+      "renamed",
+      { references: "rename" },
+    )
+    || footnotesHandle.state.getDefinition({ label: "renamed" })?.label !== "renamed"
+    || !footnotesEditor.commands.undo()
+    || !footnotesHandle.commands.navigateToReference("note")
+    || !footnotesHandle.commands.navigateToDefinition("note")
+    || !footnotesHandle.commands.removeDefinition(
+      { label: "note" },
+      { references: "preserve" },
+    )
+    || footnotesHandle.state.getDiagnostics()[0]?.code !== "unresolved-reference"
+    || !footnotesEditor.commands.undo()
+  ) {
+    throw new Error("Packed footnotes " + label + " command, state, or history smoke failed.");
+  }
+  footnotesEditor.destroy();
   element.remove();
 }
 
@@ -1768,6 +1979,7 @@ currentPhase = "node-import-smoke";
 run("node", ["--input-type=module", "-e", `
   const extensionApi = await import("markora/extension-api");
   const frontmatter = await import("markora-extension-frontmatter");
+  const footnotes = await import("markora-extension-footnotes");
   const minimal = await import("markora/minimal");
   if (typeof extensionApi.defineMarkdownEditorExtension !== "function") {
     throw new Error("defineMarkdownEditorExtension export missing");
@@ -1788,40 +2000,81 @@ run("node", ["--input-type=module", "-e", `
   if (frontmatterDefinition.name !== "markora-extension-frontmatter") {
     throw new Error("front matter package factory returned the wrong identity");
   }
+  if (
+    typeof footnotes.createFootnotesExtension !== "function"
+    || !Object.isFrozen(footnotes.defaultFootnotesMessages)
+    || !Object.isFrozen(footnotes.footnoteDiagnosticCodes)
+  ) {
+    throw new Error("footnotes package Node ESM surface is incomplete");
+  }
+  const footnotesDefinition = footnotes.createFootnotesExtension({
+    messages: { referenceText: (number) => "F" + number },
+  });
+  if (
+    footnotesDefinition.name !== "markora-extension-footnotes"
+    || footnotes.defaultFootnotesMessages.referenceText(2) !== "2"
+  ) {
+    throw new Error("footnotes package factory returned the wrong identity or messages");
+  }
   if (typeof minimal.createEditor !== "function") {
     throw new Error("markora/minimal createEditor export missing");
   }
 `], { cwd: smokeAppDir });
-currentPhase = "frontmatter-root-minimal-runtime-smoke";
+currentPhase = "advanced-extensions-root-minimal-runtime-smoke";
 run("node", ["src/frontmatter-runtime.mjs"], { cwd: smokeAppDir });
 
 currentPhase = "bundle-configuration";
 writeBundleConfig("root", "./src/root.js");
 writeBundleConfig("minimal", "./src/minimal.js");
-writeBundleConfig("frontmatter", "./src/frontmatter.js");
+for (const spec of extensionBundleSpecs) {
+  writeBundleConfig(spec.graphName, `./src/${spec.graphName}.js`);
+}
 currentPhase = "root-bundle-build";
 run("node", [viteCliPath, "build", "--config", "vite.root.config.mjs"], { cwd: smokeAppDir });
 currentPhase = "minimal-bundle-build";
 run("node", [viteCliPath, "build", "--config", "vite.minimal.config.mjs"], { cwd: smokeAppDir });
-currentPhase = "frontmatter-bundle-build";
-run("node", [viteCliPath, "build", "--config", "vite.frontmatter.config.mjs"], { cwd: smokeAppDir });
+for (const spec of extensionBundleSpecs) {
+  currentPhase = `${spec.graphName}-bundle-build`;
+  run(
+    "node",
+    [viteCliPath, "build", "--config", `vite.${spec.graphName}.config.mjs`],
+    { cwd: smokeAppDir },
+  );
+}
 
 currentPhase = "bundle-validation";
 const rootBundleReport = readBundleReport("root");
 const minimalBundleReport = readBundleReport("minimal");
-const frontmatterBundleReport = readBundleReport("frontmatter");
+const extensionBundleReports = Object.freeze(Object.fromEntries(
+  extensionBundleSpecs.map((spec) => [spec.graphName, readBundleReport(spec.graphName)]),
+));
+const frontmatterBundleReport = extensionBundleReports.frontmatter;
+const footnotesBundleReport = extensionBundleReports.footnotes;
 const rootBundleMeasurement = measureBundleGraph(rootBundleReport);
 const minimalBundleMeasurement = measureBundleGraph(minimalBundleReport);
-const frontmatterBundleMeasurement = measureBundleGraph(frontmatterBundleReport);
+const extensionBundleMeasurements = Object.freeze(Object.fromEntries(
+  extensionBundleSpecs.map((spec) => [
+    spec.graphName,
+    measureBundleGraph(extensionBundleReports[spec.graphName]),
+  ]),
+));
+const frontmatterBundleMeasurement = extensionBundleMeasurements.frontmatter;
+const footnotesBundleMeasurement = extensionBundleMeasurements.footnotes;
+const extensionBundles = extensionBundleSpecs.map((spec) => ({
+  measurement: extensionBundleMeasurements[spec.graphName],
+  report: extensionBundleReports[spec.graphName],
+  spec,
+}));
 assertBundleIsolation(rootBundleReport, minimalBundleReport);
-assertFrontmatterBundleIsolation(frontmatterBundleReport);
+for (const { report, spec } of extensionBundles) {
+  assertExtensionBundleIsolation(report, spec);
+}
 assertPackedProvenance(
   rootBundleReport,
   minimalBundleReport,
-  frontmatterBundleReport,
   rootBundleMeasurement,
   minimalBundleMeasurement,
-  frontmatterBundleMeasurement,
+  extensionBundles,
 );
 const minimalEntryChunk = minimalBundleReport.chunks.find((chunk) => chunk.isEntry);
 
@@ -1853,17 +2106,28 @@ run("node", ["--input-type=module", "-e", `
   }
 `], { cwd: smokeAppDir });
 
+const footnotesEntryChunk = footnotesBundleReport.chunks.find((chunk) => chunk.isEntry);
+if (!footnotesEntryChunk) {
+  throw new Error("The footnotes feature bundle did not emit an entry chunk.");
+}
+const footnotesEntrySpecifier = `./dist/footnotes/${footnotesEntryChunk.fileName}`;
+currentPhase = "footnotes-feature-runtime-smoke";
+run("node", ["--input-type=module", "-e", `
+  const consumer = await import(${JSON.stringify(footnotesEntrySpecifier)});
+  const names = consumer.packedFootnotesDefinitions?.map((extension) => extension.name);
+  if (names?.join(":") !== "markora-extension-footnotes:markora-extension-footnotes") {
+    throw new Error("Packed footnotes feature bundle did not execute");
+  }
+`], { cwd: smokeAppDir });
+
 const measurements = Object.freeze({
+  footnotes: footnotesBundleMeasurement,
   frontmatter: frontmatterBundleMeasurement,
   minimal: minimalBundleMeasurement,
   root: rootBundleMeasurement,
 });
 availableMeasurements = measurements;
-printBundleMeasurements(
-  rootBundleMeasurement,
-  minimalBundleMeasurement,
-  frontmatterBundleMeasurement,
-);
+printBundleMeasurements(measurements);
 currentPhase = "budget-evaluation";
 const budgetConfig = loadBudgetConfig(commandOptions.budgetPath);
 const evaluations = evaluateBundleBudgets(budgetConfig, measurements);
