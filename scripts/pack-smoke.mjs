@@ -1169,6 +1169,7 @@ import {
 import {
   MARKORA_EXTENSION_API_VERSION,
   defineMarkdownEditorExtension,
+  sliceMarkdownEditorOriginalSourceLines,
   type AnyMarkdownEditorExtension,
 } from "markora/extension-api";
 import {
@@ -1408,13 +1409,16 @@ editor.focus("start");
 editor.blur();
 editor.destroy();
 minimalEditor.destroy();
-MARKORA_EXTENSION_API_VERSION satisfies "1.0.0";
+MARKORA_EXTENSION_API_VERSION satisfies "1.1.0";
+const unavailableSourceSlice: string | null =
+  sliceMarkdownEditorOriginalSourceLines({}, 0, 1);
 void new MarkdownEditorDestroyedError("focus the editor");
 void staticDefinition;
 void legacyCreateOptions;
 void minimalIdleChangeMode;
 void reconciled;
 void transactionOrigin;
+void unavailableSourceSlice;
 `);
 
 writeFileSync(join(smokeAppDir, "tsconfig.json"), `${JSON.stringify({
@@ -1437,6 +1441,9 @@ run("node", ["--input-type=module", "-e", `
   const minimal = await import("markora/minimal");
   if (typeof extensionApi.defineMarkdownEditorExtension !== "function") {
     throw new Error("defineMarkdownEditorExtension export missing");
+  }
+  if (typeof extensionApi.sliceMarkdownEditorOriginalSourceLines !== "function") {
+    throw new Error("sliceMarkdownEditorOriginalSourceLines export missing");
   }
   if (typeof minimal.createEditor !== "function") {
     throw new Error("markora/minimal createEditor export missing");

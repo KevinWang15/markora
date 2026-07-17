@@ -423,7 +423,7 @@ describe("extension graph resolution", () => {
     });
 
     expect(resolution.manifest).toEqual({
-      extensionApi: "1.0.0",
+      extensionApi: "1.1.0",
       preset: { name: "acme-default-preset", version: "3.2.1" },
       extensions: [
         { name: "acme-base", version: "1.0.0", configuration: { dialect: "base" } },

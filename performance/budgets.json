@@ -143,7 +143,7 @@
         "rawBytes": { "warning": 16750, "failure": 37000 },
         "gzipBytes": { "warning": 3300, "failure": 5600 }
       },
-      "staticModuleCount": { "warning": 148, "failure": 157 }
+      "staticModuleCount": { "warning": 148, "failure": 158 }
     },
     "minimal": {
       "initialJs": {
@@ -162,7 +162,7 @@
         "rawBytes": { "warning": 4800, "failure": 11750 },
         "gzipBytes": { "warning": 1250, "failure": 2425 }
       },
-      "staticModuleCount": { "warning": 128, "failure": 134 }
+      "staticModuleCount": { "warning": 128, "failure": 135 }
     }
   }
 }

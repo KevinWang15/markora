@@ -103,7 +103,7 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-018 | DONE | L | Add mature table resize, reorder, selection, and keyboard operations |
 | EE-019 | DONE | M | Add configurable auto-pairing, shortcuts, and code-language editing |
 | EE-020 | DONE | M | Tokenize styling and add dark, high-contrast, reduced-motion, RTL, and i18n support |
-| EE-021 | NEXT | L | Ship optional front matter, footnote, math, callout, TOC, HTML, and diagram extensions |
+| EE-021 | IN PROGRESS | L | Ship optional front matter, footnote, math, callout, TOC, HTML, and diagram extensions |
 
 Sizes are relative planning aids: `S` is a focused change, `M` spans several related surfaces, and `L` requires an architectural or multi-stage implementation.
 
@@ -365,7 +365,7 @@ Design the stable customization contract before adding more built-in syntax.
 
 #### Completion notes
 
-- The accepted [extension system RFC](./extension-system-rfc.md) versions the API independently at `1.0.0` and defines a compile-before-mount architecture for schema, Markdown codec, runtime behavior, typed handles, and lifecycle resources.
+- The accepted [extension system RFC](./extension-system-rfc.md) versions the API independently; its current additive contract is `1.1.0` and defines a compile-before-mount architecture for schema, Markdown codec, runtime behavior, typed handles, and lifecycle resources.
 - The contract now covers branded heterogeneous definitions, exact-object typed lookup, a single inferred per-editor `createRuntime()` boundary, required/optional dependency and order edges, stable tokenizer anchors, compiler-qualified local token IDs, additive schema ownership, deterministic fixed runtime lanes, collision policy, clipboard pipelines, NodeViews, and headless UI actions.
 - Per-editor storage, the late-bound state/dispatch/command bridge, reset behavior, phase-owned cleanup scopes, reverse teardown, structured system/extension errors, trusted runtime-only callbacks, persistence manifests, SemVer rules, compatibility adapters, and the separate `markora/minimal` bundle boundary are specified before implementation.
 - The private, non-publishable `@markora-internal/extension-rfc-prototype` package implements an external multiline callout block and inline highlight mark using only public Markdown-it/ProseMirror APIs. Ten runtime tests prove semantic round-trip, registration-independent tokenizer precedence, optional fallback composition, host-shaped commands, storage isolation, fixed contribution lanes, key fallback chains, and ownership failures.
@@ -672,11 +672,42 @@ Let Markora fit production design systems and international products.
 
 ### EE-021 — Ship advanced syntax as optional extensions
 
-Status: `NEXT`
+Status: `IN PROGRESS` (2026-07-18)
 
 #### Goal
 
 Broaden document compatibility without turning the base editor into a monolith.
+
+The normative package, dialect, fidelity, renderer, security, accessibility,
+and verification decisions are frozen in the
+[advanced-syntax extension contract](./advanced-syntax-contract.md).
+
+#### Sub-item status
+
+| Sub-item | Status | Package or outcome |
+| --- | --- | --- |
+| Foundation | IN PROGRESS | Exact-source claim points plus optional-package build, type, pack, browser, and bundle gates |
+| YAML front matter | QUEUED | `markora-extension-frontmatter` |
+| Footnotes | QUEUED | `markora-extension-footnotes` |
+| Inline and block math | QUEUED | `markora-extension-math` |
+| GitHub-style alerts | QUEUED | `markora-extension-alerts` |
+| Generated TOC | QUEUED | `markora-extension-toc` |
+| Sanitized raw HTML | QUEUED | `markora-extension-html` |
+| Mermaid and GitHub diagrams | QUEUED | `markora-extension-diagrams` |
+
+#### Progress notes
+
+- The first foundation checkpoint accepts the
+  [advanced-syntax contract](./advanced-syntax-contract.md), advances the
+  extension API additively to `1.1.0`, exposes private-metadata-backed exact
+  source line slices to public tokenizer rules, and publishes stable root and
+  minimal tokenizer anchors. Host-rendered extension actions now also inherit
+  the editor's read-only state.
+- The source-range module moves the packed compatibility graph from 157 to 158
+  static modules and the minimal graph from 134 to 135. Their measured byte
+  deltas are 1,351 raw / 191 gzip bytes and 847 raw / 194 gzip bytes,
+  respectively. Only those two crossed module-count failure ceilings increase
+  by one; all warning ceilings and byte failure ceilings remain unchanged.
 
 #### Recommended order
 
@@ -716,4 +747,5 @@ An item is `DONE` only when all applicable requirements below are met:
 
 `EE-001` through `EE-020` are complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, and Gate C now has keyboard/screen-reader, deliberate clipboard, mature table, configurable typing, theme, localization, and bidirectional-text foundations. Completed work includes the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, lazy code-editor, semantic embedded-control, rich/Markdown/plain clipboard, production table-editing, host-configurable typing/keymap, and design-system/internationalization foundations.
 
-The next iteration is `EE-021 — Ship advanced syntax as optional extensions`.
+The current iteration is `EE-021 — Ship advanced syntax as optional extensions`.
+Its foundation is in progress; all seven feature packages remain queued.

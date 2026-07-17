@@ -40,9 +40,21 @@ import {
   compileMarkdownEditorSchemaEntries,
   type MarkdownEditorOrderedSchemaMap,
 } from "./schemaContributionOrder";
+import { createMarkdownEditorSourceEnvironment } from "./markdownSource";
 
 const minimalTokenizerFoundationAnchors = [
   { id: "@markora/foundation/block/fence", phase: "block", markdownItName: "fence" },
+  {
+    id: "@markora/foundation/block/blockquote",
+    phase: "block",
+    markdownItName: "blockquote",
+  },
+  { id: "@markora/foundation/block/hr", phase: "block", markdownItName: "hr" },
+  {
+    id: "@markora/foundation/block/reference",
+    phase: "block",
+    markdownItName: "reference",
+  },
   {
     id: "@markora/foundation/block/paragraph",
     phase: "block",
@@ -54,6 +66,7 @@ const minimalTokenizerFoundationAnchors = [
     phase: "inline",
     markdownItName: "emphasis",
   },
+  { id: "@markora/foundation/core/block", phase: "core", markdownItName: "block" },
   { id: "@markora/foundation/core/inline", phase: "core", markdownItName: "inline" },
 ] as const;
 
@@ -385,7 +398,10 @@ export function createMinimalMarkdownCodec(
       return schema.topNodeType.createAndFill();
     }
 
-    const parsed = parser.parse(markdown, {});
+    const parsed = parser.parse(
+      markdown,
+      createMarkdownEditorSourceEnvironment(markdown),
+    );
     return sanitizeNode(schema, resources, parsed) ?? schema.topNodeType.createAndFill();
   };
 

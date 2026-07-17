@@ -45,11 +45,31 @@ function resolve(...definitions: ReturnType<typeof extension>[]) {
   });
 }
 
-function blockRuleNames(codec: MarkdownEditorCodec) {
-  const ruler = codec.tokenizer.block.ruler as unknown as Readonly<{
+function ruleNames(
+  codec: MarkdownEditorCodec,
+  phase: "block" | "core" | "inline",
+) {
+  const ruler = (
+    phase === "block"
+      ? codec.tokenizer.block.ruler
+      : phase === "inline"
+        ? codec.tokenizer.inline.ruler
+        : codec.tokenizer.core.ruler
+  ) as unknown as Readonly<{
     __rules__: readonly Readonly<{ name: string }>[];
   }>;
   return ruler.__rules__.map(({ name }) => name);
+}
+
+function blockRuleNames(codec: MarkdownEditorCodec) {
+  return ruleNames(codec, "block");
+}
+
+function expectRelativeOrder(names: readonly string[], expected: readonly string[]) {
+  const indexes = expected.map((name) => names.indexOf(name));
+
+  expect(indexes, `missing rules in ${names.join(", ")}`).not.toContain(-1);
+  expect(indexes).toEqual([...indexes].sort((left, right) => left - right));
 }
 
 function expectExtensionError(
@@ -67,7 +87,149 @@ function expectExtensionError(
   }
 }
 
-describe.each(codecBuilders)("%s Markdown contribution compiler", (_, createCodec) => {
+describe.each(codecBuilders)("%s Markdown contribution compiler", (codecName, createCodec) => {
+  it("publishes stable anchors in the underlying Markdown-it order", () => {
+    const codec = build(createCodec);
+
+    expectRelativeOrder(
+      ruleNames(codec, "block"),
+      codecName === "compatibility"
+        ? [
+            "markora_frontmatter",
+            "table",
+            "markora_display_math",
+            "markora_directive_container",
+            "fence",
+            "blockquote",
+            "hr",
+            "reference",
+            "paragraph",
+          ]
+        : ["fence", "blockquote", "hr", "reference", "paragraph"],
+    );
+    expectRelativeOrder(
+      ruleNames(codec, "inline"),
+      codecName === "compatibility"
+        ? ["markora_inline_directive", "text", "emphasis"]
+        : ["text", "emphasis"],
+    );
+    expectRelativeOrder(
+      ruleNames(codec, "core"),
+      codecName === "compatibility"
+        ? [
+            "block",
+            "markora_html_source",
+            "inline",
+            "markora_inline_source",
+          ]
+        : ["block", "inline"],
+    );
+  });
+
+  it("places rules deterministically around optional compatibility anchors", () => {
+    const owner = "acme-optional-anchor-placement";
+    const codec = build(createCodec, extension(owner, {
+      tokenizerRules: [
+        {
+          id: "frontmatter",
+          phase: "block",
+          before: [
+            { id: "@markora/opaque/frontmatter", optional: true },
+            "@markora/foundation/block/hr",
+          ],
+          createRule: () => () => false,
+        },
+        {
+          id: "between-blockquote-reference",
+          phase: "block",
+          after: ["@markora/foundation/block/blockquote"],
+          before: ["@markora/foundation/block/reference"],
+          createRule: () => () => false,
+        },
+        {
+          id: "display-math",
+          phase: "block",
+          before: [
+            { id: "@markora/opaque/display-math", optional: true },
+            "@markora/foundation/block/fence",
+          ],
+          createRule: () => () => false,
+        },
+        {
+          id: "inline",
+          phase: "inline",
+          before: [
+            { id: "@markora/opaque/inline-directive", optional: true },
+            "@markora/foundation/inline/text",
+          ],
+          createRule: () => () => false,
+        },
+        {
+          id: "after-html-source",
+          phase: "core",
+          after: [
+            "@markora/foundation/core/block",
+            { id: "@markora/opaque/html-source", optional: true },
+          ],
+          before: ["@markora/foundation/core/inline"],
+          createRule: () => () => undefined,
+        },
+        {
+          id: "before-inline-source",
+          phase: "core",
+          after: ["@markora/foundation/core/inline"],
+          before: [{ id: "@markora/opaque/inline-source", optional: true }],
+          createRule: () => () => undefined,
+        },
+      ],
+    }));
+    const blockNames = ruleNames(codec, "block");
+    const inlineNames = ruleNames(codec, "inline");
+    const coreNames = ruleNames(codec, "core");
+
+    expectRelativeOrder(
+      blockNames,
+      codecName === "compatibility"
+        ? [`${owner}/frontmatter`, "markora_frontmatter", "hr"]
+        : [`${owner}/frontmatter`, "hr"],
+    );
+    expectRelativeOrder(blockNames, [
+      "blockquote",
+      `${owner}/between-blockquote-reference`,
+      "reference",
+    ]);
+    expectRelativeOrder(
+      blockNames,
+      codecName === "compatibility"
+        ? [`${owner}/display-math`, "markora_display_math", "fence"]
+        : [`${owner}/display-math`, "fence"],
+    );
+    expectRelativeOrder(
+      inlineNames,
+      codecName === "compatibility"
+        ? [`${owner}/inline`, "markora_inline_directive", "text"]
+        : [`${owner}/inline`, "text"],
+    );
+    expectRelativeOrder(
+      coreNames,
+      codecName === "compatibility"
+        ? [
+            "block",
+            "markora_html_source",
+            `${owner}/after-html-source`,
+            "inline",
+            `${owner}/before-inline-source`,
+            "markora_inline_source",
+          ]
+        : [
+            "block",
+            `${owner}/after-html-source`,
+            "inline",
+            `${owner}/before-inline-source`,
+          ],
+    );
+  });
+
   it("honors every before and after constraint in one deterministic tokenizer graph", () => {
     const owner = "acme-token-graph";
     const noMatch = () => false;

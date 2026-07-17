@@ -30,7 +30,7 @@ import {
   parseMarkdownEditorSemVer,
 } from "./extensionSemver";
 
-export const MARKORA_EXTENSION_API_VERSION = "1.0.0" as const;
+export const MARKORA_EXTENSION_API_VERSION = "1.1.0" as const;
 
 export type MarkdownEditorExtensionName = string;
 

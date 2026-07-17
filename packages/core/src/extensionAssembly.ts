@@ -1576,13 +1576,18 @@ export function createMarkdownEditorExtensionAssembly(
 
         uiActionIds.add(qualifiedId);
 
+        const owner = instance.resolved.definition.name;
+
         uiActions.push(Object.freeze({
           id: qualifiedId,
           group: typedAction.group,
           order: typedAction.order ?? extensionIndex * 1_000 + declarationIndex,
           defaultLabel: typedAction.defaultLabel,
           run: () => command(),
-          isEnabled: () => enabled ? Boolean(enabled()) : true,
+          isEnabled: () => (
+            requireView(owner, "state").editable
+            && (enabled ? Boolean(enabled()) : true)
+          ),
           isActive: () => active ? Boolean(active()) : false,
         }));
       });

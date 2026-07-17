@@ -30,11 +30,11 @@ import {
 } from "./schemaContributionOrder";
 import {
   configureOpaqueMarkdown,
-  createOpaqueMarkdownEnvironment,
   getOpaqueTokenAttrs,
   normalizeOpaqueMarkdownKind,
   type OpaqueMarkdownKind,
 } from "./opaqueMarkdown";
+import { createMarkdownEditorSourceEnvironment } from "./markdownSource";
 import {
   normalizeMarkdownEditorResources,
   sanitizeResourceUrl,
@@ -463,7 +463,17 @@ function extensionCodecError(options: {
 }
 
 const compatibilityTokenizerFoundationAnchors = [
+  {
+    id: "@markora/opaque/frontmatter",
+    phase: "block",
+    markdownItName: "markora_frontmatter",
+  },
   { id: "@markora/table/table", phase: "block", markdownItName: "table" },
+  {
+    id: "@markora/opaque/display-math",
+    phase: "block",
+    markdownItName: "markora_display_math",
+  },
   {
     id: "@markora/opaque/directive",
     phase: "block",
@@ -471,9 +481,25 @@ const compatibilityTokenizerFoundationAnchors = [
   },
   { id: "@markora/foundation/block/fence", phase: "block", markdownItName: "fence" },
   {
+    id: "@markora/foundation/block/blockquote",
+    phase: "block",
+    markdownItName: "blockquote",
+  },
+  { id: "@markora/foundation/block/hr", phase: "block", markdownItName: "hr" },
+  {
+    id: "@markora/foundation/block/reference",
+    phase: "block",
+    markdownItName: "reference",
+  },
+  {
     id: "@markora/foundation/block/paragraph",
     phase: "block",
     markdownItName: "paragraph",
+  },
+  {
+    id: "@markora/opaque/inline-directive",
+    phase: "inline",
+    markdownItName: "markora_inline_directive",
   },
   { id: "@markora/foundation/inline/text", phase: "inline", markdownItName: "text" },
   {
@@ -481,7 +507,18 @@ const compatibilityTokenizerFoundationAnchors = [
     phase: "inline",
     markdownItName: "emphasis",
   },
+  { id: "@markora/foundation/core/block", phase: "core", markdownItName: "block" },
+  {
+    id: "@markora/opaque/html-source",
+    phase: "core",
+    markdownItName: "markora_html_source",
+  },
   { id: "@markora/foundation/core/inline", phase: "core", markdownItName: "inline" },
+  {
+    id: "@markora/opaque/inline-source",
+    phase: "core",
+    markdownItName: "markora_inline_source",
+  },
 ] as const;
 
 function qualifyMarkdownToken(extensionName: string, localId: string) {
@@ -1044,7 +1081,7 @@ function parseMarkdown(markdown: string) {
   }
 
   return sanitizeImportedDoc(normalizeTaskListNode(
-    markdownParser.parse(markdown, createOpaqueMarkdownEnvironment(markdown)),
+    markdownParser.parse(markdown, createMarkdownEditorSourceEnvironment(markdown)),
   ));
 }
 

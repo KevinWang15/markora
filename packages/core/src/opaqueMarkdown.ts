@@ -3,6 +3,7 @@ import type StateBlock from "markdown-it/lib/rules_block/state_block.mjs";
 import type StateCore from "markdown-it/lib/rules_core/state_core.mjs";
 import type StateInline from "markdown-it/lib/rules_inline/state_inline.mjs";
 import type Token from "markdown-it/lib/token.mjs";
+import { sliceMarkdownEditorOriginalSourceLines } from "./markdownSource";
 
 export const opaqueMarkdownKinds = [
   "frontmatter",
@@ -24,16 +25,6 @@ export type OpaqueMarkdownEditRequest = {
   update: (nextSource: string) => boolean;
 };
 
-type OpaqueMarkdownEnvironment = {
-  markoraOriginalLineRanges?: OriginalLineRanges;
-  markoraOriginalSource?: string;
-};
-
-type OriginalLineRanges = {
-  starts: number[];
-  ends: number[];
-};
-
 type OpaqueTokenMeta = {
   markoraOpaqueKind?: OpaqueMarkdownKind;
   markoraOpaqueSource?: string;
@@ -45,51 +36,6 @@ export function normalizeOpaqueMarkdownKind(value: unknown, fallback: OpaqueMark
   return typeof value === "string" && opaqueKindSet.has(value)
     ? value as OpaqueMarkdownKind
     : fallback;
-}
-
-function getOriginalSource(env: unknown) {
-  if (typeof env !== "object" || env === null) {
-    return null;
-  }
-
-  const source = (env as OpaqueMarkdownEnvironment).markoraOriginalSource;
-  return typeof source === "string" ? source : null;
-}
-
-function createOriginalLineRanges(source: string): OriginalLineRanges {
-  const starts = [0];
-  const ends: number[] = [];
-  const lineEnding = /\r\n|\r|\n/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = lineEnding.exec(source))) {
-    ends.push(match.index);
-    starts.push(match.index + match[0].length);
-  }
-
-  ends.push(source.length);
-  return { starts, ends };
-}
-
-function sliceOriginalLines(env: unknown, startLine: number, endLine: number) {
-  const source = getOriginalSource(env);
-
-  if (source === null) {
-    return null;
-  }
-
-  const storedRanges = typeof env === "object" && env !== null
-    ? (env as OpaqueMarkdownEnvironment).markoraOriginalLineRanges
-    : undefined;
-  const { starts, ends } = storedRanges ?? createOriginalLineRanges(source);
-  const start = starts[startLine];
-  const end = ends[endLine - 1];
-
-  if (typeof start !== "number" || typeof end !== "number" || end < start) {
-    return null;
-  }
-
-  return source.slice(start, end);
 }
 
 function stripOneTrailingLineEnding(source: string) {
@@ -105,7 +51,11 @@ function getOpaqueBlockSource(state: StateBlock, startLine: number, endLine: num
   const isTopLevel = state.level === 0 && state.blkIndent === 0;
 
   if (isTopLevel) {
-    const originalSlice = sliceOriginalLines(state.env, startLine, endLine);
+    const originalSlice = sliceMarkdownEditorOriginalSourceLines(
+      state.env,
+      startLine,
+      endLine,
+    );
 
     if (originalSlice !== null) {
       return originalSlice;
@@ -383,7 +333,7 @@ function hydrateHtmlBlockSources(state: StateCore) {
 
     const isTopLevel = token.level === 0;
     const originalSlice = isTopLevel && token.map
-      ? sliceOriginalLines(state.env, token.map[0], token.map[1])
+      ? sliceMarkdownEditorOriginalSourceLines(state.env, token.map[0], token.map[1])
       : null;
     const source = originalSlice ?? stripOneTrailingLineEnding(token.content);
 
@@ -422,7 +372,11 @@ function hydrateInlineSources(state: StateCore) {
       continue;
     }
 
-    const originalSlice = sliceOriginalLines(state.env, token.map[0], token.map[1]);
+    const originalSlice = sliceMarkdownEditorOriginalSourceLines(
+      state.env,
+      token.map[0],
+      token.map[1],
+    );
 
     if (originalSlice === null) {
       continue;
@@ -476,13 +430,6 @@ export function configureOpaqueMarkdown(tokenizer: MarkdownIt) {
   tokenizer.inline.ruler.before("text", "markora_inline_directive", inlineDirectiveRule);
   tokenizer.core.ruler.after("block", "markora_html_source", hydrateHtmlBlockSources);
   tokenizer.core.ruler.after("inline", "markora_inline_source", hydrateInlineSources);
-}
-
-export function createOpaqueMarkdownEnvironment(source: string): OpaqueMarkdownEnvironment {
-  return {
-    markoraOriginalLineRanges: createOriginalLineRanges(source),
-    markoraOriginalSource: source,
-  };
 }
 
 export function getOpaqueTokenAttrs(token: Token, fallback: OpaqueMarkdownKind) {

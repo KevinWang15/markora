@@ -1,9 +1,9 @@
 # Markora Extension System RFC
 
 - Status: Accepted design for `EE-009`
-- Extension API version: `1.0.0`
+- Extension API version: `1.1.0`
 - Accepted: 2026-07-15
-- Implemented: `EE-010`; host resource boundary integrated by `EE-012`
+- Implemented: `EE-010`; host resource boundary integrated by `EE-012`; additive source and tokenizer-anchor contract integrated for `EE-021`
 
 ## Decision summary
 
@@ -72,7 +72,7 @@ Parsing during creation, reconciliation, and reset must use the same immutable a
 The following is the approved public boundary. Supporting contribution interfaces may be split across files, but the branded carrier, definition identity, typed lookup, and behavioral rules are normative. `EE-010` must add declaration tests before refining any mechanical generic shape.
 
 ```ts
-export const MARKORA_EXTENSION_API_VERSION = "1.0.0" as const;
+export const MARKORA_EXTENSION_API_VERSION = "1.1.0" as const;
 
 export type MarkdownEditorExtensionName = string;
 
@@ -441,6 +441,12 @@ type MarkdownEditorTokenizerNamespace = Readonly<{
   token(localId: string): string;
 }>;
 
+function sliceMarkdownEditorOriginalSourceLines(
+  environment: unknown,
+  startLine: number,
+  endLine: number,
+): string | null;
+
 type MarkdownEditorTokenizerRule = MarkdownEditorOrderedContribution &
   Readonly<{
     phase: "block" | "inline" | "inline-post" | "core";
@@ -455,7 +461,9 @@ Tokenizer rules declare:
 - optional fully qualified contribution-level `before`/`after` edges, each of which may be explicitly optional;
 - a synchronous pure `createRule({ token })` factory.
 
-Markora publishes virtual IDs for the foundation anchors extensions need: `@markora/foundation/block/fence`, `@markora/foundation/block/paragraph`, `@markora/foundation/inline/emphasis`, `@markora/foundation/inline/text`, and `@markora/foundation/core/inline`. Optional built-ins publish their own fully qualified rule IDs, such as the table and opaque-directive rules, only when installed. These IDs are stable even if the underlying Markdown-it rule names change. `EE-010` may add anchors without changing the extension API version, but removing or changing an anchor's ordering semantics is an extension API major change.
+Markora publishes virtual IDs for the foundation anchors extensions need: `@markora/foundation/block/fence`, `@markora/foundation/block/blockquote`, `@markora/foundation/block/hr`, `@markora/foundation/block/reference`, `@markora/foundation/block/paragraph`, `@markora/foundation/inline/text`, `@markora/foundation/inline/emphasis`, `@markora/foundation/core/block`, and `@markora/foundation/core/inline`. The compatibility codec also publishes optional `@markora/table/table`, `@markora/opaque/frontmatter`, `@markora/opaque/display-math`, `@markora/opaque/directive`, `@markora/opaque/inline-directive`, `@markora/opaque/html-source`, and `@markora/opaque/inline-source` anchors. These IDs follow their underlying Markdown-it order and are stable even if the internal rule names change. Optional built-in anchors must be targeted with `{ id, optional: true }` by extensions that also support the minimal codec. Adding an anchor is additive, but removing or changing an anchor's ordering semantics is an extension API major change.
+
+`sliceMarkdownEditorOriginalSourceLines(environment, startLine, endLine)` exposes an exact, half-open, zero-based line slice to tokenizer callbacks without exposing mutable source bookkeeping. It retains authored BOMs and CRLF/CR/LF line endings between the selected lines, returns `null` for a foreign environment or invalid/out-of-bounds range, and is available in both compatibility and minimal codec parses. Markora keeps the original source metadata private rather than adding writable fields to the Markdown-it environment; extensions may continue to use their own namespaced environment entries.
 
 The compiler first collects the complete tokenizer graph, validates phase-local targets and cycles, computes final order, calls each rule factory with its namespace, and only then registers rules. Registration therefore cannot depend on host extension order or on a target callback having run first. The supported registrar maps virtual foundation IDs to Markdown-it and exposes only ordered rule installation; raw Markdown-it rule names are not valid public targets.
 

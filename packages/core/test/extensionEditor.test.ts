@@ -148,6 +148,29 @@ describe("public editor extensions", () => {
     expect(handle.storage.commandRuns).toBe(1);
   });
 
+  it("disables host-rendered extension actions while the editor is read-only", () => {
+    const editor = track(createEditor({
+      element: createHost(),
+      extensions: [calloutExtension],
+      markdown: "paragraph",
+    }));
+    const action = editor.extensions.uiActions.find(
+      ({ id }) => id === "@acme/callout/wrap-warning",
+    );
+
+    expect(action).toBeDefined();
+    expect(action?.isEnabled()).toBe(true);
+
+    editor.updateOptions({ editable: false });
+
+    expect(action?.isEnabled()).toBe(false);
+    expect(action?.run()).toBe(false);
+
+    editor.updateOptions({ editable: true });
+
+    expect(action?.isEnabled()).toBe(true);
+  });
+
   it("retains one assembly and storage across reconcile and reset", () => {
     const editor = track(createEditor({
       element: createHost(),

@@ -4,6 +4,7 @@ export {
   defineMarkdownEditorExtension,
   defineMarkdownEditorPreset,
 } from "./extensionApi";
+export { sliceMarkdownEditorOriginalSourceLines } from "./markdownSource";
 export type {
   AnyMarkdownEditorExtension,
   MarkdownEditorClipboardContribution,

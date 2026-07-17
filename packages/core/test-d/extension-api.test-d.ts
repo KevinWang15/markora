@@ -1,6 +1,8 @@
 import {
+  MARKORA_EXTENSION_API_VERSION,
   defineMarkdownEditorExtension,
   defineMarkdownEditorPreset,
+  sliceMarkdownEditorOriginalSourceLines,
   type AnyMarkdownEditorExtension,
   type MarkdownEditorExtension,
   type MarkdownEditorExtensionRegistry,
@@ -20,6 +22,13 @@ interface CalloutState {
 interface CalloutStorage {
   insertions: number;
 }
+
+const extensionApiVersion: "1.1.0" = MARKORA_EXTENSION_API_VERSION;
+const originalSourceSlice: string | null =
+  sliceMarkdownEditorOriginalSourceLines({}, 0, 1);
+
+// @ts-expect-error Original source line ranges use numeric indices.
+sliceMarkdownEditorOriginalSourceLines({}, "0", 1);
 
 const calloutExtension = defineMarkdownEditorExtension({
   name: "@example/callout",
