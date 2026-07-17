@@ -163,6 +163,25 @@
         "gzipBytes": { "warning": 1250, "failure": 2425 }
       },
       "staticModuleCount": { "warning": 128, "failure": 135 }
+    },
+    "frontmatter": {
+      "initialJs": {
+        "rawBytes": { "warning": 92000, "failure": 100000 },
+        "gzipBytes": { "warning": 24000, "failure": 27000 }
+      },
+      "lazyJs": {
+        "rawBytes": { "warning": 0, "failure": 0 },
+        "gzipBytes": { "warning": 0, "failure": 0 }
+      },
+      "totalJs": {
+        "rawBytes": { "warning": 92000, "failure": 100000 },
+        "gzipBytes": { "warning": 24000, "failure": 27000 }
+      },
+      "css": {
+        "rawBytes": { "warning": 2500, "failure": 3000 },
+        "gzipBytes": { "warning": 800, "failure": 1000 }
+      },
+      "staticModuleCount": { "warning": 97, "failure": 105 }
     }
   }
 }

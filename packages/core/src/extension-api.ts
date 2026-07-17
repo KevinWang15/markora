@@ -81,6 +81,7 @@ export {
 } from "prosemirror-state";
 export { Decoration, DecorationSet } from "prosemirror-view";
 export { setBlockType, toggleMark, wrapIn } from "prosemirror-commands";
+export { closeHistory } from "prosemirror-history";
 export type { ParseSpec } from "prosemirror-markdown";
 export type {
   Attrs,

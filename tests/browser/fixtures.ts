@@ -56,7 +56,22 @@ export type LabEditorSpec = {
   controlledEcho?: boolean;
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
-  extensionMode?: "public-example";
+  entry?: "minimal" | "root";
+  extensionMode?: "frontmatter" | "public-example";
+  frontmatterMessages?: Partial<{
+    aliasLimitDiagnostic: string;
+    customTagDiagnostic: string;
+    documentInvariantDiagnostic: string;
+    editSource: string;
+    insertFrontmatter: string;
+    invalidStructureDiagnostic: string;
+    kindLabel: string;
+    nestingLimitDiagnostic: string;
+    sourceLabel: string;
+    sourceTooLargeDiagnostic: string;
+    tabIndentationDiagnostic: string;
+    unbalancedFlowDiagnostic: string;
+  }>;
   id: string;
   initialSelection?: LabSelectionTarget;
   language?: string;

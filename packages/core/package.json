@@ -59,7 +59,7 @@
     "publish:public": "npm publish --access public",
     "prepack": "pnpm run build && pnpm run typecheck && pnpm run typecheck:api && pnpm run smoke:node-esm",
     "typecheck:api": "tsc -p tsconfig.api.json --noEmit",
-    "smoke:node-esm": "node --input-type=module -e \"const [root, minimal, extensionApi] = await Promise.all([import('./dist/index.js'), import('./dist/minimal.js'), import('./dist/extension-api.js')]); if (typeof root.createEditor !== 'function') throw new Error('createEditor export missing'); if (typeof minimal.createEditor !== 'function') throw new Error('minimal createEditor export missing'); if (typeof extensionApi.defineMarkdownEditorExtension !== 'function') throw new Error('extension API export missing');\""
+    "smoke:node-esm": "node --input-type=module -e \"const [root, minimal, extensionApi] = await Promise.all([import('./dist/index.js'), import('./dist/minimal.js'), import('./dist/extension-api.js')]); if (typeof root.createEditor !== 'function') throw new Error('createEditor export missing'); if (typeof minimal.createEditor !== 'function') throw new Error('minimal createEditor export missing'); if (typeof extensionApi.defineMarkdownEditorExtension !== 'function') throw new Error('extension API export missing'); if (typeof extensionApi.closeHistory !== 'function') throw new Error('closeHistory export missing');\""
   },
   "dependencies": {
     "@codemirror/commands": "^6.8.1",

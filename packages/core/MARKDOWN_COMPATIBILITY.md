@@ -1,6 +1,6 @@
 # Markdown dialect and fidelity contract
 
-Status: current `markora` `0.0.x` contract, updated and verified for `EE-019` on 2026-07-17.
+Status: current `markora` `0.0.x` contract, updated and verified through the `EE-021` front-matter package on 2026-07-18.
 
 This contract applies to Markdown passed through `createEditor({ markdown })`, `editor.commands.reconcileMarkdown()`, or `editor.commands.resetMarkdown()` and returned by `editor.getMarkdown()` or `onChange`. Deprecated `setMarkdown()` uses the same parsing boundary as `resetMarkdown()`.
 
@@ -93,6 +93,16 @@ const editor = createEditor({
 
 The editor exposes an **Edit source** control only when this hook is present. `update(nextSource)` returns `true` when the change is accepted (including an unchanged value) and `false` when the request is stale because the atom was removed, replaced, or changed after the hook opened. A successful update is an undoable editor transaction. It replaces the atom's source under its existing opaque kind; it does not parse, validate, or reclassify the new string. Hosts should provide explicit save/cancel behavior, validate source as their product requires, and handle a `false` result instead of silently overwriting newer content.
 
+## Optional advanced-syntax packages
+
+Optional syntax changes the codec and persistence contract only when its extension definition is installed. Hosts must persist `editor.extensions.manifest` beside Markdown and restore a compatible extension set before opening that document. Importing package CSS alone never enables syntax.
+
+`markora-extension-frontmatter` is the first `EE-021` package. It works with both `markora` and `markora/minimal` and claims one Jekyll-style YAML block at document position zero: an optional BOM, standalone `---` opener, at least one mapping-looking key, and a standalone `---` or `...` closer. The source inside that node is exact, including BOM, comments, anchors, aliases, indentation, delimiter spelling, and CRLF/CR/LF; separators outside the node remain serializer-owned.
+
+The package exposes typed insert/update/remove commands, exact-source and bounded lexical-diagnostic state, an optional stale-safe host source-edit handoff, localized messages, and explicit CSS. YAML remains inert: the package constructs no YAML objects, resolves no aliases or tags, performs no network work, and bundles no form renderer. A source edit without the required envelope is rejected atomically; source inside a valid envelope remains exact, and any lexical diagnostics are non-destructive. The diagnostics are safety-oriented heuristics, not general YAML syntax or schema validation, so syntactically invalid YAML may have no package diagnostic.
+
+Without this package, the compatibility `markora` entry retains its existing conservative `raw_block` front-matter fallback. `markora/minimal` has no such fallback and may interpret the delimiters as ordinary Markdown. Neither fallback supplies the package's typed commands, diagnostics, identity, or host edit contract.
+
 ## Canonical output
 
 These transformations are intentional and happen on import/export even when the user makes no visual edit.
@@ -176,7 +186,7 @@ This table distinguishes the narrow shapes protected as opaque source from relat
 
 | Construct | Classification | Behavior today |
 | --- | --- | --- |
-| YAML front matter | Opaque for the recognized document-head shape; otherwise unsupported — unreported | A conservatively bounded document-head block with a mapping-looking key is preserved. Other metadata syntaxes can be interpreted as ordinary Markdown. |
+| YAML front matter | Exact optional syntax when `markora-extension-frontmatter` is installed; otherwise opaque only in the compatibility entry's recognized head shape | The package owns one validated head node and typed source workflow. Without it, compatibility `markora` preserves the conservative shape as `raw_block`; `markora/minimal` and other metadata syntaxes have no fidelity guarantee. |
 | Footnotes | Unsupported — unreported | Labels and definitions can become ordinary reference links or escaped text; definitions can disappear. |
 | Math | Opaque for recognized standalone display math; inline math unsupported — unreported | Standalone `$$` block shapes are preserved. Inline `$...$` and `$$...$$` in prose may survive accidentally as text but have no math fidelity guarantee. |
 | GitHub alerts/callouts | Unsupported — unreported | Parsed as an ordinary blockquote; the alert marker is text and source lines can fold together. |
@@ -212,6 +222,7 @@ These limitations are outside the semantic round-trip promise. They are candidat
 6. Configure `resources` before import when stored URLs need a non-default scheme or data policy; use runtime resolution instead of rewriting stable Markdown for signed/display URLs.
 7. If `resources.assets` is enabled, persist upload results in the host service and provide accessible progress, failure, cancel, and retry UI around the headless event/API surface.
 8. Call `state.tableIssues()` before persistence when rich HTML, extensions, or advanced ProseMirror transactions can introduce non-GFM table shapes, and retain another representation when any reported construct must survive.
-9. Sanitize the final rendering surface independently; inert editor rendering is not an HTML-rendering security boundary.
+9. Persist `editor.extensions.manifest` with any Markdown that uses optional syntax, and restore compatible definitions before editing it.
+10. Sanitize the final rendering surface independently; inert editor rendering is not an HTML-rendering security boundary.
 
 The characterization tests are in [`markdownDialect.test.ts`](https://github.com/KevinWang15/markora/blob/main/packages/core/test/markdownDialect.test.ts), with representative [golden documents](https://github.com/KevinWang15/markora/tree/main/packages/core/test/fixtures/markdown-roundtrip) and reviewed [opaque-source cases](https://github.com/KevinWang15/markora/tree/main/packages/core/test/fixtures/opaque-markdown). Broader CommonMark/GFM conformance and corpus tests live alongside them in the core test suite.

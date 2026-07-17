@@ -1,7 +1,7 @@
 # Markora Embedded Editor Production Plan
 
 - Status: Active
-- Last updated: 2026-07-17
+- Last updated: 2026-07-18
 - Scope: Embeddable Markdown editor packages (`markora` and `markora-ui`) only
 
 ## Purpose
@@ -686,9 +686,9 @@ and verification decisions are frozen in the
 
 | Sub-item | Status | Package or outcome |
 | --- | --- | --- |
-| Foundation | IN PROGRESS | Exact-source claim points plus optional-package build, type, pack, browser, and bundle gates |
-| YAML front matter | QUEUED | `markora-extension-frontmatter` |
-| Footnotes | QUEUED | `markora-extension-footnotes` |
+| Foundation | DONE | Exact-source claim points plus optional-package build, type, pack, browser, and bundle gates |
+| YAML front matter | DONE | `markora-extension-frontmatter` |
+| Footnotes | NEXT | `markora-extension-footnotes` |
 | Inline and block math | QUEUED | `markora-extension-math` |
 | GitHub-style alerts | QUEUED | `markora-extension-alerts` |
 | Generated TOC | QUEUED | `markora-extension-toc` |
@@ -708,6 +708,42 @@ and verification decisions are frozen in the
   deltas are 1,351 raw / 191 gzip bytes and 847 raw / 194 gzip bytes,
   respectively. Only those two crossed module-count failure ceilings increase
   by one; all warning ceilings and byte failure ceilings remain unchanged.
+- The optional-package harness now discovers `packages/extension-*` for build,
+  declaration, Node ESM, and package-local test gates. The packed-consumer check
+  installs each tarball without workspace-source fallback, compiles the public
+  API, executes root and minimal editors in an isolated DOM, proves optional
+  syntax is absent from both baseline manifests and bundles, and measures a
+  feature-only graph against per-package budgets.
+- `markora-extension-frontmatter` owns one atomic, exact-source YAML envelope at
+  document position zero in either root or minimal. It preserves BOMs, delimiter
+  spelling, comments, anchors, indentation, and mixed line endings; exposes
+  typed insert, update, remove, snapshot, diagnostic, and stale-safe host-edit
+  surfaces; and rejects invalid placement or envelope mutations atomically.
+  YAML stays inert: bounded lexical diagnostics never construct YAML objects,
+  resolve aliases or tags, perform network work, or bundle a renderer.
+- The front-matter NodeView is keyboard-operable, localized, read-only aware,
+  forced-colors/reduced-motion safe, and explicitly styled through
+  host-overridable logical CSS tokens. Exact Markdown and useful plain-text
+  clipboard output, one-step history, composition guards, external
+  reconciliation, stale edit handoff, document invariants, and hostile/oversize
+  input all have retained coverage. Unrelated body transactions neither rescan
+  the document invariant nor repaint unchanged exact-source DOM; head-touching
+  and front-matter-bearing mutations still receive full validation.
+- The packed feature graph is one 92,370 raw / 24,188 gzip JavaScript chunk with
+  no lazy chunks, plus one 2,548 raw / 800 gzip CSS file and 97 statically
+  traversed modules. It contains no sibling extension, YAML parser, CodeMirror,
+  renderer, root-editor, minimal-editor, or default-UI graph, while neither
+  baseline entry contains front-matter code or styles. Raw JavaScript, gzip
+  JavaScript, and raw CSS cross their deliberately retained warning lines but
+  remain below unchanged failure ceilings; all other feature budgets pass.
+- Final verification for this sub-item: `pnpm check` passes all builds,
+  declaration/API checks, Node ESM smokes, browser types, and 1,012 unit tests;
+  `pnpm test:browser:required` passes 183 cases across Chromium, Firefox, and
+  WebKit with 24 intentional capability skips; the focused front-matter matrix
+  passes seven cases with two Chromium-CDP-only skips. `pnpm pack:smoke`,
+  `pnpm perf:ci`, syntax checking of the release harness, and `git diff --check`
+  pass. Every 100 KiB, 500 KiB, and 1 MiB latency, memory, teardown, and
+  zero-retention performance gate remains green.
 
 #### Recommended order
 
@@ -745,7 +781,8 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-020` are complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, and Gate C now has keyboard/screen-reader, deliberate clipboard, mature table, configurable typing, theme, localization, and bidirectional-text foundations. Completed work includes the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, lazy code-editor, semantic embedded-control, rich/Markdown/plain clipboard, production table-editing, host-configurable typing/keymap, and design-system/internationalization foundations.
+`EE-001` through `EE-020` are complete. The `EE-021` extension foundation and YAML front-matter package are also complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, and Gate C now has keyboard/screen-reader, deliberate clipboard, mature table, configurable typing, theme, localization, bidirectional-text, and independently packaged advanced-syntax foundations. Completed work includes the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, lazy code-editor, semantic embedded-control, rich/Markdown/plain clipboard, production table-editing, host-configurable typing/keymap, design-system/internationalization, exact-source extension, and front-matter foundations.
 
 The current iteration is `EE-021 — Ship advanced syntax as optional extensions`.
-Its foundation is in progress; all seven feature packages remain queued.
+Its foundation and YAML front-matter package are complete; footnotes are next,
+and the remaining six feature packages are queued.

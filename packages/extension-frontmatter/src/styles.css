@@ -1,0 +1,90 @@
+.mdw-frontmatter {
+  background: var(--mdw-frontmatter-background, var(--mdw-color-surface-muted, #f6f8fa));
+  border: var(--mdw-border-width, 1px) solid var(--mdw-frontmatter-border-color, var(--mdw-color-border, #d0d7de));
+  border-radius: var(--mdw-frontmatter-border-radius, var(--mdw-code-block-radius, 0.5rem));
+  color: var(--mdw-frontmatter-color, var(--mdw-color-text, #1f2328));
+  margin-block: var(--mdw-block-spacing, 1rem);
+  overflow: clip;
+}
+
+.mdw-frontmatter.ProseMirror-selectednode {
+  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
+  outline-offset: var(--mdw-focus-ring-offset, 2px);
+}
+
+.mdw-frontmatter__header {
+  align-items: center;
+  border-block-end: var(--mdw-border-width, 1px) solid var(--mdw-frontmatter-border-color, var(--mdw-color-border, #d0d7de));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-block-size: var(--mdw-control-min-size, 2.75rem);
+  padding-block: var(--mdw-frontmatter-header-padding-block, 0.25rem);
+  padding-inline: var(--mdw-frontmatter-padding-inline, var(--mdw-code-padding-inline, 1rem));
+}
+
+.mdw-frontmatter__kind {
+  color: var(--mdw-frontmatter-label-color, var(--mdw-color-muted, #59636e));
+  font-size: var(--mdw-label-font-size, 0.75rem);
+  font-weight: var(--mdw-label-font-weight, 600);
+  letter-spacing: var(--mdw-label-letter-spacing, 0.04em);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.mdw-frontmatter__edit {
+  background: transparent;
+  border: 0;
+  border-radius: var(--mdw-control-radius, 0.375rem);
+  color: var(--mdw-color-accent, #0969da);
+  cursor: pointer;
+  font: inherit;
+  max-inline-size: 100%;
+  min-block-size: var(--mdw-control-min-size, 2.75rem);
+  overflow-wrap: anywhere;
+  padding-inline: 0.75rem;
+  white-space: normal;
+}
+
+.mdw-frontmatter__edit:focus-visible {
+  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
+  outline-offset: var(--mdw-focus-ring-offset, 2px);
+}
+
+.mdw-frontmatter__edit:disabled {
+  cursor: default;
+  opacity: var(--mdw-disabled-opacity, 0.55);
+}
+
+.mdw-frontmatter__pre {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-family: var(--mdw-font-mono, ui-monospace, monospace);
+  font-size: var(--mdw-code-font-size, 0.875rem);
+  line-height: var(--mdw-code-line-height, 1.5);
+  margin: 0;
+  overflow: auto;
+  padding-block: var(--mdw-frontmatter-padding-block, var(--mdw-code-padding-block, 0.75rem));
+  padding-inline: var(--mdw-frontmatter-padding-inline, var(--mdw-code-padding-inline, 1rem));
+  white-space: pre;
+}
+
+@media (forced-colors: active) {
+  .mdw-frontmatter {
+    border-color: CanvasText;
+  }
+
+  .mdw-frontmatter__edit {
+    color: LinkText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mdw-frontmatter,
+  .mdw-frontmatter__edit {
+    scroll-behavior: auto;
+    transition: none;
+  }
+}

@@ -20,6 +20,15 @@ import {
   type OpaqueMarkdownEditRequest,
   type UpdateEditorOptions,
 } from "markora";
+import { createEditor as createMinimalEditor } from "markora/minimal";
+import {
+  createFrontmatterExtension,
+  type FrontmatterEditRequest,
+  type FrontmatterExtension,
+  type FrontmatterMessageOverrides,
+  type FrontmatterSnapshot,
+} from "markora-extension-frontmatter";
+import "markora-extension-frontmatter/styles.css";
 import { createDefaultUi, type DefaultUiMessageOverrides } from "markora-ui";
 import { useEffect, useRef } from "react";
 import { createGlobalListenerLedger, type ListenerSnapshot } from "../browser-lab/listenerLedger";
@@ -39,7 +48,9 @@ export type BrowserLabEditorSpec = {
   controlledEcho?: boolean;
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
-  extensionMode?: "public-example";
+  entry?: "minimal" | "root";
+  extensionMode?: "frontmatter" | "public-example";
+  frontmatterMessages?: FrontmatterMessageOverrides;
   id: string;
   initialSelection?: MarkdownEditorSelectionTarget;
   language?: string;
@@ -151,6 +162,11 @@ export type BrowserLabUpdateResult = {
   statePreserved: boolean;
 };
 
+export type BrowserLabFrontmatterCommandRequest =
+  | { type: "insert"; source?: string }
+  | { type: "remove" }
+  | { type: "update"; source: string };
+
 export type BrowserLabReconcileResult = {
   changed: boolean;
   snapshot: BrowserLabSnapshot;
@@ -221,6 +237,10 @@ export type BrowserLabApi = {
   dispatchViewportEvent: (type: "resize" | "scroll") => void;
   events: (id: string) => BrowserLabEventSnapshot;
   extensionSnapshot: (id: string) => BrowserLabExtensionSnapshot;
+  frontmatterCommand: (id: string, request: BrowserLabFrontmatterCommandRequest) => boolean;
+  frontmatterEditRemove: (id: string) => boolean;
+  frontmatterEditUpdate: (id: string, source: string) => boolean;
+  frontmatterSnapshot: (id: string) => FrontmatterSnapshot | null;
   focus: (id: string, selection?: MarkdownEditorSelectionTarget) => void;
   getMarkdown: (id: string) => string;
   isDestroyed: (id: string) => boolean;
@@ -229,6 +249,10 @@ export type BrowserLabApi = {
   mountedIds: () => string[];
   openUi: (id: string, kind: "code-language" | "image" | "link" | "table" | "table-create") => boolean;
   pendingOpaqueEdit: (id: string) => Pick<OpaqueMarkdownEditRequest, "kind" | "source"> | null;
+  pendingFrontmatterEdit: (id: string) => Pick<
+    FrontmatterEditRequest,
+    "diagnostics" | "source"
+  > | null;
   ready: true;
   reconcile: (
     id: string,
@@ -237,7 +261,7 @@ export type BrowserLabApi = {
   ) => BrowserLabReconcileResult;
   remount: (
     id: string,
-    options?: Omit<BrowserLabEditorSpec, "direction" | "id" | "placement" | "portal" | "root">,
+    options?: Omit<BrowserLabEditorSpec, "direction" | "entry" | "id" | "placement" | "portal" | "root">,
   ) => BrowserLabSnapshot;
   resourceLog: (id: string) => BrowserLabResourceLog;
   reset: (id: string, markdown: string) => string;
@@ -261,11 +285,14 @@ type MountedEditor = {
   changeCount: number;
   controlledEcho: boolean;
   editor: MarkdownEditor;
+  entry: "minimal" | "root";
   eventCounts: Record<MarkdownEditorEventName, number>;
   eventLog: BrowserLabEventRecord[];
   eventUnsubscribes: Map<MarkdownEditorEventName, () => void>;
   extensionActions?: HTMLElement;
-  extensionMode?: "public-example";
+  extensionMode?: "frontmatter" | "public-example";
+  frontmatterEditRequest: FrontmatterEditRequest | null;
+  frontmatterExtension: FrontmatterExtension | null;
   explicitPortalRoot?: HTMLElement | ShadowRoot;
   host: HTMLElement;
   id: string;
@@ -520,6 +547,14 @@ function requireEditor(editors: Map<string, MountedEditor>, id: string) {
   return mounted;
 }
 
+function requireFrontmatterHandle(mounted: MountedEditor) {
+  if (!mounted.frontmatterExtension) {
+    throw new Error(`Browser lab editor "${mounted.id}" has no front matter extension.`);
+  }
+
+  return mounted.editor.extensions.get(mounted.frontmatterExtension);
+}
+
 function cloneEditorStyles(shadowRoot: ShadowRoot) {
   for (const style of document.head.querySelectorAll<HTMLLinkElement | HTMLStyleElement>('link[rel="stylesheet"], style')) {
     shadowRoot.append(style.cloneNode(true));
@@ -665,23 +700,43 @@ export function BrowserLabPage() {
     };
     const mountEditorInHost = (
       mounted: MountedEditor,
-      spec: Omit<BrowserLabEditorSpec, "direction" | "id" | "placement" | "portal" | "root">,
+      spec: Omit<BrowserLabEditorSpec, "direction" | "entry" | "id" | "placement" | "portal" | "root">,
     ) => {
       mounted.controlledEcho = spec.controlledEcho ?? false;
       const extensionMode = spec.extensionMode ?? mounted.extensionMode;
       mounted.extensionMode = extensionMode;
+      mounted.frontmatterEditRequest = null;
+      delete mounted.section.dataset.pendingFrontmatterEdit;
+      mounted.frontmatterExtension = extensionMode === "frontmatter"
+        ? createFrontmatterExtension({
+            messages: spec.frontmatterMessages,
+            onEditSource(request) {
+              mounted.frontmatterEditRequest = request;
+              mounted.section.dataset.pendingFrontmatterEdit = "true";
+            },
+          })
+        : null;
+      const extensions = extensionMode === "public-example"
+        ? publicExampleExtensions
+        : mounted.frontmatterExtension
+          ? [mounted.frontmatterExtension]
+          : undefined;
       const existingOverlays = new Set(
         mounted.portalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR),
       );
 
-      mounted.editor = listenerLedger.scope(mounted.id, () => createEditor({
+      const createEntryEditor = mounted.entry === "minimal"
+        ? createMinimalEditor
+        : createEditor;
+
+      mounted.editor = listenerLedger.scope(mounted.id, () => createEntryEditor({
         ariaLabel: spec.ariaLabel ?? (spec.ariaLabelledBy ? undefined : `${mounted.id} Markdown editor`),
         ariaLabelledBy: spec.ariaLabelledBy,
         attributes: spec.attributes,
         autofocus: spec.autofocus,
         editable: spec.editable,
         element: mounted.host,
-        extensions: extensionMode === "public-example" ? publicExampleExtensions : undefined,
+        extensions,
         initialSelection: spec.initialSelection,
         markdown: spec.markdown ?? `# ${mounted.id}\n\nBrowser lab paragraph.`,
         messages: spec.messages,
@@ -784,6 +839,7 @@ export function BrowserLabPage() {
         const section = document.createElement("section");
         section.className = "browser-lab-editor";
         section.dataset.e2eEditor = id;
+        section.dataset.entry = spec.entry ?? "root";
         section.dataset.placement = spec.placement ?? "normal";
         section.dataset.portal = portalMode;
         section.dataset.root = rootMode;
@@ -864,11 +920,14 @@ export function BrowserLabPage() {
           changeCount: 0,
           controlledEcho: false,
           editor: null as unknown as MarkdownEditor,
+          entry: spec.entry ?? "root",
           eventCounts: createEventCounts(),
           eventLog: [],
           eventUnsubscribes: new Map(),
           extensionMode: spec.extensionMode,
           explicitPortalRoot,
+          frontmatterEditRequest: null,
+          frontmatterExtension: null,
           host,
           id,
           opaqueEditRequest: null,
@@ -952,6 +1011,57 @@ export function BrowserLabPage() {
       },
       extensionSnapshot(id) {
         return readExtensionSnapshot(requireEditor(editors, id));
+      },
+      frontmatterCommand(id, request) {
+        const mounted = requireEditor(editors, id);
+        const commands = requireFrontmatterHandle(mounted).commands;
+        const changed = request.type === "insert"
+          ? commands.insert(request.source)
+          : request.type === "update"
+            ? commands.update(request.source)
+            : commands.remove();
+
+        if (changed) {
+          mounted.editor.flushChange();
+          mounted.output.textContent = mounted.editor.getMarkdown();
+        }
+
+        renderExtensionActions(mounted);
+
+        return changed;
+      },
+      frontmatterEditRemove(id) {
+        const mounted = requireEditor(editors, id);
+        const request = mounted.frontmatterEditRequest;
+
+        if (!request || !request.remove()) {
+          return false;
+        }
+
+        mounted.frontmatterEditRequest = null;
+        delete mounted.section.dataset.pendingFrontmatterEdit;
+        mounted.editor.flushChange();
+        mounted.output.textContent = mounted.editor.getMarkdown();
+        renderExtensionActions(mounted);
+        return true;
+      },
+      frontmatterEditUpdate(id, source) {
+        const mounted = requireEditor(editors, id);
+        const request = mounted.frontmatterEditRequest;
+
+        if (!request || !request.update(source)) {
+          return false;
+        }
+
+        mounted.frontmatterEditRequest = null;
+        delete mounted.section.dataset.pendingFrontmatterEdit;
+        mounted.editor.flushChange();
+        mounted.output.textContent = mounted.editor.getMarkdown();
+        renderExtensionActions(mounted);
+        return true;
+      },
+      frontmatterSnapshot(id) {
+        return requireFrontmatterHandle(requireEditor(editors, id)).state.getSnapshot();
       },
       focus(id, selection) {
         requireEditor(editors, id).editor.focus(selection);
@@ -1088,6 +1198,12 @@ export function BrowserLabPage() {
         const request = requireEditor(editors, id).opaqueEditRequest;
         return request ? { kind: request.kind, source: request.source } : null;
       },
+      pendingFrontmatterEdit(id) {
+        const request = requireEditor(editors, id).frontmatterEditRequest;
+        return request
+          ? { diagnostics: request.diagnostics, source: request.source }
+          : null;
+      },
       updateOpaque(id, source) {
         const mounted = requireEditor(editors, id);
         const request = mounted.opaqueEditRequest;
@@ -1121,6 +1237,7 @@ export function BrowserLabPage() {
         const mounted = requireEditor(editors, id);
         const previousState = mounted.editor.view.state;
         mounted.editor.updateOptions(options);
+        renderExtensionActions(mounted);
 
         return {
           snapshot: readSnapshot(mounted),

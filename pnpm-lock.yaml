@@ -125,6 +125,9 @@ importers:
       markora:
         specifier: workspace:*
         version: link:../core
+      markora-extension-frontmatter:
+        specifier: workspace:*
+        version: link:../extension-frontmatter
       markora-ui:
         specifier: workspace:*
         version: link:../ui
@@ -156,6 +159,12 @@ importers:
       vite:
         specifier: ^6.2.1
         version: 6.4.1
+
+  packages/extension-frontmatter:
+    devDependencies:
+      markora:
+        specifier: workspace:*
+        version: link:../core
 
   packages/ui:
     devDependencies:

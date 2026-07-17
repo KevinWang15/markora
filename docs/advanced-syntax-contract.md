@@ -138,8 +138,12 @@ mapping-looking entry are not claimed.
 Raw source is authoritative. Parsed YAML, diagnostics, key summaries, or host
 forms are derived state and must not rewrite comments, anchors, aliases, key
 order, scalar style, quoting, or delimiters unless the host explicitly submits
-new source. Invalid or over-limit YAML remains an exact source node with a
-recoverable diagnostic; it never becomes executable data.
+new source. Invalid envelopes and bounded lexical safety-limit violations expose
+recoverable diagnostics. General YAML validity is deliberately not claimed:
+syntactically invalid YAML inside a valid envelope remains an exact source node
+and may have no package diagnostic. Hosts that require schema or syntax
+validation perform it on the inert source string; the package never turns YAML
+into executable data.
 
 Only one front-matter node may occur, at document position zero. Commands,
 Markdown paste, rich paste, drag/drop, and raw transactions must not silently
@@ -354,9 +358,11 @@ renderer. Optional URL approval callbacks must document allowed protocols,
 credentials, referrer behavior, cancellation, and navigation versus load
 purpose.
 
-Front-matter parsing uses a safe data schema: no object construction, custom
-tags, executable values, prototype mutation, or implicit network access. It
-bounds source bytes, nesting, alias count, and alias expansion. Math and diagram
+Front-matter inspection keeps source inert: it constructs no objects, resolves
+no custom tags or aliases, creates no executable values, mutates no prototypes,
+and performs no implicit network access. Lexical inspection bounds source
+bytes, nesting, and alias references; once the byte limit is exceeded it emits
+only the size diagnostic and skips remaining inspection. Math and diagram
 packages bound source bytes, rendered node count, output bytes, and concurrent
 renders. An over-limit operation leaves source intact and reports a recoverable
 error.
@@ -399,7 +405,7 @@ The source representation is always a complete accessible fallback:
 
 | Package | Codec and fidelity evidence | Command/state evidence | Browser, accessibility, and safety evidence |
 | --- | --- | --- | --- |
-| Front matter | Jekyll opener/closers, BOM and mixed line endings, comments/anchors, invalid YAML, negative thematic breaks, one head node, exact copy/reset/reconcile | Insert or replace source, remove, inspect source/diagnostics; duplicate/non-head rejection; read-only, composition, undo/redo, origin and stale edit | Source editor handoff, invalid/over-limit fallback, keyboard boundary navigation, localized label, hostile YAML limits, root/minimal parity |
+| Front matter | Jekyll opener/closers, BOM and mixed line endings, comments/anchors, inert nonvalidated YAML, negative thematic breaks, one head node, exact copy/reset/reconcile | Insert or replace source, remove, inspect bounded lexical safety diagnostics; duplicate/non-head rejection; read-only, composition, undo/redo, origin and stale edit | Source editor handoff, invalid-envelope/over-limit fallback, keyboard boundary navigation, localized label, hostile YAML limits, root/minimal parity |
 | Footnotes | References, multiline definitions, repeated/unresolved/duplicate labels, canonical continuation, whole and partial clipboard, reset/reconcile | Insert reference/definition, navigate both directions, rename/remove with explicit orphan behavior, pure diagnostics; one-step undo and selection restoration | Keyboard reference/back-reference flow, editor-scoped IDs across multiple editors/Shadow DOM, axe, read-only and paste-label collisions |
 | Math | Currency/code/escape negatives, inline and both block inputs, canonical block shell, exact expression payload, Markdown/HTML/plain clipboard | Insert/edit/remove inline and block source, convert where valid, toggle/retry preview, render state query; no-op/read-only/composition/undo | Missing/throwing/rejecting/stale renderer, hostile DOM clamp, source fallback, AT source name, RTL, teardown and zero late commits in all engines |
 | Alerts | Five kinds, case normalization, nested supported body blocks, malformed/unknown marker negatives, canonical blockquote output, clipboard | Wrap/toggle, set kind, unwrap, active/enabled state; selection/content preservation, one undo, extension origin | Editable contentDOM, kind without color, localization/RTL/contrast, keyboard and axe, ordinary blockquote remains unchanged |
@@ -428,8 +434,9 @@ For each package, retained automation must:
    minimal consumer must assert the documented pre-claim incompatibility;
 5. verify exports, files, license/readme, peer dependencies, side effects, and
    Node ESM import without browser globals;
-6. bundle each package alone and in an all-seven consumer, proving that omitted
-   packages and all renderer engines have no static or dynamic module path;
+6. bundle each package alone, proving that omitted packages and all renderer
+   engines have no static or dynamic module path; before `EE-021` completes,
+   repeat that proof in an all-seven consumer;
 7. prove that importing none of the packages leaves the existing root and
    minimal graphs and default extension manifests unchanged.
 
@@ -449,6 +456,11 @@ manifest entries, no NodeView/contribution collision, combined clipboard
 round-trip, and complete cleanup with zero console errors, page errors, or
 failed unexpected requests.
 
+A package sub-item may be marked `DONE` after its individual gates pass. The
+all-seven package, browser, and workload gates are cumulative final-integration
+requirements for `EE-021`; they are deferred until all seven packages exist,
+not waived by earlier sub-item completion.
+
 ### Performance gates
 
 Before a package is marked complete, checked-in budgets record its production
@@ -459,9 +471,11 @@ or renderer CSS.
 
 `pnpm perf:ci` must continue to pass the existing 100 KiB, 500 KiB, and 1 MiB
 latency, hot-path, memory, teardown, and zero-retention gates with no optional
-package installed and with the all-seven source features installed. Additional
-feature workloads cover documents containing many references/definitions,
-math nodes, alerts, TOCs, HTML atoms, and diagrams. They verify:
+package installed. Each package adds its applicable source-only measurements;
+before `EE-021` completes, the same gate runs with all seven source features
+installed. Additional feature workloads cover documents containing many
+references/definitions, math nodes, alerts, TOCs, HTML atoms, and diagrams.
+They verify:
 
 - no full-document serialization or renderer call enters synchronous typing;
 - TOC/footnote document indexes update incrementally or within an approved

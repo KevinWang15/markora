@@ -1,5 +1,6 @@
 import {
   MARKORA_EXTENSION_API_VERSION,
+  closeHistory,
   defineMarkdownEditorExtension,
   defineMarkdownEditorPreset,
   sliceMarkdownEditorOriginalSourceLines,
@@ -7,6 +8,7 @@ import {
   type MarkdownEditorExtension,
   type MarkdownEditorExtensionRegistry,
   type MarkdownEditorExtensionPreset,
+  type Transaction,
 } from "../src/extension-api";
 // @ts-expect-error Compiler-only definition records are not part of the author API.
 import type { InternalMarkdownEditorExtensionDefinition } from "../src/extension-api";
@@ -26,6 +28,9 @@ interface CalloutStorage {
 const extensionApiVersion: "1.1.0" = MARKORA_EXTENSION_API_VERSION;
 const originalSourceSlice: string | null =
   sliceMarkdownEditorOriginalSourceLines({}, 0, 1);
+declare const transaction: Transaction;
+const isolatedHistoryTransaction: Transaction = closeHistory(transaction);
+void isolatedHistoryTransaction;
 
 // @ts-expect-error Original source line ranges use numeric indices.
 sliceMarkdownEditorOriginalSourceLines({}, "0", 1);

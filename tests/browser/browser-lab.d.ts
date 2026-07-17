@@ -90,7 +90,22 @@ type BrowserLabTestSpec = {
   controlledEcho?: boolean;
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
-  extensionMode?: "public-example";
+  entry?: "minimal" | "root";
+  extensionMode?: "frontmatter" | "public-example";
+  frontmatterMessages?: Partial<{
+    aliasLimitDiagnostic: string;
+    customTagDiagnostic: string;
+    documentInvariantDiagnostic: string;
+    editSource: string;
+    insertFrontmatter: string;
+    invalidStructureDiagnostic: string;
+    kindLabel: string;
+    nestingLimitDiagnostic: string;
+    sourceLabel: string;
+    sourceTooLargeDiagnostic: string;
+    tabIndentationDiagnostic: string;
+    unbalancedFlowDiagnostic: string;
+  }>;
   id: string;
   initialSelection?: BrowserLabSelectionTarget;
   language?: string;
@@ -196,6 +211,27 @@ type BrowserLabExtensionSnapshot = {
   uiActions: Array<{ defaultLabel: string; group: string; id: string }>;
 };
 
+type BrowserLabFrontmatterCommandRequest =
+  | { type: "insert"; source?: string }
+  | { type: "remove" }
+  | { type: "update"; source: string };
+
+type BrowserLabFrontmatterSnapshot = {
+  diagnostics: ReadonlyArray<{
+    code:
+      | "alias-limit"
+      | "custom-tag"
+      | "invalid-structure"
+      | "nesting-limit"
+      | "source-too-large"
+      | "tab-indentation"
+      | "unbalanced-flow";
+    message: string;
+    severity: "error" | "warning";
+  }>;
+  source: string;
+};
+
 interface Window {
   __MARKORA_BROWSER_LAB__?: {
     active(id: string, request: BrowserLabActiveRequest): boolean;
@@ -227,6 +263,10 @@ interface Window {
       log: BrowserLabEventRecord[];
     };
     extensionSnapshot(id: string): BrowserLabExtensionSnapshot;
+    frontmatterCommand(id: string, request: BrowserLabFrontmatterCommandRequest): boolean;
+    frontmatterEditRemove(id: string): boolean;
+    frontmatterEditUpdate(id: string, source: string): boolean;
+    frontmatterSnapshot(id: string): BrowserLabFrontmatterSnapshot | null;
     focus(id: string, selection?: BrowserLabSelectionTarget): void;
     getMarkdown(id: string): string;
     isDestroyed(id: string): boolean;
@@ -235,6 +275,7 @@ interface Window {
     mountedIds(): string[];
     openUi(id: string, kind: "code-language" | "image" | "link" | "table" | "table-create"): boolean;
     pendingOpaqueEdit(id: string): { kind: string; source: string } | null;
+    pendingFrontmatterEdit(id: string): Pick<BrowserLabFrontmatterSnapshot, "diagnostics" | "source"> | null;
     ready: true;
     reconcile(
       id: string,

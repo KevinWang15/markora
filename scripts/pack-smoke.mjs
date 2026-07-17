@@ -13,7 +13,7 @@ import { homedir, tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
 
 import {
@@ -38,6 +38,7 @@ let tarballRoot;
 let tempRoot;
 let availableMeasurements = null;
 const availablePackages = [];
+const bundleGraphNames = Object.freeze(["root", "minimal", "frontmatter"]);
 
 function readValueArgument(args, index, name) {
   const value = args[index + 1];
@@ -167,7 +168,13 @@ function packPackage(packagePath) {
 
 function copyWorkspaceDependencies() {
   for (const entry of readdirSync(workspaceNodeModulesDir)) {
-    if (entry === "markora" || entry === "markora-ui" || entry === "demo" || entry === ".bin") {
+    if (
+      entry === "markora"
+      || entry === "markora-ui"
+      || entry === "demo"
+      || entry === ".bin"
+      || entry.startsWith("markora-extension-")
+    ) {
       continue;
     }
 
@@ -176,6 +183,7 @@ function copyWorkspaceDependencies() {
       dereference: true,
     });
   }
+
 }
 
 function unpackPackage(packageName, tarballPath) {
@@ -435,7 +443,7 @@ function assertPackedModule(report, fragment, label) {
   }
 }
 
-function assertPackedPackage(packageInfo) {
+function assertPackedPackage(packageInfo, extensionCssContract) {
   const packageRoot = join(smokeNodeModulesDir, packageInfo.name);
   const packageJson = JSON.parse(readFileSync(
     join(packageRoot, "package.json"),
@@ -466,16 +474,80 @@ function assertPackedPackage(packageInfo) {
         throw new Error(`Packed themes.css omitted the ${requiredTheme} reference theme.`);
       }
     }
+  } else if (packageInfo.name.startsWith("markora-extension-")) {
+    const requiredFiles = [
+      "LICENSE",
+      "README.md",
+      "dist/index.d.ts",
+      "dist/index.js",
+      "dist/styles.css",
+    ];
+    const missingFiles = requiredFiles.filter((fileName) => (
+      !existsSync(join(packageRoot, fileName))
+    ));
+
+    if (missingFiles.length > 0) {
+      throw new Error(
+        `Packed ${packageInfo.name} omitted required files: ${missingFiles.join(", ")}.`,
+      );
+    }
+
+    if (
+      packageJson.type !== "module"
+      || packageJson.exports?.["."]?.types !== "./dist/index.d.ts"
+      || packageJson.exports?.["."]?.import !== "./dist/index.js"
+      || packageJson.exports?.["./styles.css"] !== "./dist/styles.css"
+      || JSON.stringify(packageJson.sideEffects) !== JSON.stringify(["./dist/styles.css"])
+      || packageJson.peerDependencies?.markora !== "^0.0.1"
+      || packageJson.license !== "MIT"
+    ) {
+      throw new Error(`Packed ${packageInfo.name} metadata contract is incomplete.`);
+    }
+
+    const leakedDirectories = ["src", "test", "test-d", "scripts"].filter((entry) => (
+      existsSync(join(packageRoot, entry))
+    ));
+    if (leakedDirectories.length > 0) {
+      throw new Error(
+        `Packed ${packageInfo.name} leaked development directories: ${leakedDirectories.join(", ")}.`,
+      );
+    }
+
+    const styles = readFileSync(join(packageRoot, "dist/styles.css"), "utf8");
+    if (
+      !extensionCssContract
+      || !styles.includes(extensionCssContract.rootSelector)
+      || !styles.includes(extensionCssContract.tokenPrefix)
+    ) {
+      throw new Error(`Packed ${packageInfo.name} omitted its public CSS token contract.`);
+    }
   }
 }
 
-function assertPackedProvenance(rootReport, minimalReport, rootMeasurement, minimalMeasurement) {
+function assertPackedProvenance(
+  rootReport,
+  minimalReport,
+  frontmatterReport,
+  rootMeasurement,
+  minimalMeasurement,
+  frontmatterMeasurement,
+) {
   assertPackedModule(rootReport, "/node_modules/markora/dist/index.js", "Packed markora root entry");
   assertPackedModule(rootReport, "/node_modules/markora/dist/styles.css", "Packed markora stylesheet");
   assertPackedModule(rootReport, "/node_modules/markora-ui/dist/index.js", "Packed markora-ui entry");
   assertPackedModule(rootReport, "/node_modules/markora-ui/dist/styles.css", "Packed markora-ui stylesheet");
   assertPackedModule(minimalReport, "/node_modules/markora/dist/minimal.js", "Packed markora minimal entry");
   assertPackedModule(minimalReport, "/node_modules/markora/dist/minimal.css", "Packed minimal stylesheet");
+  assertPackedModule(
+    frontmatterReport,
+    "/node_modules/markora-extension-frontmatter/dist/index.js",
+    "Packed front matter extension entry",
+  );
+  assertPackedModule(
+    frontmatterReport,
+    "/node_modules/markora-extension-frontmatter/dist/styles.css",
+    "Packed front matter extension stylesheet",
+  );
 
   if (minimalMeasurement.lazyJs.chunkCount !== 0) {
     throw new Error(
@@ -488,6 +560,21 @@ function assertPackedProvenance(rootReport, minimalReport, rootMeasurement, mini
     throw new Error(
       "Packed root and minimal consumers must each emit exactly one production stylesheet.",
     );
+  }
+
+  if (
+    frontmatterMeasurement.css.fileCount !== 1
+    || frontmatterMeasurement.initialJs.chunkCount !== 1
+    || frontmatterMeasurement.lazyJs.chunkCount !== 0
+    || frontmatterMeasurement.totalJs.chunkCount !== 1
+  ) {
+    throw new Error(
+      "Packed front matter must emit one explicit stylesheet and no lazy JavaScript chunks.",
+    );
+  }
+
+  if (!frontmatterReport.cssSource.includes(".mdw-frontmatter")) {
+    throw new Error("Packed front matter stylesheet omitted its public root selector.");
   }
 
   for (const selector of [
@@ -613,6 +700,65 @@ function assertBundleIsolation(rootReport, minimalReport) {
     }
   }
 
+  for (const report of [rootReport, minimalReport]) {
+    const leakedModules = [
+      ...report.staticModuleIds,
+      ...report.emittedModuleIds,
+    ].filter((moduleId) => moduleIdIncludes(
+      moduleId,
+      "/node_modules/markora-extension-",
+    ));
+
+    if (leakedModules.length > 0 || report.cssSource.includes(".mdw-frontmatter")) {
+      throw new Error(
+        `${report.label} included optional advanced-syntax package code or CSS by default.`,
+      );
+    }
+  }
+
+}
+
+function assertFrontmatterBundleIsolation(report) {
+  const forbiddenFragments = [
+    "/node_modules/markora/dist/index.js",
+    "/node_modules/markora/dist/minimal.js",
+    "/node_modules/markora-ui/",
+    "/node_modules/@codemirror/",
+    "/node_modules/@lezer/",
+    "/node_modules/katex/",
+    "/node_modules/mathjax",
+    "/node_modules/mermaid/",
+    "/node_modules/js-yaml/",
+    "/node_modules/yaml/",
+  ];
+  const moduleIds = [...report.staticModuleIds, ...report.emittedModuleIds];
+  const leaks = forbiddenFragments.flatMap((fragment) => moduleIds
+    .filter((moduleId) => moduleIdIncludes(moduleId, fragment))
+    .map((moduleId) => ({ fragment, moduleId })));
+
+  if (leaks.length > 0) {
+    throw new Error(`Front matter feature bundle reached forbidden modules:\n${leaks
+      .map(({ fragment, moduleId }) => `- ${fragment}: ${moduleId}`)
+      .join("\n")}`);
+  }
+
+  const siblingExtensions = moduleIds.filter((moduleId) => (
+    moduleIdIncludes(moduleId, "/node_modules/markora-extension-")
+    && !moduleIdIncludes(
+      moduleId,
+      "/node_modules/markora-extension-frontmatter/",
+    )
+  ));
+  if (siblingExtensions.length > 0) {
+    throw new Error(`Front matter feature bundle reached sibling optional packages:\n${siblingExtensions.join("\n")}`);
+  }
+
+  if (!report.staticModuleIds.some((moduleId) => moduleIdIncludes(
+    moduleId,
+    "/node_modules/markora/dist/extension-api.js",
+  ))) {
+    throw new Error("Front matter feature bundle omitted the packed extension API entry.");
+  }
 }
 
 function describeCount(count, singular) {
@@ -630,10 +776,11 @@ function printBundleMeasurement(label, measurement) {
   ].join("\n"));
 }
 
-function printBundleMeasurements(rootMeasurement, minimalMeasurement) {
+function printBundleMeasurements(rootMeasurement, minimalMeasurement, frontmatterMeasurement) {
   console.log("Packed production bundle graph (per-file gzip level 9):");
   printBundleMeasurement("markora", rootMeasurement);
   printBundleMeasurement("markora/minimal", minimalMeasurement);
+  printBundleMeasurement("markora-extension-frontmatter", frontmatterMeasurement);
 }
 
 const bundleBudgetMetrics = Object.freeze([
@@ -660,7 +807,7 @@ function loadBudgetConfig(filePath) {
 function evaluateBundleBudgets(config, measurements) {
   const evaluations = [];
 
-  for (const graphName of ["root", "minimal"]) {
+  for (const graphName of bundleGraphNames) {
     const measurement = measurements[graphName];
     const budget = config.bundle[graphName];
 
@@ -815,10 +962,8 @@ function writeFailureReport(error) {
 function writeMeasurementReport({
   budgetConfigPath,
   budgetResult,
-  corePackage,
   measurements,
   reportPath,
-  uiPackage,
 }) {
   if (!reportPath) {
     return;
@@ -850,7 +995,7 @@ function writeMeasurementReport({
     provenance: {
       consumer: "production-minified Vite library build",
       source: "npm-pack tarballs",
-      packages: [corePackage, uiPackage].map(describePackage),
+      packages: availablePackages,
     },
     invariants: {
       initialAndLazyPartitionTotal: true,
@@ -858,6 +1003,9 @@ function writeMeasurementReport({
       compatibilityLazyIncludesCodeMirror: true,
       minimalExcludesCodeMirror: true,
       minimalHasNoLazyChunks: measurements.minimal.lazyJs.chunkCount === 0,
+      optionalExtensionsAbsentFromBaseline: true,
+      frontmatterHasNoLazyChunks: measurements.frontmatter.lazyJs.chunkCount === 0,
+      frontmatterHasNoRendererEngine: true,
       packedEntriesAndStylesResolved: true,
       packedPackageVersionsMatched: true,
       rootAndMinimalGraphsIndependent: true,
@@ -897,13 +1045,24 @@ rememberPackage(corePackage);
 currentPhase = "ui-package";
 const uiPackage = packPackage(join(rootDir, "packages/ui"));
 rememberPackage(uiPackage);
+currentPhase = "frontmatter-package";
+const frontmatterPackage = packPackage(join(
+  rootDir,
+  "packages/extension-frontmatter",
+));
+rememberPackage(frontmatterPackage);
 
 currentPhase = "packed-dependency-isolation";
 copyWorkspaceDependencies();
 unpackPackage(corePackage.name, corePackage.tarballPath);
 unpackPackage(uiPackage.name, uiPackage.tarballPath);
+unpackPackage(frontmatterPackage.name, frontmatterPackage.tarballPath);
 assertPackedPackage(corePackage);
 assertPackedPackage(uiPackage);
+assertPackedPackage(frontmatterPackage, {
+  rootSelector: ".mdw-frontmatter",
+  tokenPrefix: "--mdw-frontmatter-",
+});
 
 currentPhase = "consumer-generation";
 writeFileSync(join(smokeAppDir, "package.json"), `${JSON.stringify({
@@ -1134,6 +1293,27 @@ export const packedMinimalSurface = [
 ].join(":");
 `);
 
+writeFileSync(join(smokeAppDir, "src/frontmatter.js"), `import {
+  FRONTMATTER_MAX_SOURCE_BYTES,
+  createFrontmatterExtension,
+  defaultFrontmatterMessages,
+} from "markora-extension-frontmatter";
+import "markora-extension-frontmatter/styles.css";
+
+export const packedFrontmatterDefinitions = [
+  createFrontmatterExtension(),
+  createFrontmatterExtension({
+    messages: { editSource: "Edit packed metadata" },
+  }),
+];
+
+export const packedFrontmatterSurface = [
+  FRONTMATTER_MAX_SOURCE_BYTES,
+  defaultFrontmatterMessages.kindLabel,
+  ...packedFrontmatterDefinitions.map(({ name, version }) => name + "@" + version),
+].join(":");
+`);
+
 writeFileSync(join(smokeAppDir, "src/api.ts"), `import {
   MarkdownEditorDestroyedError,
   createEditor,
@@ -1168,22 +1348,52 @@ import {
 } from "markora/minimal";
 import {
   MARKORA_EXTENSION_API_VERSION,
+  closeHistory,
   defineMarkdownEditorExtension,
   sliceMarkdownEditorOriginalSourceLines,
   type AnyMarkdownEditorExtension,
+  type Transaction,
 } from "markora/extension-api";
+import {
+  FRONTMATTER_MAX_SOURCE_BYTES,
+  createFrontmatterExtension,
+  defaultFrontmatterMessages,
+  type FrontmatterDiagnostic,
+  type FrontmatterEditRequest,
+  type FrontmatterExtension,
+  type FrontmatterExtensionOptions,
+  type FrontmatterMessages,
+  type FrontmatterSnapshot,
+} from "markora-extension-frontmatter";
 import {
   packedCalloutExtension,
   packedHighlightExtension,
 } from "./extensions";
 
 declare const element: HTMLElement;
+declare const transaction: Transaction;
+
+const frontmatterOptions: FrontmatterExtensionOptions = {
+  messages: { editSource: "Edit packed metadata" },
+  onEditSource(request: FrontmatterEditRequest) {
+    const source: string = request.source;
+    const diagnostics: readonly FrontmatterDiagnostic[] = request.diagnostics;
+    const unchanged: boolean = request.update(source);
+    void diagnostics;
+    void unchanged;
+  },
+};
+const rootFrontmatterExtension: FrontmatterExtension =
+  createFrontmatterExtension(frontmatterOptions);
+const minimalFrontmatterExtension: FrontmatterExtension =
+  createFrontmatterExtension();
 
 const editor = createEditor({
   ariaLabel: "Packed editor",
   autofocus: true,
   editable: true,
   element,
+  extensions: [rootFrontmatterExtension],
   initialSelection: "end",
   onChange(markdown, context) {
     const origin: MarkdownEditorChangeOrigin = context.origin;
@@ -1217,6 +1427,7 @@ const editor = createEditor({
 const externalExtensions: readonly AnyMarkdownEditorExtension[] = [
   packedCalloutExtension,
   packedHighlightExtension,
+  minimalFrontmatterExtension,
 ];
 const minimalEditor = createMinimalEditor({
   element,
@@ -1241,6 +1452,25 @@ const rootCommands: MarkdownEditorCommands = editor.commands;
 const rootState: MarkdownEditorState = editor.state;
 const minimalCommands: MinimalMarkdownEditorCommands = minimalEditor.commands;
 const minimalState: MinimalMarkdownEditorState = minimalEditor.state;
+const rootFrontmatterHandle = editor.extensions.get(rootFrontmatterExtension);
+const minimalFrontmatterHandle = minimalEditor.extensions.get(minimalFrontmatterExtension);
+const rootFrontmatterSnapshot: FrontmatterSnapshot | null =
+  rootFrontmatterHandle.state.getSnapshot();
+const frontmatterMessages: FrontmatterMessages = defaultFrontmatterMessages;
+const frontmatterMaximum: number = FRONTMATTER_MAX_SOURCE_BYTES;
+const insertedFrontmatter: boolean = rootFrontmatterHandle.commands.insert(
+  "---\\ntitle: Packed\\n---",
+);
+const updatedFrontmatter: boolean = minimalFrontmatterHandle.commands.update(
+  "---\\ntitle: Minimal\\n---",
+);
+const closedTransaction: Transaction = closeHistory(transaction);
+void rootFrontmatterSnapshot;
+void frontmatterMessages;
+void frontmatterMaximum;
+void insertedFrontmatter;
+void updatedFrontmatter;
+void closedTransaction;
 
 function exerciseStructuralSurface(
   commands: MarkdownEditorCommands,
@@ -1419,6 +1649,10 @@ void minimalIdleChangeMode;
 void reconciled;
 void transactionOrigin;
 void unavailableSourceSlice;
+// @ts-expect-error Front matter source commands only accept strings.
+rootFrontmatterHandle.commands.update(42);
+// @ts-expect-error Front matter messages reject undeclared keys.
+createFrontmatterExtension({ messages: { unknownLabel: "Unknown" } });
 `);
 
 writeFileSync(join(smokeAppDir, "tsconfig.json"), `${JSON.stringify({
@@ -1433,11 +1667,107 @@ writeFileSync(join(smokeAppDir, "tsconfig.json"), `${JSON.stringify({
   include: ["src/api.ts"],
 }, null, 2)}\n`);
 
+writeFileSync(join(smokeAppDir, "src/frontmatter-runtime.mjs"), `import { JSDOM } from ${JSON.stringify(
+  pathToFileURL(resolve(rootDir, "node_modules/jsdom/lib/api.js")).href,
+)};
+
+const dom = new JSDOM("<!doctype html><html><body></body></html>", {
+  pretendToBeVisual: true,
+  url: "https://pack-smoke.invalid/",
+});
+const ownerWindow = dom.window;
+for (const name of [
+  "CompositionEvent",
+  "CustomEvent",
+  "DOMParser",
+  "Element",
+  "Event",
+  "HTMLElement",
+  "KeyboardEvent",
+  "MutationObserver",
+  "Node",
+  "Range",
+  "Selection",
+  "Text",
+]) {
+  Object.defineProperty(globalThis, name, {
+    configurable: true,
+    value: ownerWindow[name],
+  });
+}
+Object.defineProperties(globalThis, {
+  document: { configurable: true, value: ownerWindow.document },
+  getComputedStyle: { configurable: true, value: ownerWindow.getComputedStyle.bind(ownerWindow) },
+  navigator: { configurable: true, value: ownerWindow.navigator },
+  window: { configurable: true, value: ownerWindow },
+});
+ownerWindow.requestAnimationFrame ??= (callback) => ownerWindow.setTimeout(
+  () => callback(ownerWindow.performance.now()),
+  0,
+);
+ownerWindow.cancelAnimationFrame ??= (handle) => ownerWindow.clearTimeout(handle);
+globalThis.requestAnimationFrame = ownerWindow.requestAnimationFrame.bind(ownerWindow);
+globalThis.cancelAnimationFrame = ownerWindow.cancelAnimationFrame.bind(ownerWindow);
+if (!ownerWindow.Range.prototype.getClientRects) {
+  ownerWindow.Range.prototype.getClientRects = () => [];
+}
+if (!ownerWindow.Range.prototype.getBoundingClientRect) {
+  ownerWindow.Range.prototype.getBoundingClientRect = () => new ownerWindow.DOMRect();
+}
+
+const [{ createEditor }, { createEditor: createMinimalEditor }, frontmatter] = await Promise.all([
+  import("markora"),
+  import("markora/minimal"),
+  import("markora-extension-frontmatter"),
+]);
+const SOURCE = "\\uFEFF---\\r\\ntitle: Packed\\r\\nanchor: &base value\\r\\ncopy: *base\\r\\n...";
+
+for (const [label, create] of [["root", createEditor], ["minimal", createMinimalEditor]]) {
+  const element = ownerWindow.document.createElement("div");
+  ownerWindow.document.body.append(element);
+  const baseline = create({ element, markdown: "Body" });
+  if (baseline.extensions.manifest.extensions.some(({ name }) => (
+    name === "markora-extension-frontmatter"
+  ))) {
+    throw new Error("Packed " + label + " baseline unexpectedly installed front matter.");
+  }
+  baseline.destroy();
+  element.replaceChildren();
+  const definition = frontmatter.createFrontmatterExtension();
+  const editor = create({
+    element,
+    extensions: [definition],
+    markdown: SOURCE + "\\r\\nBody",
+  });
+  const handle = editor.extensions.get(definition);
+  if (
+    handle.state.getSource() !== SOURCE
+    || editor.getMarkdown() !== SOURCE + "\\n\\nBody"
+    || !editor.extensions.manifest.extensions.some(({ name }) => (
+      name === "markora-extension-frontmatter"
+    ))
+  ) {
+    throw new Error("Packed front matter " + label + " consumer lost exact source or manifest state.");
+  }
+  if (!handle.commands.update("---\\ntitle: Updated\\n---")) {
+    throw new Error("Packed front matter " + label + " consumer command failed.");
+  }
+  if (!editor.commands.undo() || handle.state.getSource() !== SOURCE) {
+    throw new Error("Packed front matter " + label + " consumer history failed.");
+  }
+  editor.destroy();
+  element.remove();
+}
+
+ownerWindow.close();
+`);
+
 currentPhase = "consumer-typecheck";
 run("node", [tscCliPath, "-p", "tsconfig.json"], { cwd: smokeAppDir });
 currentPhase = "node-import-smoke";
 run("node", ["--input-type=module", "-e", `
   const extensionApi = await import("markora/extension-api");
+  const frontmatter = await import("markora-extension-frontmatter");
   const minimal = await import("markora/minimal");
   if (typeof extensionApi.defineMarkdownEditorExtension !== "function") {
     throw new Error("defineMarkdownEditorExtension export missing");
@@ -1445,30 +1775,53 @@ run("node", ["--input-type=module", "-e", `
   if (typeof extensionApi.sliceMarkdownEditorOriginalSourceLines !== "function") {
     throw new Error("sliceMarkdownEditorOriginalSourceLines export missing");
   }
+  if (typeof extensionApi.closeHistory !== "function") {
+    throw new Error("closeHistory export missing");
+  }
+  if (
+    typeof frontmatter.createFrontmatterExtension !== "function"
+    || !Object.isFrozen(frontmatter.defaultFrontmatterMessages)
+  ) {
+    throw new Error("front matter package Node ESM surface is incomplete");
+  }
+  const frontmatterDefinition = frontmatter.createFrontmatterExtension();
+  if (frontmatterDefinition.name !== "markora-extension-frontmatter") {
+    throw new Error("front matter package factory returned the wrong identity");
+  }
   if (typeof minimal.createEditor !== "function") {
     throw new Error("markora/minimal createEditor export missing");
   }
 `], { cwd: smokeAppDir });
+currentPhase = "frontmatter-root-minimal-runtime-smoke";
+run("node", ["src/frontmatter-runtime.mjs"], { cwd: smokeAppDir });
 
 currentPhase = "bundle-configuration";
 writeBundleConfig("root", "./src/root.js");
 writeBundleConfig("minimal", "./src/minimal.js");
+writeBundleConfig("frontmatter", "./src/frontmatter.js");
 currentPhase = "root-bundle-build";
 run("node", [viteCliPath, "build", "--config", "vite.root.config.mjs"], { cwd: smokeAppDir });
 currentPhase = "minimal-bundle-build";
 run("node", [viteCliPath, "build", "--config", "vite.minimal.config.mjs"], { cwd: smokeAppDir });
+currentPhase = "frontmatter-bundle-build";
+run("node", [viteCliPath, "build", "--config", "vite.frontmatter.config.mjs"], { cwd: smokeAppDir });
 
 currentPhase = "bundle-validation";
 const rootBundleReport = readBundleReport("root");
 const minimalBundleReport = readBundleReport("minimal");
+const frontmatterBundleReport = readBundleReport("frontmatter");
 const rootBundleMeasurement = measureBundleGraph(rootBundleReport);
 const minimalBundleMeasurement = measureBundleGraph(minimalBundleReport);
+const frontmatterBundleMeasurement = measureBundleGraph(frontmatterBundleReport);
 assertBundleIsolation(rootBundleReport, minimalBundleReport);
+assertFrontmatterBundleIsolation(frontmatterBundleReport);
 assertPackedProvenance(
   rootBundleReport,
   minimalBundleReport,
+  frontmatterBundleReport,
   rootBundleMeasurement,
   minimalBundleMeasurement,
+  frontmatterBundleMeasurement,
 );
 const minimalEntryChunk = minimalBundleReport.chunks.find((chunk) => chunk.isEntry);
 
@@ -1486,12 +1839,31 @@ run("node", ["--input-type=module", "-e", `
   }
 `], { cwd: smokeAppDir });
 
+const frontmatterEntryChunk = frontmatterBundleReport.chunks.find((chunk) => chunk.isEntry);
+if (!frontmatterEntryChunk) {
+  throw new Error("The front matter feature bundle did not emit an entry chunk.");
+}
+const frontmatterEntrySpecifier = `./dist/frontmatter/${frontmatterEntryChunk.fileName}`;
+currentPhase = "frontmatter-feature-runtime-smoke";
+run("node", ["--input-type=module", "-e", `
+  const consumer = await import(${JSON.stringify(frontmatterEntrySpecifier)});
+  const names = consumer.packedFrontmatterDefinitions?.map((extension) => extension.name);
+  if (names?.join(":") !== "markora-extension-frontmatter:markora-extension-frontmatter") {
+    throw new Error("Packed front matter feature bundle did not execute");
+  }
+`], { cwd: smokeAppDir });
+
 const measurements = Object.freeze({
+  frontmatter: frontmatterBundleMeasurement,
   minimal: minimalBundleMeasurement,
   root: rootBundleMeasurement,
 });
 availableMeasurements = measurements;
-printBundleMeasurements(rootBundleMeasurement, minimalBundleMeasurement);
+printBundleMeasurements(
+  rootBundleMeasurement,
+  minimalBundleMeasurement,
+  frontmatterBundleMeasurement,
+);
 currentPhase = "budget-evaluation";
 const budgetConfig = loadBudgetConfig(commandOptions.budgetPath);
 const evaluations = evaluateBundleBudgets(budgetConfig, measurements);
@@ -1508,10 +1880,8 @@ currentPhase = "report-writing";
 reportWritten = Boolean(writeMeasurementReport({
   budgetConfigPath: commandOptions.budgetPath,
   budgetResult,
-  corePackage,
   measurements,
   reportPath: commandOptions.reportPath,
-  uiPackage,
 }));
 
 if (!budgetResult.passed) {
