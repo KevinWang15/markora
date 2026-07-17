@@ -21,6 +21,10 @@ import {
   type NormalizedMarkdownEditorResources,
 } from "./resourcePolicy";
 import { setBuiltinMarkdownEditorTransactionOrigin } from "./transactionOrigin";
+import {
+  defaultMarkdownEditorMessages,
+  type MarkdownEditorMessages,
+} from "./editorMessages";
 
 type UploadAnchor = Readonly<{
   batchId: string;
@@ -72,6 +76,7 @@ export type CreateAssetUploadControllerOptions = {
   ) => void;
   getView: () => EditorView | null;
   isActive: () => boolean;
+  messages?: Pick<MarkdownEditorMessages, "uploadedFileLabel">;
   ownerWindow: Window & typeof globalThis;
   reportUnhandled: (error: unknown) => void;
   resources: NormalizedMarkdownEditorResources;
@@ -135,6 +140,7 @@ function normalizeUploadResult(
   resources: NormalizedMarkdownEditorResources,
   file: File,
   result: MarkdownEditorAssetUploadResult,
+  uploadedFileLabel: string,
 ): NormalizedUploadResult {
   if (typeof result !== "object" || result === null || Array.isArray(result)) {
     throw new TypeError("Asset upload results must be objects.");
@@ -168,7 +174,7 @@ function normalizeUploadResult(
     kind: "link" as const,
     label: normalizeOptionalText(result.label, "Asset upload result label")
       ?? normalizeOptionalText(file.name, "Asset file name")
-      ?? "Uploaded file",
+      ?? uploadedFileLabel,
     title,
     url,
   });
@@ -246,6 +252,7 @@ export function createAssetUploadController(
     emit,
     getView,
     isActive,
+    messages = defaultMarkdownEditorMessages,
     ownerWindow,
     reportUnhandled,
     resources,
@@ -466,7 +473,12 @@ export function createAssetUploadController(
 
     let normalizedResult: NormalizedUploadResult;
     try {
-      normalizedResult = normalizeUploadResult(resources, task.file, result);
+      normalizedResult = normalizeUploadResult(
+        resources,
+        task.file,
+        result,
+        messages.uploadedFileLabel,
+      );
     } catch (error) {
       if (isCurrentAttempt()) {
         failTask(task, "invalid-result", "The asset upload returned an invalid result.", error);

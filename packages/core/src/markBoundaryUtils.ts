@@ -1,5 +1,11 @@
 import { Plugin, PluginKey, TextSelection, type EditorState } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
+import {
+  horizontalArrowLogicalSide,
+  probeVisualRangeMotion,
+  type LogicalHorizontalSide,
+  type PhysicalHorizontalDirection,
+} from "./physicalArrow";
 
 export type BoundaryMarkName = "strong" | "em" | "code" | "link" | "strike";
 
@@ -22,7 +28,7 @@ export function createMarkBoundaryHelpers(options: {
 }) {
   const { getMarkInfo } = options;
 
-  function getBoundaryMark(state: EditorState, direction: "left" | "right") {
+  function getBoundaryMark(state: EditorState, side: LogicalHorizontalSide) {
     const markNames: BoundaryMarkName[] = ["code", "link", "strong", "em", "strike"];
 
     for (const markName of markNames) {
@@ -32,11 +38,11 @@ export function createMarkBoundaryHelpers(options: {
         continue;
       }
 
-      if (direction === "left" && state.selection.from === markInfo.start) {
+      if (side === "before" && state.selection.from === markInfo.start) {
         return { markName, pos: markInfo.start, side: "before" as const };
       }
 
-      if (direction === "right" && state.selection.from === markInfo.end) {
+      if (side === "after" && state.selection.from === markInfo.end) {
         return { markName, pos: markInfo.end, side: "after" as const };
       }
     }
@@ -61,8 +67,27 @@ export function createMarkBoundaryHelpers(options: {
     );
   }
 
-  function escapeBoundaryMark(view: EditorView, direction: "left" | "right") {
-    const boundary = getBoundaryMark(view.state, direction);
+  function escapeBoundaryMark(view: EditorView, direction: PhysicalHorizontalDirection) {
+    const fallbackSide = horizontalArrowLogicalSide(view, direction);
+    let boundary: ReturnType<typeof getBoundaryMark> = null;
+
+    for (const side of ["before", "after"] as const) {
+      const candidate = getBoundaryMark(view.state, side);
+
+      if (!candidate) {
+        continue;
+      }
+
+      const markInfo = getMarkInfo(view.state, candidate.markName);
+      const visualMotion = markInfo
+        ? probeVisualRangeMotion(view, direction, markInfo.start, markInfo.end)
+        : null;
+
+      if ((visualMotion ?? fallbackSide) === side) {
+        boundary = candidate;
+        break;
+      }
+    }
 
     if (!boundary) {
       return false;

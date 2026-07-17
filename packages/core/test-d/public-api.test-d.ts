@@ -2,6 +2,7 @@ import {
   MarkdownEditorDestroyedError,
   createDefaultCodeBlockLanguageRegistry,
   createEditor,
+  defaultMarkdownEditorMessages,
   getMarkdownEditorTransactionOrigin,
   setMarkdownEditorTransactionOrigin,
   type CodeBlockLanguageRegistry,
@@ -26,6 +27,8 @@ import {
   type MarkdownEditorHeadingLevel,
   type MarkdownEditorMark,
   type MarkdownEditorMarkdownUpdateOptions,
+  type MarkdownEditorMessageOverrides,
+  type MarkdownEditorMessages,
   type MarkdownEditorAssetUploadRequest,
   type MarkdownEditorAssetUploadResult,
   type MarkdownEditorSelectionSnapshot,
@@ -64,6 +67,13 @@ const typing: MarkdownEditorTypingOptions = {
   autoPairs: ["parentheses", "double-quotes", "strong-asterisks"],
   wrapSelection: true,
 };
+const defaultMessages: MarkdownEditorMessages = defaultMarkdownEditorMessages;
+const messages: MarkdownEditorMessageOverrides = {
+  codeBlockPlainTextLabel: "texto sin formato",
+  codeBlockEditLanguageLabel: ({ language, languageLabel }) => `${language}:${languageLabel}`,
+  opaqueKindLabels: { frontmatter: "Cabecera" },
+  opaqueSourceLabel: ({ kind, kindLabel }) => `${kind}:${kindLabel}`,
+};
 const options: CreateEditorOptions = {
   ariaLabel: "Document body",
   attributes: domAttributes,
@@ -71,6 +81,7 @@ const options: CreateEditorOptions = {
   editable: true,
   element: hostElement,
   initialSelection,
+  messages,
   placeholder: "Start writing",
   resources: {
     links: { allowedProtocols: ["https:", "acme:"], allowRelative: false },
@@ -111,6 +122,7 @@ const options: CreateEditorOptions = {
   shortcuts,
   typing,
 };
+void defaultMessages;
 const editor = createEditor(options);
 const typedEditor: MarkdownEditor = editor;
 const view: EditorView = editor.view;

@@ -350,6 +350,69 @@ change definitions or configuration. The complete versioning, ordering,
 ownership, lifecycle, security, and persistence contract is documented in the
 repository's extension-system RFC.
 
+## Localization
+
+Core-rendered text and accessible names are creation-time configuration through
+`createEditor({ messages })`. This includes task fallback names, passive and
+active code-block labels, image loading/policy/failure status, preserved-source
+labels and actions, and the unnamed uploaded-file fallback.
+
+```ts
+import {
+  createEditor,
+  type MarkdownEditorMessageOverrides,
+} from "markora";
+
+const messages = {
+  codeBlockPlainTextLabel: "texte brut",
+  imageLoading: "Chargement de l’image",
+  taskFallbackLabel: "Tâche",
+  opaqueKindLabels: {
+    frontmatter: "Métadonnées",
+  },
+  opaqueSourceLabel: ({ kindLabel }) => `Source Markdown : ${kindLabel}`,
+} satisfies MarkdownEditorMessageOverrides;
+
+const editor = createEditor({
+  element: document.querySelector("#editor")!,
+  markdown: "- [ ] À faire",
+  messages,
+});
+```
+
+`MarkdownEditorMessages` describes a complete locale,
+`MarkdownEditorMessageOverrides` accepts a partial locale with English
+fallback, and `defaultMarkdownEditorMessages` exposes the frozen English
+defaults. Overrides and nested opaque-kind labels are validated, copied, and
+frozen during creation; formatter results must be nonblank. Recreate the editor
+to switch locale. Set `lang` and `dir` on the editor's DOM ancestry, and pass a
+separate `createDefaultUi({ messages })` locale when using `markora-ui`.
+User-authored Markdown, URLs, image metadata, code-fence info, and structured
+developer diagnostics are not translated by this surface.
+
+## Theme contract
+
+Every color, type, spacing, radius, focus, motion, and overlay-layer value in
+`markora/styles.css`, `markora/minimal.css`, and `markora-ui/styles.css` is
+exposed through a documented `--mdw-*` custom property with its previous value
+as the fallback. An integration that sets no tokens keeps the compatibility
+appearance.
+
+Import `markora/themes.css` to opt into the reference light, dark, automatic,
+and higher-contrast palettes. Scope one with `data-mdw-theme="light"`,
+`"dark"`, `"auto"`, or `"contrast"` (or the equivalent
+`.mdw-theme-*` class). Reduced motion and forced colors are honored
+automatically; `.mdw-motion-reduce` and `data-mdw-motion="reduce"` provide an
+explicit reduced-motion scope.
+
+Default UI mirrors the active editor's effective `--mdw-*` tokens, theme and
+motion scope, color scheme, language, and direction onto body-portaled
+overlays. A local `portalRoot` remains useful for host stacking, landmark, and
+Shadow DOM ownership. See
+the repository's [theme and visual-ownership contract](https://github.com/KevinWang15/markora/blob/main/docs/theme-contract.md)
+for the full token table, Shadow DOM guidance, reference behavior, and the
+core/default-UI/host responsibility boundary.
+
 ## Integration notes
 
 A typical integration has four parts:

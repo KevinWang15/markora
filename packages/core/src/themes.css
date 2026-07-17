@@ -1,0 +1,245 @@
+/*
+ * Optional reference themes for Markora's public --mdw-* token contract.
+ *
+ * Put one of these classes or data attributes on a common ancestor of the
+ * editor host and any default-UI portal. Host declarations can override any
+ * token after this stylesheet, or on a more specific/local scope.
+ */
+
+:where(
+  .mdw-theme-light,
+  [data-mdw-theme="light"],
+  .mdw-theme-auto,
+  [data-mdw-theme="auto"]
+) {
+  color-scheme: light;
+  --mdw-color-scheme: light;
+  --mdw-editor-color: #24292f;
+  --mdw-editor-background: #ffffff;
+  --mdw-color-text: #24292f;
+  --mdw-color-muted: #57606a;
+  --mdw-color-placeholder: #6e7781;
+  --mdw-color-disabled: #8c959f;
+  --mdw-color-surface: #ffffff;
+  --mdw-color-surface-subtle: #f6f8fa;
+  --mdw-color-surface-muted: #f0f3f6;
+  --mdw-color-border: #d8dee4;
+  --mdw-color-border-strong: #afb8c1;
+  --mdw-color-accent: #0969da;
+  --mdw-color-accent-strong: #0550ae;
+  --mdw-color-accent-soft: rgba(9, 105, 218, 0.14);
+  --mdw-color-accent-softer: rgba(9, 105, 218, 0.08);
+  --mdw-color-focus: #0969da;
+  --mdw-color-focus-soft: rgba(9, 105, 218, 0.18);
+  --mdw-color-selection: rgba(9, 105, 218, 0.18);
+  --mdw-color-selection-overlay: rgba(9, 105, 218, 0.12);
+  --mdw-color-selection-text: currentColor;
+  --mdw-color-danger: #cf222e;
+  --mdw-color-danger-soft: rgba(207, 34, 46, 0.12);
+  --mdw-color-caret: #1f2328;
+  --mdw-color-caret-contrast: rgba(255, 255, 255, 0.65);
+  --mdw-color-quote: #4b5563;
+  --mdw-color-marker: #6e7781;
+  --mdw-syntax-keyword: #cf222e;
+  --mdw-syntax-literal: #0550ae;
+  --mdw-syntax-name: #24292f;
+  --mdw-syntax-property: #8250df;
+  --mdw-syntax-string: #0a3069;
+  --mdw-syntax-comment: #6e7781;
+  --mdw-syntax-type: #953800;
+  --mdw-syntax-operator: #57606a;
+  --mdw-shadow-caret: 0 0 0 1px rgba(255, 255, 255, 0.65);
+  --mdw-shadow-subtle: 0 1px 2px rgba(31, 35, 40, 0.08);
+  --mdw-shadow-control: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --mdw-shadow-overlay: 0 10px 30px rgba(15, 23, 42, 0.16);
+  --mdw-code-block-inset-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --mdw-code-active-line-background: rgba(9, 105, 218, 0.06);
+  --mdw-task-background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  --mdw-task-checked-background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  --mdw-task-checked-color: #ffffff;
+  --mdw-task-checked-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08), 0 2px 4px rgba(37, 99, 235, 0.22);
+  --mdw-image-status-background: rgba(148, 163, 184, 0.12);
+}
+
+:where(.mdw-theme-dark, [data-mdw-theme="dark"]) {
+  color-scheme: dark;
+  --mdw-color-scheme: dark;
+  --mdw-editor-color: #e6edf3;
+  --mdw-editor-background: #0d1117;
+  --mdw-color-text: #e6edf3;
+  --mdw-color-muted: #9da7b1;
+  --mdw-color-placeholder: #9da7b1;
+  --mdw-color-disabled: #8b949e;
+  --mdw-color-surface: #0d1117;
+  --mdw-color-surface-subtle: #161b22;
+  --mdw-color-surface-muted: #21262d;
+  --mdw-color-border: #30363d;
+  --mdw-color-border-strong: #6e7681;
+  --mdw-color-accent: #58a6ff;
+  --mdw-color-accent-strong: #79c0ff;
+  --mdw-color-accent-soft: rgba(56, 139, 253, 0.26);
+  --mdw-color-accent-softer: rgba(56, 139, 253, 0.16);
+  --mdw-color-focus: #58a6ff;
+  --mdw-color-focus-soft: rgba(56, 139, 253, 0.34);
+  --mdw-color-selection: rgba(56, 139, 253, 0.34);
+  --mdw-color-selection-overlay: rgba(56, 139, 253, 0.2);
+  --mdw-color-selection-text: currentColor;
+  --mdw-color-danger: #ff7b72;
+  --mdw-color-danger-soft: rgba(248, 81, 73, 0.24);
+  --mdw-color-caret: #f0f6fc;
+  --mdw-color-caret-contrast: rgba(13, 17, 23, 0.78);
+  --mdw-color-quote: #b1bac4;
+  --mdw-color-marker: #9da7b1;
+  --mdw-syntax-keyword: #ff7b72;
+  --mdw-syntax-literal: #79c0ff;
+  --mdw-syntax-name: #e6edf3;
+  --mdw-syntax-property: #d2a8ff;
+  --mdw-syntax-string: #a5d6ff;
+  --mdw-syntax-comment: #9da7b1;
+  --mdw-syntax-type: #ffa657;
+  --mdw-syntax-operator: #b1bac4;
+  --mdw-shadow-caret: 0 0 0 1px rgba(13, 17, 23, 0.78);
+  --mdw-shadow-subtle: 0 1px 2px rgba(1, 4, 9, 0.5);
+  --mdw-shadow-control: 0 1px 2px rgba(1, 4, 9, 0.5);
+  --mdw-shadow-overlay: 0 10px 30px rgba(1, 4, 9, 0.58);
+  --mdw-code-block-inset-shadow: inset 0 1px 0 rgba(240, 246, 252, 0.08);
+  --mdw-code-active-line-background: rgba(56, 139, 253, 0.12);
+  --mdw-task-background: linear-gradient(180deg, #21262d 0%, #161b22 100%);
+  --mdw-task-checked-background: linear-gradient(180deg, #1f6feb 0%, #1158c7 100%);
+  --mdw-task-checked-color: #ffffff;
+  --mdw-task-checked-shadow: 0 0 0 1px rgba(88, 166, 255, 0.16), 0 2px 4px rgba(1, 4, 9, 0.5);
+  --mdw-image-status-background: rgba(139, 148, 158, 0.14);
+}
+
+:where(.mdw-theme-contrast, [data-mdw-theme="contrast"]) {
+  color-scheme: light dark;
+  --mdw-color-scheme: light dark;
+  --mdw-editor-color: CanvasText;
+  --mdw-editor-background: Canvas;
+  --mdw-color-text: CanvasText;
+  --mdw-color-muted: CanvasText;
+  --mdw-color-placeholder: CanvasText;
+  --mdw-color-disabled: GrayText;
+  --mdw-color-surface: Canvas;
+  --mdw-color-surface-subtle: Canvas;
+  --mdw-color-surface-muted: Canvas;
+  --mdw-color-border: CanvasText;
+  --mdw-color-border-strong: CanvasText;
+  --mdw-color-accent: LinkText;
+  --mdw-color-accent-strong: LinkText;
+  --mdw-color-accent-soft: transparent;
+  --mdw-color-accent-softer: transparent;
+  --mdw-color-focus: Highlight;
+  --mdw-color-focus-soft: transparent;
+  --mdw-color-selection: Highlight;
+  --mdw-color-selection-overlay: transparent;
+  --mdw-color-selection-text: HighlightText;
+  --mdw-color-danger: MarkText;
+  --mdw-color-danger-soft: Mark;
+  --mdw-color-caret: CanvasText;
+  --mdw-color-caret-contrast: Canvas;
+  --mdw-color-quote: CanvasText;
+  --mdw-color-marker: CanvasText;
+  --mdw-syntax-keyword: CanvasText;
+  --mdw-syntax-literal: CanvasText;
+  --mdw-syntax-name: CanvasText;
+  --mdw-syntax-property: CanvasText;
+  --mdw-syntax-string: CanvasText;
+  --mdw-syntax-comment: CanvasText;
+  --mdw-syntax-type: CanvasText;
+  --mdw-syntax-operator: CanvasText;
+  --mdw-shadow-caret: none;
+  --mdw-shadow-subtle: none;
+  --mdw-shadow-control: none;
+  --mdw-shadow-overlay: none;
+  --mdw-code-block-inset-shadow: none;
+  --mdw-code-active-line-background: transparent;
+  --mdw-task-background: Canvas;
+  --mdw-task-checked-background: Highlight;
+  --mdw-task-checked-color: HighlightText;
+  --mdw-task-checked-shadow: none;
+  --mdw-image-status-background: Canvas;
+  --mdw-border-width: 2px;
+  --mdw-focus-ring-width: 3px;
+  --mdw-disabled-opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  :where(.mdw-theme-auto, [data-mdw-theme="auto"]) {
+    color-scheme: dark;
+    --mdw-color-scheme: dark;
+    --mdw-editor-color: #e6edf3;
+    --mdw-editor-background: #0d1117;
+    --mdw-color-text: #e6edf3;
+    --mdw-color-muted: #9da7b1;
+    --mdw-color-placeholder: #9da7b1;
+    --mdw-color-disabled: #8b949e;
+    --mdw-color-surface: #0d1117;
+    --mdw-color-surface-subtle: #161b22;
+    --mdw-color-surface-muted: #21262d;
+    --mdw-color-border: #30363d;
+    --mdw-color-border-strong: #6e7681;
+    --mdw-color-accent: #58a6ff;
+    --mdw-color-accent-strong: #79c0ff;
+    --mdw-color-accent-soft: rgba(56, 139, 253, 0.26);
+    --mdw-color-accent-softer: rgba(56, 139, 253, 0.16);
+    --mdw-color-focus: #58a6ff;
+    --mdw-color-focus-soft: rgba(56, 139, 253, 0.34);
+    --mdw-color-selection: rgba(56, 139, 253, 0.34);
+    --mdw-color-selection-overlay: rgba(56, 139, 253, 0.2);
+    --mdw-color-selection-text: currentColor;
+    --mdw-color-danger: #ff7b72;
+    --mdw-color-danger-soft: rgba(248, 81, 73, 0.24);
+    --mdw-color-caret: #f0f6fc;
+    --mdw-color-caret-contrast: rgba(13, 17, 23, 0.78);
+    --mdw-color-quote: #b1bac4;
+    --mdw-color-marker: #9da7b1;
+    --mdw-syntax-keyword: #ff7b72;
+    --mdw-syntax-literal: #79c0ff;
+    --mdw-syntax-name: #e6edf3;
+    --mdw-syntax-property: #d2a8ff;
+    --mdw-syntax-string: #a5d6ff;
+    --mdw-syntax-comment: #9da7b1;
+    --mdw-syntax-type: #ffa657;
+    --mdw-syntax-operator: #b1bac4;
+    --mdw-shadow-caret: 0 0 0 1px rgba(13, 17, 23, 0.78);
+    --mdw-shadow-subtle: 0 1px 2px rgba(1, 4, 9, 0.5);
+    --mdw-shadow-control: 0 1px 2px rgba(1, 4, 9, 0.5);
+    --mdw-shadow-overlay: 0 10px 30px rgba(1, 4, 9, 0.58);
+    --mdw-code-block-inset-shadow: inset 0 1px 0 rgba(240, 246, 252, 0.08);
+    --mdw-code-active-line-background: rgba(56, 139, 253, 0.12);
+    --mdw-task-background: linear-gradient(180deg, #21262d 0%, #161b22 100%);
+    --mdw-task-checked-background: linear-gradient(180deg, #1f6feb 0%, #1158c7 100%);
+    --mdw-task-checked-color: #ffffff;
+    --mdw-task-checked-shadow: 0 0 0 1px rgba(88, 166, 255, 0.16), 0 2px 4px rgba(1, 4, 9, 0.5);
+    --mdw-image-status-background: rgba(139, 148, 158, 0.14);
+  }
+}
+
+@media (prefers-contrast: more) {
+  :where(
+    .mdw-theme-light,
+    [data-mdw-theme="light"],
+    .mdw-theme-dark,
+    [data-mdw-theme="dark"],
+    .mdw-theme-auto,
+    [data-mdw-theme="auto"]
+  ) {
+    --mdw-color-border: currentColor;
+    --mdw-color-border-strong: currentColor;
+    --mdw-color-muted: currentColor;
+    --mdw-color-placeholder: currentColor;
+    --mdw-shadow-subtle: none;
+    --mdw-shadow-control: none;
+    --mdw-shadow-overlay: none;
+    --mdw-border-width: 2px;
+    --mdw-focus-ring-width: 3px;
+    --mdw-disabled-opacity: 1;
+  }
+}
+
+:where(.mdw-motion-reduce, [data-mdw-motion="reduce"]) {
+  --mdw-motion-duration-fast: 0ms;
+  --mdw-caret-animation: none;
+  --mdw-spinner-animation: none;
+}

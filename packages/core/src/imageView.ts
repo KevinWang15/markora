@@ -1,6 +1,10 @@
 import type { Node as ProseMirrorNode, NodeType } from "prosemirror-model";
 import type { MarkdownEditorResourceErrorPhase } from "./resourceApi";
 import {
+  defaultMarkdownEditorMessages,
+  type MarkdownEditorMessages,
+} from "./editorMessages";
+import {
   normalizeImageLoadResult,
   resolveResourceUrl,
   sanitizeResourceUrl,
@@ -21,10 +25,16 @@ type ImageViewClass = new (node: ProseMirrorNode, ownerDocument: Document) => Im
 
 export function createImageViewClass(options: {
   imageNodeType: NodeType;
+  messages?: MarkdownEditorMessages;
   onError?: (error: unknown, phase: MarkdownEditorResourceErrorPhase) => void;
   resources: NormalizedMarkdownEditorResources;
 }): ImageViewClass {
-  const { imageNodeType, onError, resources } = options;
+  const {
+    imageNodeType,
+    messages = defaultMarkdownEditorMessages,
+    onError,
+    resources,
+  } = options;
 
   class ImageView {
     dom: HTMLSpanElement;
@@ -34,7 +44,6 @@ export function createImageViewClass(options: {
     private img: HTMLImageElement;
     private status: HTMLSpanElement;
     private spinner: HTMLSpanElement;
-    private spinnerAnimation: Animation | null = null;
     private errorIcon: HTMLSpanElement;
     private statusText: HTMLSpanElement;
     private requestVersion = 0;
@@ -49,21 +58,10 @@ export function createImageViewClass(options: {
       this.dom = doc.createElement("span");
       this.dom.className = "mdw-image";
       this.dom.contentEditable = "false";
-      this.dom.style.display = "inline-flex";
-      this.dom.style.flexDirection = "column";
-      this.dom.style.gap = "8px";
-      this.dom.style.maxWidth = "100%";
-      this.dom.style.verticalAlign = "top";
 
       this.sourceRow = doc.createElement("span");
       this.sourceRow.className = "mdw-image-source";
       this.sourceRow.hidden = true;
-      this.sourceRow.style.display = "inline-flex";
-      this.sourceRow.style.alignItems = "center";
-      this.sourceRow.style.gap = "8px";
-      this.sourceRow.style.opacity = "0.72";
-      this.sourceRow.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      this.sourceRow.style.fontSize = "0.95em";
 
       const sourceIcon = doc.createElement("span");
       sourceIcon.textContent = "🖼️";
@@ -73,50 +71,32 @@ export function createImageViewClass(options: {
       this.sourceRow.append(sourceIcon, this.sourceText);
 
       this.frame = doc.createElement("span");
-      this.frame.style.position = "relative";
-      this.frame.style.display = "inline-flex";
-      this.frame.style.alignSelf = "flex-start";
-      this.frame.style.maxWidth = "100%";
-      this.frame.style.minWidth = "48px";
-      this.frame.style.minHeight = "48px";
+      this.frame.className = "mdw-image-frame";
 
       this.img = doc.createElement("img");
       this.img.draggable = false;
-      this.img.style.display = "block";
-      this.img.style.maxWidth = "100%";
-      this.img.style.height = "auto";
 
       this.status = doc.createElement("span");
-      this.status.style.position = "absolute";
-      this.status.style.inset = "0";
-      this.status.style.display = "grid";
-      this.status.style.placeItems = "center";
-      this.status.style.background = "rgba(148, 163, 184, 0.12)";
-      this.status.style.border = "1px dashed rgba(148, 163, 184, 0.35)";
-      this.status.style.borderRadius = "12px";
-      this.status.style.padding = "12px";
+      this.status.className = "mdw-image-status";
+      this.status.setAttribute("aria-atomic", "true");
+      this.status.setAttribute("aria-live", "polite");
+      this.status.setAttribute("role", "status");
 
       const statusInner = doc.createElement("span");
-      statusInner.style.display = "inline-flex";
-      statusInner.style.flexDirection = "column";
-      statusInner.style.alignItems = "center";
-      statusInner.style.gap = "8px";
+      statusInner.className = "mdw-image-status-inner";
 
       this.spinner = doc.createElement("span");
-      this.spinner.style.width = "20px";
-      this.spinner.style.height = "20px";
-      this.spinner.style.border = "2px solid rgba(148, 163, 184, 0.35)";
-      this.spinner.style.borderTopColor = "rgba(59, 130, 246, 0.95)";
-      this.spinner.style.borderRadius = "999px";
-      this.spinner.style.display = "inline-block";
+      this.spinner.className = "mdw-image-spinner";
+      this.spinner.setAttribute("aria-hidden", "true");
 
       this.errorIcon = doc.createElement("span");
+      this.errorIcon.className = "mdw-image-error-icon";
       this.errorIcon.textContent = "⚠️";
       this.errorIcon.hidden = true;
+      this.errorIcon.setAttribute("aria-hidden", "true");
 
       this.statusText = doc.createElement("span");
-      this.statusText.style.fontSize = "12px";
-      this.statusText.style.opacity = "0.8";
+      this.statusText.className = "mdw-image-status-text";
 
       statusInner.append(this.spinner, this.errorIcon, this.statusText);
       this.status.append(statusInner);
@@ -141,7 +121,7 @@ export function createImageViewClass(options: {
       if (previousSrc !== (typeof node.attrs.src === "string" ? node.attrs.src : "")) {
         this.load();
       } else if (previousAlt !== nextAlt && this.loadState === "error" && this.errorUsesAltText) {
-        this.setState("error", nextAlt || "Image failed to load");
+        this.setState("error", nextAlt || messages.imageFailedToLoad);
       }
 
       return true;
@@ -150,13 +130,11 @@ export function createImageViewClass(options: {
     selectNode() {
       this.dom.classList.add("ProseMirror-selectednode");
       this.sourceRow.hidden = false;
-      this.sourceRow.style.display = "inline-flex";
     }
 
     deselectNode() {
       this.dom.classList.remove("ProseMirror-selectednode");
       this.sourceRow.hidden = true;
-      this.sourceRow.style.display = "none";
     }
 
     stopEvent() {
@@ -174,7 +152,6 @@ export function createImageViewClass(options: {
 
       this.destroyed = true;
       this.requestVersion += 1;
-      this.stopSpinnerAnimation();
       this.cancelRequest();
       this.img.onload = null;
       this.img.onerror = null;
@@ -227,34 +204,9 @@ export function createImageViewClass(options: {
       }
     }
 
-    private startSpinnerAnimation() {
-      if (this.spinnerAnimation || typeof this.spinner.animate !== "function") {
-        return;
-      }
-
-      this.spinnerAnimation = this.spinner.animate(
-        [
-          { transform: "rotate(0deg)" },
-          { transform: "rotate(360deg)" },
-        ],
-        { duration: 900, iterations: Infinity },
-      );
-    }
-
-    private stopSpinnerAnimation() {
-      const animation = this.spinnerAnimation;
-      this.spinnerAnimation = null;
-      animation?.cancel();
-    }
-
     private setState(state: "loading" | "loaded" | "error", message = "") {
       this.loadState = state;
-
-      if (state === "loading") {
-        this.startSpinnerAnimation();
-      } else {
-        this.stopSpinnerAnimation();
-      }
+      this.dom.dataset.mdwImageState = state;
 
       if (state !== "error") {
         this.errorUsesAltText = false;
@@ -262,17 +214,13 @@ export function createImageViewClass(options: {
 
       if (state === "loaded") {
         this.status.hidden = true;
-        this.status.style.display = "none";
         this.spinner.hidden = true;
         this.errorIcon.hidden = true;
         this.statusText.textContent = "";
-        this.img.style.opacity = "1";
         return;
       }
 
       this.status.hidden = false;
-      this.status.style.display = "grid";
-      this.img.style.opacity = state === "loading" ? "0.35" : "0";
       this.spinner.hidden = state !== "loading";
       this.errorIcon.hidden = state !== "error";
       this.statusText.textContent = message;
@@ -283,7 +231,7 @@ export function createImageViewClass(options: {
       const getFallbackMessage = () =>
         typeof this.node.attrs.alt === "string" && this.node.attrs.alt
           ? this.node.attrs.alt
-          : "Image failed to load";
+          : messages.imageFailedToLoad;
       const requestVersion = ++this.requestVersion;
       this.cancelRequest();
       this.img.onload = null;
@@ -297,18 +245,18 @@ export function createImageViewClass(options: {
       const storedUrl = sanitizeResourceUrl(resources, "image", rawSrc);
       if (!storedUrl) {
         this.errorUsesAltText = false;
-        this.setState("error", "Missing image URL");
+        this.setState("error", messages.imageMissingUrl);
         return;
       }
 
-      this.setState("loading", "Loading image");
+      this.setState("loading", messages.imageLoading);
 
       let resolvedUrl: string | null;
       try {
         resolvedUrl = resolveResourceUrl(resources, "image", "load", storedUrl);
       } catch (error) {
         this.report(error, "resolve");
-        this.setState("error", "Image blocked by resource policy");
+        this.setState("error", messages.imageBlockedByPolicy);
         return;
       }
 
@@ -317,7 +265,7 @@ export function createImageViewClass(options: {
       }
 
       if (!resolvedUrl) {
-        this.setState("error", "Image blocked by resource policy");
+        this.setState("error", messages.imageBlockedByPolicy);
         return;
       }
 
@@ -462,7 +410,7 @@ export function createImageViewClass(options: {
           (result) => {
             if (result === null) {
               if (requestVersion === this.requestVersion && !controller.signal.aborted) {
-                this.setState("error", "Image blocked by resource policy");
+                this.setState("error", messages.imageBlockedByPolicy);
               }
               return;
             }
@@ -476,7 +424,7 @@ export function createImageViewClass(options: {
           },
         );
       } else if (loadResult === null) {
-        this.setState("error", "Image blocked by resource policy");
+        this.setState("error", messages.imageBlockedByPolicy);
       } else {
         startImageLoad(loadResult);
       }

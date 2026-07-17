@@ -34,6 +34,38 @@ const editor = createEditor({
 });
 ```
 
+## Localization
+
+Every string rendered by the default overlays—including visible button copy, placeholders, dialog and control names, validation alerts, tooltips, and table status announcements—can be replaced through `createDefaultUi({ messages })`.
+
+```ts
+import { createDefaultUi, type DefaultUiMessageOverrides } from "markora-ui";
+
+const messages = {
+  cancelButtonLabel: "取消",
+  saveButtonLabel: "保存",
+  linkDialogLabel: "编辑链接",
+  linkUrlInputLabel: "链接地址",
+  tableControlLabel(control) {
+    return `表格操作：${control}`;
+  },
+  tableSelectionStatus({ rowFrom, rowTo, columnFrom, columnTo }) {
+    return `已选择第 ${rowFrom}–${rowTo} 行、第 ${columnFrom}–${columnTo} 列。`;
+  },
+  tableActionStatus({ action, selection }) {
+    return selection
+      ? `${action}；当前范围为第 ${selection.rowFrom}–${selection.rowTo} 行。`
+      : action;
+  },
+} satisfies DefaultUiMessageOverrides;
+
+const ui = createDefaultUi({ messages });
+```
+
+Static overrides must be nonblank strings. Dynamic copy uses typed formatter functions so a locale controls word order, plural rules, punctuation, and number formatting instead of combining translated English fragments. Table selection coordinates passed to formatters are one-based and inclusive. `DefaultUiMessages` describes a complete locale, while `DefaultUiMessageOverrides` supports partial overrides and English fallback. `defaultUiMessages` exposes the frozen English defaults for inspection or deliberate composition.
+
+Message options are validated, copied, and frozen when `createDefaultUi()` is called. Unknown keys, invalid values, and blank formatter results throw rather than leaving an unnamed control. Formatters must be pure: Markora preflights every finite table variant and representative selection ranges during creation, then validates each result again when it is used. Later mutations to the source object have no effect. Localization is creation-time configuration; recreate the UI/editor to switch locales. User-authored URLs, image metadata, and code-fence info are document content and are never translated. The embedding host remains responsible for setting the appropriate `lang` and `dir` on its document or portal boundary.
+
 ## Portal root
 
 Pass `portalRoot` when the editor lives inside a Shadow DOM host or another custom DOM boundary and you want the overlays rendered into that same root.
@@ -53,6 +85,23 @@ const editor = createEditor({
   ui: createDefaultUi({ portalRoot: shadowRoot }),
 });
 ```
+
+## Themes and portal inheritance
+
+The default UI consumes the same public `--mdw-*` colors, typography, spacing,
+focus, contrast, and overlay-layer tokens as the core stylesheet. Import the
+optional `markora/themes.css` asset for the reference `light`, `dark`, `auto`,
+and `contrast` scopes, or provide product tokens directly.
+
+CSS custom properties normally inherit only from the portal's DOM ancestors.
+To keep body portals correct, the default UI mirrors the active editor's
+effective `--mdw-*` tokens, theme/motion scope, color scheme, language, and
+direction onto every owned overlay and follows relevant ancestor/media
+changes. Two independently themed editors therefore remain isolated even with
+the default body portal. A local `portalRoot` is still useful for a product's
+stacking or landmark boundary. When UI DOM is rendered in Shadow DOM, load both
+package styles into that root. The complete token and ownership contract is in
+[`docs/theme-contract.md`](https://github.com/KevinWang15/markora/blob/main/docs/theme-contract.md).
 
 ## Notes
 

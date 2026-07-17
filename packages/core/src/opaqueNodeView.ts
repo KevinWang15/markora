@@ -2,6 +2,10 @@ import type { Node as ProseMirrorNode, NodeType } from "prosemirror-model";
 import type { NodeView, EditorView } from "prosemirror-view";
 import { normalizeOpaqueMarkdownKind } from "./opaqueMarkdown";
 import type { OpaqueMarkdownEditRequest, OpaqueMarkdownKind } from "./opaqueMarkdown";
+import {
+  defaultMarkdownEditorMessages,
+  type MarkdownEditorMessages,
+} from "./editorMessages";
 
 export type { OpaqueMarkdownEditRequest, OpaqueMarkdownKind } from "./opaqueMarkdown";
 
@@ -19,19 +23,8 @@ type CreateOpaqueNodeViewClassOptions = {
   nodeType: NodeType;
   display: "block" | "inline";
   getOnEdit?: () => ((request: OpaqueMarkdownEditRequest) => void) | undefined;
+  messages?: MarkdownEditorMessages;
   onEdit?: (request: OpaqueMarkdownEditRequest) => void;
-};
-
-const OPAQUE_KIND_LABELS: Record<OpaqueMarkdownKind, string> = {
-  "display-math": "Display math",
-  "directive-container": "Directive container",
-  "directive-leaf": "Directive",
-  "frontmatter": "Front matter",
-  "html-block": "HTML block",
-  "html-comment": "HTML comment",
-  "inline-directive": "Inline directive",
-  "inline-html": "Inline HTML",
-  "unknown-fence": "Unknown fenced extension",
 };
 
 function readOpaqueKind(node: ProseMirrorNode): OpaqueMarkdownKind {
@@ -50,7 +43,13 @@ function isEventTargetInside(target: EventTarget | null, container: HTMLElement)
 export function createOpaqueNodeViewClass(
   options: CreateOpaqueNodeViewClassOptions,
 ): OpaqueNodeViewClass {
-  const { display, getOnEdit, nodeType, onEdit } = options;
+  const {
+    display,
+    getOnEdit,
+    messages = defaultMarkdownEditorMessages,
+    nodeType,
+    onEdit,
+  } = options;
   const refreshers = new Set<() => void>();
   const resolveOnEdit = () => getOnEdit ? getOnEdit() : onEdit;
 
@@ -171,7 +170,7 @@ export function createOpaqueNodeViewClass(
       const button = ownerDocument.createElement("button");
       button.className = "mdw-opaque-edit";
       button.type = "button";
-      button.textContent = "Edit source";
+      button.textContent = messages.opaqueEditSource;
       button.addEventListener("click", this.handleEditClick);
       return button;
     }
@@ -243,10 +242,11 @@ export function createOpaqueNodeViewClass(
 
     private renderNode(node: ProseMirrorNode) {
       const kind = readOpaqueKind(node);
-      const kindLabel = OPAQUE_KIND_LABELS[kind];
+      const kindLabel = messages.opaqueKindLabels[kind];
+      const context = Object.freeze({ kind, kindLabel });
 
       this.dom.setAttribute("data-mdw-opaque-kind", kind);
-      this.dom.setAttribute("aria-label", `${kindLabel} Markdown source`);
+      this.dom.setAttribute("aria-label", messages.opaqueSourceLabel(context));
 
       if (this.kindElement) {
         this.kindElement.textContent = kindLabel;
@@ -258,7 +258,7 @@ export function createOpaqueNodeViewClass(
         this.editButton.hidden = !hasEditHandler;
         this.editButton.disabled = editDisabled;
         this.editButton.setAttribute("aria-disabled", editDisabled ? "true" : "false");
-        this.editButton.setAttribute("aria-label", `Edit ${kindLabel} Markdown source`);
+        this.editButton.setAttribute("aria-label", messages.opaqueEditSourceLabel(context));
       }
 
       this.sourceElement.textContent = readOpaqueSource(node);

@@ -1,5 +1,9 @@
 import type { Node as ProseMirrorNode, NodeType } from "prosemirror-model";
 import type { EditorView, NodeView } from "prosemirror-view";
+import {
+  defaultMarkdownEditorMessages,
+  type MarkdownEditorMessages,
+} from "./editorMessages";
 
 type TaskListItemViewConstructor = new (
   node: ProseMirrorNode,
@@ -10,11 +14,14 @@ function isTask(node: ProseMirrorNode) {
   return typeof node.attrs.checked === "boolean";
 }
 
-function getTaskName(node: ProseMirrorNode) {
-  return node.textBetween(0, node.content.size, " ").trim() || "Task";
+function getTaskName(node: ProseMirrorNode, fallbackLabel: string) {
+  return node.textBetween(0, node.content.size, " ").trim() || fallbackLabel;
 }
 
-export function createTaskListItemViewClass(nodeType: NodeType): TaskListItemViewConstructor {
+export function createTaskListItemViewClass(
+  nodeType: NodeType,
+  messages: MarkdownEditorMessages = defaultMarkdownEditorMessages,
+): TaskListItemViewConstructor {
   return class TaskListItemView implements NodeView {
     readonly contentDOM: HTMLElement;
     readonly dom: HTMLLIElement;
@@ -74,7 +81,7 @@ export function createTaskListItemViewClass(nodeType: NodeType): TaskListItemVie
       this.dom.dataset.checked = checked ? "true" : "false";
       this.control.setAttribute("aria-checked", checked ? "true" : "false");
       this.control.setAttribute("aria-disabled", editable ? "false" : "true");
-      this.control.setAttribute("aria-label", getTaskName(node));
+      this.control.setAttribute("aria-label", getTaskName(node, messages.taskFallbackLabel));
       this.control.disabled = !editable;
       this.control.tabIndex = editable ? 0 : -1;
     }

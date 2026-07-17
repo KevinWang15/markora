@@ -7,7 +7,13 @@ import {
   StateField,
   type Extension,
 } from "@codemirror/state";
-import { EditorView as CodeMirrorView, keymap as codeMirrorKeymap, drawSelection, lineNumbers } from "@codemirror/view";
+import {
+  Direction,
+  EditorView as CodeMirrorView,
+  keymap as codeMirrorKeymap,
+  drawSelection,
+  lineNumbers,
+} from "@codemirror/view";
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import { indentOnInput, syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import { Fragment, type Node as ProseMirrorNode, type Schema } from "prosemirror-model";
@@ -20,6 +26,10 @@ import {
   type CodeBlockLanguageRegistry,
 } from "./codeBlockLanguages";
 import type { MarkdownEditorNestedClipboardPipeline } from "./extensionAssembly";
+import {
+  defaultMarkdownEditorMessages,
+  type MarkdownEditorMessages,
+} from "./editorMessages";
 import { rejectFileTransferEvent } from "./fileTransferGuard";
 import { isolateClipboardHistory, nestedClipboardText } from "./clipboardSemantics";
 import {
@@ -71,6 +81,7 @@ type CreateCodeBlockViewClassOptions = {
   schema: Schema;
   historyCommands: Readonly<{ redo: Command; undo: Command }>;
   languageRegistry?: CodeBlockLanguageRegistry;
+  messages?: MarkdownEditorMessages;
   nestedClipboard?: MarkdownEditorNestedClipboardPipeline | null;
   shortcuts: NormalizedMarkdownEditorShortcutMap;
   typing: NormalizedMarkdownEditorTypingOptions;
@@ -387,6 +398,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
     schema,
     historyCommands,
     languageRegistry,
+    messages = defaultMarkdownEditorMessages,
     nestedClipboard,
     moveBeforeManagedBlock,
     onDestroyError,
@@ -633,7 +645,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
           effects: restoredAutoPairs.map((value) => addGeneratedCloser.of(value)),
         });
       }
-      this.cm.contentDOM.setAttribute("aria-label", "Code block editor");
+      this.cm.contentDOM.setAttribute("aria-label", messages.codeBlockEditorLabel);
 
       try {
         this.update(node);
@@ -666,7 +678,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
       this.applyEditable(this.outerView.editable);
       this.node = node;
       const language = this.getLanguageLabel();
-      this.languageBadge.textContent = language || "plain text";
+      this.languageBadge.textContent = language || messages.codeBlockPlainTextLabel;
       this.syncLanguageSupport(language);
 
       if (!this.updating && this.cm.state.doc.toString() !== node.textContent) {
@@ -1177,22 +1189,31 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
       this.applyLanguageSupport(subscription.extension, normalized, loadVersion);
     }
 
-    private maybeEscapeHorizontal(unit: -1 | 1) {
+    private maybeEscapeHorizontal(direction: "left" | "right") {
       const selection = this.cm.state.selection.main;
 
       if (!selection.empty) {
         return false;
       }
 
-      if (unit < 0 && selection.from > 0) {
+      const textDirection = this.cm.textDirectionAt(selection.head);
+      const forward = direction === "right"
+        ? textDirection === Direction.LTR
+        : textDirection === Direction.RTL;
+      const nextSelection = this.cm.moveByChar(selection, forward);
+
+      if (
+        !nextSelection.eq(selection, true)
+        || nextSelection.bidiLevel !== selection.bidiLevel
+      ) {
         return false;
       }
 
-      if (unit > 0 && selection.to < this.cm.state.doc.length) {
-        return false;
-      }
-
-      return this.exitCodeBlock(unit);
+      // At a visual document edge the logical position may be inside the
+      // line when an opposing-direction run reaches that edge. CodeMirror's
+      // visual move is the source of truth; `forward` still identifies the
+      // corresponding outer document side.
+      return this.exitCodeBlock(forward ? 1 : -1);
     }
 
     private maybeEscapeVertical(unit: -1 | 1) {
@@ -1639,11 +1660,11 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
           },
           {
             key: "ArrowLeft",
-            run: () => this.maybeEscapeHorizontal(-1),
+            run: () => this.maybeEscapeHorizontal("left"),
           },
           {
             key: "ArrowRight",
-            run: () => this.maybeEscapeHorizontal(1),
+            run: () => this.maybeEscapeHorizontal("right"),
           },
           {
             key: "ArrowUp",

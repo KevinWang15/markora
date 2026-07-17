@@ -114,6 +114,26 @@ describe('toolbar state', () => {
     expect(editor.getToolbarState().bold.active).toBe(false);
   });
 
+  it('uses physical RTL arrows when escaping strong boundaries', () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: '**אבג**',
+    });
+    const paragraph = editor.view.dom.querySelector('p') as HTMLElement;
+    paragraph.style.direction = 'rtl';
+    const range = findMarkedTextRange(editor, 'strong');
+
+    setSelection(editor, TextSelection.create(editor.view.state.doc, range.start));
+    expect(editor.getToolbarState().bold.active).toBe(true);
+    expect(pressKey(editor, 'ArrowRight')).toBe(true);
+    expect(editor.getToolbarState().bold.active).toBe(false);
+
+    setSelection(editor, TextSelection.create(editor.view.state.doc, range.end));
+    expect(editor.getToolbarState().bold.active).toBe(true);
+    expect(pressKey(editor, 'ArrowLeft')).toBe(true);
+    expect(editor.getToolbarState().bold.active).toBe(false);
+  });
+
   it('shows link active inside a link and can remove it', () => {
     const editor = createEditor({
       element: createHost(),

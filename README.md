@@ -221,7 +221,7 @@ editor.updateOptions({
 });
 ```
 
-`updateOptions()` also accepts `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Replacing `onChange` or its batching mode first flushes pending output once through the previous listener, then installs the new configuration. `onChangeMode` is `"idle"` by default; `"animationFrame"` retains once-per-frame delivery, and `"immediate"` is the explicit compatibility mode for same-stack serialization and callback delivery. `element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `typing`, `shortcuts`, `codeBlockLanguages`, `resources`, and extension configuration are creation-only.
+`updateOptions()` also accepts `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Replacing `onChange` or its batching mode first flushes pending output once through the previous listener, then installs the new configuration. `onChangeMode` is `"idle"` by default; `"animationFrame"` retains once-per-frame delivery, and `"immediate"` is the explicit compatibility mode for same-stack serialization and callback delivery. `element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `typing`, `shortcuts`, `codeBlockLanguages`, `messages`, `resources`, and extension configuration are creation-only.
 
 `focus`, `blur`, `state`, `selection`, `update`, `asset`, and `error` subscriptions return idempotent unsubscribe functions. State, selection, and update events are synchronous and expose host-facing selection snapshots plus a change `origin`; `state` fires for every accepted state transition and adds `docChanged` and `selectionChanged`, while `selection` and `update` are limited to those respective changes. Focus and blur each cross one microtask boundary so host callbacks run outside nested editor focus internals and movement within the composite surface does not produce a false boundary. Asset events describe upload lifecycle without requiring Markdown serialization or a document transaction. Update events do not serialize Markdown. Use the default idle `onChange(markdown, context)` for coalesced normalized output, or call `getMarkdown()` synchronously only when a save/export boundary needs the latest snapshot. `onTransaction(transaction, view, context)` remains available for advanced ProseMirror-aware integrations.
 
@@ -239,8 +239,10 @@ editor.updateOptions({
 - `editor.getMarkdown()` is the synchronous lazy save/export snapshot, and `editor.flushChange()` forces pending `onChange` delivery
 - `editor.view` is a version-coupled advanced escape hatch. Inspection and `dispatch()` are supported for advanced integrations; direct `setProps()`, `updateState()`, DOM mutation, or `destroy()` can bypass Markora invariants and events and are outside the public semver contract
 - `resources` configures per-editor stored-URL policy, runtime URL resolution/opening, async image loading, privacy attributes, and optional file upload; `editor.assets` controls retained uploads
+- `messages` localizes core-rendered text and accessible names at editor creation; `markora-ui` has a separate complete message contract for its optional overlays
 - `markora/extension-api` is the supported constructor/type boundary for external schema, Markdown, command, state, plugin, NodeView, clipboard, and UI-action contributions
 - `markora/minimal` plus `markora/minimal.css` keeps the extension kernel and basic CommonMark editing in a separate static graph and stylesheet without CodeMirror or default-only syntax modules
+- every shipped visual value is available through the documented `--mdw-*` token contract; optional `markora/themes.css` provides scoped light, dark, automatic, and contrast reference palettes while forced colors and reduced motion remain automatic
 
 ## External Markdown updates
 

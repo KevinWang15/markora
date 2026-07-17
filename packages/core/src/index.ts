@@ -1,4 +1,11 @@
 export { createEditor } from "./createEditor";
+export { defaultMarkdownEditorMessages } from "./editorMessages";
+export type {
+  MarkdownEditorCodeBlockLanguageMessageContext,
+  MarkdownEditorMessageOverrides,
+  MarkdownEditorMessages,
+  MarkdownEditorOpaqueMessageContext,
+} from "./editorMessages";
 export type {
   CreateEditorOptions,
   MarkdownEditorDomAttributes,

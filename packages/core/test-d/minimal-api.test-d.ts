@@ -3,6 +3,7 @@ import {
   MarkdownEditorDestroyedError,
   createEditor,
   createMinimalMarkdownEditorPreset,
+  defaultMarkdownEditorMessages,
   defineMarkdownEditorExtension,
   getMarkdownEditorTransactionOrigin,
   setMarkdownEditorTransactionOrigin,
@@ -12,6 +13,8 @@ import {
   type MarkdownEditorChangeOrigin,
   type MarkdownEditorCodeBlockRuntimeErrorEvent,
   type MarkdownEditorExtensionHandle,
+  type MarkdownEditorMessageOverrides,
+  type MarkdownEditorMessages,
   type MarkdownEditorShortcutMap,
   type MarkdownEditorTypingOptions,
   type ToolbarState,
@@ -21,6 +24,10 @@ import {
 import type { InternalMarkdownEditorExtensionDefinition } from "../src/minimal";
 
 declare const host: HTMLElement;
+const minimalDefaultMessages: MarkdownEditorMessages = defaultMarkdownEditorMessages;
+const minimalMessages: MarkdownEditorMessageOverrides = {
+  imageLoading: "Chargement de l’image",
+};
 
 const extension = defineMarkdownEditorExtension({
   name: "acme-minimal-types",
@@ -47,6 +54,7 @@ const options: CreateEditorOptions = {
   extensionPreset: createMinimalMarkdownEditorPreset(),
   extensions: [extension],
   markdown: "minimal",
+  messages: minimalMessages,
   onChangeMode: "idle",
   onChange(markdown, context) {
     const origin: MarkdownEditorChangeOrigin = context.origin;
@@ -71,6 +79,7 @@ const options: CreateEditorOptions = {
     autoPairs: ["parentheses", "inline-code"],
   } satisfies MarkdownEditorTypingOptions,
 };
+void minimalDefaultMessages;
 const editor: MarkdownEditor = createEditor(options);
 const changeMode: MarkdownEditorChangeMode = "idle";
 const view: EditorView = editor.view;

@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { createDefaultUi } from '../src/index';
+import {
+  createDefaultUi,
+  defaultUiMessages,
+  type DefaultUiConfig,
+  type DefaultUiMessages,
+} from '../src/index';
 
 const foreignWindows: Window[] = [];
 type ControllerOptions = Parameters<ReturnType<typeof createDefaultUi>>[0];
@@ -12,7 +17,7 @@ function trackWindow(win: Window) {
 
 function createControllers(
   hostElement: HTMLElement,
-  config?: { portalRoot?: HTMLElement | ShadowRoot },
+  config?: DefaultUiConfig,
   overrides: Partial<Omit<ControllerOptions, 'hostElement'>> = {},
 ) {
   const factory = createDefaultUi(config);
@@ -87,6 +92,47 @@ function createTableContext(overrides: Partial<{
   };
 }
 
+const localizedMessages: DefaultUiMessages = {
+  cancelButtonLabel: 'ui:cancel',
+  codeBlockLanguageDialogLabel: 'ui:code-dialog',
+  codeBlockLanguageInputLabel: 'ui:code-input',
+  codeBlockLanguageInputPlaceholder: 'ui:code-placeholder',
+  codeBlockLanguageInvalidError: ({ maximumLength }) => `ui:code-invalid:${maximumLength}`,
+  codeBlockLanguageStaleError: 'ui:code-stale',
+  imageAltInputLabel: 'ui:image-alt',
+  imageAltInputPlaceholder: 'ui:image-alt-placeholder',
+  imageDialogLabel: 'ui:image-dialog',
+  imageTitleInputLabel: 'ui:image-title',
+  imageTitleInputPlaceholder: 'ui:image-title-placeholder',
+  imageUrlInputLabel: 'ui:image-url',
+  imageUrlInputPlaceholder: 'ui:image-url-placeholder',
+  imageUrlInvalidError: 'ui:image-invalid',
+  linkDialogLabel: 'ui:link-dialog',
+  linkUrlInputLabel: 'ui:link-url',
+  linkUrlInputPlaceholder: 'ui:link-placeholder',
+  linkUrlInvalidError: 'ui:link-invalid',
+  removeButtonLabel: 'ui:remove',
+  saveButtonLabel: 'ui:save',
+  tableActionStatus: ({ action, selection }) => (
+    `ui:action:${action}:${selection
+      ? `${selection.rowFrom}-${selection.rowTo}:${selection.columnFrom}-${selection.columnTo}`
+      : 'none'}`
+  ),
+  tableColumnsInputLabel: 'ui:columns',
+  tableControlLabel: (control) => `ui:control:${control}`,
+  tableDialogLabel: (mode) => `ui:table-dialog:${mode}`,
+  tableDimensionsInvalidError: ({ maximum, minimum }) => `ui:dimensions:${minimum}-${maximum}`,
+  tableGroupLabel: (group) => `ui:group:${group}`,
+  tableOperationError: (mode) => `ui:table-error:${mode}`,
+  tableRowsInputLabel: 'ui:rows',
+  tableSelectionStatus: ({ columnFrom, columnTo, rowFrom, rowTo }) => (
+    `ui:selection:${rowFrom}-${rowTo}:${columnFrom}-${columnTo}`
+  ),
+  tableSubmitButtonLabel: (mode) => `ui:submit:${mode}`,
+  tableToolbarLabel: 'ui:table-toolbar',
+  unlinkButtonLabel: 'ui:unlink',
+};
+
 function destroyControllers(controllers: ReturnType<ReturnType<typeof createDefaultUi>>) {
   controllers.clearSelectionAnchor();
   controllers.codeBlockLanguageEditor?.destroy();
@@ -154,6 +200,212 @@ afterEach(() => {
 });
 
 describe('createDefaultUi', () => {
+  it('publishes frozen English defaults and validates copied partial message overrides', () => {
+    expect(Object.isFrozen(defaultUiMessages)).toBe(true);
+    expect(defaultUiMessages.saveButtonLabel).toBe('Save');
+    expect(defaultUiMessages.tableSelectionStatus({
+      columnFrom: 2,
+      columnTo: 3,
+      rowFrom: 3,
+      rowTo: 4,
+    })).toBe('Rectangular selection: rows 3 through 4 and columns 2 through 3.');
+
+    const overrides = { saveButtonLabel: 'Stored save' };
+    const factory = createDefaultUi({ messages: overrides });
+    overrides.saveButtonLabel = 'Mutated save';
+    const hostElement = document.createElement('div');
+    document.body.append(hostElement);
+    const controllers = factory({
+      addTableColumn() { return true; },
+      addTableRow() { return true; },
+      appendTableColumn() { return true; },
+      appendTableRow() { return true; },
+      getTableContext() { return null; },
+      hostElement,
+      insertTable() { return true; },
+      moveTableColumn() { return true; },
+      moveTableRow() { return true; },
+      normalizeTableAlignment() { return null; },
+      removeActiveImage() {},
+      removeActiveLink() {},
+      removeActiveTable() { return true; },
+      removeTableColumn() { return true; },
+      removeTableRow() { return true; },
+      resizeTable() { return true; },
+      setTableColumnAlignment() { return true; },
+      updateActiveImage() { return true; },
+      updateLinkHref() { return true; },
+    });
+    expect(document.querySelector('.mdw-link-editor')?.textContent).toContain('Stored save');
+    expect(document.querySelector('.mdw-link-editor')?.textContent).not.toContain('Mutated save');
+    destroyControllers(controllers);
+
+    expect(() => createDefaultUi({ messages: null as never }))
+      .toThrowError('Default UI messages must be an object.');
+    expect(() => createDefaultUi({ messages: [] as never }))
+      .toThrowError('Default UI messages must be an object.');
+    expect(() => createDefaultUi({ messages: { unknownMessage: 'no' } as never }))
+      .toThrowError('Unknown default UI message key unknownMessage.');
+    expect(() => createDefaultUi({ messages: { saveButtonLabel: '  ' } }))
+      .toThrowError('messages.saveButtonLabel must be a nonblank string.');
+    expect(() => createDefaultUi({
+      messages: { tableControlLabel: 'not a function' as never },
+    })).toThrowError('messages.tableControlLabel must be a function.');
+    expect(() => createDefaultUi({
+      messages: { tableControlLabel: () => '' },
+    })).toThrowError('messages.tableControlLabel result must be a nonblank string.');
+
+    const symbol = Symbol('unknown');
+    expect(() => createDefaultUi({ messages: { [symbol]: 'no' } as never }))
+      .toThrowError('Unknown default UI message key Symbol(unknown).');
+  });
+
+  it('threads complete localized copy and whole table formatters through every overlay', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('button');
+    const tableMarker = document.createElement('table');
+    document.body.append(hostElement, marker, tableMarker);
+    const tableContext = createTableContext({
+      columnCount: 5,
+      rowCount: 6,
+      selectedColumnFrom: 1,
+      selectedColumnTo: 2,
+      selectedRowFrom: 2,
+      selectedRowTo: 3,
+    });
+    const controllers = createControllers(hostElement, { messages: localizedMessages }, {
+      getTableContext() {
+        return tableContext;
+      },
+      insertTable() {
+        return false;
+      },
+      resizeTable() {
+        return false;
+      },
+      updateActiveImage() {
+        return false;
+      },
+      updateLinkHref() {
+        return false;
+      },
+    });
+    const view = createView();
+    view.nodeDOM = () => tableMarker;
+
+    const languageEditor = controllers.codeBlockLanguageEditor!;
+    languageEditor.open(view, marker, {
+      language: 'ts',
+      update() {
+        return false;
+      },
+    });
+    const codeDialog = document.querySelector<HTMLElement>('.mdw-code-language-editor')!;
+    const codeInput = codeDialog.querySelector<HTMLInputElement>('input')!;
+    expect(codeDialog.getAttribute('aria-label')).toBe('ui:code-dialog');
+    expect(codeInput.getAttribute('aria-label')).toBe('ui:code-input');
+    expect(codeInput.placeholder).toBe('ui:code-placeholder');
+    expect(Array.from(codeDialog.querySelectorAll('button')).map((button) => button.textContent))
+      .toEqual(['ui:save', 'ui:cancel']);
+    codeInput.value = 'bad\0info';
+    codeDialog.querySelector<HTMLButtonElement>('button')!.click();
+    expect(codeDialog.querySelector('[role="alert"]')?.textContent).toBe('ui:code-invalid:128');
+    codeInput.value = 'rust';
+    codeInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    codeDialog.querySelector<HTMLButtonElement>('button')!.click();
+    expect(codeDialog.querySelector('[role="alert"]')?.textContent).toBe('ui:code-stale');
+    languageEditor.close(false);
+
+    controllers.linkEditor.open(view, marker, 'https://example.com');
+    const linkDialog = document.querySelector<HTMLElement>('.mdw-link-editor')!;
+    const linkInput = linkDialog.querySelector<HTMLInputElement>('input')!;
+    expect(linkDialog.getAttribute('aria-label')).toBe('ui:link-dialog');
+    expect(linkInput.getAttribute('aria-label')).toBe('ui:link-url');
+    expect(linkInput.placeholder).toBe('ui:link-placeholder');
+    expect(Array.from(linkDialog.querySelectorAll('button')).map((button) => button.textContent))
+      .toEqual(['ui:save', 'ui:unlink', 'ui:cancel']);
+    linkDialog.querySelector<HTMLButtonElement>('button')!.click();
+    expect(linkDialog.querySelector('[role="alert"]')?.textContent).toBe('ui:link-invalid');
+    controllers.linkEditor.close(false);
+
+    controllers.imageEditor.open(view, marker, { node: { attrs: {} } } as never);
+    const imageDialog = document.querySelector<HTMLElement>('.mdw-image-editor')!;
+    const imageInputs = Array.from(imageDialog.querySelectorAll<HTMLInputElement>('input'));
+    expect(imageDialog.getAttribute('aria-label')).toBe('ui:image-dialog');
+    expect(imageInputs.map((input) => input.getAttribute('aria-label')))
+      .toEqual(['ui:image-url', 'ui:image-alt', 'ui:image-title']);
+    expect(imageInputs.map((input) => input.placeholder)).toEqual([
+      'ui:image-url-placeholder',
+      'ui:image-alt-placeholder',
+      'ui:image-title-placeholder',
+    ]);
+    expect(Array.from(imageDialog.querySelectorAll('button')).map((button) => button.textContent))
+      .toEqual(['ui:save', 'ui:remove', 'ui:cancel']);
+    imageDialog.querySelector<HTMLButtonElement>('button')!.click();
+    expect(imageDialog.querySelector('[role="alert"]')?.textContent).toBe('ui:image-invalid');
+    controllers.imageEditor.close(false);
+
+    controllers.tableToolbar.update(view);
+    const toolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
+    expect(toolbar.getAttribute('aria-label')).toBe('ui:table-toolbar');
+    expect(Array.from(toolbar.querySelectorAll('[role="group"]')).map((group) => (
+      group.getAttribute('aria-label')
+    ))).toEqual(['ui:group:row', 'ui:group:column', 'ui:group:alignment', 'ui:group:table']);
+    const tableButtons = Array.from(toolbar.querySelectorAll<HTMLButtonElement>('button'));
+    expect(tableButtons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'ui:control:insert-row-before',
+      'ui:control:insert-row-after',
+      'ui:control:move-row-up',
+      'ui:control:move-row-down',
+      'ui:control:delete-row',
+      'ui:control:insert-column-before',
+      'ui:control:insert-column-after',
+      'ui:control:move-column-left',
+      'ui:control:move-column-right',
+      'ui:control:delete-column',
+      'ui:control:automatic-alignment',
+      'ui:control:align-left',
+      'ui:control:align-center',
+      'ui:control:align-right',
+      'ui:control:resize-table',
+      'ui:control:delete-table',
+    ]);
+    expect(tableButtons.map((button) => button.title))
+      .toEqual(tableButtons.map((button) => button.getAttribute('aria-label')));
+    expect(toolbar.querySelector('[role="status"]')?.textContent).toBe('ui:selection:3-4:2-3');
+    tableButtons[0]!.click();
+    expect(toolbar.querySelector('[role="status"]')?.textContent)
+      .toBe('ui:action:insert-row-before:3-4:2-3');
+
+    controllers.tableToolbar.create?.(view, marker);
+    const sizeDialog = document.querySelector<HTMLElement>('.mdw-table-size-editor')!;
+    const sizeForm = sizeDialog.querySelector<HTMLFormElement>('form')!;
+    const sizeInputs = Array.from(sizeDialog.querySelectorAll<HTMLInputElement>('input'));
+    expect(sizeDialog.getAttribute('aria-label')).toBe('ui:table-dialog:create');
+    expect(sizeInputs.map((input) => input.getAttribute('aria-label'))).toEqual(['ui:rows', 'ui:columns']);
+    expect(Array.from(sizeDialog.querySelectorAll('button')).map((button) => button.textContent))
+      .toEqual(['ui:submit:create', 'ui:cancel']);
+    sizeInputs[0]!.value = '0';
+    sizeForm.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+    expect(sizeDialog.querySelector('[role="alert"]')?.textContent).toBe('ui:dimensions:1-100');
+    sizeInputs[0]!.value = '2';
+    sizeInputs[1]!.value = '3';
+    sizeForm.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+    expect(sizeDialog.querySelector('[role="alert"]')?.textContent).toBe('ui:table-error:create');
+    Array.from(sizeDialog.querySelectorAll('button'))
+      .find((button) => button.textContent === 'ui:cancel')!
+      .click();
+
+    tableButtons[14]!.click();
+    expect(sizeDialog.getAttribute('aria-label')).toBe('ui:table-dialog:resize');
+    expect(Array.from(sizeDialog.querySelectorAll('button')).map((button) => button.textContent))
+      .toEqual(['ui:submit:resize', 'ui:cancel']);
+    sizeForm.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true }));
+    expect(sizeDialog.querySelector('[role="alert"]')?.textContent).toBe('ui:table-error:resize');
+
+    destroyControllers(controllers);
+  });
+
   it('edits exact code-fence info with accessible, IME-safe trigger focus', () => {
     const hostElement = document.createElement('div');
     const marker = document.createElement('button');
@@ -704,6 +956,102 @@ describe('createDefaultUi', () => {
     expect(portalRoot.contains(anchor)).toBe(true);
     expect(anchor?.style.left).toBe('12px');
     expect(anchor?.style.top).toBe('24px');
+
+    destroyControllers(controllers);
+  });
+
+  it('keeps body-portaled overlays in the active editor theme, language, and direction', async () => {
+    setWindowMetrics(window, { height: 600, width: 800 });
+    const hostElement = document.createElement('div');
+    const editorDom = document.createElement('div');
+    const marker = document.createElement('span');
+    hostElement.className = 'mdw-theme-dark';
+    hostElement.dataset.mdwTheme = 'dark';
+    hostElement.lang = 'ar';
+    editorDom.dir = 'rtl';
+    editorDom.style.direction = 'rtl';
+    editorDom.style.setProperty('--mdw-color-accent', 'rgb(12, 34, 56)');
+    hostElement.append(editorDom, marker);
+    document.body.append(hostElement);
+    setElementRect(marker, { bottom: 220, left: 420, right: 440, top: 200 });
+
+    const controllers = createControllers(hostElement);
+    const view = {
+      ...createView(),
+      dom: editorDom,
+    };
+    const linkEditor = document.querySelector<HTMLElement>('.mdw-link-editor')!;
+    setOverlaySize(linkEditor, 100, 80);
+    controllers.linkEditor.open(view, marker, 'https://example.com');
+
+    expect(linkEditor.classList.contains('mdw-ui')).toBe(true);
+    expect(linkEditor.classList.contains('mdw-theme-dark')).toBe(true);
+    expect(linkEditor.dataset.mdwTheme).toBe('dark');
+    expect(linkEditor.lang).toBe('ar');
+    expect(linkEditor.dir).toBe('rtl');
+    expect(linkEditor.style.getPropertyValue('--mdw-color-accent')).toBe('rgb(12, 34, 56)');
+    expect(linkEditor.style.left).toBe('340px');
+
+    hostElement.classList.replace('mdw-theme-dark', 'mdw-theme-light');
+    hostElement.dataset.mdwTheme = 'light';
+    hostElement.lang = 'fr';
+    editorDom.dir = 'ltr';
+    editorDom.style.direction = 'ltr';
+    editorDom.style.setProperty('--mdw-color-accent', 'rgb(65, 43, 21)');
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+
+    expect(linkEditor.classList.contains('mdw-theme-dark')).toBe(false);
+    expect(linkEditor.classList.contains('mdw-theme-light')).toBe(true);
+    expect(linkEditor.dataset.mdwTheme).toBe('light');
+    expect(linkEditor.lang).toBe('fr');
+    expect(linkEditor.dir).toBe('ltr');
+    expect(linkEditor.style.getPropertyValue('--mdw-color-accent')).toBe('rgb(65, 43, 21)');
+    expect(linkEditor.style.left).toBe('420px');
+
+    editorDom.lang = '';
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    expect(linkEditor.getAttribute('lang')).toBe('');
+
+    editorDom.dataset.mdwTheme = 'contrast';
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    expect(linkEditor.dataset.mdwTheme).toBe('contrast');
+    expect(linkEditor.classList.contains('mdw-theme-light')).toBe(false);
+
+    destroyControllers(controllers);
+  });
+
+  it('refreshes a body-portaled overlay after the editor is reparented between scopes', () => {
+    const darkScope = document.createElement('div');
+    const lightScope = document.createElement('div');
+    const hostElement = document.createElement('div');
+    const editorDom = document.createElement('div');
+    const marker = document.createElement('span');
+    darkScope.className = 'mdw-theme-dark';
+    darkScope.dataset.mdwTheme = 'dark';
+    darkScope.lang = 'ar';
+    lightScope.className = 'mdw-theme-light';
+    lightScope.dataset.mdwTheme = 'light';
+    lightScope.lang = 'fr';
+    hostElement.append(editorDom, marker);
+    darkScope.append(hostElement);
+    document.body.append(darkScope, lightScope);
+
+    const controllers = createControllers(hostElement);
+    const view = {
+      ...createView(),
+      dom: editorDom,
+    };
+    const linkEditor = document.querySelector<HTMLElement>('.mdw-link-editor')!;
+    controllers.linkEditor.open(view, marker, 'https://example.com');
+    expect(linkEditor.dataset.mdwTheme).toBe('dark');
+    expect(linkEditor.lang).toBe('ar');
+
+    lightScope.append(hostElement);
+    controllers.linkEditor.open(view, marker, 'https://example.com');
+    expect(linkEditor.dataset.mdwTheme).toBe('light');
+    expect(linkEditor.classList.contains('mdw-theme-dark')).toBe(false);
+    expect(linkEditor.classList.contains('mdw-theme-light')).toBe(true);
+    expect(linkEditor.lang).toBe('fr');
 
     destroyControllers(controllers);
   });
@@ -1603,6 +1951,95 @@ describe('createDefaultUi', () => {
     expect(document.activeElement).toBe(deleteRow);
     expect(Array.from(toolbar.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.tabIndex === 0))
       .toEqual([deleteRow]);
+
+    destroyControllers(controllers);
+  });
+
+  it('maps table-toolbar navigation and physical column movement in RTL', async () => {
+    const hostElement = document.createElement('div');
+    const editorDom = document.createElement('div');
+    const marker = document.createElement('table');
+    editorDom.dir = 'rtl';
+    editorDom.style.direction = 'rtl';
+    hostElement.append(editorDom, marker);
+    document.body.append(hostElement);
+    let context = createTableContext({
+      columnCount: 4,
+      columnIndex: 1,
+      rowIndex: 2,
+      rowCount: 5,
+      selectedColumnFrom: 1,
+      selectedColumnTo: 1,
+      selectedRowFrom: 2,
+      selectedRowTo: 2,
+    });
+    const columnMoves: string[] = [];
+    const controllers = createControllers(hostElement, undefined, {
+      getTableContext() {
+        return context;
+      },
+      moveTableColumn(_view, direction) {
+        columnMoves.push(direction);
+      },
+    });
+    const view = {
+      ...createView(),
+      dom: editorDom,
+      nodeDOM() {
+        return marker;
+      },
+    };
+    controllers.tableToolbar.update(view);
+
+    const toolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
+    const buttons = Array.from(toolbar.querySelectorAll<HTMLButtonElement>('button'));
+    const moveLeft = toolbar.querySelector<HTMLButtonElement>('[aria-label="Move column left"]')!;
+    const moveRight = toolbar.querySelector<HTMLButtonElement>('[aria-label="Move column right"]')!;
+    expect(toolbar.dir).toBe('rtl');
+
+    buttons[0]!.focus();
+    buttons[0]!.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'ArrowLeft',
+    }));
+    expect(document.activeElement).toBe(buttons[1]);
+    buttons[1]!.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'ArrowRight',
+    }));
+    expect(document.activeElement).toBe(buttons[0]);
+
+    moveLeft.click();
+    moveRight.click();
+    expect(columnMoves).toEqual(['right', 'left']);
+
+    context = createTableContext({
+      columnCount: 4,
+      selectedColumnFrom: 0,
+      selectedColumnTo: 0,
+    });
+    controllers.tableToolbar.update(view);
+    expect(moveLeft.disabled).toBe(false);
+    expect(moveRight.disabled).toBe(true);
+
+    context = createTableContext({
+      columnCount: 4,
+      columnIndex: 3,
+      selectedColumnFrom: 3,
+      selectedColumnTo: 3,
+    });
+    controllers.tableToolbar.update(view);
+    expect(moveLeft.disabled).toBe(true);
+    expect(moveRight.disabled).toBe(false);
+
+    editorDom.dir = 'ltr';
+    editorDom.style.direction = 'ltr';
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    expect(toolbar.dir).toBe('ltr');
+    expect(moveLeft.disabled).toBe(false);
+    expect(moveRight.disabled).toBe(true);
 
     destroyControllers(controllers);
   });

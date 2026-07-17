@@ -45,9 +45,9 @@
   "scripts": {
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "build": "node ./scripts/cleanDist.mjs && tsc -p tsconfig.json && node ./scripts/copyStyles.mjs && node ../../scripts/fix-node-esm-specifiers.mjs dist",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.api.json --noEmit",
     "prepack": "pnpm run build && pnpm run typecheck && pnpm run smoke:node-esm",
-    "smoke:node-esm": "node --input-type=module -e \"const mod = await import('./dist/index.js'); if (typeof mod.createDefaultUi !== 'function') throw new Error('createDefaultUi export missing');\""
+    "smoke:node-esm": "node --input-type=module -e \"const mod = await import('./dist/index.js'); if (typeof mod.createDefaultUi !== 'function') throw new Error('createDefaultUi export missing'); if (!Object.isFrozen(mod.defaultUiMessages)) throw new Error('frozen defaultUiMessages export missing');\""
   },
   "peerDependencies": {
     "markora": "^0.0.1"

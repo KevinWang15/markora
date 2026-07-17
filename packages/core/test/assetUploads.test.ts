@@ -599,6 +599,7 @@ describe('asset upload integration policy and lifecycle', () => {
     const editor = track(createCompatibilityEditor({
       element: createHost(),
       markdown: '',
+      messages: { uploadedFileLabel: 'Fichier téléversé' },
       resources: {
         assets: {
           upload: () => ({ kind: 'link', url: '/uploads/unnamed' }),
@@ -611,7 +612,7 @@ describe('asset upload integration policy and lifecycle', () => {
     await flushMicrotasks();
 
     expect(events.map(({ reason }) => reason)).toEqual(['started', 'completed']);
-    expect(editor.view.state.doc.firstChild?.textContent).toBe('Uploaded file');
+    expect(editor.view.state.doc.firstChild?.textContent).toBe('Fichier téléversé');
     expect(editor.view.state.doc.firstChild?.firstChild?.marks[0]?.attrs.href).toBe(
       '/uploads/unnamed',
     );

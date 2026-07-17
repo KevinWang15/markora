@@ -19,6 +19,7 @@ import type {
 } from "./resourceApi";
 import type { MarkdownEditorShortcutMap } from "./shortcutConfig";
 import type { MarkdownEditorTypingOptions } from "./typingErgonomics";
+import type { MarkdownEditorMessageOverrides } from "./editorMessages";
 
 export type MarkdownEditorDomAttributes = Readonly<Record<string, string>>;
 
@@ -49,6 +50,8 @@ export type CreateEditorOptions = {
   extensions?: readonly AnyMarkdownEditorExtension[];
   initialSelection?: MarkdownEditorSelectionTarget;
   markdown?: string;
+  /** Creation-time text and accessible-label overrides for core-owned UI. */
+  messages?: MarkdownEditorMessageOverrides;
   onTransaction?: (
     transaction: Parameters<EditorView["dispatch"]>[0],
     view: EditorView,

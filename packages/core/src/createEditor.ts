@@ -90,6 +90,17 @@ export type {
   MarkdownEditorAutoPair,
   MarkdownEditorTypingOptions,
 } from "./typingErgonomics";
+export { defaultMarkdownEditorMessages } from "./editorMessages";
+export type {
+  MarkdownEditorCodeBlockLanguageMessageContext,
+  MarkdownEditorMessageOverrides,
+  MarkdownEditorMessages,
+  MarkdownEditorOpaqueMessageContext,
+} from "./editorMessages";
+import {
+  normalizeMarkdownEditorMessages,
+  type MarkdownEditorMessages,
+} from "./editorMessages";
 import { createImageViewClass } from "./imageView";
 import type { MarkdownEditorResourceErrorPhase } from "./resourceApi";
 import {
@@ -436,6 +447,7 @@ function createChangeContext(origin: MarkdownEditorChangeOrigin): MarkdownEditor
 
 function createSchemaRuntimeHelpers(
   codec: MarkdownEditorCodec,
+  messages: MarkdownEditorMessages,
   resources: NormalizedMarkdownEditorResources,
   onResourceError: (error: unknown, phase: MarkdownEditorResourceErrorPhase) => void,
 ) {
@@ -490,6 +502,7 @@ const revealMarkConfigs: RevealMarkConfig[] = [
 
 const ImageView = createImageViewClass({
   imageNodeType: schema.nodes.image,
+  messages,
   onError: onResourceError,
   resources,
 });
@@ -870,6 +883,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
   const shortcuts = normalizeMarkdownEditorShortcuts(shortcutOptions);
   const typing = normalizeMarkdownEditorTypingOptions(typingOptions);
+  const messages = normalizeMarkdownEditorMessages(options.messages);
   const resources = normalizeMarkdownEditorResources(options.resources);
   let handleResourceError: (
     error: unknown,
@@ -889,7 +903,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     usesCompatibilityPreset,
   );
   const codec = usesCompatibilityPreset
-    ? createCompatibilityMarkdownCodec(extensionResolution.extensions, resources)
+    ? createCompatibilityMarkdownCodec(extensionResolution.extensions, resources, messages)
     : createMinimalMarkdownCodec(extensionResolution.extensions, resources);
   const { schema } = codec;
   const {
@@ -944,6 +958,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     convertPipeTable,
   } = createSchemaRuntimeHelpers(
     codec,
+    messages,
     resources,
     (error, phase) => handleResourceError(error, phase),
   );
@@ -1145,6 +1160,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     getHistoryAction: () => codeBlockHistoryAction,
     historyCommands: { redo: trackedRedo, undo: trackedUndo },
     languageRegistry: codeBlockLanguages,
+    messages,
     nestedClipboard: extensionAssembly.contributions.nestedClipboard,
     shortcuts,
     typing,
@@ -1225,15 +1241,17 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     moveBeforeManagedBlock,
     setManagedBlockBoundarySelection,
   });
-  const TaskListItemView = createTaskListItemViewClass(schema.nodes.list_item);
+  const TaskListItemView = createTaskListItemViewClass(schema.nodes.list_item, messages);
   const RawBlockView = createOpaqueNodeViewClass({
     display: "block",
     getOnEdit: () => runtimeOptions.onEditOpaqueMarkdown,
+    messages,
     nodeType: schema.nodes.raw_block,
   });
   const RawInlineView = createOpaqueNodeViewClass({
     display: "inline",
     getOnEdit: () => runtimeOptions.onEditOpaqueMarkdown,
+    messages,
     nodeType: schema.nodes.raw_inline,
   });
   let releaseHostOwnership: () => void;
@@ -1512,6 +1530,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     },
     getView: () => view || null,
     isActive: () => lifecycle === "active",
+    messages,
     ownerWindow,
     reportUnhandled,
     resources,

@@ -39,7 +39,8 @@
       "import": "./dist/minimal.js"
     },
     "./minimal.css": "./dist/minimal.css",
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": "./dist/styles.css",
+    "./themes.css": "./dist/themes.css"
   },
   "files": [
     "dist",
@@ -92,6 +93,7 @@
   },
   "sideEffects": [
     "./dist/minimal.css",
-    "./dist/styles.css"
+    "./dist/styles.css",
+    "./dist/themes.css"
   ]
 }

@@ -1,4 +1,12 @@
 import type { MarkdownEditor } from "markora";
+import {
+  formatDefaultUiMessage,
+  type DefaultUiMessages,
+  type DefaultUiTableAction,
+  type DefaultUiTableControl,
+  type DefaultUiTableGroup,
+  type DefaultUiTableSelectionContext,
+} from "./messages";
 import { measurePositionSpace, setViewportPosition } from "./positioning";
 
 type EditorView = MarkdownEditor["view"];
@@ -17,11 +25,20 @@ type ActiveImageInfoLike = {
 
 type OverlayEnvironment = {
   doc: Document;
+  messages: DefaultUiMessages;
   portalRoot: PortalRoot;
+  syncEnvironment: (
+    target: HTMLElement,
+    view: EditorView,
+    onInvalidated?: () => void,
+  ) => void;
   win: BrowserWindow;
 };
 
+const CODE_BLOCK_LANGUAGE_MAX_LENGTH = 128;
 const OVERLAY_GAP = 8;
+const TABLE_DIMENSION_MAXIMUM = 100;
+const TABLE_DIMENSION_MINIMUM = 1;
 const VIEWPORT_MARGIN = 12;
 let nextOverlayMessageId = 0;
 
@@ -144,7 +161,10 @@ function positionOverlay(
   const overlayHeight = Math.min(overlayRect.height || dom.offsetHeight * space.scaleY, availableHeight);
   const minLeft = viewport.left + VIEWPORT_MARGIN;
   const maxLeft = Math.max(minLeft, viewport.right - overlayWidth - VIEWPORT_MARGIN);
-  const left = clamp(markerRect.left, minLeft, maxLeft);
+  const preferredLeft = win.getComputedStyle(dom).direction === "rtl"
+    ? markerRect.right - overlayWidth
+    : markerRect.left;
+  const left = clamp(preferredLeft, minLeft, maxLeft);
   const topAbove = markerRect.top - overlayHeight - OVERLAY_GAP;
   const topBelow = markerRect.bottom + OVERLAY_GAP;
   const aboveFits = topAbove >= viewport.top + VIEWPORT_MARGIN;
@@ -174,6 +194,20 @@ function positionOverlay(
   const maxTop = Math.max(minTop, viewport.bottom - overlayHeight - VIEWPORT_MARGIN);
 
   setViewportPosition(dom, left, clamp(top, minTop, maxTop), space);
+}
+
+function refreshSelectionAnchor(marker: HTMLElement, view: EditorView) {
+  if (marker.dataset.mdwSelectionAnchor !== "true") {
+    return;
+  }
+
+  try {
+    const coords = view.coordsAtPos(view.state.selection.from);
+    setViewportPosition(marker, coords.left, coords.bottom);
+  } catch {
+    // The selection or its owner document may have changed while the overlay
+    // was open. Normal close/update handling will retire a stale anchor.
+  }
 }
 
 export type LinkEditorOverlay = {
@@ -215,22 +249,22 @@ export type TableToolbarOverlay = {
 export function createCodeBlockLanguageEditorOverlay(
   options: OverlayEnvironment,
 ): CodeBlockLanguageEditorOverlay {
-  const { doc, portalRoot, win } = options;
+  const { doc, messages, portalRoot, syncEnvironment, win } = options;
   const NodeCtor = win.Node;
   const dom = doc.createElement("div");
-  dom.className = "mdw-code-language-editor";
+  dom.className = "mdw-code-language-editor mdw-ui";
   dom.hidden = true;
   dom.style.display = "none";
   dom.setAttribute("role", "dialog");
-  dom.setAttribute("aria-label", "Edit code block language");
+  dom.setAttribute("aria-label", messages.codeBlockLanguageDialogLabel);
   dom.setAttribute("aria-modal", "false");
 
   const input = doc.createElement("input");
   input.className = "mdw-code-language-editor-input";
   input.type = "text";
-  input.maxLength = 128;
-  input.placeholder = "Language or fence info";
-  input.setAttribute("aria-label", "Code block language or fence info");
+  input.maxLength = CODE_BLOCK_LANGUAGE_MAX_LENGTH;
+  input.placeholder = messages.codeBlockLanguageInputPlaceholder;
+  input.setAttribute("aria-label", messages.codeBlockLanguageInputLabel);
 
   const errorMessage = doc.createElement("div");
   errorMessage.className = "mdw-editor-error";
@@ -242,11 +276,11 @@ export function createCodeBlockLanguageEditorOverlay(
 
   const saveButton = doc.createElement("button");
   saveButton.type = "button";
-  saveButton.textContent = "Save";
+  saveButton.textContent = messages.saveButtonLabel;
 
   const cancelButton = doc.createElement("button");
   cancelButton.type = "button";
-  cancelButton.textContent = "Cancel";
+  cancelButton.textContent = messages.cancelButtonLabel;
 
   const actions = doc.createElement("div");
   actions.className = "mdw-code-language-editor-actions";
@@ -280,6 +314,11 @@ export function createCodeBlockLanguageEditorOverlay(
   const reposition = () => {
     if (!activeMarker) {
       return;
+    }
+
+    if (activeView) {
+      syncEnvironment(dom, activeView, reposition);
+      refreshSelectionAnchor(activeMarker, activeView);
     }
 
     try {
@@ -344,14 +383,21 @@ export function createCodeBlockLanguageEditorOverlay(
 
     const nextLanguage = input.value;
 
-    if (nextLanguage.length > 128 || /[\0\r\n]/u.test(nextLanguage)) {
-      showError("Fence info must be at most 128 characters with no NUL or line-break characters.");
+    if (
+      nextLanguage.length > CODE_BLOCK_LANGUAGE_MAX_LENGTH
+      || /[\0\r\n]/u.test(nextLanguage)
+    ) {
+      showError(formatDefaultUiMessage(
+        "messages.codeBlockLanguageInvalidError",
+        messages.codeBlockLanguageInvalidError,
+        Object.freeze({ maximumLength: CODE_BLOCK_LANGUAGE_MAX_LENGTH }),
+      ));
       return;
     }
 
     if (!request.update(nextLanguage)) {
       if (session === currentSession && activeRequest === request) {
-        showError("The code block changed. Close this editor and try again.");
+        showError(messages.codeBlockLanguageStaleError);
       }
       return;
     }
@@ -443,6 +489,7 @@ export function createCodeBlockLanguageEditorOverlay(
       activeMarker = marker;
       activeRequest = request;
       activeView = view;
+      syncEnvironment(dom, view, reposition);
       composing = false;
       session += 1;
       const currentSession = session;
@@ -497,42 +544,50 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
   updateLinkHref: (view: EditorView, href: string) => boolean;
   removeActiveLink: (view: EditorView) => void;
 }): LinkEditorOverlay {
-  const { doc, portalRoot, removeActiveLink, updateLinkHref, win } = options;
+  const {
+    doc,
+    messages,
+    portalRoot,
+    removeActiveLink,
+    syncEnvironment,
+    updateLinkHref,
+    win,
+  } = options;
   const NodeCtor = win.Node;
   const dom = doc.createElement("div");
-  dom.className = "mdw-link-editor";
+  dom.className = "mdw-link-editor mdw-ui";
   dom.hidden = true;
   dom.style.display = "none";
   dom.setAttribute("role", "dialog");
-  dom.setAttribute("aria-label", "Edit link");
+  dom.setAttribute("aria-label", messages.linkDialogLabel);
   dom.setAttribute("aria-modal", "false");
 
   const input = doc.createElement("input");
   input.className = "mdw-link-editor-input";
   input.type = "text";
-  input.placeholder = "https://example.com";
-  input.setAttribute("aria-label", "Link URL");
+  input.placeholder = messages.linkUrlInputPlaceholder;
+  input.setAttribute("aria-label", messages.linkUrlInputLabel);
 
   const errorMessage = doc.createElement("div");
   errorMessage.className = "mdw-editor-error";
   errorMessage.hidden = true;
   errorMessage.id = createOverlayMessageId("link");
   errorMessage.setAttribute("role", "alert");
-  errorMessage.textContent = "Enter a valid link URL.";
+  errorMessage.textContent = messages.linkUrlInvalidError;
   input.setAttribute("aria-describedby", errorMessage.id);
   input.setAttribute("aria-errormessage", errorMessage.id);
 
   const saveButton = doc.createElement("button");
   saveButton.type = "button";
-  saveButton.textContent = "Save";
+  saveButton.textContent = messages.saveButtonLabel;
 
   const unlinkButton = doc.createElement("button");
   unlinkButton.type = "button";
-  unlinkButton.textContent = "Unlink";
+  unlinkButton.textContent = messages.unlinkButtonLabel;
 
   const cancelButton = doc.createElement("button");
   cancelButton.type = "button";
-  cancelButton.textContent = "Cancel";
+  cancelButton.textContent = messages.cancelButtonLabel;
 
   let activeView: EditorView | null = null;
   let activeMarker: HTMLElement | null = null;
@@ -542,6 +597,11 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
   const reposition = () => {
     if (!activeMarker) {
       return;
+    }
+
+    if (activeView) {
+      syncEnvironment(dom, activeView, reposition);
+      refreshSelectionAnchor(activeMarker, activeView);
     }
 
     try {
@@ -679,6 +739,7 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
       }
 
       activeView = view;
+      syncEnvironment(dom, view, reposition);
       activeMarker = marker;
       activeSession += 1;
       input.value = href;
@@ -710,54 +771,62 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   updateActiveImage: (view: EditorView, attrs: { src: string; alt: string | null; title: string | null }) => boolean;
   removeActiveImage: (view: EditorView) => void;
 }): ImageEditorOverlay {
-  const { doc, portalRoot, removeActiveImage, updateActiveImage, win } = options;
+  const {
+    doc,
+    messages,
+    portalRoot,
+    removeActiveImage,
+    syncEnvironment,
+    updateActiveImage,
+    win,
+  } = options;
   const NodeCtor = win.Node;
   const dom = doc.createElement("div");
-  dom.className = "mdw-image-editor";
+  dom.className = "mdw-image-editor mdw-ui";
   dom.hidden = true;
   dom.style.display = "none";
   dom.setAttribute("role", "dialog");
-  dom.setAttribute("aria-label", "Edit image");
+  dom.setAttribute("aria-label", messages.imageDialogLabel);
   dom.setAttribute("aria-modal", "false");
 
   const srcInput = doc.createElement("input");
   srcInput.className = "mdw-image-editor-input";
   srcInput.type = "text";
-  srcInput.placeholder = "Image URL";
-  srcInput.setAttribute("aria-label", "Image URL");
+  srcInput.placeholder = messages.imageUrlInputPlaceholder;
+  srcInput.setAttribute("aria-label", messages.imageUrlInputLabel);
 
   const errorMessage = doc.createElement("div");
   errorMessage.className = "mdw-editor-error";
   errorMessage.hidden = true;
   errorMessage.id = createOverlayMessageId("image");
   errorMessage.setAttribute("role", "alert");
-  errorMessage.textContent = "Enter a valid image URL.";
+  errorMessage.textContent = messages.imageUrlInvalidError;
   srcInput.setAttribute("aria-describedby", errorMessage.id);
   srcInput.setAttribute("aria-errormessage", errorMessage.id);
 
   const altInput = doc.createElement("input");
   altInput.className = "mdw-image-editor-input";
   altInput.type = "text";
-  altInput.placeholder = "Alt text";
-  altInput.setAttribute("aria-label", "Alt text");
+  altInput.placeholder = messages.imageAltInputPlaceholder;
+  altInput.setAttribute("aria-label", messages.imageAltInputLabel);
 
   const titleInput = doc.createElement("input");
   titleInput.className = "mdw-image-editor-input";
   titleInput.type = "text";
-  titleInput.placeholder = "Title";
-  titleInput.setAttribute("aria-label", "Title");
+  titleInput.placeholder = messages.imageTitleInputPlaceholder;
+  titleInput.setAttribute("aria-label", messages.imageTitleInputLabel);
 
   const saveButton = doc.createElement("button");
   saveButton.type = "button";
-  saveButton.textContent = "Save";
+  saveButton.textContent = messages.saveButtonLabel;
 
   const removeButton = doc.createElement("button");
   removeButton.type = "button";
-  removeButton.textContent = "Remove";
+  removeButton.textContent = messages.removeButtonLabel;
 
   const cancelButton = doc.createElement("button");
   cancelButton.type = "button";
-  cancelButton.textContent = "Cancel";
+  cancelButton.textContent = messages.cancelButtonLabel;
 
   let activeView: EditorView | null = null;
   let activeMarker: HTMLElement | null = null;
@@ -766,6 +835,10 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
 
   const reposition = () => {
     if (!activeMarker) return;
+    if (activeView) {
+      syncEnvironment(dom, activeView, reposition);
+      refreshSelectionAnchor(activeMarker, activeView);
+    }
     try {
       const markerRect = activeMarker.getBoundingClientRect();
       positionOverlay(dom, markerRect, doc, win, "below");
@@ -900,6 +973,7 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
       }
 
       activeView = view;
+      syncEnvironment(dom, view, reposition);
       activeMarker = marker;
       activeSession += 1;
       srcInput.value = typeof imageInfo.node.attrs.src === "string" ? imageInfo.node.attrs.src : "";
@@ -949,10 +1023,18 @@ function createTableSizeEditorOverlay(options: OverlayEnvironment & {
   insertTable: (view: EditorView, dimensions: TableDimensions) => boolean | void;
   resizeTable: (view: EditorView, dimensions: TableDimensions) => boolean | void;
 }): TableSizeEditorOverlay {
-  const { doc, insertTable, portalRoot, resizeTable, win } = options;
+  const {
+    doc,
+    insertTable,
+    messages,
+    portalRoot,
+    resizeTable,
+    syncEnvironment,
+    win,
+  } = options;
   const NodeCtor = win.Node;
   const dom = doc.createElement("div");
-  dom.className = "mdw-table-size-editor";
+  dom.className = "mdw-table-size-editor mdw-ui";
   dom.hidden = true;
   dom.style.display = "none";
   dom.setAttribute("role", "dialog");
@@ -972,8 +1054,8 @@ function createTableSizeEditorOverlay(options: OverlayEnvironment & {
     input.className = "mdw-table-size-editor-input";
     input.type = "number";
     input.inputMode = "numeric";
-    input.min = "1";
-    input.max = "100";
+    input.min = String(TABLE_DIMENSION_MINIMUM);
+    input.max = String(TABLE_DIMENSION_MAXIMUM);
     input.step = "1";
     input.required = true;
     input.setAttribute("aria-label", labelText);
@@ -981,8 +1063,8 @@ function createTableSizeEditorOverlay(options: OverlayEnvironment & {
     return { input, label };
   };
 
-  const rowField = createDimensionField("Rows");
-  const columnField = createDimensionField("Columns");
+  const rowField = createDimensionField(messages.tableRowsInputLabel);
+  const columnField = createDimensionField(messages.tableColumnsInputLabel);
   fields.append(rowField.label, columnField.label);
 
   const errorMessage = doc.createElement("div");
@@ -1001,7 +1083,7 @@ function createTableSizeEditorOverlay(options: OverlayEnvironment & {
   submitButton.type = "submit";
   const cancelButton = doc.createElement("button");
   cancelButton.type = "button";
-  cancelButton.textContent = "Cancel";
+  cancelButton.textContent = messages.cancelButtonLabel;
   actions.append(submitButton, cancelButton);
   form.append(fields, errorMessage, actions);
   dom.append(form);
@@ -1020,6 +1102,11 @@ function createTableSizeEditorOverlay(options: OverlayEnvironment & {
   const reposition = () => {
     if (!activeMarker) {
       return;
+    }
+
+    if (activeView) {
+      syncEnvironment(dom, activeView, reposition);
+      refreshSelectionAnchor(activeMarker, activeView);
     }
 
     try {
@@ -1046,7 +1133,11 @@ function createTableSizeEditorOverlay(options: OverlayEnvironment & {
 
   const readDimension = (input: HTMLInputElement) => {
     const value = Number(input.value);
-    return Number.isInteger(value) && value >= 1 && value <= 100 ? value : null;
+    return Number.isInteger(value)
+      && value >= TABLE_DIMENSION_MINIMUM
+      && value <= TABLE_DIMENSION_MAXIMUM
+      ? value
+      : null;
   };
 
   const close = (refocus: boolean) => {
@@ -1119,7 +1210,14 @@ function createTableSizeEditorOverlay(options: OverlayEnvironment & {
     ];
 
     if (rows === null || columns === null) {
-      showError("Enter whole numbers from 1 through 100.", invalidInputs);
+      showError(formatDefaultUiMessage(
+        "messages.tableDimensionsInvalidError",
+        messages.tableDimensionsInvalidError,
+        Object.freeze({
+          maximum: TABLE_DIMENSION_MAXIMUM,
+          minimum: TABLE_DIMENSION_MINIMUM,
+        }),
+      ), invalidInputs);
       return;
     }
 
@@ -1135,9 +1233,11 @@ function createTableSizeEditorOverlay(options: OverlayEnvironment & {
     }
 
     if (handled === false) {
-      showError(mode === "create"
-        ? "The table could not be inserted at the current selection."
-        : "The table could not be resized. Clear content outside the new size and try again.");
+      showError(formatDefaultUiMessage(
+        "messages.tableOperationError",
+        messages.tableOperationError,
+        mode,
+      ));
       return;
     }
 
@@ -1173,14 +1273,23 @@ function createTableSizeEditorOverlay(options: OverlayEnvironment & {
           : null;
       }
       activeView = view;
+      syncEnvironment(dom, view, reposition);
       activeMarker = marker;
       activeMode = mode;
       closeCallback = onClose ?? null;
       activeSession += 1;
       rowField.input.value = String(dimensions.rows);
       columnField.input.value = String(dimensions.columns);
-      dom.setAttribute("aria-label", mode === "create" ? "Create table" : "Resize table");
-      submitButton.textContent = mode === "create" ? "Create" : "Resize";
+      dom.setAttribute("aria-label", formatDefaultUiMessage(
+        "messages.tableDialogLabel",
+        messages.tableDialogLabel,
+        mode,
+      ));
+      submitButton.textContent = formatDefaultUiMessage(
+        "messages.tableSubmitButtonLabel",
+        messages.tableSubmitButtonLabel,
+        mode,
+      );
       clearError();
       dom.hidden = false;
       dom.style.display = "flex";
@@ -1245,6 +1354,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     doc,
     getTableContext,
     insertTable,
+    messages,
     moveTableColumn,
     moveTableRow,
     normalizeTableAlignment,
@@ -1254,22 +1364,25 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     removeTableRow,
     resizeTable,
     setTableColumnAlignment,
+    syncEnvironment,
     win,
   } = options;
   const tableSizeEditor = createTableSizeEditorOverlay({
     doc,
     insertTable,
+    messages,
     portalRoot,
     resizeTable,
+    syncEnvironment,
     win,
   });
   const HTMLElementCtor = win.HTMLElement;
   const dom = doc.createElement("div");
-  dom.className = "mdw-table-toolbar";
+  dom.className = "mdw-table-toolbar mdw-ui";
   dom.hidden = true;
   dom.style.display = "none";
   dom.setAttribute("role", "toolbar");
-  dom.setAttribute("aria-label", "Table controls");
+  dom.setAttribute("aria-label", messages.tableToolbarLabel);
   dom.setAttribute("aria-orientation", "horizontal");
 
   const status = doc.createElement("div");
@@ -1312,7 +1425,12 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     return svg;
   };
 
-  const createButton = (title: string, paths: string[]) => {
+  const createButton = (control: DefaultUiTableControl, paths: string[]) => {
+    const title = formatDefaultUiMessage(
+      "messages.tableControlLabel",
+      messages.tableControlLabel,
+      control,
+    );
     const button = doc.createElement("button");
     button.type = "button";
     button.className = "mdw-table-toolbar-button";
@@ -1323,22 +1441,22 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     return button;
   };
 
-  const insertRowBeforeButton = createButton("Insert row before", ["M5 9h14M5 17h14M12 3v4M9.5 5.5 12 3l2.5 2.5"]);
-  const insertRowAfterButton = createButton("Insert row after", ["M5 7h14M5 15h14M12 17v4M9.5 18.5 12 21l2.5-2.5"]);
-  const moveRowUpButton = createButton("Move row up", ["M5 8h14M5 16h14M12 14V3M8.5 6.5 12 3l3.5 3.5"]);
-  const moveRowDownButton = createButton("Move row down", ["M5 8h14M5 16h14M12 10v11M8.5 17.5 12 21l3.5-3.5"]);
-  const removeRowButton = createButton("Delete row", ["M5 8h14M5 16h14M9 12h6"]);
-  const insertColumnBeforeButton = createButton("Insert column before", ["M9 5v14M17 5v14M3 12h4M5.5 9.5 3 12l2.5 2.5"]);
-  const insertColumnAfterButton = createButton("Insert column after", ["M7 5v14M15 5v14M17 12h4M18.5 9.5 21 12l-2.5 2.5"]);
-  const moveColumnLeftButton = createButton("Move column left", ["M8 5v14M16 5v14M14 12H3M6.5 8.5 3 12l3.5 3.5"]);
-  const moveColumnRightButton = createButton("Move column right", ["M8 5v14M16 5v14M10 12h11M17.5 8.5 21 12l-3.5 3.5"]);
-  const removeColumnButton = createButton("Delete column", ["M8 5v14M16 5v14M11 12h2"]);
-  const alignAutomaticButton = createButton("Automatic alignment", ["M5 7h14M7 12h10M9 17h6"]);
-  const alignLeftButton = createButton("Align left", ["M5 7h14M5 12h10M5 17h14"]);
-  const alignCenterButton = createButton("Align center", ["M5 7h14M7 12h10M5 17h14"]);
-  const alignRightButton = createButton("Align right", ["M5 7h14M9 12h10M5 17h14"]);
-  const resizeButton = createButton("Resize table", ["M5 9V5h4M15 5h4v4M19 15v4h-4M9 19H5v-4M8 8l8 8M16 8l-8 8"]);
-  const removeButton = createButton("Delete table", ["M9 4.5h6M10 9v7M14 9v7M5 6h14M7 6l1 13h8l1-13"]);
+  const insertRowBeforeButton = createButton("insert-row-before", ["M5 9h14M5 17h14M12 3v4M9.5 5.5 12 3l2.5 2.5"]);
+  const insertRowAfterButton = createButton("insert-row-after", ["M5 7h14M5 15h14M12 17v4M9.5 18.5 12 21l2.5-2.5"]);
+  const moveRowUpButton = createButton("move-row-up", ["M5 8h14M5 16h14M12 14V3M8.5 6.5 12 3l3.5 3.5"]);
+  const moveRowDownButton = createButton("move-row-down", ["M5 8h14M5 16h14M12 10v11M8.5 17.5 12 21l3.5-3.5"]);
+  const removeRowButton = createButton("delete-row", ["M5 8h14M5 16h14M9 12h6"]);
+  const insertColumnBeforeButton = createButton("insert-column-before", ["M9 5v14M17 5v14M3 12h4M5.5 9.5 3 12l2.5 2.5"]);
+  const insertColumnAfterButton = createButton("insert-column-after", ["M7 5v14M15 5v14M17 12h4M18.5 9.5 21 12l-2.5 2.5"]);
+  const moveColumnLeftButton = createButton("move-column-left", ["M8 5v14M16 5v14M14 12H3M6.5 8.5 3 12l3.5 3.5"]);
+  const moveColumnRightButton = createButton("move-column-right", ["M8 5v14M16 5v14M10 12h11M17.5 8.5 21 12l-3.5 3.5"]);
+  const removeColumnButton = createButton("delete-column", ["M8 5v14M16 5v14M11 12h2"]);
+  const alignAutomaticButton = createButton("automatic-alignment", ["M5 7h14M7 12h10M9 17h6"]);
+  const alignLeftButton = createButton("align-left", ["M5 7h14M5 12h10M5 17h14"]);
+  const alignCenterButton = createButton("align-center", ["M5 7h14M7 12h10M5 17h14"]);
+  const alignRightButton = createButton("align-right", ["M5 7h14M9 12h10M5 17h14"]);
+  const resizeButton = createButton("resize-table", ["M5 9V5h4M15 5h4v4M19 15v4h-4M9 19H5v-4M8 8l8 8M16 8l-8 8"]);
+  const removeButton = createButton("delete-table", ["M9 4.5h6M10 9v7M14 9v7M5 6h14M7 6l1 13h8l1-13"]);
   const toolbarButtons = [
     insertRowBeforeButton,
     insertRowAfterButton,
@@ -1408,27 +1526,30 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     setButtonState(alignRightButton, active === "right");
   };
 
+  const getSelectionContext = (
+    info: TableUiContextLike,
+  ): DefaultUiTableSelectionContext => Object.freeze({
+    columnFrom: Math.min(info.selectedColumnFrom, info.selectedColumnTo) + 1,
+    columnTo: Math.max(info.selectedColumnFrom, info.selectedColumnTo) + 1,
+    rowFrom: Math.min(info.selectedRowFrom, info.selectedRowTo) + 1,
+    rowTo: Math.max(info.selectedRowFrom, info.selectedRowTo) + 1,
+  });
+
   const describeSelection = (info: TableUiContextLike) => {
-    const rowFrom = Math.min(info.selectedRowFrom, info.selectedRowTo) + 1;
-    const rowTo = Math.max(info.selectedRowFrom, info.selectedRowTo) + 1;
-    const columnFrom = Math.min(info.selectedColumnFrom, info.selectedColumnTo) + 1;
-    const columnTo = Math.max(info.selectedColumnFrom, info.selectedColumnTo) + 1;
-
-    if (rowFrom === rowTo && columnFrom === columnTo) {
-      return `Cell at row ${rowFrom}, column ${columnFrom} selected.`;
-    }
-
-    const rows = rowFrom === rowTo ? `row ${rowFrom}` : `rows ${rowFrom} through ${rowTo}`;
-    const columns = columnFrom === columnTo
-      ? `column ${columnFrom}`
-      : `columns ${columnFrom} through ${columnTo}`;
-    return `Rectangular selection: ${rows} and ${columns}.`;
+    return formatDefaultUiMessage(
+      "messages.tableSelectionStatus",
+      messages.tableSelectionStatus,
+      getSelectionContext(info),
+    );
   };
 
-  const announce = (message: string, view: EditorView | null = activeView) => {
+  const announce = (action: DefaultUiTableAction, view: EditorView | null = activeView) => {
     const info = view && !view.isDestroyed ? getTableContext(view.state) : null;
-    const description = info ? describeSelection(info) : "";
-    status.textContent = description ? `${message} ${description}` : message;
+    status.textContent = formatDefaultUiMessage(
+      "messages.tableActionStatus",
+      messages.tableActionStatus,
+      Object.freeze({ action, selection: info ? getSelectionContext(info) : null }),
+    );
   };
 
   const updateButtonAvailability = (info: TableUiContextLike) => {
@@ -1439,14 +1560,19 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     const selectedColumnFrom = Math.min(info.selectedColumnFrom, info.selectedColumnTo);
     const selectedColumnTo = Math.max(info.selectedColumnFrom, info.selectedColumnTo);
     const selectionIncludesHeader = selectedRowFrom === 0;
+    const rtl = win.getComputedStyle(dom).direction === "rtl";
     moveRowUpButton.disabled = selectedRowFrom <= 1;
     moveRowDownButton.disabled = selectionIncludesHeader || selectedRowTo >= info.rowCount - 1;
-    moveColumnLeftButton.disabled = selectedColumnFrom <= 0;
-    moveColumnRightButton.disabled = selectedColumnTo >= info.columnCount - 1;
-    insertRowBeforeButton.disabled = info.rowCount >= 100;
-    insertRowAfterButton.disabled = info.rowCount >= 100;
-    insertColumnBeforeButton.disabled = info.columnCount >= 100;
-    insertColumnAfterButton.disabled = info.columnCount >= 100;
+    moveColumnLeftButton.disabled = rtl
+      ? selectedColumnTo >= info.columnCount - 1
+      : selectedColumnFrom <= 0;
+    moveColumnRightButton.disabled = rtl
+      ? selectedColumnFrom <= 0
+      : selectedColumnTo >= info.columnCount - 1;
+    insertRowBeforeButton.disabled = info.rowCount >= TABLE_DIMENSION_MAXIMUM;
+    insertRowAfterButton.disabled = info.rowCount >= TABLE_DIMENSION_MAXIMUM;
+    insertColumnBeforeButton.disabled = info.columnCount >= TABLE_DIMENSION_MAXIMUM;
+    insertColumnAfterButton.disabled = info.columnCount >= TABLE_DIMENSION_MAXIMUM;
 
     const preferredIndex = focusedIndex >= 0 ? focusedIndex : rovingIndex;
     const shouldMoveFocus = focusedIndex >= 0 && toolbarButtons[focusedIndex]?.disabled === true;
@@ -1455,6 +1581,10 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
 
   const reposition = () => {
     if (!activeMarker) return;
+    if (activeView) {
+      syncEnvironment(dom, activeView, handleEnvironmentInvalidated);
+      refreshSelectionAnchor(activeMarker, activeView);
+    }
     try {
       const rect = activeMarker.getBoundingClientRect();
       positionOverlay(dom, rect, doc, win, "above");
@@ -1506,6 +1636,23 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     }
   };
 
+  const handleEnvironmentInvalidated = () => {
+    const view = activeView;
+
+    if (!view || view.isDestroyed || dom.hidden) {
+      return;
+    }
+
+    const info = getTableContext(view.state);
+    if (!info) {
+      close(false);
+      return;
+    }
+
+    updateButtonAvailability(info);
+    reposition();
+  };
+
   const handleMouseDown = (event: MouseEvent) => {
     const target = event.target;
 
@@ -1553,11 +1700,16 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     }
 
     let nextIndex: number | null = null;
+    const rtl = win.getComputedStyle(dom).direction === "rtl";
 
     if (event.key === "ArrowRight") {
-      nextIndex = findEnabledIndex(currentIndex + 1, 1);
+      nextIndex = rtl
+        ? findEnabledIndex(currentIndex - 1, -1)
+        : findEnabledIndex(currentIndex + 1, 1);
     } else if (event.key === "ArrowLeft") {
-      nextIndex = findEnabledIndex(currentIndex - 1, -1);
+      nextIndex = rtl
+        ? findEnabledIndex(currentIndex + 1, 1)
+        : findEnabledIndex(currentIndex - 1, -1);
     } else if (event.key === "Home") {
       nextIndex = findEnabledIndex(0, 1);
     } else if (event.key === "End") {
@@ -1577,20 +1729,24 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     }
   };
 
-  const createGroup = (label: string, ...buttons: HTMLButtonElement[]) => {
+  const createGroup = (groupName: DefaultUiTableGroup, ...buttons: HTMLButtonElement[]) => {
     const group = doc.createElement("div");
     group.className = "mdw-table-toolbar-group";
     group.setAttribute("role", "group");
-    group.setAttribute("aria-label", label);
+    group.setAttribute("aria-label", formatDefaultUiMessage(
+      "messages.tableGroupLabel",
+      messages.tableGroupLabel,
+      groupName,
+    ));
     group.append(...buttons);
     return group;
   };
 
   dom.append(
-    createGroup("Row", insertRowBeforeButton, insertRowAfterButton, moveRowUpButton, moveRowDownButton, removeRowButton),
-    createGroup("Column", insertColumnBeforeButton, insertColumnAfterButton, moveColumnLeftButton, moveColumnRightButton, removeColumnButton),
-    createGroup("Alignment", alignAutomaticButton, alignLeftButton, alignCenterButton, alignRightButton),
-    createGroup("Table", resizeButton, removeButton),
+    createGroup("row", insertRowBeforeButton, insertRowAfterButton, moveRowUpButton, moveRowDownButton, removeRowButton),
+    createGroup("column", insertColumnBeforeButton, insertColumnAfterButton, moveColumnLeftButton, moveColumnRightButton, removeColumnButton),
+    createGroup("alignment", alignAutomaticButton, alignLeftButton, alignCenterButton, alignRightButton),
+    createGroup("table", resizeButton, removeButton),
     status,
   );
   portalRoot.append(dom);
@@ -1598,7 +1754,10 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   dom.addEventListener("mousedown", handleMouseDown);
   dom.addEventListener("focusin", handleFocusIn);
   dom.addEventListener("keydown", handleKeyDown);
-  const runTableAction = (action: (view: EditorView) => boolean | void, message: string) => {
+  const runTableAction = (
+    action: (view: EditorView) => boolean | void,
+    actionName: DefaultUiTableAction,
+  ) => {
     const view = activeView;
 
     if (!view || view.isDestroyed || !view.editable) {
@@ -1607,59 +1766,65 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     }
 
     if (action(view) !== false) {
-      announce(message, view);
+      announce(actionName, view);
     }
   };
 
   insertRowBeforeButton.addEventListener("click", () => runTableAction(
     (view) => addTableRow(view, "before"),
-    "Inserted row before.",
+    "insert-row-before",
   ));
   insertRowAfterButton.addEventListener("click", () => runTableAction(
     (view) => addTableRow(view, "after"),
-    "Inserted row after.",
+    "insert-row-after",
   ));
   moveRowUpButton.addEventListener("click", () => runTableAction(
     (view) => moveTableRow(view, "up"),
-    "Moved row up.",
+    "move-row-up",
   ));
   moveRowDownButton.addEventListener("click", () => runTableAction(
     (view) => moveTableRow(view, "down"),
-    "Moved row down.",
+    "move-row-down",
   ));
-  removeRowButton.addEventListener("click", () => runTableAction(removeTableRow, "Deleted row."));
+  removeRowButton.addEventListener("click", () => runTableAction(removeTableRow, "delete-row"));
   insertColumnBeforeButton.addEventListener("click", () => runTableAction(
     (view) => addTableColumn(view, "before"),
-    "Inserted column before.",
+    "insert-column-before",
   ));
   insertColumnAfterButton.addEventListener("click", () => runTableAction(
     (view) => addTableColumn(view, "after"),
-    "Inserted column after.",
+    "insert-column-after",
   ));
   moveColumnLeftButton.addEventListener("click", () => runTableAction(
-    (view) => moveTableColumn(view, "left"),
-    "Moved column left.",
+    (view) => moveTableColumn(
+      view,
+      win.getComputedStyle(dom).direction === "rtl" ? "right" : "left",
+    ),
+    "move-column-left",
   ));
   moveColumnRightButton.addEventListener("click", () => runTableAction(
-    (view) => moveTableColumn(view, "right"),
-    "Moved column right.",
+    (view) => moveTableColumn(
+      view,
+      win.getComputedStyle(dom).direction === "rtl" ? "left" : "right",
+    ),
+    "move-column-right",
   ));
-  removeColumnButton.addEventListener("click", () => runTableAction(removeTableColumn, "Deleted column."));
+  removeColumnButton.addEventListener("click", () => runTableAction(removeTableColumn, "delete-column"));
   alignAutomaticButton.addEventListener("click", () => runTableAction(
     (view) => setTableColumnAlignment(view, null),
-    "Set automatic alignment.",
+    "automatic-alignment",
   ));
   alignLeftButton.addEventListener("click", () => runTableAction(
     (view) => setTableColumnAlignment(view, "left"),
-    "Aligned column left.",
+    "align-left",
   ));
   alignCenterButton.addEventListener("click", () => runTableAction(
     (view) => setTableColumnAlignment(view, "center"),
-    "Aligned column center.",
+    "align-center",
   ));
   alignRightButton.addEventListener("click", () => runTableAction(
     (view) => setTableColumnAlignment(view, "right"),
-    "Aligned column right.",
+    "align-right",
   ));
   resizeButton.addEventListener("click", () => {
     const view = activeView;
@@ -1734,6 +1899,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
 
     activeView = view;
     activeMarker = marker;
+    syncEnvironment(dom, view, handleEnvironmentInvalidated);
     dom.hidden = false;
     dom.style.display = "flex";
     updateButtonAvailability(info);

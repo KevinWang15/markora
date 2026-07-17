@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDir, "..");
 const sourcePath = resolve(packageRoot, "src/styles.css");
+const themesSourcePath = resolve(packageRoot, "src/themes.css");
 const outputPath = resolve(packageRoot, "dist/styles.css");
 const minimalOutputPath = resolve(packageRoot, "dist/minimal.css");
+const themesOutputPath = resolve(packageRoot, "dist/themes.css");
 
 function findClosingBrace(source, openingBrace) {
   let depth = 1;
@@ -134,6 +136,7 @@ function createMinimalStyles(source) {
 
 await mkdir(dirname(outputPath), { recursive: true });
 const styles = await readFile(sourcePath, "utf8");
+const themes = await readFile(themesSourcePath, "utf8");
 const minimalStyles = createMinimalStyles(styles);
 
 if (
@@ -158,4 +161,5 @@ for (const requiredSelector of [
 await Promise.all([
   writeFile(outputPath, styles),
   writeFile(minimalOutputPath, minimalStyles),
+  writeFile(themesOutputPath, themes),
 ]);

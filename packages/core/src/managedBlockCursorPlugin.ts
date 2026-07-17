@@ -1,6 +1,11 @@
 import { Plugin } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import { ManagedBlockCursor, type ManagedBlockBoundary, type BoundarySide } from "./managedBlockCursor";
+import {
+  horizontalArrowLogicalSide,
+  probeVisualRangeMotion,
+  type PhysicalHorizontalDirection,
+} from "./physicalArrow";
 
 const DEBUG_MANAGED_BLOCK_CURSOR = false;
 
@@ -183,31 +188,45 @@ export type CreateManagedBlockBoundaryPluginOptions = {
 
 export function createManagedBlockBoundaryPlugin(options: CreateManagedBlockBoundaryPluginOptions) {
   const handleManagedBlockKeyDown = (view: EditorView, event: KeyboardEvent) => {
-    if (event.key === "ArrowLeft") {
-      const tableInfo = options.getTableBoundaryEscapeInfo(view.state, "before");
+    const horizontalDirection: PhysicalHorizontalDirection | null = event.key === "ArrowLeft"
+      ? "left"
+      : event.key === "ArrowRight"
+        ? "right"
+        : null;
 
-      if (tableInfo) {
-        const handled = options.moveBeforeManagedBlock(view, tableInfo.tablePos);
+    if (horizontalDirection) {
+      const tableBoundary = (["before", "after"] as const).map((side) => ({
+        info: options.getTableBoundaryEscapeInfo(view.state, side),
+        side,
+      })).find(({ info }) => info !== null);
 
-        if (handled) {
-          event.preventDefault();
+      if (tableBoundary?.info) {
+        const { tablePos } = tableBoundary.info;
+        const table = view.state.doc.nodeAt(tablePos);
+        const tableDom = view.nodeDOM(tablePos);
+        const visualMotion = table
+          ? probeVisualRangeMotion(
+              view,
+              horizontalDirection,
+              tablePos,
+              tablePos + table.nodeSize,
+            )
+          : null;
+        const targetsBoundary = (
+          visualMotion ?? horizontalArrowLogicalSide(view, horizontalDirection, tableDom)
+        ) === tableBoundary.side;
+
+        if (targetsBoundary) {
+          const handled = tableBoundary.side === "before"
+            ? options.moveBeforeManagedBlock(view, tablePos)
+            : options.setManagedBlockBoundarySelection(view, tablePos, "after");
+
+          if (handled) {
+            event.preventDefault();
+          }
+
+          return handled;
         }
-
-        return handled;
-      }
-    }
-
-    if (event.key === "ArrowRight") {
-      const tableInfo = options.getTableBoundaryEscapeInfo(view.state, "after");
-
-      if (tableInfo) {
-        const handled = options.setManagedBlockBoundarySelection(view, tableInfo.tablePos, "after");
-
-        if (handled) {
-          event.preventDefault();
-        }
-
-        return handled;
       }
     }
 
@@ -217,17 +236,27 @@ export function createManagedBlockBoundaryPlugin(options: CreateManagedBlockBoun
       return false;
     }
 
-    if (event.key === "ArrowLeft" && boundary.side === "after") {
-      const handled = options.moveInsideManagedBlock(view, boundary);
+    if (horizontalDirection) {
+      const blockDom = view.nodeDOM(boundary.blockPos);
+      const visualMotion = probeVisualRangeMotion(
+        view,
+        horizontalDirection,
+        boundary.blockPos,
+        boundary.blockPos + boundary.node.nodeSize,
+      );
+      const fallbackSide = horizontalArrowLogicalSide(view, horizontalDirection, blockDom);
+      const movesInside = visualMotion === "inside" || (
+        visualMotion === null
+        && (
+          (boundary.side === "before" && fallbackSide === "after")
+          || (boundary.side === "after" && fallbackSide === "before")
+        )
+      );
 
-      if (handled) {
-        event.preventDefault();
+      if (!movesInside) {
+        return false;
       }
 
-      return handled;
-    }
-
-    if (event.key === "ArrowRight" && boundary.side === "before") {
       const handled = options.moveInsideManagedBlock(view, boundary);
 
       if (handled) {

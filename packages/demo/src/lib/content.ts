@@ -1,6 +1,7 @@
 export const quickStartCode = `import { createEditor } from "markora";
 import { createDefaultUi } from "markora-ui";
 import "markora/styles.css";
+import "markora/themes.css";
 import "markora-ui/styles.css";
 
 const hostElement = document.querySelector("#editor");

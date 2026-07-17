@@ -1,18 +1,31 @@
 .mdw-host .ProseMirror {
-  min-height: 180px;
-  padding: 12px;
-  border: 1px solid #d0d7de;
-  border-radius: 8px;
+  min-height: var(--mdw-editor-min-block-size, 180px);
+  padding: var(--mdw-editor-padding, 12px);
+  border: var(--mdw-border-width, 1px) solid var(--mdw-color-border, #d0d7de);
+  border-radius: var(--mdw-editor-radius, 8px);
+  background: var(--mdw-editor-background, transparent);
+  color: var(--mdw-editor-color, inherit);
+  color-scheme: var(--mdw-color-scheme, normal);
   outline: none;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.mdw-host .ProseMirror:focus-visible {
+  border-color: var(--mdw-color-focus, #0969da);
+  box-shadow: 0 0 0 var(--mdw-focus-ring-width, 2px) var(--mdw-color-focus-soft, rgba(9, 105, 218, 0.18));
+}
+
+.mdw-host .ProseMirror ::selection {
+  background: var(--mdw-color-selection);
+  color: var(--mdw-color-selection-text);
 }
 
 .mdw-host .ProseMirror .mdw-placeholder::before {
   content: attr(data-placeholder);
   float: inline-start;
   height: 0;
-  color: #8c959f;
+  color: var(--mdw-color-placeholder, #8c959f);
   pointer-events: none;
 }
 
@@ -30,14 +43,14 @@
   content: "";
   display: block;
   position: absolute;
-  top: -1px;
-  left: 8px;
-  width: 1px;
-  height: 1.2em;
-  border-radius: 1px;
-  background: #1f2328;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.65);
-  animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
+  inset-block-start: calc(-1 * var(--mdw-cursor-width, 1px));
+  inset-inline-start: var(--mdw-gap-cursor-offset, 8px);
+  width: var(--mdw-cursor-width, 1px);
+  height: var(--mdw-gap-cursor-height, 1.2em);
+  border-radius: var(--mdw-cursor-radius, 1px);
+  background: var(--mdw-color-caret, #1f2328);
+  box-shadow: var(--mdw-shadow-caret, 0 0 0 1px var(--mdw-color-caret-contrast, rgba(255, 255, 255, 0.65)));
+  animation: var(--mdw-caret-animation, ProseMirror-cursor-blink 1.1s steps(2, start) infinite);
 }
 
 @keyframes ProseMirror-cursor-blink {
@@ -84,69 +97,70 @@
 .mdw-host .ProseMirror p + ol,
 .mdw-host .ProseMirror pre + p,
 .mdw-host .ProseMirror p + pre {
-  margin-top: 0.75rem;
+  margin-block-start: var(--mdw-block-spacing, 0.75rem);
 }
 
 .mdw-host .ProseMirror h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: var(--mdw-heading-1-font-size, 2rem);
+  font-weight: var(--mdw-heading-font-weight, 700);
+  line-height: var(--mdw-heading-1-line-height, 1.2);
 }
 
 .mdw-host .ProseMirror h2 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1.3;
+  font-size: var(--mdw-heading-2-font-size, 1.5rem);
+  font-weight: var(--mdw-heading-font-weight, 700);
+  line-height: var(--mdw-heading-2-line-height, 1.3);
 }
 
 .mdw-host .ProseMirror h3 {
-  font-size: 1.25rem;
-  font-weight: 700;
-  line-height: 1.35;
+  font-size: var(--mdw-heading-3-font-size, 1.25rem);
+  font-weight: var(--mdw-heading-font-weight, 700);
+  line-height: var(--mdw-heading-3-line-height, 1.35);
 }
 
 .mdw-host .ProseMirror h4 {
-  font-size: 1.125rem;
-  font-weight: 700;
-  line-height: 1.4;
+  font-size: var(--mdw-heading-4-font-size, 1.125rem);
+  font-weight: var(--mdw-heading-font-weight, 700);
+  line-height: var(--mdw-heading-4-line-height, 1.4);
 }
 
 .mdw-host .ProseMirror h5 {
-  font-size: 1rem;
-  font-weight: 700;
-  line-height: 1.45;
+  font-size: var(--mdw-heading-5-font-size, 1rem);
+  font-weight: var(--mdw-heading-font-weight, 700);
+  line-height: var(--mdw-heading-5-line-height, 1.45);
 }
 
 .mdw-host .ProseMirror h6 {
-  font-size: 0.875rem;
-  font-weight: 700;
-  line-height: 1.5;
+  font-size: var(--mdw-heading-6-font-size, 0.875rem);
+  font-weight: var(--mdw-heading-font-weight, 700);
+  line-height: var(--mdw-heading-6-line-height, 1.5);
 }
 
 .mdw-host .ProseMirror :is(p, h1, h2, h3, h4, h5, h6) + :is(h4, h5, h6),
 .mdw-host .ProseMirror :is(h4, h5, h6) + :is(p, h1, h2, h3, h4, h5, h6) {
-  margin-top: 0.75rem;
+  margin-block-start: var(--mdw-block-spacing, 0.75rem);
 }
 
 
 .mdw-host .ProseMirror table {
   width: 100%;
   border-collapse: collapse;
-  margin: 0.75rem 0;
+  margin: var(--mdw-block-spacing, 0.75rem) 0;
   table-layout: fixed;
 }
 
 .mdw-host .ProseMirror th,
 .mdw-host .ProseMirror td {
-  padding: 0.55rem 0.75rem;
-  border: 1px solid #d8dee4;
+  padding-block: var(--mdw-table-cell-padding-block, 0.55rem);
+  padding-inline: var(--mdw-table-cell-padding-inline, 0.75rem);
+  border: var(--mdw-border-width, 1px) solid var(--mdw-color-border, #d8dee4);
   vertical-align: top;
-  text-align: left;
+  text-align: start;
 }
 
 .mdw-host .ProseMirror th {
-  background: #f6f8fa;
-  font-weight: 600;
+  background: var(--mdw-color-surface-subtle, #f6f8fa);
+  font-weight: var(--mdw-table-heading-font-weight, 600);
 }
 
 .mdw-host .ProseMirror :is(th, td).selectedCell {
@@ -158,31 +172,33 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: rgba(9, 105, 218, 0.14);
-  box-shadow: inset 0 0 0 2px #0969da;
+  background: var(--mdw-color-accent-soft, rgba(9, 105, 218, 0.14));
+  box-shadow: inset 0 0 0 var(--mdw-selection-ring-width, 2px) var(--mdw-color-accent, #0969da);
 }
 
 .mdw-host .ProseMirror td > :first-child,
 .mdw-host .ProseMirror th > :first-child {
-  margin-top: 0;
+  margin-block-start: 0;
 }
 
 .mdw-host .ProseMirror td > :last-child,
 .mdw-host .ProseMirror th > :last-child {
-  margin-bottom: 0;
+  margin-block-end: 0;
 }
 .mdw-host .ProseMirror hr {
-  margin: 1rem 0;
+  margin: var(--mdw-rule-margin-block, 1rem) 0;
   border: 0;
-  border-top: 1px solid #d8dee4;
-  border-radius: 999px;
-  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  border-block-start: var(--mdw-border-width, 1px) solid var(--mdw-color-border, #d8dee4);
+  border-radius: var(--mdw-radius-pill, 999px);
+  transition: border-color var(--mdw-motion-duration-fast, 120ms) ease,
+    box-shadow var(--mdw-motion-duration-fast, 120ms) ease,
+    background-color var(--mdw-motion-duration-fast, 120ms) ease;
 }
 
 .mdw-host .ProseMirror-selectednode hr {
-  border-top-color: #0969da;
-  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.16);
-  background: rgba(9, 105, 218, 0.08);
+  border-block-start-color: var(--mdw-color-accent, #0969da);
+  box-shadow: 0 0 0 var(--mdw-focus-halo-width, 3px) var(--mdw-color-focus-soft, rgba(9, 105, 218, 0.16));
+  background: var(--mdw-color-accent-softer, rgba(9, 105, 218, 0.08));
 }
 
 .mdw-host .ProseMirror.ProseMirror-focused:has(.ProseMirror-selectednode) {
@@ -190,18 +206,18 @@
 }
 
 .mdw-host .ProseMirror blockquote {
-  padding-left: 1rem;
-  color: #4b5563;
-  border-left: 3px solid #d1d5db;
+  padding-inline-start: var(--mdw-blockquote-padding-inline, 1rem);
+  color: var(--mdw-color-quote, #4b5563);
+  border-inline-start: var(--mdw-blockquote-border-width, 3px) solid var(--mdw-color-border, #d1d5db);
 }
 
 .mdw-host .ProseMirror ul,
 .mdw-host .ProseMirror ol {
-  padding-left: 1.5rem;
+  padding-inline-start: var(--mdw-list-indent, 1.5rem);
 }
 
 .mdw-host .ProseMirror li + li {
-  margin-top: 0.25rem;
+  margin-block-start: var(--mdw-list-item-spacing, 0.25rem);
 }
 
 .mdw-host .ProseMirror li > p + p,
@@ -209,7 +225,7 @@
 .mdw-host .ProseMirror li > p + ol,
 .mdw-host .ProseMirror li > ul + p,
 .mdw-host .ProseMirror li > ol + p {
-  margin-top: 0.2rem;
+  margin-block-start: var(--mdw-list-nested-spacing, 0.2rem);
 }
 
 .mdw-host .ProseMirror li[data-task="true"] {
@@ -218,21 +234,21 @@
 }
 
 .mdw-host .ProseMirror li[data-task="true"] > .mdw-task-content > p {
-  min-height: 1.5rem;
+  min-height: var(--mdw-task-content-min-block-size, 1.5rem);
 }
 
 .mdw-host .ProseMirror .mdw-task-checkbox {
   position: absolute;
-  inset-inline-end: calc(100% - 0.5rem);
-  top: -0.625rem;
+  inset-inline-end: calc(100% - var(--mdw-task-control-offset-inline, 0.5rem));
+  inset-block-start: var(--mdw-task-control-offset-block, -0.625rem);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: max(var(--mdw-control-min-size, 44px), var(--mdw-task-control-size, 2.75rem));
+  height: max(var(--mdw-control-min-size, 44px), var(--mdw-task-control-size, 2.75rem));
   padding: 0;
   border: 0;
-  border-radius: 0.5rem;
+  border-radius: var(--mdw-control-radius, 0.5rem);
   background: transparent;
   box-sizing: border-box;
   color: inherit;
@@ -249,40 +265,43 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.125rem;
-  height: 1.125rem;
-  border: 1.5px solid #94a3b8;
-  border-radius: 0.375rem;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  width: var(--mdw-task-indicator-size, 1.125rem);
+  height: var(--mdw-task-indicator-size, 1.125rem);
+  border: var(--mdw-task-indicator-border-width, 1.5px) solid var(--mdw-color-border-strong, #94a3b8);
+  border-radius: var(--mdw-task-indicator-radius, 0.375rem);
+  background: var(--mdw-task-background, linear-gradient(180deg, #ffffff 0%, #f8fafc 100%));
   box-sizing: border-box;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
-  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  box-shadow: var(--mdw-shadow-control, 0 1px 2px rgba(15, 23, 42, 0.08));
+  transition: background-color var(--mdw-motion-duration-fast, 120ms) ease,
+    border-color var(--mdw-motion-duration-fast, 120ms) ease,
+    box-shadow var(--mdw-motion-duration-fast, 120ms) ease,
+    transform var(--mdw-motion-duration-fast, 120ms) ease;
 }
 
 .mdw-host .ProseMirror .mdw-task-checkbox:not(:disabled):hover::before,
 .mdw-host .ProseMirror .mdw-task-checkbox:focus-visible::before {
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.14);
+  border-color: var(--mdw-color-focus, #60a5fa);
+  box-shadow: 0 0 0 var(--mdw-focus-halo-width, 3px) var(--mdw-color-focus-soft, rgba(96, 165, 250, 0.14));
 }
 
 .mdw-host .ProseMirror .mdw-task-checkbox:focus-visible {
-  outline: 2px solid #0969da;
-  outline-offset: -2px;
+  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
+  outline-offset: calc(-1 * var(--mdw-focus-ring-width, 2px));
 }
 
 .mdw-host .ProseMirror .mdw-task-checkbox[aria-checked="true"]::before {
   content: "✓";
-  color: #fff;
-  font-size: 0.84rem;
-  font-weight: 700;
+  color: var(--mdw-task-checked-color, #fff);
+  font-size: var(--mdw-task-check-font-size, 0.84rem);
+  font-weight: var(--mdw-task-check-font-weight, 700);
   line-height: 1;
-  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
-  border-color: #2563eb;
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08), 0 2px 4px rgba(37, 99, 235, 0.22);
+  background: var(--mdw-task-checked-background, linear-gradient(180deg, #3b82f6 0%, #2563eb 100%));
+  border-color: var(--mdw-color-accent, #2563eb);
+  box-shadow: var(--mdw-task-checked-shadow, 0 0 0 1px rgba(37, 99, 235, 0.08), 0 2px 4px rgba(37, 99, 235, 0.22));
 }
 
 .mdw-host .ProseMirror a {
-  color: #0969da;
+  color: var(--mdw-color-accent, #0969da);
   text-decoration: underline;
 }
 
@@ -290,135 +309,227 @@
 .mdw-host .ProseMirror img {
   max-width: 100%;
   height: auto;
-  border-radius: 10px;
+  border-radius: var(--mdw-image-radius, 10px);
   vertical-align: middle;
+}
+
+.mdw-host .ProseMirror .mdw-image {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--mdw-image-gap, 8px);
+  max-width: 100%;
+  vertical-align: top;
+}
+
+.mdw-host .ProseMirror .mdw-image-source {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mdw-image-gap, 8px);
+  opacity: var(--mdw-image-source-opacity, 0.72);
+  font-family: var(--mdw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: var(--mdw-image-source-font-size, 0.95em);
+}
+
+.mdw-host .ProseMirror .mdw-image-source[hidden],
+.mdw-host .ProseMirror .mdw-image-status[hidden] {
+  display: none;
+}
+
+.mdw-host .ProseMirror .mdw-image-frame {
+  position: relative;
+  display: inline-flex;
+  align-self: flex-start;
+  min-width: var(--mdw-image-frame-min-size, 48px);
+  min-height: var(--mdw-image-frame-min-size, 48px);
+  max-width: 100%;
+}
+
+.mdw-host .ProseMirror .mdw-image-frame > img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.mdw-host .ProseMirror .mdw-image-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--mdw-image-status-padding, 12px);
+  border: var(--mdw-border-width, 1px) dashed var(--mdw-color-border-strong, rgba(148, 163, 184, 0.35));
+  border-radius: var(--mdw-code-block-radius, 12px);
+  background: var(--mdw-image-status-background, rgba(148, 163, 184, 0.12));
+}
+
+.mdw-host .ProseMirror .mdw-image-status-inner {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mdw-image-gap, 8px);
+}
+
+.mdw-host .ProseMirror .mdw-image-spinner {
+  display: inline-block;
+  width: var(--mdw-image-spinner-size, 20px);
+  height: var(--mdw-image-spinner-size, 20px);
+  border: var(--mdw-image-spinner-border-width, 2px) solid var(--mdw-color-border-strong, rgba(148, 163, 184, 0.35));
+  border-block-start-color: var(--mdw-color-accent, rgba(59, 130, 246, 0.95));
+  border-radius: var(--mdw-radius-pill, 999px);
+  animation: var(--mdw-spinner-animation, mdw-image-spinner 900ms linear infinite);
+}
+
+.mdw-host .ProseMirror .mdw-image-spinner[hidden],
+.mdw-host .ProseMirror .mdw-image-error-icon[hidden] {
+  display: none;
+}
+
+.mdw-host .ProseMirror .mdw-image-status-text {
+  opacity: var(--mdw-image-status-text-opacity, 0.8);
+  font-size: var(--mdw-image-status-font-size, 12px);
+}
+
+.mdw-host .ProseMirror .mdw-image[data-mdw-image-state="loading"] img {
+  opacity: var(--mdw-image-loading-opacity, 0.35);
+}
+
+.mdw-host .ProseMirror .mdw-image[data-mdw-image-state="error"] img {
+  opacity: 0;
+}
+
+@keyframes mdw-image-spinner {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .mdw-host .ProseMirror .mdw-image.mdw-image-standalone {
   display: flex !important;
   width: fit-content;
-  margin: 0.5rem auto;
+  margin: var(--mdw-image-block-margin, 0.5rem) auto;
 }
 
 .mdw-host .ProseMirror .mdw-image.mdw-image-standalone img {
-  box-shadow: 0 1px 2px rgba(31, 35, 40, 0.08);
+  box-shadow: var(--mdw-shadow-subtle, 0 1px 2px rgba(31, 35, 40, 0.08));
 }
 
 .mdw-host .ProseMirror .mdw-image.ProseMirror-selectednode img {
-  outline: 2px solid #0969da;
-  outline-offset: 2px;
+  outline: var(--mdw-selection-ring-width, 2px) solid var(--mdw-color-accent, #0969da);
+  outline-offset: var(--mdw-selection-ring-offset, 2px);
 }
 .mdw-host .ProseMirror :not(pre) > code {
-  padding: 0.15em 0.35em;
-  border-radius: 0.375rem;
-  background: #f6f8fa;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.9em;
+  padding-block: var(--mdw-inline-code-padding-block, 0.15em);
+  padding-inline: var(--mdw-inline-code-padding-inline, 0.35em);
+  border-radius: var(--mdw-inline-code-radius, 0.375rem);
+  background: var(--mdw-color-surface-subtle, #f6f8fa);
+  font-family: var(--mdw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: var(--mdw-inline-code-font-size, 0.9em);
 }
 
 .mdw-host .mdw-code-block {
-  margin-top: 0.75rem;
-  border: 1px solid #d8dee4;
-  border-radius: 12px;
-  background: #f6f8fa;
-  color: #24292f;
+  margin-block-start: var(--mdw-block-spacing, 0.75rem);
+  border: var(--mdw-border-width, 1px) solid var(--mdw-color-border, #d8dee4);
+  border-radius: var(--mdw-code-block-radius, 12px);
+  background: var(--mdw-color-surface-subtle, #f6f8fa);
+  color: var(--mdw-color-text, #24292f);
   overflow: hidden;
   position: relative;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow: var(--mdw-code-block-inset-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.5));
 }
 
 .mdw-host .mdw-code-block + :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol) {
-  margin-top: 0.75rem;
+  margin-block-start: var(--mdw-block-spacing, 0.75rem);
 }
 
 .mdw-host .mdw-opaque-block {
   position: relative;
-  margin-top: 0.75rem;
+  margin-block-start: var(--mdw-block-spacing, 0.75rem);
   overflow: hidden;
-  border: 1px solid #d8dee4;
-  border-radius: 10px;
-  background: #f6f8fa;
-  color: #24292f;
+  border: var(--mdw-border-width, 1px) solid var(--mdw-color-border, #d8dee4);
+  border-radius: var(--mdw-opaque-block-radius, 10px);
+  background: var(--mdw-color-surface-subtle, #f6f8fa);
+  color: var(--mdw-color-text, #24292f);
 }
 
 .mdw-host .mdw-opaque-block + :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol),
 .mdw-host :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol) + .mdw-opaque-block {
-  margin-top: 0.75rem;
+  margin-block-start: var(--mdw-block-spacing, 0.75rem);
 }
 
 .mdw-host .mdw-opaque-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #d8dee4;
-  background: #f0f3f6;
+  gap: var(--mdw-block-spacing, 0.75rem);
+  padding-block: var(--mdw-opaque-header-padding-block, 0.5rem);
+  padding-inline: var(--mdw-opaque-header-padding-inline, 0.75rem);
+  border-block-end: var(--mdw-border-width, 1px) solid var(--mdw-color-border, #d8dee4);
+  background: var(--mdw-color-surface-muted, #f0f3f6);
 }
 
 .mdw-host .mdw-opaque-kind {
-  color: #57606a;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  color: var(--mdw-color-muted, #57606a);
+  font-size: var(--mdw-label-font-size, 0.75rem);
+  font-weight: var(--mdw-label-font-weight, 600);
+  letter-spacing: var(--mdw-label-letter-spacing, 0.06em);
   text-transform: uppercase;
 }
 
 .mdw-host .mdw-opaque-edit {
-  padding: 0.25rem 0.55rem;
-  border: 1px solid #afb8c1;
-  border-radius: 6px;
-  background: #fff;
-  color: #24292f;
+  padding-block: var(--mdw-opaque-control-padding-block, 0.25rem);
+  padding-inline: var(--mdw-opaque-control-padding-inline, 0.55rem);
+  border: var(--mdw-border-width, 1px) solid var(--mdw-color-border-strong, #afb8c1);
+  border-radius: var(--mdw-opaque-control-radius, 6px);
+  background: var(--mdw-color-surface, #fff);
+  color: var(--mdw-color-text, #24292f);
   cursor: pointer;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: var(--mdw-label-font-size, 0.75rem);
 }
 
 .mdw-host .mdw-opaque-edit:hover {
-  background: #f6f8fa;
+  background: var(--mdw-color-surface-subtle, #f6f8fa);
 }
 
 .mdw-host .mdw-opaque-edit:focus-visible {
-  outline: 2px solid #0969da;
-  outline-offset: 2px;
+  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
+  outline-offset: var(--mdw-focus-ring-offset, 2px);
 }
 
 @media (pointer: coarse) {
   .mdw-host .mdw-opaque-edit {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--mdw-control-min-size, 44px);
+    min-height: var(--mdw-control-min-size, 44px);
   }
 }
 
 .mdw-host .mdw-opaque-block > .mdw-opaque-source {
-  max-height: 18rem;
+  max-height: var(--mdw-opaque-source-max-block-size, 18rem);
   margin: 0;
   overflow: auto;
-  padding: 0.75rem;
-  background: #fff;
+  padding: var(--mdw-opaque-source-padding, 0.75rem);
+  background: var(--mdw-color-surface, #fff);
   white-space: pre-wrap;
 }
 
 .mdw-host .mdw-opaque-source code,
 .mdw-host code.mdw-opaque-source {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.875rem;
+  font-family: var(--mdw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: var(--mdw-code-font-size, 0.875rem);
 }
 
 .mdw-host .mdw-opaque-inline {
   display: inline-flex;
   align-items: baseline;
-  gap: 0.25rem;
+  gap: var(--mdw-opaque-inline-gap, 0.25rem);
   max-width: 100%;
-  border: 1px solid #d8dee4;
-  border-radius: 5px;
-  background: #f6f8fa;
+  border: var(--mdw-border-width, 1px) solid var(--mdw-color-border, #d8dee4);
+  border-radius: var(--mdw-opaque-inline-radius, 5px);
+  background: var(--mdw-color-surface-subtle, #f6f8fa);
   vertical-align: baseline;
 }
 
 .mdw-host .mdw-opaque-inline .mdw-opaque-edit {
-  margin-right: 0.2rem;
+  margin-inline-end: var(--mdw-opaque-inline-control-margin, 0.2rem);
 }
 
 .mdw-host .mdw-opaque-inline > .mdw-opaque-source {
@@ -428,18 +539,19 @@
 }
 
 .mdw-host .mdw-opaque-node.ProseMirror-selectednode {
-  border-color: #0969da;
-  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.18);
+  border-color: var(--mdw-color-accent, #0969da);
+  box-shadow: 0 0 0 var(--mdw-selection-ring-width, 2px) var(--mdw-color-focus-soft, rgba(9, 105, 218, 0.18));
 }
 
 .mdw-host .mdw-code-block-language {
-  padding: 0.625rem 0.875rem;
-  border-bottom: 1px solid #d8dee4;
-  font-size: 0.75rem;
+  padding-block: var(--mdw-code-language-padding-block, 0.625rem);
+  padding-inline: var(--mdw-code-language-padding-inline, 0.875rem);
+  border-block-end: var(--mdw-border-width, 1px) solid var(--mdw-color-border, #d8dee4);
+  font-size: var(--mdw-label-font-size, 0.75rem);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #57606a;
-  background: #f0f3f6;
+  letter-spacing: var(--mdw-code-language-letter-spacing, 0.08em);
+  color: var(--mdw-color-muted, #57606a);
+  background: var(--mdw-color-surface-muted, #f0f3f6);
 }
 
 .mdw-host button.mdw-code-block-language {
@@ -453,34 +565,35 @@
 }
 
 .mdw-host button.mdw-code-block-language:hover:not(:disabled) {
-  color: #0969da;
-  background: #e7f1ff;
+  color: var(--mdw-color-accent, #0969da);
+  background: var(--mdw-color-accent-softer, #e7f1ff);
 }
 
 .mdw-host button.mdw-code-block-language:focus-visible {
   position: relative;
-  z-index: 1;
-  outline: 2px solid #0969da;
-  outline-offset: -2px;
+  z-index: var(--mdw-layer-selection, 1);
+  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
+  outline-offset: calc(-1 * var(--mdw-focus-ring-width, 2px));
 }
 
 .mdw-host button.mdw-code-block-language:disabled {
   cursor: default;
-  opacity: 0.72;
+  opacity: var(--mdw-disabled-opacity, 0.72);
 }
 
 .mdw-host .mdw-code-block-editor {
   overflow: hidden;
-  background: #ffffff;
+  background: var(--mdw-color-surface, #ffffff);
 }
 
 .mdw-host .mdw-code-block-static {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   overflow: auto;
-  background: #ffffff;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  line-height: 1.65;
+  background: var(--mdw-color-surface, #ffffff);
+  font-family: var(--mdw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  line-height: var(--mdw-code-line-height, 1.65);
+  direction: ltr;
 }
 
 .mdw-host .mdw-code-block-static[hidden],
@@ -489,22 +602,24 @@
 }
 
 .mdw-host .mdw-code-block-static-gutter {
-  min-width: 2.5rem;
-  padding: 0.875rem 0.625rem 0.875rem 0.75rem;
+  min-width: var(--mdw-code-gutter-min-inline-size, 2.5rem);
+  padding-block: var(--mdw-code-padding-block, 0.875rem);
+  padding-inline: var(--mdw-code-gutter-padding-start, 0.75rem) var(--mdw-code-gutter-padding-end, 0.625rem);
   box-sizing: border-box;
-  border-right: 1px solid #d8dee4;
-  background: #f6f8fa;
-  color: #626c76;
-  text-align: right;
+  border-inline-end: var(--mdw-border-width, 1px) solid var(--mdw-color-border, #d8dee4);
+  background: var(--mdw-color-surface-subtle, #f6f8fa);
+  color: var(--mdw-color-muted, #626c76);
+  text-align: end;
   white-space: pre;
   user-select: none;
 }
 
 .mdw-host .mdw-code-block-static-pre {
   min-width: max-content;
-  min-height: 1.65em;
+  min-height: var(--mdw-code-line-min-block-size, 1.65em);
   margin: 0;
-  padding: 0.875rem 0 0.875rem 0.875rem;
+  padding-block: var(--mdw-code-padding-block, 0.875rem);
+  padding-inline: var(--mdw-code-padding-inline, 0.875rem) 0;
   box-sizing: border-box;
   font: inherit;
   line-height: inherit;
@@ -525,17 +640,18 @@
 }
 
 .mdw-host .mdw-code-block.mdw-code-block-outer-selection {
-  border-color: #96c0ff;
-  box-shadow: 0 0 0 1px rgba(9, 105, 218, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  border-color: var(--mdw-color-focus, #96c0ff);
+  box-shadow: 0 0 0 var(--mdw-border-width, 1px) var(--mdw-color-focus-soft, rgba(9, 105, 218, 0.18)),
+    var(--mdw-code-block-inset-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.5));
 }
 
 .mdw-host .mdw-code-block.mdw-code-block-outer-selection::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: rgba(9, 105, 218, 0.12);
+  background: var(--mdw-color-selection-overlay, rgba(9, 105, 218, 0.12));
   pointer-events: none;
-  z-index: 1;
+  z-index: var(--mdw-layer-selection, 1);
 }
 
 .mdw-host .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-language,
@@ -556,39 +672,42 @@
 .mdw-host .mdw-code-block .cm-scroller,
 .mdw-host .mdw-code-block .cm-gutters {
   position: relative;
-  z-index: 2;
+  z-index: var(--mdw-layer-content, 2);
 }
 
 .mdw-host .cm-editor {
   background: transparent;
-  color: #24292f;
+  color: var(--mdw-color-text, #24292f);
+  direction: ltr;
 }
 
 .mdw-host .cm-scroller {
   overflow: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  line-height: 1.65;
+  font-family: var(--mdw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  line-height: var(--mdw-code-line-height, 1.65);
 }
 
 .mdw-host .cm-content {
-  min-height: 1.65em;
-  padding: 0.875rem 0 0.875rem 0.875rem;
+  min-height: var(--mdw-code-line-min-block-size, 1.65em);
+  padding-block: var(--mdw-code-padding-block, 0.875rem);
+  padding-inline: var(--mdw-code-padding-inline, 0.875rem) 0;
 }
 
 .mdw-host .cm-gutter {
-  min-height: 1.65em;
+  min-height: var(--mdw-code-line-min-block-size, 1.65em);
   padding: 0;
 }
 
 .mdw-host .cm-lineNumbers {
-  min-width: 2.5rem;
-  color: #626c76;
+  min-width: var(--mdw-code-gutter-min-inline-size, 2.5rem);
+  color: var(--mdw-color-muted, #626c76);
 }
 
 .mdw-host .cm-lineNumbers .cm-gutterElement {
-  padding: 0 0.625rem 0 0.75rem;
+  padding-block: 0;
+  padding-inline: var(--mdw-code-gutter-padding-start, 0.75rem) var(--mdw-code-gutter-padding-end, 0.625rem);
   box-sizing: border-box;
-  text-align: right;
+  text-align: end;
 }
 
 .mdw-host .cm-lineNumbers .cm-gutterElement[style*="visibility: hidden"] {
@@ -600,81 +719,85 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  min-height: 1.65em;
-  line-height: 1.65;
+  min-height: var(--mdw-code-line-min-block-size, 1.65em);
+  line-height: var(--mdw-code-line-height, 1.65);
 }
 
 .mdw-host .cm-gutters {
-  border-right: 1px solid #d8dee4;
-  background: #f6f8fa;
-  color: #626c76;
+  border-inline-end: var(--mdw-border-width, 1px) solid var(--mdw-color-border, #d8dee4);
+  background: var(--mdw-color-surface-subtle, #f6f8fa);
+  color: var(--mdw-color-muted, #626c76);
 }
 
 .mdw-host .cm-activeLine {
-  background: rgba(9, 105, 218, 0.06);
+  background: var(--mdw-code-active-line-background, rgba(9, 105, 218, 0.06));
 }
 
 .mdw-host .cm-activeLineGutter {
-  background: rgba(9, 105, 218, 0.08);
+  background: var(--mdw-color-accent-softer, rgba(9, 105, 218, 0.08));
 }
 
 .mdw-host .cm-cursor,
 .mdw-host .cm-dropCursor {
-  border-left-color: #1f2328;
+  border-inline-start-color: var(--mdw-color-caret, #1f2328);
 }
 
 .mdw-host .cm-selectionBackground,
 .mdw-host .cm-content ::selection {
-  background: rgba(9, 105, 218, 0.18);
+  background: var(--mdw-color-selection, rgba(9, 105, 218, 0.18));
+}
+
+.mdw-host .cm-content ::selection {
+  color: var(--mdw-color-selection-text, inherit);
 }
 
 .mdw-host .mdw-code-block.mdw-code-block-outer-selection .cm-gutterElement {
-  color: #0550ae;
+  color: var(--mdw-color-accent-strong, #0550ae);
 }
 
 .mdw-host .cm-keyword {
-  color: #cf222e;
+  color: var(--mdw-syntax-keyword, #cf222e);
 }
 
 .mdw-host .cm-atom,
 .mdw-host .cm-bool,
 .mdw-host .cm-number {
-  color: #0550ae;
+  color: var(--mdw-syntax-literal, #0550ae);
 }
 
 .mdw-host .cm-def,
 .mdw-host .cm-variable {
-  color: #24292f;
+  color: var(--mdw-syntax-name, #24292f);
 }
 
 .mdw-host .cm-variable-2,
 .mdw-host .cm-variable-3,
 .mdw-host .cm-propertyName {
-  color: #8250df;
+  color: var(--mdw-syntax-property, #8250df);
 }
 
 .mdw-host .cm-string {
-  color: #0a3069;
+  color: var(--mdw-syntax-string, #0a3069);
 }
 
 .mdw-host .cm-comment {
-  color: #6e7781;
+  color: var(--mdw-syntax-comment, #6e7781);
 }
 
 .mdw-host .cm-typeName,
 .mdw-host .cm-className,
 .mdw-host .cm-tagName {
-  color: #953800;
+  color: var(--mdw-syntax-type, #953800);
 }
 
 .mdw-host .cm-operator,
 .mdw-host .cm-punctuation {
-  color: #57606a;
+  color: var(--mdw-syntax-operator, #57606a);
 }
 
 .mdw-host .mdw-marker {
-  color: #9ca3af;
-  font-weight: 400;
+  color: var(--mdw-color-marker, #9ca3af);
+  font-weight: var(--mdw-marker-font-weight, 400);
   user-select: none;
   pointer-events: none;
 }
@@ -716,15 +839,14 @@
 .mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor::after {
   content: none;
   position: absolute;
-  top: 8px;
-  bottom: 8px;
-  width: 1px;
-  border-radius: 999px;
-  background: #1f2328;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.65);
-  animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
+  inset-block: var(--mdw-managed-cursor-inset-block, 8px);
+  width: var(--mdw-cursor-width, 1px);
+  border-radius: var(--mdw-radius-pill, 999px);
+  background: var(--mdw-color-caret, #1f2328);
+  box-shadow: var(--mdw-shadow-caret, 0 0 0 1px var(--mdw-color-caret-contrast, rgba(255, 255, 255, 0.65)));
+  animation: var(--mdw-caret-animation, ProseMirror-cursor-blink 1.1s steps(2, start) infinite);
   pointer-events: none;
-  z-index: 3;
+  z-index: var(--mdw-layer-cursor, 3);
 }
 
 .mdw-host .ProseMirror table.mdw-managed-block-cursor-before::before,
@@ -732,7 +854,7 @@
 .mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor-before::before,
 .mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor-before::before {
   content: "";
-  left: -1px;
+  inset-inline-start: calc(-1 * var(--mdw-cursor-width, 1px));
 }
 
 .mdw-host .ProseMirror table.mdw-managed-block-cursor-after::after,
@@ -740,5 +862,87 @@
 .mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor-after::after,
 .mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor-after::after {
   content: "";
-  right: -1px;
+  inset-inline-end: calc(-1 * var(--mdw-cursor-width, 1px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mdw-host .ProseMirror-gapcursor::after,
+  .mdw-host .ProseMirror table.mdw-managed-block-cursor::before,
+  .mdw-host .ProseMirror table.mdw-managed-block-cursor::after,
+  .mdw-host .ProseMirror pre.mdw-managed-block-cursor::before,
+  .mdw-host .ProseMirror pre.mdw-managed-block-cursor::after,
+  .mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor::before,
+  .mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor::after,
+  .mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor::before,
+  .mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor::after,
+  .mdw-host .mdw-image-spinner,
+  .mdw-host .cm-cursorLayer {
+    animation: none !important;
+  }
+
+  .mdw-host .ProseMirror hr,
+  .mdw-host .ProseMirror .mdw-task-checkbox::before {
+    transition: none;
+  }
+}
+
+:where(.mdw-motion-reduce, [data-mdw-motion="reduce"]) .ProseMirror-gapcursor::after,
+:where(.mdw-motion-reduce, [data-mdw-motion="reduce"]) .mdw-managed-block-cursor::before,
+:where(.mdw-motion-reduce, [data-mdw-motion="reduce"]) .mdw-managed-block-cursor::after,
+:where(.mdw-motion-reduce, [data-mdw-motion="reduce"]) .mdw-image-spinner,
+:where(.mdw-motion-reduce, [data-mdw-motion="reduce"]) .cm-cursorLayer {
+  animation: none !important;
+}
+
+:where(.mdw-motion-reduce, [data-mdw-motion="reduce"]) .ProseMirror hr,
+:where(.mdw-motion-reduce, [data-mdw-motion="reduce"]) .mdw-task-checkbox::before {
+  transition: none;
+}
+
+@media (forced-colors: active) {
+  .mdw-host .ProseMirror:focus-visible,
+  .mdw-host .ProseMirror .mdw-task-checkbox:focus-visible,
+  .mdw-host .mdw-opaque-edit:focus-visible,
+  .mdw-host button.mdw-code-block-language:focus-visible {
+    outline: var(--mdw-focus-ring-width, 2px) solid Highlight;
+    outline-offset: var(--mdw-focus-ring-offset, 2px);
+    box-shadow: none;
+  }
+
+  .mdw-host .ProseMirror :is(th, td).selectedCell::after,
+  .mdw-host .mdw-opaque-node.ProseMirror-selectednode,
+  .mdw-host .mdw-code-block.mdw-code-block-outer-selection,
+  .mdw-host .ProseMirror .mdw-image.ProseMirror-selectednode img {
+    outline: var(--mdw-selection-ring-width, 2px) solid Highlight;
+    outline-offset: calc(-1 * var(--mdw-selection-ring-width, 2px));
+    box-shadow: none;
+  }
+
+  .mdw-host .ProseMirror :is(th, td).selectedCell::after,
+  .mdw-host .mdw-code-block.mdw-code-block-outer-selection::after {
+    background: transparent;
+  }
+
+  .mdw-host .ProseMirror-gapcursor::after,
+  .mdw-host .ProseMirror .mdw-managed-block-cursor::before,
+  .mdw-host .ProseMirror .mdw-managed-block-cursor::after {
+    background: CanvasText;
+    box-shadow: none;
+  }
+
+  .mdw-host .ProseMirror .mdw-task-checkbox[aria-checked="true"]::before {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+    box-shadow: none;
+    forced-color-adjust: none;
+  }
+
+  .mdw-host .cm-selectionBackground,
+  .mdw-host .cm-content ::selection,
+  .mdw-host .ProseMirror ::selection {
+    background: Highlight;
+    color: HighlightText;
+    forced-color-adjust: none;
+  }
 }

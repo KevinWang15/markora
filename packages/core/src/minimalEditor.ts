@@ -92,6 +92,7 @@ import {
   createTrackedHistoryCommand,
   normalizeMarkdownEditorTypingOptions,
 } from "./typingErgonomics";
+import { normalizeMarkdownEditorMessages } from "./editorMessages";
 
 function destroyProseMirrorView(view: EditorView) {
   const input = (view as EditorView & {
@@ -522,6 +523,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   assertEditorHostAvailable(element);
   const shortcuts = normalizeMarkdownEditorShortcuts(options.shortcuts);
   const typing = normalizeMarkdownEditorTypingOptions(options.typing);
+  const messages = normalizeMarkdownEditorMessages(options.messages);
   const resources = normalizeMarkdownEditorResources(options.resources);
 
   const runtimeOptions: EditorRuntimeOptions = {
@@ -778,6 +780,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     },
     getView: () => view || null,
     isActive: () => lifecycle === "active",
+    messages,
     ownerWindow,
     reportUnhandled,
     resources,
@@ -796,6 +799,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   });
   const ImageView = createImageViewClass({
     imageNodeType: codec.schema.nodes.image,
+    messages,
     onError: handleResourceError,
     resources,
   });

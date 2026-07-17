@@ -5,6 +5,7 @@ import {
   type MarkdownEditorEventName,
   type MarkdownEditorHeadingLevel,
   type MarkdownEditorMark,
+  type MarkdownEditorMessageOverrides,
   type MarkdownEditorSelectionSnapshot,
   type MarkdownEditorSelectionTarget,
   type MarkdownEditorShortcutMap,
@@ -19,7 +20,7 @@ import {
   type OpaqueMarkdownEditRequest,
   type UpdateEditorOptions,
 } from "markora";
-import { createDefaultUi } from "markora-ui";
+import { createDefaultUi, type DefaultUiMessageOverrides } from "markora-ui";
 import { useEffect, useRef } from "react";
 import { createGlobalListenerLedger, type ListenerSnapshot } from "../browser-lab/listenerLedger";
 import {
@@ -41,7 +42,10 @@ export type BrowserLabEditorSpec = {
   extensionMode?: "public-example";
   id: string;
   initialSelection?: MarkdownEditorSelectionTarget;
+  language?: string;
   markdown?: string;
+  messages?: MarkdownEditorMessageOverrides;
+  motion?: "reduce";
   placement?: "bottom-right" | "normal";
   placeholder?: string;
   portal?: BrowserLabPortal;
@@ -49,6 +53,8 @@ export type BrowserLabEditorSpec = {
   resourceMode?: "custom-protocol" | "deny-images" | "immediate-upload" | "proxy-images";
   shortcuts?: MarkdownEditorShortcutMap;
   typing?: MarkdownEditorTypingOptions;
+  theme?: "auto" | "contrast" | "dark" | "light";
+  uiMessages?: DefaultUiMessageOverrides;
 };
 
 export type BrowserLabUpdateOptions = Pick<
@@ -678,6 +684,7 @@ export function BrowserLabPage() {
         extensions: extensionMode === "public-example" ? publicExampleExtensions : undefined,
         initialSelection: spec.initialSelection,
         markdown: spec.markdown ?? `# ${mounted.id}\n\nBrowser lab paragraph.`,
+        messages: spec.messages,
         onChangeMode: "animationFrame",
         onChange(markdown) {
           mounted.changeCount += 1;
@@ -701,8 +708,11 @@ export function BrowserLabPage() {
         shortcuts: spec.shortcuts,
         typing: spec.typing,
         ui: mounted.explicitPortalRoot
-          ? createDefaultUi({ portalRoot: mounted.explicitPortalRoot })
-          : createDefaultUi(),
+          ? createDefaultUi({
+              messages: spec.uiMessages,
+              portalRoot: mounted.explicitPortalRoot,
+            })
+          : createDefaultUi({ messages: spec.uiMessages }),
       }));
 
       subscribeToEditorEvents(mounted);
@@ -802,6 +812,15 @@ export function BrowserLabPage() {
         frame.className = `browser-lab-frame browser-lab-frame--${portalMode}`;
         frame.dataset.e2eFrame = id;
         frame.dir = spec.direction ?? "auto";
+        if (spec.language) {
+          frame.lang = spec.language;
+        }
+        if (spec.theme) {
+          frame.dataset.mdwTheme = spec.theme;
+        }
+        if (spec.motion) {
+          frame.dataset.mdwMotion = spec.motion;
+        }
         const host = document.createElement("div");
         host.className = "browser-lab-editor-host";
         host.dataset.e2eHost = id;

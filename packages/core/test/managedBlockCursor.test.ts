@@ -300,6 +300,36 @@ describe('ManagedBlockCursor', () => {
     expectManagedCursor(editor, 'before', table.pos);
   });
 
+  it('uses physical RTL arrows at table boundaries', () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: ['| ראשון | שני |', '| --- | --- |', '| א | ב |'].join('\n'),
+    });
+    const table = findNodeByName(editor.view.state.doc, 'table');
+    const tableDom = editor.view.nodeDOM(table.pos) as HTMLElement;
+    tableDom.style.direction = 'rtl';
+
+    setSelection(editor, findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, 1));
+    expect(pressKey(editor, 'ArrowRight')).toBe(true);
+    expectManagedCursor(editor, 'before', table.pos);
+
+    expect(pressKey(editor, 'ArrowLeft')).toBe(true);
+    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+    expect(editor.view.state.selection.from).toBe(
+      findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, 1).from,
+    );
+
+    setSelection(editor, findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, -1));
+    expect(pressKey(editor, 'ArrowLeft')).toBe(true);
+    expectManagedCursor(editor, 'after', table.pos);
+
+    expect(pressKey(editor, 'ArrowRight')).toBe(true);
+    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+    expect(editor.view.state.selection.from).toBe(
+      findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, -1).from,
+    );
+  });
+
   it('deletes an empty first paragraph before a table on Backspace', () => {
     const editor = createEditor({
       element: createHost(),
@@ -347,6 +377,44 @@ describe('ManagedBlockCursor', () => {
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
     expect(editor.view.state.selection.from).toBe(paragraph.pos + paragraph.node.nodeSize - 1);
     editor.destroy();
+  });
+
+  it('uses physical RTL arrows at active code-block boundaries', async () => {
+    let codeMirrorView: CodeMirrorView | null = null;
+    const editor = createEditor({
+      codeBlockLanguages: {
+        rtl: async () => ViewPlugin.define((view) => {
+          codeMirrorView = view;
+          return {};
+        }),
+      },
+      element: createHost(),
+      markdown: ['```rtl', 'אבג', '```'].join('\n'),
+    });
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const codeBlockDom = editor.view.nodeDOM(codeBlock.pos) as HTMLElement;
+    codeBlockDom.style.direction = 'rtl';
+    const cmContent = await activateCodeMirrorAt(editor, codeBlock.pos + 1);
+
+    await vi.waitFor(() => expect(codeMirrorView).not.toBeNull());
+    cmContent.style.direction = 'rtl';
+    (codeMirrorView as CodeMirrorView).requestMeasure();
+    await flushAnimationFrames();
+    expect(getComputedStyle(cmContent).direction).toBe('rtl');
+    dispatchDomKey(cmContent, 'ArrowRight');
+    expectManagedCursor(editor, 'before', codeBlock.pos);
+
+    (editor.view.nodeDOM(codeBlock.pos) as HTMLElement).style.direction = 'rtl';
+    expect(pressKey(editor, 'ArrowLeft')).toBe(true);
+    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+
+    const capturedView = codeMirrorView as CodeMirrorView;
+    capturedView.dispatch({
+      selection: { anchor: capturedView.state.doc.length },
+    });
+    focusCodeMirrorContent(editor);
+    dispatchDomKey(cmContent, 'ArrowLeft');
+    expectManagedCursor(editor, 'after', codeBlock.pos);
   });
 
   it('claims the outer selection when a code block is clicked from another block', async () => {

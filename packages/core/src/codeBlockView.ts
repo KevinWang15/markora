@@ -2,6 +2,10 @@ import { type Node as ProseMirrorNode, type Schema } from "prosemirror-model";
 import { TextSelection, type Command } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import type { CodeBlockLanguageRegistry } from "./codeBlockLanguages";
+import {
+  defaultMarkdownEditorMessages,
+  type MarkdownEditorMessages,
+} from "./editorMessages";
 import type { MarkdownEditorNestedClipboardPipeline } from "./extensionAssembly";
 import { rejectFileTransferEvent } from "./fileTransferGuard";
 import { isolateClipboardHistory, nestedClipboardText } from "./clipboardSemantics";
@@ -76,6 +80,7 @@ type CodeBlockLanguageEditTarget = Readonly<{
 type CreateCodeBlockViewClassOptions = {
   schema: Schema;
   languageRegistry?: CodeBlockLanguageRegistry;
+  messages?: MarkdownEditorMessages;
   nestedClipboard?: MarkdownEditorNestedClipboardPipeline | null;
   getOnEditLanguage?: () => ((target: CodeBlockLanguageEditTarget) => boolean) | null;
   getHistoryAction: () => MarkdownEditorHistoryAction | null;
@@ -272,6 +277,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     getHistoryAction,
     historyCommands,
     languageRegistry,
+    messages = defaultMarkdownEditorMessages,
     nestedClipboard,
     moveBeforeManagedBlock,
     onActivationError,
@@ -303,6 +309,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
         activeViewClass = module.createActiveCodeBlockViewClass({
           historyCommands,
           languageRegistry,
+          messages,
           moveBeforeManagedBlock,
           nestedClipboard,
           onDestroyError,
@@ -1172,12 +1179,13 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       }
 
       this.presentedLanguage = language;
-      this.languageBadge.textContent = language || "plain text";
+      const languageLabel = language || messages.codeBlockPlainTextLabel;
+      this.languageBadge.textContent = languageLabel;
 
       if (this.onEditLanguage) {
         this.languageBadge.setAttribute(
           "aria-label",
-          `Edit code block language: ${language || "plain text"}`,
+          messages.codeBlockEditLanguageLabel(Object.freeze({ language, languageLabel })),
         );
       }
     }

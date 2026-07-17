@@ -59,7 +59,32 @@ export type LabEditorSpec = {
   extensionMode?: "public-example";
   id: string;
   initialSelection?: LabSelectionTarget;
+  language?: string;
   markdown?: string;
+  messages?: {
+    codeBlockEditorLabel?: string;
+    codeBlockPlainTextLabel?: string;
+    imageBlockedByPolicy?: string;
+    imageFailedToLoad?: string;
+    imageLoading?: string;
+    imageMissingUrl?: string;
+    opaqueEditSource?: string;
+    opaqueKindLabels?: Partial<Record<
+      | "display-math"
+      | "directive-container"
+      | "directive-leaf"
+      | "frontmatter"
+      | "html-block"
+      | "html-comment"
+      | "inline-directive"
+      | "inline-html"
+      | "unknown-fence",
+      string
+    >>;
+    taskFallbackLabel?: string;
+    uploadedFileLabel?: string;
+  };
+  motion?: "reduce";
   placement?: "bottom-right" | "normal";
   placeholder?: string;
   portal?: "body" | "default" | "local" | "positioned" | "transformed";
@@ -69,6 +94,32 @@ export type LabEditorSpec = {
   typing?: {
     autoPairs?: readonly ("braces" | "double-quotes" | "emphasis-asterisks" | "emphasis-underscores" | "inline-code" | "parentheses" | "single-quotes" | "square-brackets" | "strikethrough" | "strong-asterisks" | "strong-underscores")[];
     wrapSelection?: boolean;
+  };
+  theme?: "auto" | "contrast" | "dark" | "light";
+  uiMessages?: {
+    cancelButtonLabel?: string;
+    codeBlockLanguageDialogLabel?: string;
+    codeBlockLanguageInputLabel?: string;
+    codeBlockLanguageInputPlaceholder?: string;
+    codeBlockLanguageStaleError?: string;
+    imageAltInputLabel?: string;
+    imageAltInputPlaceholder?: string;
+    imageDialogLabel?: string;
+    imageTitleInputLabel?: string;
+    imageTitleInputPlaceholder?: string;
+    imageUrlInputLabel?: string;
+    imageUrlInputPlaceholder?: string;
+    imageUrlInvalidError?: string;
+    linkDialogLabel?: string;
+    linkUrlInputLabel?: string;
+    linkUrlInputPlaceholder?: string;
+    linkUrlInvalidError?: string;
+    removeButtonLabel?: string;
+    saveButtonLabel?: string;
+    tableColumnsInputLabel?: string;
+    tableRowsInputLabel?: string;
+    tableToolbarLabel?: string;
+    unlinkButtonLabel?: string;
   };
 };
 

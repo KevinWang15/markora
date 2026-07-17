@@ -1,5 +1,12 @@
 export { createEditor } from "./minimalEditor";
 export { ManagedBlockCursor } from "./managedBlockCursor";
+export { defaultMarkdownEditorMessages } from "./editorMessages";
+export type {
+  MarkdownEditorCodeBlockLanguageMessageContext,
+  MarkdownEditorMessageOverrides,
+  MarkdownEditorMessages,
+  MarkdownEditorOpaqueMessageContext,
+} from "./editorMessages";
 export type {
   CreateEditorOptions,
   MarkdownEditor,

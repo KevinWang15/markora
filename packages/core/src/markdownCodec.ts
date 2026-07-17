@@ -41,6 +41,10 @@ import {
   type NormalizedMarkdownEditorResources,
 } from "./resourcePolicy";
 import type { TableAlignment } from "./tableNavigation";
+import {
+  defaultMarkdownEditorMessages,
+  type MarkdownEditorMessages,
+} from "./editorMessages";
 
 type MarkdownSerializerStateWithInternals = MarkdownSerializerState & {
   closed: { type: ProseMirrorNode["type"] } | null;
@@ -84,64 +88,68 @@ const nonSelectableCodeBlockSpec = codeBlockSpec
       }],
     }
   : undefined;
-const taskListItemSpec = listItemSpec
-  ? {
-      ...listItemSpec,
-      attrs: {
-        ...(listItemSpec.attrs ?? {}),
-        checked: { default: null },
-      },
-      parseDOM: [
-        {
-          tag: '[data-mdw-task-control="true"]',
-          ignore: true,
-          priority: 100,
+function createTaskListItemSpec(messages: MarkdownEditorMessages): NodeSpec | undefined {
+  return listItemSpec
+    ? {
+        ...listItemSpec,
+        attrs: {
+          ...(listItemSpec.attrs ?? {}),
+          checked: { default: null },
         },
-        {
-          tag: "li",
-          getAttrs(dom: Node | string) {
-            if (!isHTMLElementNode(dom)) {
-              return { checked: null };
-            }
-
-            const task = dom.getAttribute("data-task");
-            const checked = dom.getAttribute("data-checked");
-
-            if (task === "true") {
-              return { checked: checked === "true" };
-            }
-
-            const checkbox = leadingTaskCheckbox(dom);
-            return { checked: checkbox ? checkbox.checked : null };
+        parseDOM: [
+          {
+            tag: '[data-mdw-task-control="true"]',
+            ignore: true,
+            priority: 100,
           },
-        },
-      ],
-      toDOM(node: ProseMirrorNode) {
-        const checked = node.attrs.checked;
+          {
+            tag: "li",
+            getAttrs(dom: Node | string) {
+              if (!isHTMLElementNode(dom)) {
+                return { checked: null };
+              }
 
-        if (typeof checked === "boolean") {
-          return [
-            "li",
-            {
-              "data-task": "true",
-              "data-checked": checked ? "true" : "false",
+              const task = dom.getAttribute("data-task");
+              const checked = dom.getAttribute("data-checked");
+
+              if (task === "true") {
+                return { checked: checked === "true" };
+              }
+
+              const checkbox = leadingTaskCheckbox(dom);
+              return { checked: checkbox ? checkbox.checked : null };
             },
-            [
-              "input",
-              {
-                ...(checked ? { checked: "" } : {}),
-                disabled: "",
-                type: "checkbox",
-              },
-            ],
-            ["div", 0],
-          ] as const;
-        }
+          },
+        ],
+        toDOM(node: ProseMirrorNode) {
+          const checked = node.attrs.checked;
 
-        return ["li", 0] as const;
-      },
-    }
-  : undefined;
+          if (typeof checked === "boolean") {
+            return [
+              "li",
+              {
+                "data-task": "true",
+                "data-checked": checked ? "true" : "false",
+              },
+              [
+                "input",
+                {
+                  ...(checked ? { checked: "" } : {}),
+                  "aria-label": node.textBetween(0, node.content.size, " ").trim()
+                    || messages.taskFallbackLabel,
+                  disabled: "",
+                  type: "checkbox",
+                },
+              ],
+              ["div", 0],
+            ] as const;
+          }
+
+          return ["li", 0] as const;
+        },
+      }
+    : undefined;
+}
 
 function isHTMLElementNode(dom: Node | string): dom is HTMLElement {
   // ProseMirror parses external clipboard HTML in a detached HTML document,
@@ -164,9 +172,14 @@ function getOpaqueDOMAttrs(dom: Node | string, fallback: OpaqueMarkdownKind) {
   };
 }
 
-function getOpaqueDOMAttributes(kind: OpaqueMarkdownKind, display: "block" | "inline") {
+function getOpaqueDOMAttributes(
+  kind: OpaqueMarkdownKind,
+  display: "block" | "inline",
+  messages: MarkdownEditorMessages,
+) {
+  const kindLabel = messages.opaqueKindLabels[kind];
   return {
-    "aria-label": `Opaque ${kind} Markdown source`,
+    "aria-label": messages.opaqueSourceLabel(Object.freeze({ kind, kindLabel })),
     "class": `mdw-opaque-source mdw-opaque-source-${display}`,
     "contenteditable": "false",
     "data-markora-opaque": display,
@@ -174,62 +187,66 @@ function getOpaqueDOMAttributes(kind: OpaqueMarkdownKind, display: "block" | "in
   };
 }
 
-const rawBlockSpec: NodeSpec = {
-  attrs: {
-    kind: { default: "unknown-fence" },
-    source: { default: "" },
-  },
-  atom: true,
-  createGapCursor: true,
-  defining: true,
-  draggable: true,
-  group: "block",
-  isolating: true,
-  leafText(node) {
-    return typeof node.attrs.source === "string" ? node.attrs.source : "";
-  },
-  parseDOM: [{
-    tag: '[data-markora-opaque="block"]',
-    priority: 60,
-    preserveWhitespace: "full",
-    getAttrs(dom) {
-      return getOpaqueDOMAttrs(dom, "unknown-fence");
+function createRawBlockSpec(messages: MarkdownEditorMessages): NodeSpec {
+  return {
+    attrs: {
+      kind: { default: "unknown-fence" },
+      source: { default: "" },
     },
-  }],
-  selectable: true,
-  toDOM(node) {
-    const kind = normalizeOpaqueMarkdownKind(node.attrs.kind, "unknown-fence");
-    const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
-    return ["pre", getOpaqueDOMAttributes(kind, "block"), ["code", source]] as const;
-  },
-};
+    atom: true,
+    createGapCursor: true,
+    defining: true,
+    draggable: true,
+    group: "block",
+    isolating: true,
+    leafText(node) {
+      return typeof node.attrs.source === "string" ? node.attrs.source : "";
+    },
+    parseDOM: [{
+      tag: '[data-markora-opaque="block"]',
+      priority: 60,
+      preserveWhitespace: "full",
+      getAttrs(dom) {
+        return getOpaqueDOMAttrs(dom, "unknown-fence");
+      },
+    }],
+    selectable: true,
+    toDOM(node) {
+      const kind = normalizeOpaqueMarkdownKind(node.attrs.kind, "unknown-fence");
+      const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
+      return ["pre", getOpaqueDOMAttributes(kind, "block", messages), ["code", source]] as const;
+    },
+  };
+}
 
-const rawInlineSpec: NodeSpec = {
-  attrs: {
-    kind: { default: "inline-html" },
-    source: { default: "" },
-  },
-  atom: true,
-  draggable: true,
-  group: "inline",
-  inline: true,
-  leafText(node) {
-    return typeof node.attrs.source === "string" ? node.attrs.source : "";
-  },
-  parseDOM: [{
-    tag: '[data-markora-opaque="inline"]',
-    preserveWhitespace: "full",
-    getAttrs(dom) {
-      return getOpaqueDOMAttrs(dom, "inline-html");
+function createRawInlineSpec(messages: MarkdownEditorMessages): NodeSpec {
+  return {
+    attrs: {
+      kind: { default: "inline-html" },
+      source: { default: "" },
     },
-  }],
-  selectable: true,
-  toDOM(node) {
-    const kind = normalizeOpaqueMarkdownKind(node.attrs.kind, "inline-html");
-    const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
-    return ["span", getOpaqueDOMAttributes(kind, "inline"), ["code", source]] as const;
-  },
-};
+    atom: true,
+    draggable: true,
+    group: "inline",
+    inline: true,
+    leafText(node) {
+      return typeof node.attrs.source === "string" ? node.attrs.source : "";
+    },
+    parseDOM: [{
+      tag: '[data-markora-opaque="inline"]',
+      preserveWhitespace: "full",
+      getAttrs(dom) {
+        return getOpaqueDOMAttrs(dom, "inline-html");
+      },
+    }],
+    selectable: true,
+    toDOM(node) {
+      const kind = normalizeOpaqueMarkdownKind(node.attrs.kind, "inline-html");
+      const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
+      return ["span", getOpaqueDOMAttributes(kind, "inline", messages), ["code", source]] as const;
+    },
+  };
+}
 
 export function normalizeTableAlignment(value: unknown): TableAlignment | null {
   return value === "left" || value === "center" || value === "right" ? value : null;
@@ -415,17 +432,20 @@ const strikeMarkSpec = {
   },
 };
 
-const schemaNodes = (
-  nonSelectableCodeBlockSpec ? baseSchema.spec.nodes.update("code_block", nonSelectableCodeBlockSpec) : baseSchema.spec.nodes
-)
-  .update("list_item", taskListItemSpec ?? listItemSpec!)
-  .update("heading", headingSpec ? { ...headingSpec, content: "(text | image | raw_inline)*" } : headingSpec!)
-  .addBefore("image", "raw_inline", rawInlineSpec)
-  .addToEnd("raw_block", rawBlockSpec)
-  .addToEnd("table", tableNodeSpecs.table)
-  .addToEnd("table_row", tableNodeSpecs.table_row)
-  .addToEnd("table_cell", tableNodeSpecs.table_cell)
-  .addToEnd("table_header", tableNodeSpecs.table_header);
+function createSchemaNodes(messages: MarkdownEditorMessages) {
+  const taskListItemSpec = createTaskListItemSpec(messages);
+  return (
+    nonSelectableCodeBlockSpec ? baseSchema.spec.nodes.update("code_block", nonSelectableCodeBlockSpec) : baseSchema.spec.nodes
+  )
+    .update("list_item", taskListItemSpec ?? listItemSpec!)
+    .update("heading", headingSpec ? { ...headingSpec, content: "(text | image | raw_inline)*" } : headingSpec!)
+    .addBefore("image", "raw_inline", createRawInlineSpec(messages))
+    .addToEnd("raw_block", createRawBlockSpec(messages))
+    .addToEnd("table", tableNodeSpecs.table)
+    .addToEnd("table_row", tableNodeSpecs.table_row)
+    .addToEnd("table_cell", tableNodeSpecs.table_cell)
+    .addToEnd("table_header", tableNodeSpecs.table_header);
+}
 
 function extensionCodecError(options: {
   code?: string;
@@ -497,8 +517,9 @@ export type MarkdownEditorCodec = Readonly<{
 export function createCompatibilityMarkdownCodec(
   resolvedExtensions: readonly ResolvedMarkdownEditorExtension[] = [],
   resources: NormalizedMarkdownEditorResources = normalizeMarkdownEditorResources(undefined),
+  messages: MarkdownEditorMessages = defaultMarkdownEditorMessages,
 ): MarkdownEditorCodec {
-  const foundationNodes = schemaNodes as MarkdownEditorOrderedSchemaMap<NodeSpec>;
+  const foundationNodes = createSchemaNodes(messages) as MarkdownEditorOrderedSchemaMap<NodeSpec>;
   const foundationMarks = baseSchema.spec.marks.addToEnd(
     "strike",
     strikeMarkSpec,

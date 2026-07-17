@@ -436,8 +436,9 @@ function assertPackedModule(report, fragment, label) {
 }
 
 function assertPackedPackage(packageInfo) {
+  const packageRoot = join(smokeNodeModulesDir, packageInfo.name);
   const packageJson = JSON.parse(readFileSync(
-    join(smokeNodeModulesDir, packageInfo.name, "package.json"),
+    join(packageRoot, "package.json"),
     "utf8",
   ));
 
@@ -446,6 +447,25 @@ function assertPackedPackage(packageInfo) {
       `Packed ${packageInfo.name} provenance mismatch: expected ${packageInfo.version}, `
       + `received ${packageJson.name}@${packageJson.version}.`,
     );
+  }
+
+  if (packageInfo.name === "markora") {
+    const themesPath = join(packageRoot, "dist", "themes.css");
+
+    if (
+      packageJson.exports?.["./themes.css"] !== "./dist/themes.css"
+      || !packageJson.sideEffects?.includes("./dist/themes.css")
+      || !existsSync(themesPath)
+    ) {
+      throw new Error("Packed markora omitted the public themes.css asset contract.");
+    }
+
+    const themes = readFileSync(themesPath, "utf8");
+    for (const requiredTheme of ["light", "dark", "auto", "contrast"]) {
+      if (!themes.includes(`[data-mdw-theme=\"${requiredTheme}\"]`)) {
+        throw new Error(`Packed themes.css omitted the ${requiredTheme} reference theme.`);
+      }
+    }
   }
 }
 
