@@ -18,6 +18,7 @@ import {
 } from "./extensionApi";
 import type { ResolvedMarkdownEditorExtension } from "./extensionResolver";
 import {
+  combineMarkdownSerializerEscapePatterns,
   compileMarkdownEditorParserTokens,
   registerMarkdownEditorTokenizerRules,
   wrapMarkdownEditorExtensionRuntimeCallback,
@@ -901,7 +902,11 @@ for (const { definition } of resolvedExtensions) {
 }
 
 const markdownSerializer = new MarkdownSerializer(serializerNodes, serializerMarks, {
-  escapeExtraCharacters: /<(?=\/?[A-Za-z]|[!?])/g,
+  escapeExtraCharacters: combineMarkdownSerializerEscapePatterns([
+    /<(?=\/?[A-Za-z]|[!?])/g,
+  ], resolvedExtensions.map(({ definition }) => (
+    definition.markdown?.serializer?.escapeExtraCharacters
+  ))),
 });
 
 function stripTaskPrefixFromInline(fragment: Fragment, count: number) {

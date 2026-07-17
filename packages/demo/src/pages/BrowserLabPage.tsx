@@ -38,6 +38,19 @@ import {
   type FootnotesSnapshot,
 } from "markora-extension-footnotes";
 import "markora-extension-footnotes/styles.css";
+import {
+  createMathExtension,
+  defaultMathMessages,
+  type MathEditRequest,
+  type MathExtension,
+  type MathKind,
+  type MathMessageOverrides,
+  type MathMessages,
+  type MathNodeTarget,
+  type MathRenderRequest,
+  type MathSnapshot,
+} from "markora-extension-math";
+import "markora-extension-math/styles.css";
 import { createDefaultUi, type DefaultUiMessageOverrides } from "markora-ui";
 import { useEffect, useRef } from "react";
 import { createGlobalListenerLedger, type ListenerSnapshot } from "../browser-lab/listenerLedger";
@@ -51,6 +64,16 @@ export type BrowserLabPortal = "body" | "default" | "local" | "positioned" | "tr
 export type BrowserLabFootnotesMessages = Partial<
   Record<keyof FootnotesMessageOverrides, string>
 >;
+export type BrowserLabMathMessages = Partial<Record<keyof MathMessages, string>>;
+export type BrowserLabMathRendererMode =
+  | "connected"
+  | "deferred"
+  | "missing"
+  | "reject"
+  | "sync"
+  | "throw"
+  | "unsafe"
+  | "wrong-document";
 
 export type BrowserLabEditorSpec = {
   ariaLabel?: string;
@@ -61,13 +84,15 @@ export type BrowserLabEditorSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "footnotes" | "frontmatter" | "public-example";
+  extensionMode?: "footnotes" | "frontmatter" | "math" | "public-example";
   footnotesMessages?: BrowserLabFootnotesMessages;
   frontmatterMessages?: FrontmatterMessageOverrides;
   id: string;
   initialSelection?: MarkdownEditorSelectionTarget;
   language?: string;
   markdown?: string;
+  mathMessages?: BrowserLabMathMessages;
+  mathRendererMode?: BrowserLabMathRendererMode;
   messages?: MarkdownEditorMessageOverrides;
   motion?: "reduce";
   placement?: "bottom-right" | "normal";
@@ -205,6 +230,30 @@ export type BrowserLabFootnoteSelectionRequest = Readonly<{
   occurrence?: number;
 }>;
 
+export type BrowserLabMathCommandRequest =
+  | { kind: MathKind; target: MathNodeTarget; type: "convert" }
+  | { source: string; type: "insertBlock" | "insertInline" }
+  | { source: string; target: MathNodeTarget; type: "update" }
+  | { target: MathNodeTarget; type: "remove" | "retryPreview" | "togglePreview" };
+
+export type BrowserLabMathEditSnapshot = Pick<
+  MathEditRequest,
+  "kind" | "position" | "render" | "source"
+>;
+
+export type BrowserLabMathRendererCall = Readonly<{
+  aborted: boolean;
+  id: number;
+  kind: MathKind;
+  settled: "pending" | "rejected" | "resolved" | "threw";
+  source: string;
+}>;
+
+export type BrowserLabMathRendererSettlement = Readonly<{
+  callId?: number;
+  outcome?: "reject" | "resolve";
+}>;
+
 export type BrowserLabReconcileResult = {
   changed: boolean;
   snapshot: BrowserLabSnapshot;
@@ -285,6 +334,16 @@ export type BrowserLabApi = {
   getMarkdown: (id: string) => string;
   isDestroyed: (id: string) => boolean;
   listenerSnapshot: (id?: string) => ListenerSnapshot;
+  mathCommand: (id: string, request: BrowserLabMathCommandRequest) => boolean;
+  mathEditConvert: (id: string, kind: MathKind) => boolean;
+  mathEditRemove: (id: string) => boolean;
+  mathEditUpdate: (id: string, source: string) => boolean;
+  mathRendererCalls: (id: string) => readonly BrowserLabMathRendererCall[];
+  mathRendererSettle: (
+    id: string,
+    settlement?: BrowserLabMathRendererSettlement,
+  ) => boolean;
+  mathSnapshot: (id: string) => MathSnapshot;
   mount: (spec: BrowserLabEditorSpec) => BrowserLabSnapshot;
   mountedIds: () => string[];
   openUi: (id: string, kind: "code-language" | "image" | "link" | "table" | "table-create") => boolean;
@@ -293,6 +352,7 @@ export type BrowserLabApi = {
     FrontmatterEditRequest,
     "diagnostics" | "source"
   > | null;
+  pendingMathEdit: (id: string) => BrowserLabMathEditSnapshot | null;
   ready: true;
   reconcile: (
     id: string,
@@ -306,6 +366,7 @@ export type BrowserLabApi = {
   resourceLog: (id: string) => BrowserLabResourceLog;
   reset: (id: string, markdown: string) => string;
   selectFootnote: (id: string, request: BrowserLabFootnoteSelectionRequest) => boolean;
+  selectMath: (id: string, target: MathNodeTarget) => boolean;
   selectText: (id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number) => boolean;
   settle: (id?: string) => Promise<void>;
   snapshot: (id: string) => BrowserLabSnapshot;
@@ -331,13 +392,28 @@ type MountedEditor = {
   eventLog: BrowserLabEventRecord[];
   eventUnsubscribes: Map<MarkdownEditorEventName, () => void>;
   extensionActions?: HTMLElement;
-  extensionMode?: "footnotes" | "frontmatter" | "public-example";
+  extensionMode?: "footnotes" | "frontmatter" | "math" | "public-example";
   footnotesExtension: FootnotesExtension | null;
   frontmatterEditRequest: FrontmatterEditRequest | null;
   frontmatterExtension: FrontmatterExtension | null;
   explicitPortalRoot?: HTMLElement | ShadowRoot;
   host: HTMLElement;
   id: string;
+  mathEditRequest: MathEditRequest | null;
+  mathExtension: MathExtension | null;
+  mathRendererArtifacts: Set<Node>;
+  mathRendererCalls: Array<{
+    aborted: boolean;
+    id: number;
+    kind: MathKind;
+    settled: "pending" | "rejected" | "resolved" | "threw";
+    source: string;
+  }>;
+  mathRendererDeferred: Map<number, {
+    reject(reason: unknown): void;
+    request: MathRenderRequest;
+    resolve(value: Node | DocumentFragment): void;
+  }>;
   output: HTMLOutputElement;
   opaqueEditRequest: OpaqueMarkdownEditRequest | null;
   portalRoot: HTMLElement | ShadowRoot;
@@ -605,6 +681,131 @@ function requireFootnotesHandle(mounted: MountedEditor) {
   return mounted.editor.extensions.get(mounted.footnotesExtension);
 }
 
+function requireMathHandle(mounted: MountedEditor) {
+  if (!mounted.mathExtension) {
+    throw new Error(`Browser lab editor "${mounted.id}" has no math extension.`);
+  }
+
+  return mounted.editor.extensions.get(mounted.mathExtension);
+}
+
+function normalizeBrowserLabMathMessages(
+  overrides: BrowserLabMathMessages | undefined,
+): MathMessageOverrides | undefined {
+  if (!overrides) {
+    return undefined;
+  }
+
+  return Object.fromEntries(Object.entries(overrides).map(([key, message]) => [
+    key,
+    typeof defaultMathMessages[key as keyof MathMessages] === "function"
+      ? () => message
+      : message,
+  ])) as MathMessageOverrides;
+}
+
+function createBrowserLabMathOutput(request: MathRenderRequest, callId: number) {
+  const output = request.ownerDocument.createElement("span");
+  output.className = "browser-lab-math-rendered";
+  output.textContent = `Rendered ${request.kind} math ${callId}: ${request.source}`;
+  return output;
+}
+
+function clearMathRendererArtifacts(mounted: MountedEditor) {
+  for (const artifact of mounted.mathRendererArtifacts) {
+    artifact.parentNode?.removeChild(artifact);
+  }
+
+  mounted.mathRendererArtifacts.clear();
+}
+
+function createBrowserLabMathRenderer(
+  mounted: MountedEditor,
+  mode: BrowserLabMathRendererMode | undefined,
+) {
+  if (!mode || mode === "missing") {
+    return undefined;
+  }
+
+  return (request: MathRenderRequest): Node | DocumentFragment | Promise<Node | DocumentFragment> => {
+    const call = {
+      aborted: request.signal.aborted,
+      id: mounted.mathRendererCalls.length + 1,
+      kind: request.kind,
+      settled: "pending" as "pending" | "rejected" | "resolved" | "threw",
+      source: request.source,
+    };
+    mounted.mathRendererCalls.push(call);
+    request.signal.addEventListener("abort", () => {
+      call.aborted = true;
+    }, { once: true });
+
+    if (mode === "throw") {
+      call.settled = "threw";
+      throw new Error(`Browser lab math renderer threw for call ${call.id}.`);
+    }
+
+    if (mode === "reject") {
+      call.settled = "rejected";
+      return Promise.reject(new Error(
+        `Browser lab math renderer rejected call ${call.id}.`,
+      ));
+    }
+
+    if (mode === "deferred") {
+      return new Promise<Node | DocumentFragment>((resolve, reject) => {
+        mounted.mathRendererDeferred.set(call.id, { reject, request, resolve });
+      });
+    }
+
+    call.settled = "resolved";
+
+    if (mode === "wrong-document") {
+      const foreignDocument = request.ownerDocument.implementation
+        .createHTMLDocument("Browser lab foreign math renderer");
+      const output = foreignDocument.createElement("span");
+      output.textContent = request.source;
+      return output;
+    }
+
+    const output = createBrowserLabMathOutput(request, call.id);
+
+    if (mode === "unsafe") {
+      output.setAttribute("onclick", "window.__markoraUnsafeMathRenderer = true");
+      return output;
+    }
+
+    if (mode === "connected") {
+      output.dataset.e2eMathRendererArtifact = mounted.id;
+      request.ownerDocument.body.append(output);
+      mounted.mathRendererArtifacts.add(output);
+      request.signal.addEventListener("abort", () => {
+        output.remove();
+        mounted.mathRendererArtifacts.delete(output);
+      }, { once: true });
+    }
+
+    return output;
+  };
+}
+
+function runBrowserLabMathCommand(
+  mounted: MountedEditor,
+  request: BrowserLabMathCommandRequest,
+) {
+  const commands = requireMathHandle(mounted).commands;
+
+  switch (request.type) {
+    case "convert": return commands.convert(request.target, request.kind);
+    case "insertBlock": return commands.insertBlock(request.source);
+    case "insertInline": return commands.insertInline(request.source);
+    case "remove": return commands.remove(request.target);
+    case "retryPreview": return commands.retryPreview(request.target);
+    case "togglePreview": return commands.togglePreview(request.target);
+    case "update": return commands.update(request.target, request.source);
+  }
+}
+
 function cloneEditorStyles(shadowRoot: ShadowRoot) {
   for (const style of document.head.querySelectorAll<HTMLLinkElement | HTMLStyleElement>('link[rel="stylesheet"], style')) {
     shadowRoot.append(style.cloneNode(true));
@@ -757,6 +958,11 @@ export function BrowserLabPage() {
       mounted.extensionMode = extensionMode;
       mounted.frontmatterEditRequest = null;
       delete mounted.section.dataset.pendingFrontmatterEdit;
+      mounted.mathEditRequest = null;
+      mounted.mathRendererCalls.length = 0;
+      mounted.mathRendererDeferred.clear();
+      clearMathRendererArtifacts(mounted);
+      delete mounted.section.dataset.pendingMathEdit;
       mounted.frontmatterExtension = extensionMode === "frontmatter"
         ? createFrontmatterExtension({
             messages: spec.frontmatterMessages,
@@ -778,13 +984,28 @@ export function BrowserLabPage() {
               : undefined,
           })
         : null;
+      mounted.mathExtension = extensionMode === "math"
+        ? createMathExtension({
+            messages: normalizeBrowserLabMathMessages(spec.mathMessages),
+            onEditSource(request) {
+              mounted.mathEditRequest = request;
+              mounted.section.dataset.pendingMathEdit = "true";
+            },
+            renderer: createBrowserLabMathRenderer(
+              mounted,
+              spec.mathRendererMode,
+            ),
+          })
+        : null;
       const extensions = extensionMode === "public-example"
         ? publicExampleExtensions
         : mounted.frontmatterExtension
           ? [mounted.frontmatterExtension]
           : mounted.footnotesExtension
             ? [mounted.footnotesExtension]
-            : undefined;
+            : mounted.mathExtension
+              ? [mounted.mathExtension]
+              : undefined;
       const existingOverlays = new Set(
         mounted.portalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR),
       );
@@ -860,6 +1081,7 @@ export function BrowserLabPage() {
 
         mounted.editor.destroy();
       } finally {
+        clearMathRendererArtifacts(mounted);
         for (const unsubscribe of mounted.eventUnsubscribes.values()) {
           unsubscribe();
         }
@@ -995,6 +1217,11 @@ export function BrowserLabPage() {
           frontmatterExtension: null,
           host,
           id,
+          mathEditRequest: null,
+          mathExtension: null,
+          mathRendererArtifacts: new Set(),
+          mathRendererCalls: [],
+          mathRendererDeferred: new Map(),
           opaqueEditRequest: null,
           output,
           portalRoot: effectivePortalRoot,
@@ -1053,6 +1280,7 @@ export function BrowserLabPage() {
         const mounted = requireEditor(editors, id);
         const wasDestroyed = mounted.editor.isDestroyed;
         mounted.editor.destroy();
+        clearMathRendererArtifacts(mounted);
 
         for (const button of mounted.extensionActions?.querySelectorAll("button") ?? []) {
           button.disabled = true;
@@ -1179,6 +1407,98 @@ export function BrowserLabPage() {
       isDestroyed(id) {
         return requireEditor(editors, id).editor.isDestroyed;
       },
+      mathCommand(id, request) {
+        const mounted = requireEditor(editors, id);
+        const handled = runBrowserLabMathCommand(mounted, request);
+
+        if (handled) {
+          mounted.editor.flushChange();
+          mounted.output.textContent = mounted.editor.getMarkdown();
+        }
+
+        return handled;
+      },
+      mathEditConvert(id, kind) {
+        const mounted = requireEditor(editors, id);
+        const request = mounted.mathEditRequest;
+
+        if (!request || !request.convert(kind)) {
+          return false;
+        }
+
+        mounted.mathEditRequest = null;
+        delete mounted.section.dataset.pendingMathEdit;
+        mounted.editor.flushChange();
+        mounted.output.textContent = mounted.editor.getMarkdown();
+        return true;
+      },
+      mathEditRemove(id) {
+        const mounted = requireEditor(editors, id);
+        const request = mounted.mathEditRequest;
+
+        if (!request || !request.remove()) {
+          return false;
+        }
+
+        mounted.mathEditRequest = null;
+        delete mounted.section.dataset.pendingMathEdit;
+        mounted.editor.flushChange();
+        mounted.output.textContent = mounted.editor.getMarkdown();
+        return true;
+      },
+      mathEditUpdate(id, source) {
+        const mounted = requireEditor(editors, id);
+        const request = mounted.mathEditRequest;
+
+        if (!request || !request.update(source)) {
+          return false;
+        }
+
+        mounted.mathEditRequest = null;
+        delete mounted.section.dataset.pendingMathEdit;
+        mounted.editor.flushChange();
+        mounted.output.textContent = mounted.editor.getMarkdown();
+        return true;
+      },
+      mathRendererCalls(id) {
+        return requireEditor(editors, id).mathRendererCalls.map((call) => ({
+          ...call,
+        }));
+      },
+      mathRendererSettle(id, settlement = {}) {
+        const mounted = requireEditor(editors, id);
+        const pendingCallIds = [...mounted.mathRendererDeferred.keys()];
+        const callId = settlement.callId
+          ?? pendingCallIds[pendingCallIds.length - 1];
+
+        if (callId === undefined) {
+          return false;
+        }
+
+        const deferred = mounted.mathRendererDeferred.get(callId);
+        const call = mounted.mathRendererCalls.find(({ id: nextId }) => nextId === callId);
+
+        if (!deferred || !call || call.settled !== "pending") {
+          return false;
+        }
+
+        mounted.mathRendererDeferred.delete(callId);
+
+        if (settlement.outcome === "reject") {
+          call.settled = "rejected";
+          deferred.reject(new Error(
+            `Browser lab deferred math renderer rejected call ${callId}.`,
+          ));
+        } else {
+          call.settled = "resolved";
+          deferred.resolve(createBrowserLabMathOutput(deferred.request, callId));
+        }
+
+        return true;
+      },
+      mathSnapshot(id) {
+        return requireMathHandle(requireEditor(editors, id)).state.getSnapshot();
+      },
       remount(id, options = {}) {
         const mounted = requireEditor(editors, id);
 
@@ -1298,6 +1618,33 @@ export function BrowserLabPage() {
         view.focus();
         return true;
       },
+      selectMath(id, target) {
+        const mounted = requireEditor(editors, id);
+        const snapshot = requireMathHandle(mounted).state.getNode(target);
+
+        if (!snapshot) {
+          return false;
+        }
+
+        const view = mounted.editor.view;
+        const node = view.state.doc.nodeAt(snapshot.position);
+        const expectedType = snapshot.kind === "inline"
+          ? "math_inline"
+          : "math_block";
+
+        if (!node || node.type.name !== expectedType || view.composing) {
+          return false;
+        }
+
+        const selection = NodeSelection.create(view.state.doc, snapshot.position);
+
+        if (!selection.eq(view.state.selection)) {
+          view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
+        }
+
+        view.focus();
+        return true;
+      },
       selectText(id, text, mode = "all", occurrence = 0) {
         if (!text || occurrence < 0) {
           return false;
@@ -1372,6 +1719,17 @@ export function BrowserLabPage() {
         const request = requireEditor(editors, id).frontmatterEditRequest;
         return request
           ? { diagnostics: request.diagnostics, source: request.source }
+          : null;
+      },
+      pendingMathEdit(id) {
+        const request = requireEditor(editors, id).mathEditRequest;
+        return request
+          ? {
+              kind: request.kind,
+              position: request.position,
+              render: { ...request.render },
+              source: request.source,
+            }
           : null;
       },
       updateOpaque(id, source) {

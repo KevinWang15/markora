@@ -25,6 +25,7 @@ import {
 import type { ResolvedMarkdownEditorExtension } from "./extensionResolver";
 import type { MarkdownEditorCodec } from "./markdownCodec";
 import {
+  combineMarkdownSerializerEscapePatterns,
   compileMarkdownEditorParserTokens,
   registerMarkdownEditorTokenizerRules,
   wrapMarkdownEditorExtensionRuntimeCallback,
@@ -393,7 +394,17 @@ export function createMinimalMarkdownCodec(
   }
 
   const parser = new MarkdownParser(schema, tokenizer, parserTokens);
-  const serializer = new MarkdownSerializer(serializerNodes, serializerMarks);
+  const escapeExtraCharacters = combineMarkdownSerializerEscapePatterns(
+    [],
+    extensions.map(({ definition }) => (
+      definition.markdown?.serializer?.escapeExtraCharacters
+    )),
+  );
+  const serializer = new MarkdownSerializer(
+    serializerNodes,
+    serializerMarks,
+    escapeExtraCharacters ? { escapeExtraCharacters } : undefined,
+  );
   const parse = (markdown: string) => {
     if (!markdown.trim()) {
       return schema.topNodeType.createAndFill();

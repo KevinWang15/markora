@@ -1,6 +1,6 @@
 # Markdown dialect and fidelity contract
 
-Status: current `markora` `0.0.x` contract, updated through the `EE-021` footnotes package on 2026-07-18.
+Status: current `markora` `0.0.x` contract, updated through the `EE-021` math package on 2026-07-18.
 
 This contract applies to Markdown passed through `createEditor({ markdown })`, `editor.commands.reconcileMarkdown()`, or `editor.commands.resetMarkdown()` and returned by `editor.getMarkdown()` or `onChange`. Deprecated `setMarkdown()` uses the same parsing boundary as `resetMarkdown()`.
 
@@ -111,6 +111,39 @@ Typed rename and removal commands require an explicit reference policy. Rename c
 
 The package bundles no renderer and performs no network work. Its semantic DOM uses owner-document DOM/text operations and editor-scoped opaque relationship IDs rather than authored labels as global IDs. Standalone reference and back-reference activation moves the model selection instead of navigating the embedding page, including in read-only presentation. An unresolved reference consumes Enter and Space without moving selection or scrolling; a link-contained marker is removed from the tab order and leaves activation to its outer link. Ordinary non-footnote edits use an ordered, position-only index remap and do not repaint retained footnote controls. Import `markora-extension-footnotes/styles.css` explicitly; its public custom properties use the `--mdw-footnotes-*` prefix.
 
+`markora-extension-math` works with both `markora` and `markora/minimal` and
+claims semantic inline `$expression$` plus standalone `$$expression$$` and
+multiline `$$` block forms. Inline source is non-empty, stays on one source
+line, cannot begin or end with whitespace, and uses ASCII-alphanumeric boundary
+guards to avoid claiming currency-like text. Block source may be empty, cannot
+contain a standalone `$$` line, and normalizes line endings to LF. Every block
+serializes as a multiline `$$` shell; ordinary literal dollars, including image
+alt text, serialize with backslash escapes so they cannot become math on the
+next parse. Code, recognized HTML, escaped dollars, and image descriptions
+remain non-math contexts.
+
+The package exposes frozen node, diagnostic, and render snapshots plus typed
+insert, update, remove, convert, preview-toggle, and retry commands. Mutation
+targets carry an opaque occurrence identity as well as kind, current position,
+and source. Unchanged occurrences keep identity when preceding edits move them;
+replacement, reset, source mutation, or a stale position invalidates the target
+instead of allowing a source-identical node to inherit it. Source mutations are
+single undo steps and are guarded during read-only and composition states.
+
+Rendering is optional, asynchronous presentation supplied by the host. The
+package bundles no TeX engine, imports no renderer lazily, and performs no
+network work. A renderer receives inert source, an owner `Document`, and an
+abort signal; only detached owner-document DOM passes the manual HTML/MathML
+allowlist, attribute/style clamp, depth/node/byte limits, and fresh-tree copy.
+Failures, missing renderers, stale promises, offscreen block previews, and
+oversized source retain the permanent accessible source representation. Render
+work is task-queued, viewport-gated for blocks, bounded to four concurrent
+calls, and never enters Markdown, history, state source, or clipboard output.
+Live controls are localized, keyboard-operable siblings of the semantic
+`role="math"` source rather than interactive descendants of that role. Import
+`markora-extension-math/styles.css` explicitly; its public custom properties
+use the `--mdw-math-*` prefix.
+
 ## Canonical output
 
 These transformations are intentional and happen on import/export even when the user makes no visual edit.
@@ -136,6 +169,9 @@ These transformations are intentional and happen on import/export even when the 
 | U+0000 in imported footnote-looking syntax, when `markora-extension-footnotes` is installed | Replaced with U+FFFD by Markdown-it source normalization; U+FFFD is outside the label grammar, so the syntax stays literal and reparses stably |
 | Footnote-looking syntax in an image description, when `markora-extension-footnotes` is installed | Retained as literal plain alt text; inline alt formatting canonicalizes to its text content |
 | Footnote definition continuation, when `markora-extension-footnotes` is installed | Four literal ASCII spaces; empty definitions retain a canonical `[^label]: ` shell |
+| Inline math, when `markora-extension-math` is installed | Canonical single-dollar `$expression$` shell |
+| Block math, when `markora-extension-math` is installed | Canonical multiline `$$` shell with LF expression lines, including empty source |
+| Literal dollars, when `markora-extension-math` is installed | Backslash-escaped in ordinary text and plain image alt text so reparsing cannot claim semantic math |
 | Angle URL or email autolink | Inline link syntax |
 | Character entity such as `&copy;` | Decoded Unicode text |
 | Backslash escape | Re-emitted only where the serializer needs an escape |
@@ -152,6 +188,11 @@ Supported external HTML is converted through schema DOM rules. Paragraphs, marks
 Outer copy exposes semantic HTML, canonical Markdown, and a human-readable plain representation when the event clipboard accepts them. Canonical Markdown is the fidelity representation for code fences/languages, table alignment, list/task state, links, images, marks, opaque source, and extension syntax. HTML additionally carries private slice context for same-editor structure. Plain text is intended for human-readable destinations and can omit syntax-only information such as link destinations or code-fence language. Nested code selection is deliberately plain source; select the complete outer code block when fenced Markdown is required. A browser-native range split across active CodeMirror and outer ProseMirror is a safety boundary: Markora emits browser-projected plain text and prevents destructive cut because Firefox/WebKit do not expose one consistent cross-owner range.
 
 With `markora-extension-footnotes` installed, copying either a complete definition or a selection inside its body produces a closed, self-contained definition slice, including when the definition is contained by a blockquote or list. Canonical Markdown retains `[^label]: ` and semantic HTML retains the definition wrapper even for a partial body selection. Rich clipboard HTML emits a reference as noninteractive semantic note text without `tabindex`; only the live NodeView may promote a resolved standalone marker to an interactive link. Pasting a colliding definition keeps every occurrence; the first definition resolves references and later occurrences remain diagnosed duplicates. When the cursor is inside a definition, pasting a whole semantic definition lifts it to a sibling after the containing definition. Any other rich paste or raw transaction that would create a nested `footnote_definition` or code-marked `footnote_reference` is rejected atomically.
+
+With `markora-extension-math` installed, Markdown and plain-text copy contain
+only the canonical source shell. Rich HTML contains inert semantic source
+markup that reparses as the same math node; it never contains renderer DOM,
+preview/status UI, event listeners, or action controls.
 
 A rectangular table-cell selection is exported as semantic table HTML, quoted TSV in `text/plain`, and a complete standalone pipe table in `text/markdown`. Tabs, line breaks, and double quotes inside TSV cells use CSV-style double-quote escaping. Because a standalone pipe table requires a header, the first row of a body-only selection becomes the clipboard Markdown header; this does not change the source table. Cut clears the selected cell contents without deleting rows or columns. When pasting a table or TSV matrix into a cell rectangle, a larger matrix is clipped and a smaller matrix is repeated to fill that rectangle. TSV parsing is limited to 1 MiB and 100 rows by 100 columns. Merged or over-limit table transfers are rejected atomically and emit the recoverable `"table-operation-rejected"` error event.
 
@@ -202,7 +243,7 @@ This table distinguishes the narrow shapes protected as opaque source from relat
 | --- | --- | --- |
 | YAML front matter | Exact optional syntax when `markora-extension-frontmatter` is installed; otherwise opaque only in the compatibility entry's recognized head shape | The package owns one validated head node and typed source workflow. Without it, compatibility `markora` preserves the conservative shape as `raw_block`; `markora/minimal` and other metadata syntaxes have no fidelity guarantee. |
 | Footnotes | Semantic optional syntax when `markora-extension-footnotes` is installed; otherwise unsupported — unreported | The package retains references, definitions, repeated-reference order, and canonical four-space continuations in root and minimal. Without it, labels and definitions can become ordinary reference links or escaped text, and definitions can disappear. |
-| Math | Opaque for recognized standalone display math; inline math unsupported — unreported | Standalone `$$` block shapes are preserved. Inline `$...$` and `$$...$$` in prose may survive accidentally as text but have no math fidelity guarantee. |
+| Math | Semantic optional syntax when `markora-extension-math` is installed; otherwise opaque only for recognized standalone display math in the compatibility entry | The package retains guarded inline expressions and canonical inline/block shells in root and minimal. Without it, compatibility `markora` preserves recognized standalone `$$` shapes as `raw_block`; inline math and all minimal-entry math have no fidelity guarantee. |
 | GitHub alerts/callouts | Unsupported — unreported | Parsed as an ordinary blockquote; the alert marker is text and source lines can fold together. |
 | Raw HTML and comments | Opaque for CommonMark-recognized block and inline shapes | Stored and displayed as inert source atoms, not rendered HTML. Syntax outside the tokenizer's recognized HTML shapes remains unsupported. |
 | Directives and container syntax | Opaque for the balanced container, leaf, and inline shapes above; otherwise unsupported — unreported | Recognized shapes are preserved. Unbalanced or different directive dialects can still be treated as ordinary Markdown text. |

@@ -365,7 +365,7 @@ Design the stable customization contract before adding more built-in syntax.
 
 #### Completion notes
 
-- The accepted [extension system RFC](./extension-system-rfc.md) versions the API independently; its current additive contract is `1.1.0` and defines a compile-before-mount architecture for schema, Markdown codec, runtime behavior, typed handles, and lifecycle resources.
+- The accepted [extension system RFC](./extension-system-rfc.md) versions the API independently; its current additive contract is `1.2.0` and defines a compile-before-mount architecture for schema, Markdown codec, runtime behavior, typed handles, and lifecycle resources.
 - The contract now covers branded heterogeneous definitions, exact-object typed lookup, a single inferred per-editor `createRuntime()` boundary, required/optional dependency and order edges, stable tokenizer anchors, compiler-qualified local token IDs, additive schema ownership, deterministic fixed runtime lanes, collision policy, clipboard pipelines, NodeViews, and headless UI actions.
 - Per-editor storage, the late-bound state/dispatch/command bridge, reset behavior, phase-owned cleanup scopes, reverse teardown, structured system/extension errors, trusted runtime-only callbacks, persistence manifests, SemVer rules, compatibility adapters, and the separate `markora/minimal` bundle boundary are specified before implementation.
 - The private, non-publishable `@markora-internal/extension-rfc-prototype` package implements an external multiline callout block and inline highlight mark using only public Markdown-it/ProseMirror APIs. Ten runtime tests prove semantic round-trip, registration-independent tokenizer precedence, optional fallback composition, host-shaped commands, storage isolation, fixed contribution lanes, key fallback chains, and ownership failures.
@@ -689,8 +689,8 @@ and verification decisions are frozen in the
 | Foundation | DONE | Exact-source claim points plus optional-package build, type, pack, browser, and bundle gates |
 | YAML front matter | DONE | `markora-extension-frontmatter` |
 | Footnotes | DONE | `markora-extension-footnotes` |
-| Inline and block math | NEXT | `markora-extension-math` |
-| GitHub-style alerts | QUEUED | `markora-extension-alerts` |
+| Inline and block math | DONE | `markora-extension-math` |
+| GitHub-style alerts | NEXT | `markora-extension-alerts` |
 | Generated TOC | QUEUED | `markora-extension-toc` |
 | Sanitized raw HTML | QUEUED | `markora-extension-html` |
 | Mermaid and GitHub diagrams | QUEUED | `markora-extension-diagrams` |
@@ -793,6 +793,51 @@ and verification decisions are frozen in the
   and `git diff --check` pass. Every performance threshold through 1 MiB is
   green. Independent review additionally passes 500 randomized canonical
   round trips and adversarial scanner bounds, with no release blocker found.
+- `markora-extension-math` provides semantic inline and block atoms in both
+  root and minimal editors. Canonical single-dollar inline and double-dollar
+  block serialization has fixed-point literal-dollar escaping, deterministic
+  precedence with footnotes and opaque syntax, source-only semantic clipboard
+  output, image-alt flattening, whole-document invariants, and typed
+  insert/update/convert/remove, preview, snapshot, diagnostic, and host-edit
+  surfaces. Runtime-only target identities prevent stale handles from claiming
+  identical siblings after move, replacement, history, or reconciliation.
+- The additive literal-delimiter escape hook advances the public extension API
+  from `1.1.0` to `1.2.0`; math requires `^1.2.0` so an older host cannot accept
+  the definition while silently omitting its fixed-point dollar escaping.
+  Front matter and footnotes continue to require only their original `^1.1.0`
+  source-range/tokenizer contract and remain compatible with the new host.
+- Preview rendering is optional and entirely host supplied; no TeX renderer is
+  bundled. The bounded manager limits concurrency and output size, defers block
+  work outside the viewport and all work during composition, aborts stale
+  generations, and retains source on missing, failed, or rejected output.
+  Renderer DOM is cloned into the editor only after owner-document, connected
+  node, active-content, URL, attribute, element-count, depth, and byte checks.
+  Source, Markdown, accessibility text, and clipboard data never depend on a
+  successful preview.
+- Localized logical-property NodeViews expose the permanent authored source to
+  assistive technology, keep action controls outside the `math` role, preserve
+  keyboard, RTL, read-only, forced-color, and reduced-motion behavior, and show
+  failures through text and diagnostic styling. Unrelated edits reuse the
+  immutable identity index and do not repaint math UI; structural transactions
+  rebuild only when needed, validate every intermediate step document, and the
+  render scheduler performs constant rather than per-target composition reads.
+- The packed feature graph is one 137,462 raw / 35,683 gzip JavaScript chunk
+  with no lazy chunks, plus 5,790 raw / 1,356 gzip CSS and 99 static modules.
+  It contains no renderer engine or sibling extension and remains absent from
+  both baseline bundles. Measurement-derived warning lines expose the current
+  size while failure ceilings retain roughly 9–11% headroom; root and minimal
+  remain at their reviewed 158/135 static-module ceilings.
+- Final verification for math: package tests pass 76 cases; `pnpm check` passes
+  every build, declaration/API check, Node ESM smoke, browser typecheck, and
+  1,143 unit/integration tests. The focused production-browser matrix passes 25
+  cases across Chromium, Firefox, and WebKit with two expected non-Chromium CDP
+  skips, including a real Chromium DevTools Protocol edit/copy path and Axe.
+  The complete required matrix passes 226 cases with 26 intentional capability
+  skips. `pnpm pack:smoke`, `pnpm perf:ci`, release-harness syntax/JSON checks,
+  and `git diff --check` pass; every performance threshold through 1 MiB is
+  green. Independent review found and closed stale-target, multi-step invariant,
+  serializer escaping, accessibility-role, error-style, repaint, and scheduler
+  scaling defects before release.
 - A separate pre-existing core follow-up remains: Markdown-it's default
   `maxNesting: 20` can drop content at roughly ten nested list items in both
   codecs. It is unrelated to the footnote scanner and must be resolved as a
@@ -835,7 +880,7 @@ An item is `DONE` only when all applicable requirements below are met:
 ## Completed iterations
 
 `EE-001` through `EE-020` are complete. The `EE-021` extension foundation,
-YAML front-matter package, and footnotes package are also complete. Gate A's
+YAML front-matter, footnotes, and math packages are also complete. Gate A's
 content-safety requirements and Gate B's production-embed requirements are
 satisfied, and Gate C now has keyboard/screen-reader, deliberate clipboard,
 mature table, configurable typing, theme, localization, bidirectional-text, and
@@ -845,9 +890,9 @@ extension-kernel, headless command/state, host-controlled resource,
 performance-budget, responsive-snapshot, lazy code-editor, semantic
 embedded-control, rich/Markdown/plain clipboard, production table-editing,
 host-configurable typing/keymap, design-system/internationalization,
-exact-source extension, front-matter, and footnote foundations.
+exact-source extension, front-matter, footnote, and math foundations.
 
 The current iteration is `EE-021 — Ship advanced syntax as optional extensions`.
-Its foundation, YAML front-matter package, and footnotes package are complete;
-inline and block math are next, and the remaining five feature packages are
-queued.
+Its foundation, YAML front-matter, footnotes, and inline/block math packages are
+complete; GitHub-style alerts are next, and the remaining four feature packages
+are queued.

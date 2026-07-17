@@ -54,6 +54,15 @@ const extensionBundleSpecs = Object.freeze([
     label: "Footnotes",
     packageName: "markora-extension-footnotes",
   }),
+  Object.freeze({
+    cssSelectors: Object.freeze([
+      ".mdw-math--inline",
+      ".mdw-math--block",
+    ]),
+    graphName: "math",
+    label: "Math",
+    packageName: "markora-extension-math",
+  }),
 ]);
 const bundleGraphNames = Object.freeze([
   "root",
@@ -1044,6 +1053,8 @@ function writeMeasurementReport({
       frontmatterHasNoRendererEngine: true,
       footnotesHasNoLazyChunks: measurements.footnotes.lazyJs.chunkCount === 0,
       footnotesHasNoRendererEngine: true,
+      mathHasNoLazyChunks: measurements.math.lazyJs.chunkCount === 0,
+      mathHasNoBundledRendererEngine: true,
       packedEntriesAndStylesResolved: true,
       packedPackageVersionsMatched: true,
       rootAndMinimalGraphsIndependent: true,
@@ -1095,6 +1106,12 @@ const footnotesPackage = packPackage(join(
   "packages/extension-footnotes",
 ));
 rememberPackage(footnotesPackage);
+currentPhase = "math-package";
+const mathPackage = packPackage(join(
+  rootDir,
+  "packages/extension-math",
+));
+rememberPackage(mathPackage);
 
 currentPhase = "packed-dependency-isolation";
 copyWorkspaceDependencies();
@@ -1102,6 +1119,7 @@ unpackPackage(corePackage.name, corePackage.tarballPath);
 unpackPackage(uiPackage.name, uiPackage.tarballPath);
 unpackPackage(frontmatterPackage.name, frontmatterPackage.tarballPath);
 unpackPackage(footnotesPackage.name, footnotesPackage.tarballPath);
+unpackPackage(mathPackage.name, mathPackage.tarballPath);
 assertPackedPackage(corePackage);
 assertPackedPackage(uiPackage);
 assertPackedPackage(frontmatterPackage, {
@@ -1111,6 +1129,10 @@ assertPackedPackage(frontmatterPackage, {
 assertPackedPackage(footnotesPackage, {
   rootSelector: ".mdw-footnote-reference",
   tokenPrefix: "--mdw-footnotes-",
+});
+assertPackedPackage(mathPackage, {
+  rootSelector: ".mdw-math--inline",
+  tokenPrefix: "--mdw-math-",
 });
 
 currentPhase = "consumer-generation";
@@ -1384,6 +1406,35 @@ export const packedFootnotesSurface = [
 ].join(":");
 `);
 
+writeFileSync(join(smokeAppDir, "src/math.js"), `import {
+  MATH_MAX_CONCURRENT_RENDERS,
+  MATH_MAX_RENDERED_NODES,
+  MATH_MAX_RENDERED_OUTPUT_BYTES,
+  MATH_MAX_SOURCE_BYTES,
+  createMathExtension,
+  defaultMathMessages,
+  mathDiagnosticCodes,
+} from "markora-extension-math";
+import "markora-extension-math/styles.css";
+
+export const packedMathDefinitions = [
+  createMathExtension(),
+  createMathExtension({
+    messages: { showPreview: "Show packed math preview" },
+  }),
+];
+
+export const packedMathSurface = [
+  MATH_MAX_SOURCE_BYTES,
+  MATH_MAX_RENDERED_NODES,
+  MATH_MAX_RENDERED_OUTPUT_BYTES,
+  MATH_MAX_CONCURRENT_RENDERS,
+  defaultMathMessages.inlineKindLabel,
+  mathDiagnosticCodes.join(","),
+  ...packedMathDefinitions.map(({ name, version }) => name + "@" + version),
+].join(":");
+`);
+
 writeFileSync(join(smokeAppDir, "src/api.ts"), `import {
   MarkdownEditorDestroyedError,
   createEditor,
@@ -1453,6 +1504,29 @@ import {
   type FootnotesSnapshot,
 } from "markora-extension-footnotes";
 import {
+  MATH_MAX_CONCURRENT_RENDERS,
+  MATH_MAX_RENDERED_NODES,
+  MATH_MAX_RENDERED_OUTPUT_BYTES,
+  MATH_MAX_SOURCE_BYTES,
+  createMathExtension,
+  defaultMathMessages,
+  mathDiagnosticCodes,
+  mathKinds,
+  mathRenderErrorCodes,
+  type MathDiagnostic,
+  type MathEditRequest,
+  type MathExtension,
+  type MathExtensionOptions,
+  type MathMessageOverrides,
+  type MathMessages,
+  type MathNodeSnapshot,
+  type MathNodeTarget,
+  type MathRenderRequest,
+  type MathRenderer,
+  type MathRenderSnapshot,
+  type MathSnapshot,
+} from "markora-extension-math";
+import {
   packedCalloutExtension,
   packedHighlightExtension,
 } from "./extensions";
@@ -1484,13 +1558,44 @@ const rootFootnotesExtension: FootnotesExtension =
   createFootnotesExtension(footnotesOptions);
 const minimalFootnotesExtension: FootnotesExtension =
   createFootnotesExtension();
+const mathMessages: MathMessageOverrides = {
+  showPreview: "Show packed preview",
+};
+const mathRenderer: MathRenderer = ({
+  kind,
+  ownerDocument,
+  signal,
+  source,
+}: MathRenderRequest) => {
+  const output = ownerDocument.createElement(kind === "inline" ? "span" : "div");
+  output.textContent = source;
+  signal.addEventListener("abort", () => undefined, { once: true });
+  return output;
+};
+const mathOptions: MathExtensionOptions = {
+  messages: mathMessages,
+  onEditSource(request: MathEditRequest) {
+    const source: string = request.source;
+    const render: MathRenderSnapshot = request.render;
+    const unchanged: boolean = request.update(source);
+    void render;
+    void unchanged;
+  },
+  renderer: mathRenderer,
+};
+const rootMathExtension: MathExtension = createMathExtension(mathOptions);
+const minimalMathExtension: MathExtension = createMathExtension();
 
 const editor = createEditor({
   ariaLabel: "Packed editor",
   autofocus: true,
   editable: true,
   element,
-  extensions: [rootFrontmatterExtension, rootFootnotesExtension],
+  extensions: [
+    rootFrontmatterExtension,
+    rootFootnotesExtension,
+    rootMathExtension,
+  ],
   initialSelection: "end",
   onChange(markdown, context) {
     const origin: MarkdownEditorChangeOrigin = context.origin;
@@ -1526,6 +1631,7 @@ const externalExtensions: readonly AnyMarkdownEditorExtension[] = [
   packedHighlightExtension,
   minimalFrontmatterExtension,
   minimalFootnotesExtension,
+  minimalMathExtension,
 ];
 const minimalEditor = createMinimalEditor({
   element,
@@ -1554,6 +1660,8 @@ const rootFrontmatterHandle = editor.extensions.get(rootFrontmatterExtension);
 const minimalFrontmatterHandle = minimalEditor.extensions.get(minimalFrontmatterExtension);
 const rootFootnotesHandle = editor.extensions.get(rootFootnotesExtension);
 const minimalFootnotesHandle = minimalEditor.extensions.get(minimalFootnotesExtension);
+const rootMathHandle = editor.extensions.get(rootMathExtension);
+const minimalMathHandle = minimalEditor.extensions.get(minimalMathExtension);
 const rootFrontmatterSnapshot: FrontmatterSnapshot | null =
   rootFrontmatterHandle.state.getSnapshot();
 const frontmatterMessages: FrontmatterMessages = defaultFrontmatterMessages;
@@ -1593,6 +1701,33 @@ const removedFootnote: boolean = minimalFootnotesHandle.commands.removeDefinitio
   footnoteTarget,
   footnoteRemoveOptions,
 );
+const mathTarget: MathNodeTarget = {
+  identity: 1,
+  kind: "inline",
+  position: 1,
+  source: "x",
+};
+const mathSnapshot: MathSnapshot = rootMathHandle.state.getSnapshot();
+const mathNodes: readonly MathNodeSnapshot[] = minimalMathHandle.state.getNodes();
+const mathDiagnostics: readonly MathDiagnostic[] = rootMathHandle.state.getDiagnostics();
+const mathRender: MathRenderSnapshot | null = rootMathHandle.state.getRenderState(mathTarget);
+const insertedInlineMath: boolean = rootMathHandle.commands.insertInline("x");
+const insertedBlockMath: boolean = minimalMathHandle.commands.insertBlock("x\\ny");
+const updatedMath: boolean = rootMathHandle.commands.update(mathTarget, "y");
+const removedMath: boolean = rootMathHandle.commands.remove(mathTarget);
+const convertedMath: boolean = rootMathHandle.commands.convert(mathTarget, "block");
+const toggledMath: boolean = rootMathHandle.commands.togglePreview(mathTarget);
+const retriedMath: boolean = rootMathHandle.commands.retryPreview(mathTarget);
+const publicMathMessages: MathMessages = defaultMathMessages;
+const mathLimits: readonly number[] = [
+  MATH_MAX_SOURCE_BYTES,
+  MATH_MAX_RENDERED_NODES,
+  MATH_MAX_RENDERED_OUTPUT_BYTES,
+  MATH_MAX_CONCURRENT_RENDERS,
+];
+const mathKind = mathKinds[0];
+const mathDiagnosticCode = mathDiagnosticCodes[0];
+const mathRenderErrorCode = mathRenderErrorCodes[0];
 const closedTransaction: Transaction = closeHistory(transaction);
 void rootFrontmatterSnapshot;
 void frontmatterMessages;
@@ -1611,6 +1746,22 @@ void navigatedToFootnoteDefinition;
 void navigatedToFootnoteReference;
 void renamedFootnote;
 void removedFootnote;
+void mathSnapshot;
+void mathNodes;
+void mathDiagnostics;
+void mathRender;
+void insertedInlineMath;
+void insertedBlockMath;
+void updatedMath;
+void removedMath;
+void convertedMath;
+void toggledMath;
+void retriedMath;
+void publicMathMessages;
+void mathLimits;
+void mathKind;
+void mathDiagnosticCode;
+void mathRenderErrorCode;
 void closedTransaction;
 
 function exerciseStructuralSurface(
@@ -1780,7 +1931,7 @@ editor.focus("start");
 editor.blur();
 editor.destroy();
 minimalEditor.destroy();
-MARKORA_EXTENSION_API_VERSION satisfies "1.1.0";
+MARKORA_EXTENSION_API_VERSION satisfies "1.2.0";
 const unavailableSourceSlice: string | null =
   sliceMarkdownEditorOriginalSourceLines({}, 0, 1);
 void new MarkdownEditorDestroyedError("focus the editor");
@@ -1802,6 +1953,14 @@ rootFootnotesHandle.commands.renameDefinition(footnoteTarget, "renamed", {});
 minimalFootnotesHandle.commands.removeDefinition(footnoteTarget, { references: "rename" });
 // @ts-expect-error Footnote messages reject undeclared keys.
 createFootnotesExtension({ messages: { unknownLabel: () => "Unknown" } });
+// @ts-expect-error Math source commands accept strings only.
+rootMathHandle.commands.insertInline(42);
+// @ts-expect-error Math targets require their stale-safe source identity.
+rootMathHandle.commands.remove({ kind: "inline", position: 1 });
+// @ts-expect-error Math renderers return DOM, not HTML strings.
+createMathExtension({ renderer: () => "<span>x</span>" });
+// @ts-expect-error Math messages reject undeclared keys.
+createMathExtension({ messages: { unknownLabel: "Unknown" } });
 `);
 
 writeFileSync(join(smokeAppDir, "tsconfig.json"), `${JSON.stringify({
@@ -1869,16 +2028,19 @@ const [
   { createEditor: createMinimalEditor },
   frontmatter,
   footnotes,
+  math,
 ] = await Promise.all([
   import("markora"),
   import("markora/minimal"),
   import("markora-extension-frontmatter"),
   import("markora-extension-footnotes"),
+  import("markora-extension-math"),
 ]);
 const SOURCE = "\\uFEFF---\\r\\ntitle: Packed\\r\\nanchor: &base value\\r\\ncopy: *base\\r\\n...";
 const OPTIONAL_EXTENSION_NAMES = new Set([
   "markora-extension-frontmatter",
   "markora-extension-footnotes",
+  "markora-extension-math",
 ]);
 
 for (const [label, create] of [["root", createEditor], ["minimal", createMinimalEditor]]) {
@@ -1967,6 +2129,36 @@ for (const [label, create] of [["root", createEditor], ["minimal", createMinimal
     throw new Error("Packed footnotes " + label + " command, state, or history smoke failed.");
   }
   footnotesEditor.destroy();
+
+  element.replaceChildren();
+  const mathDefinition = math.createMathExtension();
+  const mathEditor = create({
+    element,
+    extensions: [mathDefinition],
+    markdown: "Math: $x$\\n\\n$$\\ny\\n$$",
+  });
+  const mathHandle = mathEditor.extensions.get(mathDefinition);
+  const mathSnapshot = mathHandle.state.getSnapshot();
+  if (
+    mathSnapshot.nodes.length !== 2
+    || mathSnapshot.nodes[0]?.kind !== "inline"
+    || mathSnapshot.nodes[1]?.kind !== "block"
+    || mathEditor.getMarkdown() !== "Math: $x$\\n\\n$$\\ny\\n$$"
+    || !mathEditor.extensions.manifest.extensions.some(({ name }) => (
+      name === "markora-extension-math"
+    ))
+  ) {
+    throw new Error("Packed math " + label + " consumer lost semantic or manifest state.");
+  }
+  if (
+    !mathHandle.commands.update(mathSnapshot.nodes[0], "z")
+    || mathEditor.getMarkdown() !== "Math: $z$\\n\\n$$\\ny\\n$$"
+    || !mathEditor.commands.undo()
+    || mathEditor.getMarkdown() !== "Math: $x$\\n\\n$$\\ny\\n$$"
+  ) {
+    throw new Error("Packed math " + label + " command or history smoke failed.");
+  }
+  mathEditor.destroy();
   element.remove();
 }
 
@@ -1980,6 +2172,7 @@ run("node", ["--input-type=module", "-e", `
   const extensionApi = await import("markora/extension-api");
   const frontmatter = await import("markora-extension-frontmatter");
   const footnotes = await import("markora-extension-footnotes");
+  const math = await import("markora-extension-math");
   const minimal = await import("markora/minimal");
   if (typeof extensionApi.defineMarkdownEditorExtension !== "function") {
     throw new Error("defineMarkdownEditorExtension export missing");
@@ -2016,6 +2209,18 @@ run("node", ["--input-type=module", "-e", `
   ) {
     throw new Error("footnotes package factory returned the wrong identity or messages");
   }
+  if (
+    typeof math.createMathExtension !== "function"
+    || !Object.isFrozen(math.defaultMathMessages)
+    || !Object.isFrozen(math.mathDiagnosticCodes)
+    || math.MATH_MAX_CONCURRENT_RENDERS !== 4
+  ) {
+    throw new Error("math package Node ESM surface is incomplete");
+  }
+  const mathDefinition = math.createMathExtension();
+  if (mathDefinition.name !== "markora-extension-math") {
+    throw new Error("math package factory returned the wrong identity");
+  }
   if (typeof minimal.createEditor !== "function") {
     throw new Error("markora/minimal createEditor export missing");
   }
@@ -2050,6 +2255,7 @@ const extensionBundleReports = Object.freeze(Object.fromEntries(
 ));
 const frontmatterBundleReport = extensionBundleReports.frontmatter;
 const footnotesBundleReport = extensionBundleReports.footnotes;
+const mathBundleReport = extensionBundleReports.math;
 const rootBundleMeasurement = measureBundleGraph(rootBundleReport);
 const minimalBundleMeasurement = measureBundleGraph(minimalBundleReport);
 const extensionBundleMeasurements = Object.freeze(Object.fromEntries(
@@ -2060,6 +2266,7 @@ const extensionBundleMeasurements = Object.freeze(Object.fromEntries(
 ));
 const frontmatterBundleMeasurement = extensionBundleMeasurements.frontmatter;
 const footnotesBundleMeasurement = extensionBundleMeasurements.footnotes;
+const mathBundleMeasurement = extensionBundleMeasurements.math;
 const extensionBundles = extensionBundleSpecs.map((spec) => ({
   measurement: extensionBundleMeasurements[spec.graphName],
   report: extensionBundleReports[spec.graphName],
@@ -2120,9 +2327,24 @@ run("node", ["--input-type=module", "-e", `
   }
 `], { cwd: smokeAppDir });
 
+const mathEntryChunk = mathBundleReport.chunks.find((chunk) => chunk.isEntry);
+if (!mathEntryChunk) {
+  throw new Error("The math feature bundle did not emit an entry chunk.");
+}
+const mathEntrySpecifier = `./dist/math/${mathEntryChunk.fileName}`;
+currentPhase = "math-feature-runtime-smoke";
+run("node", ["--input-type=module", "-e", `
+  const consumer = await import(${JSON.stringify(mathEntrySpecifier)});
+  const names = consumer.packedMathDefinitions?.map((extension) => extension.name);
+  if (names?.join(":") !== "markora-extension-math:markora-extension-math") {
+    throw new Error("Packed math feature bundle did not execute");
+  }
+`], { cwd: smokeAppDir });
+
 const measurements = Object.freeze({
   footnotes: footnotesBundleMeasurement,
   frontmatter: frontmatterBundleMeasurement,
+  math: mathBundleMeasurement,
   minimal: minimalBundleMeasurement,
   root: rootBundleMeasurement,
 });

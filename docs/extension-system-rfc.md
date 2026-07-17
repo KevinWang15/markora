@@ -1,9 +1,9 @@
 # Markora Extension System RFC
 
 - Status: Accepted design for `EE-009`
-- Extension API version: `1.1.0`
+- Extension API version: `1.2.0`
 - Accepted: 2026-07-15
-- Implemented: `EE-010`; host resource boundary integrated by `EE-012`; additive source and tokenizer-anchor contract integrated for `EE-021`
+- Implemented: `EE-010`; host resource boundary integrated by `EE-012`; additive source, tokenizer-anchor, and serializer literal-escape contracts integrated for `EE-021`
 
 ## Decision summary
 
@@ -72,7 +72,7 @@ Parsing during creation, reconciliation, and reset must use the same immutable a
 The following is the approved public boundary. Supporting contribution interfaces may be split across files, but the branded carrier, definition identity, typed lookup, and behavioral rules are normative. `EE-010` must add declaration tests before refining any mechanical generic shape.
 
 ```ts
-export const MARKORA_EXTENSION_API_VERSION = "1.1.0" as const;
+export const MARKORA_EXTENSION_API_VERSION = "1.2.0" as const;
 
 export type MarkdownEditorExtensionName = string;
 
@@ -432,6 +432,9 @@ type MarkdownEditorMarkdownContribution = Readonly<{
   // Keys are local IDs and are qualified by the compiler.
   parserTokens?: Readonly<Record<string, ParseSpec>>;
   serializer?: Readonly<{
+    // Additional characters that ordinary literal text must escape so it
+    // cannot become extension syntax after serialization and reparsing.
+    escapeExtraCharacters?: string;
     nodes?: Readonly<Record<string, MarkdownNodeSerializer>>;
     marks?: Readonly<Record<string, MarkdownMarkSerializer>>;
   }>;
@@ -479,6 +482,31 @@ Markora namespaces contributed rule IDs. Direct whole-ruler replacement through 
 - tokenizer placement targets exist in the same phase;
 - tokenizer output types and parser token handlers resolve through the same extension namespace;
 - the generic opaque recognizer runs after installed specific syntax where declared.
+
+`serializer.escapeExtraCharacters` is an additive fixed-point safeguard for an
+extension's delimiter characters in ordinary literal text. It must be a
+non-empty string containing unique characters from the supported set
+`! " $ % & ' ( ) , / : ; < = ? @ ^ { }`. Whitespace, controls, letters,
+digits, non-ASCII characters, duplicates, and punctuation already handled by
+foundation or contextual escaping are rejected. In particular, an extension
+must not contribute `` ` * \\ ~ [ ] _ + - > # . | ``; applying the extra pass
+after the foundation or table pass would otherwise double-escape those
+characters in some contexts. Both the root compatibility codec and the minimal
+codec combine the character sets from every installed extension into a fresh
+global expression; the compatibility codec also retains its foundation
+literal-text escapes. This deliberately narrow grammar cannot express
+zero-width matches, captures, backreferences, or multi-character replacements,
+and one extension cannot replace or weaken another extension's requirement.
+
+The combined expression is used by the standard Markdown serializer text path:
+if parsing leaves an extension delimiter as literal model text, serialization
+backslash-escapes it so a subsequent parse cannot claim it as semantic syntax.
+This is not a Markdown postprocessor. A contributed semantic serializer that
+deliberately emits its own delimiter shell must bypass ordinary text escaping
+for that output (for example, with `state.text(canonicalSource, false)`) after
+validating the node source. Math uses this distinction so literal dollar signs
+serialize escaped while the canonical `$...$` and `$$` shells of semantic math
+nodes remain active syntax.
 
 Parsing and serialization remain synchronous. Extensions may read/write a namespaced object inside the Markdown-it environment, but cannot mutate another extension's environment entry.
 

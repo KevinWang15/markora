@@ -51,6 +51,7 @@ function expectExtensionError(
 describe("extension definition contract", () => {
   it("snapshots and deeply freezes definition-owned data without freezing inputs or functions", () => {
     const serializer = () => {};
+    const escapeExtraCharacters = "$=";
     const nodeEntry = {
       name: "acme_panel",
       spec: {
@@ -68,7 +69,10 @@ describe("extension definition contract", () => {
       configuration,
       schema: { nodes: [nodeEntry] },
       markdown: {
-        serializer: { nodes: { acme_panel: serializer } },
+        serializer: {
+          escapeExtraCharacters,
+          nodes: { acme_panel: serializer },
+        },
       },
     });
     const snapshot = readMarkdownEditorExtensionDefinition(definition);
@@ -86,6 +90,8 @@ describe("extension definition contract", () => {
       attrs: { tone: { default: "note" } },
     });
     expect(snapshot.markdown?.serializer?.nodes?.acme_panel).toBe(serializer);
+    expect(snapshot.markdown?.serializer?.escapeExtraCharacters)
+      .toBe(escapeExtraCharacters);
     expect(Object.isFrozen(configuration)).toBe(false);
     expect(Object.isFrozen(nodeEntry)).toBe(false);
     expect(Object.isFrozen(serializer)).toBe(false);
@@ -215,6 +221,50 @@ describe("extension definition contract", () => {
     expectExtensionError(() => extension("acme-mark-serializer", {
       markdown: {
         serializer: { marks: { acme_mark: { open: "==" } as never } },
+      },
+    }), "EXTENSION_INVALID_DEFINITION", "codec");
+
+    expectExtensionError(() => extension("acme-serializer-escape-regexp", {
+      markdown: {
+        serializer: { escapeExtraCharacters: /\$/g as never },
+      },
+    }), "EXTENSION_INVALID_DEFINITION", "codec");
+
+    expectExtensionError(() => extension("acme-serializer-empty-escape", {
+      markdown: {
+        serializer: { escapeExtraCharacters: "" },
+      },
+    }), "EXTENSION_INVALID_DEFINITION", "codec");
+
+    expectExtensionError(() => extension("acme-serializer-alphanumeric-escape", {
+      markdown: {
+        serializer: { escapeExtraCharacters: "$a" },
+      },
+    }), "EXTENSION_INVALID_DEFINITION", "codec");
+
+    for (const [name, characters] of [
+      ["asterisk", "*"],
+      ["backslash", "\\"],
+      ["heading", "#"],
+      ["ordered-list-period", "."],
+      ["table-pipe", "|"],
+    ] as const) {
+      expectExtensionError(() => extension(`acme-serializer-${name}-escape`, {
+        markdown: {
+          serializer: { escapeExtraCharacters: characters },
+        },
+      }), "EXTENSION_INVALID_DEFINITION", "codec");
+    }
+
+    expectExtensionError(() => extension("acme-serializer-duplicate-escape", {
+      markdown: {
+        serializer: { escapeExtraCharacters: "$$" },
+      },
+    }), "EXTENSION_INVALID_DEFINITION", "codec");
+
+    expectExtensionError(() => extension("acme-serializer-unknown", {
+      markdown: {
+        serializer: { unknown: true } as never,
       },
     }), "EXTENSION_INVALID_DEFINITION", "codec");
 
@@ -423,7 +473,7 @@ describe("extension graph resolution", () => {
     });
 
     expect(resolution.manifest).toEqual({
-      extensionApi: "1.1.0",
+      extensionApi: "1.2.0",
       preset: { name: "acme-default-preset", version: "3.2.1" },
       extensions: [
         { name: "acme-base", version: "1.0.0", configuration: { dialect: "base" } },

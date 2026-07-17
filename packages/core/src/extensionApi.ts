@@ -30,7 +30,7 @@ import {
   parseMarkdownEditorSemVer,
 } from "./extensionSemver";
 
-export const MARKORA_EXTENSION_API_VERSION = "1.1.0" as const;
+export const MARKORA_EXTENSION_API_VERSION = "1.2.0" as const;
 
 export type MarkdownEditorExtensionName = string;
 
@@ -367,6 +367,12 @@ export type MarkdownEditorMarkdownContribution = Readonly<{
   tokenizerRules?: readonly MarkdownEditorTokenizerRule[];
   parserTokens?: Readonly<Record<string, ParseSpec>>;
   serializer?: Readonly<{
+    /**
+     * A unique set of supported ASCII delimiter characters that literal text
+     * must backslash-escape so an extension tokenizer cannot claim them after
+     * a serialize/reparse cycle. Foundation-escaped punctuation is excluded.
+     */
+    escapeExtraCharacters?: string;
     nodes?: Readonly<Record<string, MarkdownNodeSerializer>>;
     marks?: Readonly<Record<string, MarkdownMarkSerializer>>;
   }>;
@@ -1101,6 +1107,40 @@ function validateMarkdown(definition: Record<PropertyKey, unknown>, owner: strin
         extension: owner,
         phase: "codec",
       });
+    }
+
+    for (const key of Object.keys(serializer)) {
+      if (key !== "escapeExtraCharacters" && key !== "nodes" && key !== "marks") {
+        invalidDefinition(`Unknown markdown.serializer key "${key}".`, {
+          extension: owner,
+          phase: "codec",
+          contribution: key,
+        });
+      }
+    }
+
+    const escapeExtraCharacters = serializer.escapeExtraCharacters;
+
+    if (escapeExtraCharacters !== undefined) {
+      const supportedExtraEscapeCharacters = "!\"$%&'(),/:;<=?@^{}";
+
+      if (
+        typeof escapeExtraCharacters !== "string"
+        || escapeExtraCharacters.length === 0
+        || [...escapeExtraCharacters].some((character) => (
+          !supportedExtraEscapeCharacters.includes(character)
+        ))
+        || new Set(escapeExtraCharacters).size !== escapeExtraCharacters.length
+      ) {
+        invalidDefinition(
+          "markdown.serializer.escapeExtraCharacters must be a non-empty set of unique supported ASCII delimiter characters.",
+          {
+            extension: owner,
+            phase: "codec",
+            contribution: "escapeExtraCharacters",
+          },
+        );
+      }
     }
 
     for (const kind of ["nodes", "marks"] as const) {

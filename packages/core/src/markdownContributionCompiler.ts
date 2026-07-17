@@ -35,6 +35,29 @@ type TokenizerGraphNode = OwnedTokenizerRule | TokenizerAnchorNode;
 
 const tokenizerPhases = ["block", "inline", "inline-post", "core"] as const;
 
+/** @internal Merge foundation patterns and validated extension delimiter sets. */
+export function combineMarkdownSerializerEscapePatterns(
+  foundationPatterns: readonly RegExp[],
+  extraCharacterSets: readonly (string | undefined)[],
+) {
+  const characters = [...new Set(extraCharacterSets.flatMap((characters) => (
+    characters ? [...characters] : []
+  )))].sort();
+  const characterPattern = characters.length === 0
+    ? null
+    : `[${characters.map((character) => (
+      `\\x${character.charCodeAt(0).toString(16).padStart(2, "0")}`
+    )).join("")}]`;
+  const sources = [
+    ...foundationPatterns.map((pattern) => `(?:${pattern.source})`),
+    ...(characterPattern ? [characterPattern] : []),
+  ];
+
+  return sources.length === 0
+    ? undefined
+    : new RegExp(sources.join("|"), "g");
+}
+
 function contributionError(options: {
   code: string;
   phase: MarkdownEditorExtensionErrorPhase;

@@ -91,7 +91,7 @@ type BrowserLabTestSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "footnotes" | "frontmatter" | "public-example";
+  extensionMode?: "footnotes" | "frontmatter" | "math" | "public-example";
   footnotesMessages?: Partial<Record<
     | "backReferenceLabel"
     | "backReferenceText"
@@ -129,6 +129,38 @@ type BrowserLabTestSpec = {
   initialSelection?: BrowserLabSelectionTarget;
   language?: string;
   markdown?: string;
+  mathMessages?: Partial<Record<
+    | "blockKindLabel"
+    | "blockSourceLabel"
+    | "editSource"
+    | "inlineKindLabel"
+    | "inlineSourceLabel"
+    | "invalidBlockSourceDiagnostic"
+    | "invalidDocumentDiagnostic"
+    | "invalidInlineSourceDiagnostic"
+    | "invalidRendererOutputDiagnostic"
+    | "previewFailed"
+    | "previewLabel"
+    | "previewLoading"
+    | "rendererFailedDiagnostic"
+    | "rendererUnavailable"
+    | "renderOutputLimitDiagnostic"
+    | "retryPreview"
+    | "showPreview"
+    | "showSource"
+    | "sourceTooLargeDiagnostic"
+    | "unsafeRendererOutputDiagnostic",
+    string
+  >>;
+  mathRendererMode?:
+    | "connected"
+    | "deferred"
+    | "missing"
+    | "reject"
+    | "sync"
+    | "throw"
+    | "unsafe"
+    | "wrong-document";
   messages?: {
     codeBlockEditorLabel?: string;
     codeBlockPlainTextLabel?: string;
@@ -303,6 +335,67 @@ type BrowserLabFootnotesSnapshot = {
   }>;
 };
 
+type BrowserLabMathKind = "block" | "inline";
+
+type BrowserLabMathNodeTarget = {
+  identity: number;
+  kind: BrowserLabMathKind;
+  position: number;
+  source: string;
+};
+
+type BrowserLabMathRenderErrorCode =
+  | "connected-output"
+  | "invalid-output"
+  | "node-limit"
+  | "output-byte-limit"
+  | "renderer-failed"
+  | "renderer-missing"
+  | "unsafe-output"
+  | "wrong-document";
+
+type BrowserLabMathRenderSnapshot = {
+  enabled: boolean;
+  errorCode: BrowserLabMathRenderErrorCode | null;
+  status:
+    | "error"
+    | "offscreen"
+    | "queued"
+    | "rendered"
+    | "rendering"
+    | "source"
+    | "source-too-large";
+};
+
+type BrowserLabMathSnapshot = {
+  diagnostics: ReadonlyArray<{
+    code: "source-too-large";
+    kind: BrowserLabMathKind;
+    message: string;
+    position: number;
+  }>;
+  nodes: ReadonlyArray<BrowserLabMathNodeTarget & {
+    render: BrowserLabMathRenderSnapshot;
+  }>;
+};
+
+type BrowserLabMathCommandRequest =
+  | { kind: BrowserLabMathKind; target: BrowserLabMathNodeTarget; type: "convert" }
+  | { source: string; type: "insertBlock" | "insertInline" }
+  | { source: string; target: BrowserLabMathNodeTarget; type: "update" }
+  | {
+      target: BrowserLabMathNodeTarget;
+      type: "remove" | "retryPreview" | "togglePreview";
+    };
+
+type BrowserLabMathRendererCall = {
+  aborted: boolean;
+  id: number;
+  kind: BrowserLabMathKind;
+  settled: "pending" | "rejected" | "resolved" | "threw";
+  source: string;
+};
+
 interface Window {
   __MARKORA_BROWSER_LAB__?: {
     active(id: string, request: BrowserLabActiveRequest): boolean;
@@ -344,11 +437,27 @@ interface Window {
     getMarkdown(id: string): string;
     isDestroyed(id: string): boolean;
     listenerSnapshot(id?: string): { total: number; byTargetAndType: Record<string, number> };
+    mathCommand(id: string, request: BrowserLabMathCommandRequest): boolean;
+    mathEditConvert(id: string, kind: BrowserLabMathKind): boolean;
+    mathEditRemove(id: string): boolean;
+    mathEditUpdate(id: string, source: string): boolean;
+    mathRendererCalls(id: string): ReadonlyArray<BrowserLabMathRendererCall>;
+    mathRendererSettle(
+      id: string,
+      settlement?: { callId?: number; outcome?: "reject" | "resolve" },
+    ): boolean;
+    mathSnapshot(id: string): BrowserLabMathSnapshot;
     mount(spec: BrowserLabTestSpec): BrowserLabTestSnapshot;
     mountedIds(): string[];
     openUi(id: string, kind: "code-language" | "image" | "link" | "table" | "table-create"): boolean;
     pendingOpaqueEdit(id: string): { kind: string; source: string } | null;
     pendingFrontmatterEdit(id: string): Pick<BrowserLabFrontmatterSnapshot, "diagnostics" | "source"> | null;
+    pendingMathEdit(id: string): ({
+      kind: BrowserLabMathKind;
+      position: number;
+      render: BrowserLabMathRenderSnapshot;
+      source: string;
+    }) | null;
     ready: true;
     reconcile(
       id: string,
@@ -362,6 +471,7 @@ interface Window {
     resourceLog(id: string): BrowserLabResourceLog;
     reset(id: string, markdown: string): string;
     selectFootnote(id: string, request: BrowserLabFootnoteSelectionRequest): boolean;
+    selectMath(id: string, target: BrowserLabMathNodeTarget): boolean;
     selectText(id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number): boolean;
     settle(id?: string): Promise<void>;
     snapshot(id: string): BrowserLabTestSnapshot;

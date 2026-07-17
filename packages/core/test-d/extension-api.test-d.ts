@@ -25,7 +25,7 @@ interface CalloutStorage {
   insertions: number;
 }
 
-const extensionApiVersion: "1.1.0" = MARKORA_EXTENSION_API_VERSION;
+const extensionApiVersion: "1.2.0" = MARKORA_EXTENSION_API_VERSION;
 const originalSourceSlice: string | null =
   sliceMarkdownEditorOriginalSourceLines({}, 0, 1);
 declare const transaction: Transaction;
@@ -122,6 +122,9 @@ const staticOnlyExtension = defineMarkdownEditorExtension({
   compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
   schema: {
     marks: [{ name: "example_highlight", spec: {} }],
+  },
+  markdown: {
+    serializer: { escapeExtraCharacters: "$" },
   },
 });
 

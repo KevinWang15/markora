@@ -41,6 +41,11 @@ export type LabActiveRequest = Parameters<BrowserLabWindowApi["active"]>[1];
 export type LabFootnotesCommandRequest = Parameters<BrowserLabWindowApi["footnotesCommand"]>[1];
 export type LabFootnoteSelectionRequest = Parameters<BrowserLabWindowApi["selectFootnote"]>[1];
 export type LabFootnotesSnapshot = ReturnType<BrowserLabWindowApi["footnotesSnapshot"]>;
+export type LabMathCommandRequest = Parameters<BrowserLabWindowApi["mathCommand"]>[1];
+export type LabMathNodeTarget = Parameters<BrowserLabWindowApi["selectMath"]>[1];
+export type LabMathRendererCall = ReturnType<BrowserLabWindowApi["mathRendererCalls"]>[number];
+export type LabMathRendererSettlement = Parameters<BrowserLabWindowApi["mathRendererSettle"]>[1];
+export type LabMathSnapshot = ReturnType<BrowserLabWindowApi["mathSnapshot"]>;
 export type LabTableIssue = ReturnType<BrowserLabWindowApi["tableIssues"]>[number];
 
 export type LabUpdateOptions = {
@@ -60,7 +65,7 @@ export type LabEditorSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "footnotes" | "frontmatter" | "public-example";
+  extensionMode?: "footnotes" | "frontmatter" | "math" | "public-example";
   footnotesMessages?: Partial<Record<
     | "backReferenceLabel"
     | "backReferenceText"
@@ -98,6 +103,38 @@ export type LabEditorSpec = {
   initialSelection?: LabSelectionTarget;
   language?: string;
   markdown?: string;
+  mathMessages?: Partial<Record<
+    | "blockKindLabel"
+    | "blockSourceLabel"
+    | "editSource"
+    | "inlineKindLabel"
+    | "inlineSourceLabel"
+    | "invalidBlockSourceDiagnostic"
+    | "invalidDocumentDiagnostic"
+    | "invalidInlineSourceDiagnostic"
+    | "invalidRendererOutputDiagnostic"
+    | "previewFailed"
+    | "previewLabel"
+    | "previewLoading"
+    | "rendererFailedDiagnostic"
+    | "rendererUnavailable"
+    | "renderOutputLimitDiagnostic"
+    | "retryPreview"
+    | "showPreview"
+    | "showSource"
+    | "sourceTooLargeDiagnostic"
+    | "unsafeRendererOutputDiagnostic",
+    string
+  >>;
+  mathRendererMode?:
+    | "connected"
+    | "deferred"
+    | "missing"
+    | "reject"
+    | "sync"
+    | "throw"
+    | "unsafe"
+    | "wrong-document";
   messages?: {
     codeBlockEditorLabel?: string;
     codeBlockPlainTextLabel?: string;
@@ -429,6 +466,98 @@ export async function getFootnotesSnapshot(page: Page, id: string) {
     (editorId) => window.__MARKORA_BROWSER_LAB__!.footnotesSnapshot(editorId),
     id,
   ) as Promise<LabFootnotesSnapshot>;
+}
+
+export async function runMathCommand(
+  page: Page,
+  id: string,
+  request: LabMathCommandRequest,
+) {
+  return page.evaluate(
+    ({ editorId, nextRequest }) => (
+      window.__MARKORA_BROWSER_LAB__!.mathCommand(editorId, nextRequest)
+    ),
+    { editorId: id, nextRequest: request },
+  );
+}
+
+export async function getMathSnapshot(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.mathSnapshot(editorId),
+    id,
+  ) as Promise<LabMathSnapshot>;
+}
+
+export async function getMathRendererCalls(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.mathRendererCalls(editorId),
+    id,
+  ) as Promise<readonly LabMathRendererCall[]>;
+}
+
+export async function settleMathRenderer(
+  page: Page,
+  id: string,
+  settlement?: LabMathRendererSettlement,
+) {
+  return page.evaluate(
+    ({ editorId, nextSettlement }) => (
+      window.__MARKORA_BROWSER_LAB__!.mathRendererSettle(
+        editorId,
+        nextSettlement,
+      )
+    ),
+    { editorId: id, nextSettlement: settlement },
+  );
+}
+
+export async function getPendingMathEdit(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.pendingMathEdit(editorId),
+    id,
+  );
+}
+
+export async function updatePendingMathEdit(page: Page, id: string, source: string) {
+  return page.evaluate(
+    ({ editorId, nextSource }) => (
+      window.__MARKORA_BROWSER_LAB__!.mathEditUpdate(editorId, nextSource)
+    ),
+    { editorId: id, nextSource: source },
+  );
+}
+
+export async function removePendingMathEdit(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.mathEditRemove(editorId),
+    id,
+  );
+}
+
+export async function convertPendingMathEdit(
+  page: Page,
+  id: string,
+  kind: "block" | "inline",
+) {
+  return page.evaluate(
+    ({ editorId, nextKind }) => (
+      window.__MARKORA_BROWSER_LAB__!.mathEditConvert(editorId, nextKind)
+    ),
+    { editorId: id, nextKind: kind },
+  );
+}
+
+export async function selectMath(
+  page: Page,
+  id: string,
+  target: LabMathNodeTarget,
+) {
+  return page.evaluate(
+    ({ editorId, nextTarget }) => (
+      window.__MARKORA_BROWSER_LAB__!.selectMath(editorId, nextTarget)
+    ),
+    { editorId: id, nextTarget: target },
+  );
 }
 
 export async function selectFootnote(

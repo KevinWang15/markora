@@ -201,6 +201,25 @@
         "gzipBytes": { "warning": 975, "failure": 1150 }
       },
       "staticModuleCount": { "warning": 100, "failure": 110 }
+    },
+    "math": {
+      "initialJs": {
+        "rawBytes": { "warning": 135000, "failure": 150000 },
+        "gzipBytes": { "warning": 35000, "failure": 39000 }
+      },
+      "lazyJs": {
+        "rawBytes": { "warning": 0, "failure": 0 },
+        "gzipBytes": { "warning": 0, "failure": 0 }
+      },
+      "totalJs": {
+        "rawBytes": { "warning": 135000, "failure": 150000 },
+        "gzipBytes": { "warning": 35000, "failure": 39000 }
+      },
+      "css": {
+        "rawBytes": { "warning": 5750, "failure": 6400 },
+        "gzipBytes": { "warning": 1350, "failure": 1500 }
+      },
+      "staticModuleCount": { "warning": 99, "failure": 108 }
     }
   }
 }
