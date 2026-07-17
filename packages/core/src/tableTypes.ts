@@ -10,3 +10,13 @@ export type TableCellInfo = {
   rowIndex: number;
   cellIndex: number;
 };
+
+export type TableSelectionInfo = TableCellInfo & {
+  anchorCellIndex: number;
+  anchorRowIndex: number;
+  columnFrom: number;
+  columnTo: number;
+  isCellSelection: boolean;
+  rowFrom: number;
+  rowTo: number;
+};

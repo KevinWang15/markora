@@ -11,7 +11,7 @@ type BrowserLabSelectionSnapshot = {
   empty: boolean;
   from: number;
   head: number;
-  kind: "all" | "managed-block" | "node" | "other" | "text";
+  kind: "all" | "managed-block" | "node" | "other" | "table-cell" | "text";
   to: number;
 };
 
@@ -34,8 +34,6 @@ type BrowserLabEventRecord = {
 };
 
 type BrowserLabNoArgumentCommand =
-  | "addTableColumn"
-  | "addTableRow"
   | "deleteTable"
   | "deleteTableColumn"
   | "deleteTableRow"
@@ -55,9 +53,13 @@ type BrowserLabNoArgumentCommand =
 
 type BrowserLabCommandRequest =
   | { type: BrowserLabNoArgumentCommand }
+  | { type: "addTableColumn" | "addTableRow"; side?: "after" | "before" }
   | { type: "insertImage"; attrs: { alt?: string | null; src: string; title?: string | null } }
   | { type: "insertTable"; options?: { columns?: number; rows?: number } }
+  | { type: "moveTableColumn"; direction: "left" | "right" }
+  | { type: "moveTableRow"; direction: "down" | "up" }
   | { type: "pasteMarkdown" | "pastePlainText"; text: string }
+  | { type: "resizeTable"; options: { columns?: number; discardContent?: boolean; rows?: number } }
   | { type: "setCodeBlock"; options?: { language?: string | null } }
   | { type: "setHeading"; level: 1 | 2 | 3 | 4 | 5 | 6 }
   | { type: "setLink"; href: string }
@@ -66,7 +68,7 @@ type BrowserLabCommandRequest =
   | { type: "toggleMark"; mark: "code" | "em" | "strike" | "strong" };
 
 type BrowserLabActiveRequest =
-  | { type: "blockquote" | "bulletList" | "hardBreak" | "horizontalRule" | "orderedList" | "paragraph" | "table" | "taskList" }
+  | { type: "blockquote" | "bulletList" | "hardBreak" | "horizontalRule" | "orderedList" | "paragraph" | "table" | "tableCellSelection" | "taskList" }
   | { type: "codeBlock"; options?: { language?: string | null } }
   | { type: "heading"; level?: 1 | 2 | 3 | 4 | 5 | 6 }
   | { type: "tableColumnAlignment"; alignment: "center" | "left" | "right" | null }
@@ -175,7 +177,7 @@ interface Window {
     listenerSnapshot(id?: string): { total: number; byTargetAndType: Record<string, number> };
     mount(spec: BrowserLabTestSpec): BrowserLabTestSnapshot;
     mountedIds(): string[];
-    openUi(id: string, kind: "image" | "link"): boolean;
+    openUi(id: string, kind: "image" | "link" | "table" | "table-create"): boolean;
     pendingOpaqueEdit(id: string): { kind: string; source: string } | null;
     ready: true;
     reconcile(
@@ -192,6 +194,13 @@ interface Window {
     selectText(id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number): boolean;
     settle(id?: string): Promise<void>;
     snapshot(id: string): BrowserLabTestSnapshot;
+    tableIssues(id: string): ReadonlyArray<{
+      code: "merged-cell" | "missing-column-header" | "multi-block-cell" | "ragged-row" | "row-header-scope";
+      column: number | null;
+      message: string;
+      row: number;
+      tablePos: number;
+    }>;
     unsubscribe(id: string, type: BrowserLabEventName): boolean;
     updateOpaque(id: string, source: string): boolean;
     updateOptions(id: string, options: BrowserLabUpdateOptions): {

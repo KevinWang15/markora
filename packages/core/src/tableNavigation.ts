@@ -36,15 +36,23 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
     return row;
   }
 
-  function appendTableRow(view: EditorView) {
-    return tableCommands.addTableRow(view.state, (transaction) => view.dispatch(transaction), view);
+  function addTableRow(view: EditorView, side: "before" | "after" = "after") {
+    return tableCommands.addTableRow(side)(view.state, (transaction) => view.dispatch(transaction), view);
   }
 
-  function appendTableColumn(view: EditorView) {
-    return tableCommands.addTableColumn(view.state, (transaction) => view.dispatch(transaction), view);
+  function addTableColumn(view: EditorView, side: "before" | "after" = "after") {
+    return tableCommands.addTableColumn(side)(view.state, (transaction) => view.dispatch(transaction), view);
   }
 
-  function setTableColumnAlignment(view: EditorView, align: TableAlignment) {
+  function moveTableRow(view: EditorView, direction: "up" | "down") {
+    return tableCommands.moveTableRow(direction)(view.state, (transaction) => view.dispatch(transaction), view);
+  }
+
+  function moveTableColumn(view: EditorView, direction: "left" | "right") {
+    return tableCommands.moveTableColumn(direction)(view.state, (transaction) => view.dispatch(transaction), view);
+  }
+
+  function setTableColumnAlignment(view: EditorView, align: TableAlignment | null) {
     return tableCommands.setTableColumnAlignment(align)(
       view.state,
       (transaction) => view.dispatch(transaction),
@@ -212,13 +220,17 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
       return true;
     }
 
-    return appendTableRow(view);
+    return addTableRow(view, "after") || moveAfterManagedBlock(view, info.tablePos);
   }
 
   return {
     createEmptyTableRow,
-    appendTableRow,
-    appendTableColumn,
+    addTableRow,
+    addTableColumn,
+    appendTableRow: (view: EditorView) => addTableRow(view, "after"),
+    appendTableColumn: (view: EditorView) => addTableColumn(view, "after"),
+    moveTableRow,
+    moveTableColumn,
     removeTableRow,
     removeTableColumn,
     setTableColumnAlignment,

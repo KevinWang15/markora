@@ -25,7 +25,7 @@ const OVERLAY_GAP = 8;
 const VIEWPORT_MARGIN = 12;
 let nextOverlayMessageId = 0;
 
-function createOverlayMessageId(kind: "image" | "link") {
+function createOverlayMessageId(kind: "image" | "link" | "table") {
   nextOverlayMessageId += 1;
   return `mdw-${kind}-editor-error-${nextOverlayMessageId}`;
 }
@@ -189,7 +189,9 @@ export type ImageEditorOverlay = {
 };
 
 export type TableToolbarOverlay = {
+  create: (view: EditorView, marker: HTMLElement, onClose?: () => void) => boolean;
   update: (view: EditorView) => void;
+  focus: (view: EditorView) => boolean;
   destroy: () => void;
 };
 
@@ -629,29 +631,340 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
   };
 }
 
+type TableDimensions = { rows: number; columns: number };
+type TableSizeMode = "create" | "resize";
+
+type TableSizeEditorOverlay = {
+  open: (
+    view: EditorView,
+    marker: HTMLElement,
+    mode: TableSizeMode,
+    dimensions: TableDimensions,
+    onClose?: () => void,
+  ) => boolean;
+  close: (refocus: boolean) => void;
+  closeResizeForView: (view: EditorView) => void;
+  destroy: () => void;
+};
+
+function createTableSizeEditorOverlay(options: OverlayEnvironment & {
+  insertTable: (view: EditorView, dimensions: TableDimensions) => boolean | void;
+  resizeTable: (view: EditorView, dimensions: TableDimensions) => boolean | void;
+}): TableSizeEditorOverlay {
+  const { doc, insertTable, portalRoot, resizeTable, win } = options;
+  const NodeCtor = win.Node;
+  const dom = doc.createElement("div");
+  dom.className = "mdw-table-size-editor";
+  dom.hidden = true;
+  dom.style.display = "none";
+  dom.setAttribute("role", "dialog");
+  dom.setAttribute("aria-modal", "false");
+
+  const form = doc.createElement("form");
+  form.className = "mdw-table-size-editor-form";
+  const fields = doc.createElement("div");
+  fields.className = "mdw-table-size-editor-fields";
+
+  const createDimensionField = (labelText: string) => {
+    const label = doc.createElement("label");
+    label.className = "mdw-table-size-editor-field";
+    const labelValue = doc.createElement("span");
+    labelValue.textContent = labelText;
+    const input = doc.createElement("input");
+    input.className = "mdw-table-size-editor-input";
+    input.type = "number";
+    input.inputMode = "numeric";
+    input.min = "1";
+    input.max = "100";
+    input.step = "1";
+    input.required = true;
+    input.setAttribute("aria-label", labelText);
+    label.append(labelValue, input);
+    return { input, label };
+  };
+
+  const rowField = createDimensionField("Rows");
+  const columnField = createDimensionField("Columns");
+  fields.append(rowField.label, columnField.label);
+
+  const errorMessage = doc.createElement("div");
+  errorMessage.className = "mdw-editor-error";
+  errorMessage.hidden = true;
+  errorMessage.id = createOverlayMessageId("table");
+  errorMessage.setAttribute("role", "alert");
+  rowField.input.setAttribute("aria-describedby", errorMessage.id);
+  rowField.input.setAttribute("aria-errormessage", errorMessage.id);
+  columnField.input.setAttribute("aria-describedby", errorMessage.id);
+  columnField.input.setAttribute("aria-errormessage", errorMessage.id);
+
+  const actions = doc.createElement("div");
+  actions.className = "mdw-table-size-editor-actions";
+  const submitButton = doc.createElement("button");
+  submitButton.type = "submit";
+  const cancelButton = doc.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.textContent = "Cancel";
+  actions.append(submitButton, cancelButton);
+  form.append(fields, errorMessage, actions);
+  dom.append(form);
+  portalRoot.append(dom);
+
+  let activeView: EditorView | null = null;
+  let activeMarker: HTMLElement | null = null;
+  let activeMode: TableSizeMode | null = null;
+  let activeSession = 0;
+  let destroyed = false;
+  let returnFocusElement: HTMLElement | null = null;
+  let closeCallback: (() => void) | null = null;
+
+  const getOwnerActiveElement = () => descendIntoActiveShadowRoot(doc.activeElement, win);
+
+  const reposition = () => {
+    if (!activeMarker) {
+      return;
+    }
+
+    try {
+      positionOverlay(dom, activeMarker.getBoundingClientRect(), doc, win, "below");
+    } catch {
+      // The selection or table marker may have been detached.
+    }
+  };
+
+  const clearError = () => {
+    rowField.input.removeAttribute("aria-invalid");
+    columnField.input.removeAttribute("aria-invalid");
+    errorMessage.hidden = true;
+    errorMessage.textContent = "";
+  };
+
+  const showError = (message: string, invalidInputs: HTMLInputElement[] = []) => {
+    clearError();
+    errorMessage.textContent = message;
+    errorMessage.hidden = false;
+    invalidInputs.forEach((input) => input.setAttribute("aria-invalid", "true"));
+    (invalidInputs[0] ?? rowField.input).focus();
+  };
+
+  const readDimension = (input: HTMLInputElement) => {
+    const value = Number(input.value);
+    return Number.isInteger(value) && value >= 1 && value <= 100 ? value : null;
+  };
+
+  const close = (refocus: boolean) => {
+    const view = activeView;
+    const focusTarget = returnFocusElement;
+    const onClose = closeCallback;
+    activeView = null;
+    activeMarker = null;
+    activeMode = null;
+    returnFocusElement = null;
+    closeCallback = null;
+    dom.hidden = true;
+    dom.style.display = "none";
+    clearError();
+    onClose?.();
+
+    if (!refocus) {
+      return;
+    }
+
+    if (
+      focusTarget
+      && focusTarget.isConnected
+      && focusTarget !== doc.body
+      && focusTarget !== doc.documentElement
+      && !focusTarget.matches(":disabled")
+      && !dom.contains(focusTarget)
+    ) {
+      focusTarget.focus();
+      return;
+    }
+
+    if (view) {
+      restoreEditorFocus(view, dom, doc, win);
+    }
+  };
+
+  const handleDocumentMouseDown = (event: MouseEvent) => {
+    if (
+      dom.hidden
+      || dom.style.display === "none"
+      || isEventInside(event, dom, NodeCtor)
+      || isEventInside(event, activeMarker, NodeCtor)
+    ) {
+      return;
+    }
+
+    close(false);
+  };
+
+  const handleWindowChange = () => {
+    if (!dom.hidden) {
+      reposition();
+    }
+  };
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+
+    if (!activeView || !activeMode || activeView.isDestroyed || !activeView.editable) {
+      close(false);
+      return;
+    }
+
+    const rows = readDimension(rowField.input);
+    const columns = readDimension(columnField.input);
+    const invalidInputs = [
+      ...(rows === null ? [rowField.input] : []),
+      ...(columns === null ? [columnField.input] : []),
+    ];
+
+    if (rows === null || columns === null) {
+      showError("Enter whole numbers from 1 through 100.", invalidInputs);
+      return;
+    }
+
+    const view = activeView;
+    const mode = activeMode;
+    const session = activeSession;
+    const handled = mode === "create"
+      ? insertTable(view, { columns, rows })
+      : resizeTable(view, { columns, rows });
+
+    if (activeSession !== session || activeView !== view) {
+      return;
+    }
+
+    if (handled === false) {
+      showError(mode === "create"
+        ? "The table could not be inserted at the current selection."
+        : "The table could not be resized. Clear content outside the new size and try again.");
+      return;
+    }
+
+    close(true);
+  });
+  cancelButton.addEventListener("click", () => close(true));
+  dom.addEventListener("keydown", (event) => {
+    if (isComposingKeyboardEvent(event) || event.key !== "Escape") {
+      return;
+    }
+
+    event.preventDefault();
+    close(true);
+  });
+  rowField.input.addEventListener("input", clearError);
+  columnField.input.addEventListener("input", clearError);
+  doc.addEventListener("mousedown", handleDocumentMouseDown, true);
+  win.addEventListener("resize", handleWindowChange);
+  win.addEventListener("scroll", handleWindowChange, true);
+  const removeVisualViewportListeners = addViewportListeners(win, handleWindowChange);
+
+  return {
+    open(view, marker, mode, dimensions, onClose) {
+      if (destroyed || view.isDestroyed || !view.editable) {
+        close(false);
+        return false;
+      }
+
+      const currentActiveElement = getOwnerActiveElement();
+      if (!(currentActiveElement instanceof NodeCtor) || !dom.contains(currentActiveElement)) {
+        returnFocusElement = currentActiveElement instanceof win.HTMLElement
+          ? currentActiveElement
+          : null;
+      }
+      activeView = view;
+      activeMarker = marker;
+      activeMode = mode;
+      closeCallback = onClose ?? null;
+      activeSession += 1;
+      rowField.input.value = String(dimensions.rows);
+      columnField.input.value = String(dimensions.columns);
+      dom.setAttribute("aria-label", mode === "create" ? "Create table" : "Resize table");
+      submitButton.textContent = mode === "create" ? "Create" : "Resize";
+      clearError();
+      dom.hidden = false;
+      dom.style.display = "flex";
+      reposition();
+      rowField.input.focus();
+      rowField.input.select();
+      return true;
+    },
+    close,
+    closeResizeForView(view) {
+      if (activeView === view && activeMode === "resize") {
+        close(false);
+      }
+    },
+    destroy() {
+      if (destroyed) {
+        return;
+      }
+
+      destroyed = true;
+      close(false);
+      doc.removeEventListener("mousedown", handleDocumentMouseDown, true);
+      win.removeEventListener("resize", handleWindowChange);
+      win.removeEventListener("scroll", handleWindowChange, true);
+      removeVisualViewportListeners();
+      dom.remove();
+    },
+  };
+}
+
+type TableUiContextLike = {
+  tablePos: number;
+  cell: { attrs: Record<string, unknown> };
+  selectedAlignment?: TableAlignment | null | "mixed";
+  rowIndex: number;
+  columnIndex: number;
+  rowCount: number;
+  columnCount: number;
+  selectedRowFrom: number;
+  selectedRowTo: number;
+  selectedColumnFrom: number;
+  selectedColumnTo: number;
+};
+
 export function createTableToolbarOverlay(options: OverlayEnvironment & {
-  appendTableColumn: (view: EditorView) => void;
-  appendTableRow: (view: EditorView) => void;
-  removeTableColumn: (view: EditorView) => void;
-  removeTableRow: (view: EditorView) => void;
-  setTableColumnAlignment: (view: EditorView, align: TableAlignment) => void;
-  removeActiveTable: (view: EditorView) => void;
-  getTableContext: (state: EditorView["state"]) => { tablePos: number; cell: { attrs: Record<string, unknown> } } | null;
+  addTableColumn: (view: EditorView, side: "before" | "after") => boolean | void;
+  addTableRow: (view: EditorView, side: "before" | "after") => boolean | void;
+  getTableContext: (state: EditorView["state"]) => TableUiContextLike | null;
+  insertTable: (view: EditorView, dimensions: TableDimensions) => boolean | void;
+  moveTableColumn: (view: EditorView, direction: "left" | "right") => boolean | void;
+  moveTableRow: (view: EditorView, direction: "up" | "down") => boolean | void;
   normalizeTableAlignment: (value: unknown) => TableAlignment | null;
+  removeActiveTable: (view: EditorView) => boolean | void;
+  removeTableColumn: (view: EditorView) => boolean | void;
+  removeTableRow: (view: EditorView) => boolean | void;
+  resizeTable: (view: EditorView, dimensions: TableDimensions) => boolean | void;
+  setTableColumnAlignment: (view: EditorView, align: TableAlignment | null) => boolean | void;
 }): TableToolbarOverlay {
   const {
-    appendTableColumn,
-    appendTableRow,
+    addTableColumn,
+    addTableRow,
     doc,
     getTableContext,
+    insertTable,
+    moveTableColumn,
+    moveTableRow,
     normalizeTableAlignment,
     portalRoot,
     removeActiveTable,
     removeTableColumn,
     removeTableRow,
+    resizeTable,
     setTableColumnAlignment,
     win,
   } = options;
+  const tableSizeEditor = createTableSizeEditorOverlay({
+    doc,
+    insertTable,
+    portalRoot,
+    resizeTable,
+    win,
+  });
   const HTMLElementCtor = win.HTMLElement;
   const dom = doc.createElement("div");
   dom.className = "mdw-table-toolbar";
@@ -661,11 +974,19 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   dom.setAttribute("aria-label", "Table controls");
   dom.setAttribute("aria-orientation", "horizontal");
 
+  const status = doc.createElement("div");
+  status.className = "mdw-table-toolbar-status";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  status.setAttribute("aria-atomic", "true");
+
   let activeView: EditorView | null = null;
   let activeMarker: HTMLElement | null = null;
   let activeContextVersion = 0;
   let destroyed = false;
   let focusRestorationVersion = 0;
+  let lastSelectionDescription = "";
+  let repositionFrame: number | null = null;
 
   const restoreTableEditorFocus = (view: EditorView) => {
     if (restoreEditorFocus(view, dom, doc, win)) {
@@ -673,9 +994,9 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     }
   };
 
-  const createIcon = (paths: string[], viewBox = "0 0 24 24") => {
+  const createIcon = (paths: string[]) => {
     const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", viewBox);
+    svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("fill", "none");
     svg.setAttribute("stroke", "currentColor");
     svg.setAttribute("stroke-width", "1.8");
@@ -693,89 +1014,77 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     return svg;
   };
 
-  const createButton = (title: string, icon: SVGElement) => {
+  const createButton = (title: string, paths: string[]) => {
     const button = doc.createElement("button");
     button.type = "button";
     button.className = "mdw-table-toolbar-button";
     button.title = title;
     button.tabIndex = -1;
     button.setAttribute("aria-label", title);
-    button.append(icon);
+    button.append(createIcon(paths));
     return button;
   };
 
-  const addColumnButton = createButton("Insert column", createIcon([
-    "M8 5v14",
-    "M16 5v14",
-    "M5 12h14",
-    "M19 7H9",
-    "M19 17H9",
-    "M5 7h1",
-    "M5 17h1",
-  ]));
-  const removeColumnButton = createButton("Delete column", createIcon([
-    "M8 5v14",
-    "M16 5v14",
-    "M10 12h9",
-    "M10 7h9",
-    "M10 17h9",
-    "M5 7h1",
-    "M5 17h1",
-  ]));
-  const addRowButton = createButton("Insert row", createIcon([
-    "M5 8h14",
-    "M5 16h14",
-    "M12 5v14",
-    "M7 19v-1",
-    "M17 19v-1",
-    "M12 18v3",
-  ]));
-  const removeRowButton = createButton("Delete row", createIcon([
-    "M5 8h14",
-    "M5 16h14",
-    "M12 5v11",
-    "M7 19h10",
-  ]));
-  const alignLeftButton = createButton("Align left", createIcon([
-    "M5 7h14",
-    "M5 11h10",
-    "M5 15h14",
-    "M5 19h10",
-  ]));
-  const alignCenterButton = createButton("Align center", createIcon([
-    "M5 7h14",
-    "M7 11h10",
-    "M5 15h14",
-    "M7 19h10",
-  ]));
-  const alignRightButton = createButton("Align right", createIcon([
-    "M5 7h14",
-    "M9 11h10",
-    "M5 15h14",
-    "M9 19h10",
-  ]));
-  const removeButton = createButton("Delete table", createIcon([
-    "M9 4.5h6",
-    "M10 9v7",
-    "M14 9v7",
-    "M5 6h14",
-    "M7 6l1 13h8l1-13",
-  ]));
+  const insertRowBeforeButton = createButton("Insert row before", ["M5 9h14M5 17h14M12 3v4M9.5 5.5 12 3l2.5 2.5"]);
+  const insertRowAfterButton = createButton("Insert row after", ["M5 7h14M5 15h14M12 17v4M9.5 18.5 12 21l2.5-2.5"]);
+  const moveRowUpButton = createButton("Move row up", ["M5 8h14M5 16h14M12 14V3M8.5 6.5 12 3l3.5 3.5"]);
+  const moveRowDownButton = createButton("Move row down", ["M5 8h14M5 16h14M12 10v11M8.5 17.5 12 21l3.5-3.5"]);
+  const removeRowButton = createButton("Delete row", ["M5 8h14M5 16h14M9 12h6"]);
+  const insertColumnBeforeButton = createButton("Insert column before", ["M9 5v14M17 5v14M3 12h4M5.5 9.5 3 12l2.5 2.5"]);
+  const insertColumnAfterButton = createButton("Insert column after", ["M7 5v14M15 5v14M17 12h4M18.5 9.5 21 12l-2.5 2.5"]);
+  const moveColumnLeftButton = createButton("Move column left", ["M8 5v14M16 5v14M14 12H3M6.5 8.5 3 12l3.5 3.5"]);
+  const moveColumnRightButton = createButton("Move column right", ["M8 5v14M16 5v14M10 12h11M17.5 8.5 21 12l-3.5 3.5"]);
+  const removeColumnButton = createButton("Delete column", ["M8 5v14M16 5v14M11 12h2"]);
+  const alignAutomaticButton = createButton("Automatic alignment", ["M5 7h14M7 12h10M9 17h6"]);
+  const alignLeftButton = createButton("Align left", ["M5 7h14M5 12h10M5 17h14"]);
+  const alignCenterButton = createButton("Align center", ["M5 7h14M7 12h10M5 17h14"]);
+  const alignRightButton = createButton("Align right", ["M5 7h14M9 12h10M5 17h14"]);
+  const resizeButton = createButton("Resize table", ["M5 9V5h4M15 5h4v4M19 15v4h-4M9 19H5v-4M8 8l8 8M16 8l-8 8"]);
+  const removeButton = createButton("Delete table", ["M9 4.5h6M10 9v7M14 9v7M5 6h14M7 6l1 13h8l1-13"]);
   const toolbarButtons = [
-    addColumnButton,
-    removeColumnButton,
-    addRowButton,
+    insertRowBeforeButton,
+    insertRowAfterButton,
+    moveRowUpButton,
+    moveRowDownButton,
     removeRowButton,
+    insertColumnBeforeButton,
+    insertColumnAfterButton,
+    moveColumnLeftButton,
+    moveColumnRightButton,
+    removeColumnButton,
+    alignAutomaticButton,
     alignLeftButton,
     alignCenterButton,
     alignRightButton,
+    resizeButton,
     removeButton,
   ];
   let rovingIndex = 0;
 
-  const setRovingIndex = (index: number, focus: boolean) => {
-    rovingIndex = (index + toolbarButtons.length) % toolbarButtons.length;
+  const findEnabledIndex = (index: number, direction: 1 | -1) => {
+    for (let offset = 0; offset < toolbarButtons.length; offset += 1) {
+      const candidate = (index + offset * direction + toolbarButtons.length) % toolbarButtons.length;
 
+      if (!toolbarButtons[candidate]?.disabled) {
+        return candidate;
+      }
+    }
+
+    return -1;
+  };
+
+  const setRovingIndex = (index: number, focus: boolean) => {
+    const normalized = (index + toolbarButtons.length) % toolbarButtons.length;
+    const nextIndex = toolbarButtons[normalized]?.disabled
+      ? findEnabledIndex(normalized, 1)
+      : normalized;
+
+    if (nextIndex < 0) {
+      toolbarButtons.forEach((button) => { button.tabIndex = -1; });
+      return false;
+    }
+
+    rovingIndex = nextIndex;
     toolbarButtons.forEach((button, buttonIndex) => {
       button.tabIndex = buttonIndex === rovingIndex ? 0 : -1;
     });
@@ -783,6 +1092,8 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     if (focus) {
       toolbarButtons[rovingIndex]?.focus();
     }
+
+    return true;
   };
 
   setRovingIndex(0, false);
@@ -792,10 +1103,56 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     button.setAttribute("aria-pressed", active ? "true" : "false");
   };
 
-  const updateAlignmentButtons = (active: TableAlignment | null) => {
+  const updateAlignmentButtons = (active: TableAlignment | null | "mixed") => {
+    setButtonState(alignAutomaticButton, active === null);
     setButtonState(alignLeftButton, active === "left");
     setButtonState(alignCenterButton, active === "center");
     setButtonState(alignRightButton, active === "right");
+  };
+
+  const describeSelection = (info: TableUiContextLike) => {
+    const rowFrom = Math.min(info.selectedRowFrom, info.selectedRowTo) + 1;
+    const rowTo = Math.max(info.selectedRowFrom, info.selectedRowTo) + 1;
+    const columnFrom = Math.min(info.selectedColumnFrom, info.selectedColumnTo) + 1;
+    const columnTo = Math.max(info.selectedColumnFrom, info.selectedColumnTo) + 1;
+
+    if (rowFrom === rowTo && columnFrom === columnTo) {
+      return `Cell at row ${rowFrom}, column ${columnFrom} selected.`;
+    }
+
+    const rows = rowFrom === rowTo ? `row ${rowFrom}` : `rows ${rowFrom} through ${rowTo}`;
+    const columns = columnFrom === columnTo
+      ? `column ${columnFrom}`
+      : `columns ${columnFrom} through ${columnTo}`;
+    return `Rectangular selection: ${rows} and ${columns}.`;
+  };
+
+  const announce = (message: string, view: EditorView | null = activeView) => {
+    const info = view && !view.isDestroyed ? getTableContext(view.state) : null;
+    const description = info ? describeSelection(info) : "";
+    status.textContent = description ? `${message} ${description}` : message;
+  };
+
+  const updateButtonAvailability = (info: TableUiContextLike) => {
+    const focused = getDeepActiveElement(dom, doc, win);
+    const focusedIndex = toolbarButtons.indexOf(focused as HTMLButtonElement);
+    const selectedRowFrom = Math.min(info.selectedRowFrom, info.selectedRowTo);
+    const selectedRowTo = Math.max(info.selectedRowFrom, info.selectedRowTo);
+    const selectedColumnFrom = Math.min(info.selectedColumnFrom, info.selectedColumnTo);
+    const selectedColumnTo = Math.max(info.selectedColumnFrom, info.selectedColumnTo);
+    const selectionIncludesHeader = selectedRowFrom === 0;
+    moveRowUpButton.disabled = selectedRowFrom <= 1;
+    moveRowDownButton.disabled = selectionIncludesHeader || selectedRowTo >= info.rowCount - 1;
+    moveColumnLeftButton.disabled = selectedColumnFrom <= 0;
+    moveColumnRightButton.disabled = selectedColumnTo >= info.columnCount - 1;
+    insertRowBeforeButton.disabled = info.rowCount >= 100;
+    insertRowAfterButton.disabled = info.rowCount >= 100;
+    insertColumnBeforeButton.disabled = info.columnCount >= 100;
+    insertColumnAfterButton.disabled = info.columnCount >= 100;
+
+    const preferredIndex = focusedIndex >= 0 ? focusedIndex : rovingIndex;
+    const shouldMoveFocus = focusedIndex >= 0 && toolbarButtons[focusedIndex]?.disabled === true;
+    setRovingIndex(preferredIndex, shouldMoveFocus);
   };
 
   const reposition = () => {
@@ -808,12 +1165,41 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     }
   };
 
+  const cancelScheduledReposition = () => {
+    if (repositionFrame === null) {
+      return;
+    }
+
+    if (typeof win.cancelAnimationFrame === "function") {
+      win.cancelAnimationFrame(repositionFrame);
+    } else {
+      win.clearTimeout(repositionFrame);
+    }
+    repositionFrame = null;
+  };
+
+  const scheduleReposition = () => {
+    if (repositionFrame !== null) {
+      return;
+    }
+
+    const callback = () => {
+      repositionFrame = null;
+      reposition();
+    };
+    repositionFrame = typeof win.requestAnimationFrame === "function"
+      ? win.requestAnimationFrame(callback)
+      : win.setTimeout(callback, 0);
+  };
+
   const close = (refocusIfToolbarFocused = true) => {
     const view = activeView;
     const activeElement = getDeepActiveElement(dom, doc, win);
     const hadToolbarFocus = activeElement instanceof win.Node && dom.contains(activeElement);
+    cancelScheduledReposition();
     activeView = null;
     activeMarker = null;
+    lastSelectionDescription = "";
     dom.hidden = true;
     dom.style.display = "none";
 
@@ -829,7 +1215,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       const button = target.closest("button");
       const index = toolbarButtons.indexOf(button as HTMLButtonElement);
 
-      if (index >= 0) {
+      if (index >= 0 && !toolbarButtons[index]?.disabled) {
         setRovingIndex(index, false);
       }
     }
@@ -842,7 +1228,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   const handleFocusIn = (event: FocusEvent) => {
     const index = toolbarButtons.indexOf(event.target as HTMLButtonElement);
 
-    if (index >= 0) {
+    if (index >= 0 && !toolbarButtons[index]?.disabled) {
       setRovingIndex(index, false);
     }
   };
@@ -871,37 +1257,50 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     let nextIndex: number | null = null;
 
     if (event.key === "ArrowRight") {
-      nextIndex = currentIndex + 1;
+      nextIndex = findEnabledIndex(currentIndex + 1, 1);
     } else if (event.key === "ArrowLeft") {
-      nextIndex = currentIndex - 1;
+      nextIndex = findEnabledIndex(currentIndex - 1, -1);
     } else if (event.key === "Home") {
-      nextIndex = 0;
+      nextIndex = findEnabledIndex(0, 1);
     } else if (event.key === "End") {
-      nextIndex = toolbarButtons.length - 1;
+      nextIndex = findEnabledIndex(toolbarButtons.length - 1, -1);
     }
 
-    if (nextIndex !== null) {
+    if (nextIndex !== null && nextIndex >= 0) {
       event.preventDefault();
       setRovingIndex(nextIndex, true);
     }
   };
 
   const handleWindowChange = () => {
-    if (!dom.hidden) reposition();
+    if (!dom.hidden) {
+      cancelScheduledReposition();
+      reposition();
+    }
   };
 
-  const alignGroup = doc.createElement("div");
-  alignGroup.className = "mdw-table-toolbar-group";
-  alignGroup.setAttribute("role", "group");
-  alignGroup.setAttribute("aria-label", "Column alignment");
-  alignGroup.append(alignLeftButton, alignCenterButton, alignRightButton);
-  dom.append(addColumnButton, removeColumnButton, addRowButton, removeRowButton, alignGroup, removeButton);
+  const createGroup = (label: string, ...buttons: HTMLButtonElement[]) => {
+    const group = doc.createElement("div");
+    group.className = "mdw-table-toolbar-group";
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", label);
+    group.append(...buttons);
+    return group;
+  };
+
+  dom.append(
+    createGroup("Row", insertRowBeforeButton, insertRowAfterButton, moveRowUpButton, moveRowDownButton, removeRowButton),
+    createGroup("Column", insertColumnBeforeButton, insertColumnAfterButton, moveColumnLeftButton, moveColumnRightButton, removeColumnButton),
+    createGroup("Alignment", alignAutomaticButton, alignLeftButton, alignCenterButton, alignRightButton),
+    createGroup("Table", resizeButton, removeButton),
+    status,
+  );
   portalRoot.append(dom);
 
   dom.addEventListener("mousedown", handleMouseDown);
   dom.addEventListener("focusin", handleFocusIn);
   dom.addEventListener("keydown", handleKeyDown);
-  const runTableAction = (action: (view: EditorView) => void) => {
+  const runTableAction = (action: (view: EditorView) => boolean | void, message: string) => {
     const view = activeView;
 
     if (!view || view.isDestroyed || !view.editable) {
@@ -909,22 +1308,76 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       return;
     }
 
-    action(view);
+    if (action(view) !== false) {
+      announce(message, view);
+    }
   };
 
-  addColumnButton.addEventListener("click", () => runTableAction(appendTableColumn));
-  removeColumnButton.addEventListener("click", () => runTableAction(removeTableColumn));
-  addRowButton.addEventListener("click", () => runTableAction(appendTableRow));
-  removeRowButton.addEventListener("click", () => runTableAction(removeTableRow));
+  insertRowBeforeButton.addEventListener("click", () => runTableAction(
+    (view) => addTableRow(view, "before"),
+    "Inserted row before.",
+  ));
+  insertRowAfterButton.addEventListener("click", () => runTableAction(
+    (view) => addTableRow(view, "after"),
+    "Inserted row after.",
+  ));
+  moveRowUpButton.addEventListener("click", () => runTableAction(
+    (view) => moveTableRow(view, "up"),
+    "Moved row up.",
+  ));
+  moveRowDownButton.addEventListener("click", () => runTableAction(
+    (view) => moveTableRow(view, "down"),
+    "Moved row down.",
+  ));
+  removeRowButton.addEventListener("click", () => runTableAction(removeTableRow, "Deleted row."));
+  insertColumnBeforeButton.addEventListener("click", () => runTableAction(
+    (view) => addTableColumn(view, "before"),
+    "Inserted column before.",
+  ));
+  insertColumnAfterButton.addEventListener("click", () => runTableAction(
+    (view) => addTableColumn(view, "after"),
+    "Inserted column after.",
+  ));
+  moveColumnLeftButton.addEventListener("click", () => runTableAction(
+    (view) => moveTableColumn(view, "left"),
+    "Moved column left.",
+  ));
+  moveColumnRightButton.addEventListener("click", () => runTableAction(
+    (view) => moveTableColumn(view, "right"),
+    "Moved column right.",
+  ));
+  removeColumnButton.addEventListener("click", () => runTableAction(removeTableColumn, "Deleted column."));
+  alignAutomaticButton.addEventListener("click", () => runTableAction(
+    (view) => setTableColumnAlignment(view, null),
+    "Set automatic alignment.",
+  ));
   alignLeftButton.addEventListener("click", () => runTableAction(
     (view) => setTableColumnAlignment(view, "left"),
+    "Aligned column left.",
   ));
   alignCenterButton.addEventListener("click", () => runTableAction(
     (view) => setTableColumnAlignment(view, "center"),
+    "Aligned column center.",
   ));
   alignRightButton.addEventListener("click", () => runTableAction(
     (view) => setTableColumnAlignment(view, "right"),
+    "Aligned column right.",
   ));
+  resizeButton.addEventListener("click", () => {
+    const view = activeView;
+    const marker = activeMarker;
+    const info = view && !view.isDestroyed ? getTableContext(view.state) : null;
+
+    if (!view || !marker || !info || !view.editable) {
+      close();
+      return;
+    }
+
+    tableSizeEditor.open(view, marker, "resize", {
+      columns: info.columnCount,
+      rows: info.rowCount,
+    });
+  });
   removeButton.addEventListener("click", () => {
     const view = activeView;
 
@@ -937,7 +1390,9 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     const contextVersion = activeContextVersion;
     const marker = activeMarker;
     const restorationVersion = focusRestorationVersion;
-    removeActiveTable(view);
+    if (removeActiveTable(view) === false) {
+      return;
+    }
 
     if (activeContextVersion !== contextVersion) {
       return;
@@ -955,34 +1410,71 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   win.addEventListener("scroll", handleWindowChange, true);
   const removeVisualViewportListeners = addViewportListeners(win, handleWindowChange);
 
-  return {
-    update(view) {
-      if (destroyed || view.isDestroyed || !view.editable) {
-        close();
-        return;
-      }
+  const update = (view: EditorView) => {
+    if (destroyed || view.isDestroyed || !view.editable) {
+      tableSizeEditor.close(false);
+      close();
+      return;
+    }
 
-      const info = getTableContext(view.state);
-      if (!info) {
-        close();
-        return;
-      }
-      const marker = view.nodeDOM(info.tablePos);
-      if (!(marker instanceof HTMLElementCtor)) {
-        close();
-        return;
-      }
+    const info = getTableContext(view.state);
+    if (!info) {
+      tableSizeEditor.closeResizeForView(view);
+      close();
+      return;
+    }
+    const marker = view.nodeDOM(info.tablePos);
+    if (!(marker instanceof HTMLElementCtor)) {
+      close();
+      return;
+    }
 
-      if (activeView !== view || activeMarker !== marker) {
-        activeContextVersion += 1;
-      }
+    const contextChanged = activeView !== view || activeMarker !== marker;
+    if (contextChanged) {
+      activeContextVersion += 1;
+    }
 
-      activeView = view;
-      activeMarker = marker;
-      dom.hidden = false;
-      dom.style.display = "flex";
-      updateAlignmentButtons(normalizeTableAlignment(info.cell.attrs.align));
+    activeView = view;
+    activeMarker = marker;
+    dom.hidden = false;
+    dom.style.display = "flex";
+    updateButtonAvailability(info);
+    updateAlignmentButtons(
+      info.selectedAlignment === undefined
+        ? normalizeTableAlignment(info.cell.attrs.align)
+        : info.selectedAlignment,
+    );
+    const selectionDescription = describeSelection(info);
+    if (selectionDescription !== lastSelectionDescription) {
+      lastSelectionDescription = selectionDescription;
+      status.textContent = selectionDescription;
+    }
+
+    if (contextChanged) {
+      cancelScheduledReposition();
       reposition();
+    } else {
+      scheduleReposition();
+    }
+  };
+
+  return {
+    create(view, marker, onClose) {
+      return tableSizeEditor.open(view, marker, "create", { columns: 3, rows: 2 }, onClose);
+    },
+    update,
+    focus(view) {
+      update(view);
+
+      if (activeView !== view || dom.hidden || dom.style.display === "none") {
+        return false;
+      }
+
+      if (!setRovingIndex(rovingIndex, true)) {
+        return false;
+      }
+
+      return getDeepActiveElement(dom, doc, win) === toolbarButtons[rovingIndex];
     },
     destroy() {
       if (destroyed) {
@@ -997,6 +1489,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       win.removeEventListener("resize", handleWindowChange);
       win.removeEventListener("scroll", handleWindowChange, true);
       removeVisualViewportListeners();
+      tableSizeEditor.destroy();
       dom.remove();
     },
   };

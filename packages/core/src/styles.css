@@ -149,6 +149,19 @@
   font-weight: 600;
 }
 
+.mdw-host .ProseMirror :is(th, td).selectedCell {
+  position: relative;
+}
+
+.mdw-host .ProseMirror :is(th, td).selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(9, 105, 218, 0.14);
+  box-shadow: inset 0 0 0 2px #0969da;
+}
+
 .mdw-host .ProseMirror td > :first-child,
 .mdw-host .ProseMirror th > :first-child {
   margin-top: 0;

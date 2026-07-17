@@ -256,14 +256,23 @@ function readTableAlignmentFromString(value: string | null | undefined): TableAl
 
 function getTableCellDOMAttrs(node: ProseMirrorNode) {
   const align = normalizeTableAlignment(node.attrs.align);
-
-  if (!align) {
-    return {};
-  }
+  const colspan = Number.isInteger(node.attrs.colspan) && node.attrs.colspan > 1
+    ? node.attrs.colspan as number
+    : 1;
+  const rowspan = Number.isInteger(node.attrs.rowspan) && node.attrs.rowspan > 1
+    ? node.attrs.rowspan as number
+    : 1;
+  const colwidth = Array.isArray(node.attrs.colwidth)
+    && node.attrs.colwidth.length === colspan
+    && node.attrs.colwidth.every((width: unknown) => Number.isInteger(width) && (width as number) > 0)
+    ? node.attrs.colwidth as number[]
+    : null;
 
   return {
-    align,
-    style: `text-align: ${align};`,
+    ...(align ? { align, style: `text-align: ${align};` } : {}),
+    ...(colspan > 1 ? { colspan } : {}),
+    ...(rowspan > 1 ? { rowspan } : {}),
+    ...(colwidth ? { "data-colwidth": colwidth.join(",") } : {}),
   };
 }
 
@@ -273,14 +282,25 @@ function normalizeTableHeaderScope(value: unknown): "col" | "row" | null {
 
 function getTableCellParseDOMAttrs(dom: Node | string) {
   if (!isHTMLElementNode(dom)) {
-    return { align: null };
+    return { align: null, colspan: 1, rowspan: 1, colwidth: null };
   }
 
   const styleAlign = readTableAlignmentFromString(dom.style.textAlign || dom.getAttribute("style") || undefined);
   const attrAlign = readTableAlignmentFromString(dom.getAttribute("align"));
+  const colspan = Math.min(100, Math.max(1, Number.parseInt(dom.getAttribute("colspan") ?? "1", 10) || 1));
+  const rowspan = Math.min(100, Math.max(1, Number.parseInt(dom.getAttribute("rowspan") ?? "1", 10) || 1));
+  const rawColwidth = dom.getAttribute("data-colwidth");
+  const colwidth = rawColwidth && /^\d+(?:,\d+)*$/.test(rawColwidth)
+    ? rawColwidth.split(",").map(Number)
+    : null;
 
   return {
     align: attrAlign ?? styleAlign ?? null,
+    colspan,
+    rowspan,
+    colwidth: colwidth?.length === colspan && colwidth.every((width) => width > 0 && width <= 4096)
+      ? colwidth
+      : null,
   };
 }
 
@@ -313,11 +333,29 @@ function createTableDividerCell(align: TableAlignment | null) {
   }
 }
 
+function validateTableColwidth(value: unknown) {
+  if (value === null) return;
+  if (
+    !Array.isArray(value)
+    || value.length > 100
+    || value.some((width) => !Number.isInteger(width) || width < 1 || width > 4096)
+  ) {
+    throw new RangeError("Table colwidth must be null or an array of 1–4096 pixel integers.");
+  }
+}
+
+function validateTableSpan(value: unknown) {
+  if (!Number.isInteger(value) || (value as number) < 1 || (value as number) > 100) {
+    throw new RangeError("Table spans must be integers between 1 and 100.");
+  }
+}
+
 const tableNodeSpecs = {
   table: {
     content: "table_row+",
     group: "block",
     isolating: true,
+    tableRole: "table",
     parseDOM: [{ tag: "table" }],
     toDOM() {
       return ["table", ["tbody", 0]] as const;
@@ -325,6 +363,7 @@ const tableNodeSpecs = {
   },
   table_row: {
     content: "(table_cell | table_header)+",
+    tableRole: "row",
     parseDOM: [{ tag: "tr" }],
     toDOM() {
       return ["tr", 0] as const;
@@ -333,9 +372,13 @@ const tableNodeSpecs = {
   table_cell: {
     attrs: {
       align: { default: null },
+      colspan: { default: 1, validate: validateTableSpan },
+      rowspan: { default: 1, validate: validateTableSpan },
+      colwidth: { default: null, validate: validateTableColwidth },
     },
     content: "block+",
     isolating: true,
+    tableRole: "cell",
     parseDOM: [{ tag: "td", getAttrs: getTableCellParseDOMAttrs }],
     toDOM(node: ProseMirrorNode) {
       return ["td", getTableCellDOMAttrs(node), 0] as const;
@@ -345,9 +388,13 @@ const tableNodeSpecs = {
     attrs: {
       align: { default: null },
       scope: { default: null },
+      colspan: { default: 1, validate: validateTableSpan },
+      rowspan: { default: 1, validate: validateTableSpan },
+      colwidth: { default: null, validate: validateTableColwidth },
     },
     content: "block+",
     isolating: true,
+    tableRole: "header_cell",
     parseDOM: [{ tag: "th", getAttrs: getTableHeaderParseDOMAttrs }],
     toDOM(node: ProseMirrorNode) {
       const scope = normalizeTableHeaderScope(node.attrs.scope);

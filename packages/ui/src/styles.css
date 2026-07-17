@@ -98,6 +98,74 @@
   font: inherit;
 }
 
+.mdw-table-size-editor {
+  position: absolute;
+  z-index: 31;
+  display: flex;
+  width: min(300px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  padding: 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  background: #fff;
+  color: #24292f;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.mdw-table-size-editor-form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mdw-table-size-editor-fields,
+.mdw-table-size-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mdw-table-size-editor-field {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mdw-table-size-editor-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.mdw-table-size-editor-input[aria-invalid="true"] {
+  border-color: #cf222e;
+  box-shadow: 0 0 0 3px rgba(207, 34, 46, 0.12);
+}
+
+.mdw-table-size-editor-actions {
+  flex-wrap: wrap;
+}
+
+.mdw-table-size-editor-actions button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+
 .mdw-table-toolbar {
   position: absolute;
   z-index: 30;
@@ -121,6 +189,11 @@
   display: inline-flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.mdw-table-toolbar-group + .mdw-table-toolbar-group {
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid #d0d7de;
 }
 
 .mdw-table-toolbar-button {
@@ -148,6 +221,25 @@
   background: #e7f1ff;
   border-color: #8cb4ff;
   color: #0550ae;
+}
+
+.mdw-table-toolbar-button:disabled {
+  color: #8c959f;
+  background: #f6f8fa;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.mdw-table-toolbar-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @media (pointer: coarse) {

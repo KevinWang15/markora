@@ -128,20 +128,20 @@
   "bundle": {
     "root": {
       "initialJs": {
-        "rawBytes": { "warning": 810000, "failure": 830000 },
-        "gzipBytes": { "warning": 225000, "failure": 235000 }
+        "rawBytes": { "warning": 810000, "failure": 900000 },
+        "gzipBytes": { "warning": 225000, "failure": 250000 }
       },
       "lazyJs": {
         "rawBytes": { "warning": 1090000, "failure": 1120000 },
         "gzipBytes": { "warning": 345000, "failure": 355000 }
       },
       "totalJs": {
-        "rawBytes": { "warning": 1880000, "failure": 1900000 },
-        "gzipBytes": { "warning": 560000, "failure": 570000 }
+        "rawBytes": { "warning": 1880000, "failure": 1980000 },
+        "gzipBytes": { "warning": 560000, "failure": 590000 }
       },
       "css": {
-        "rawBytes": { "warning": 16750, "failure": 17000 },
-        "gzipBytes": { "warning": 3300, "failure": 3400 }
+        "rawBytes": { "warning": 16750, "failure": 18750 },
+        "gzipBytes": { "warning": 3300, "failure": 3550 }
       },
       "staticModuleCount": { "warning": 148, "failure": 151 }
     },

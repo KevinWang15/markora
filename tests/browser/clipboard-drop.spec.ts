@@ -116,7 +116,7 @@ test("rich HTML table headers keep scope and mixed rows receive body cells", asy
   await rows.nth(1).locator("td p").click();
   const toolbar = ownedOverlay(labPage, id, ".mdw-table-toolbar");
   await expect(toolbar).toBeVisible();
-  await toolbar.getByRole("button", { name: "Insert column" }).click();
+  await toolbar.getByRole("button", { name: "Insert column after" }).click();
   await settleEditor(labPage, id);
 
   await expect(rows.first().locator("th")).toHaveCount(3);
@@ -155,8 +155,16 @@ test("Markdown MIME pastes semantically while plain Markdown-looking text remain
   });
   expect(plainResult.defaultPrevented).toBe(true);
   await settleEditor(labPage, id);
-  expect(await getMarkdown(labPage, id)).toBe("<b>literal tag</b>\n\nsecond block");
-  await expect(editorLocator(labPage, id).locator("strong")).toHaveCount(0);
+  const escapedPlainMarkdown = "\\<b>literal tag\\</b>\n\nsecond block";
+  expect(await getMarkdown(labPage, id)).toBe(escapedPlainMarkdown);
+  const editor = editorLocator(labPage, id);
+  expect(await editor.locator("p").allTextContents()).toEqual(["<b>literal tag</b>", "second block"]);
+  await expect(editor.locator("strong")).toHaveCount(0);
+
+  await resetEditor(labPage, id, escapedPlainMarkdown);
+  await settleEditor(labPage, id);
+  expect(await editor.locator("p").allTextContents()).toEqual(["<b>literal tag</b>", "second block"]);
+  await expect(editor.locator("strong")).toHaveCount(0);
 });
 
 test("external rich and plain drops insert undoable content", async ({ labPage }) => {

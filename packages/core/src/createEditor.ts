@@ -69,7 +69,13 @@ export type {
   MarkdownEditorSelectionTarget,
   MarkdownEditorState,
   MarkdownEditorTableAlignment,
+  MarkdownEditorTableColumnMoveDirection,
   MarkdownEditorTableInsertOptions,
+  MarkdownEditorTableInsertSide,
+  MarkdownEditorTableIssue,
+  MarkdownEditorTableIssueCode,
+  MarkdownEditorTableResizeOptions,
+  MarkdownEditorTableRowMoveDirection,
   MarkdownEditorUi,
   ToolbarButtonState,
   ToolbarState,
@@ -86,8 +92,11 @@ import { createCodeBlockOuterSelectionPlugin, createHeadingEditingPlugin, create
 import { createCodeBlockSelectionHelpers } from "./codeBlockSelection";
 import { createPipeTableHelpers } from "./pipeTable";
 import { createTableNavigation, type TableAlignment } from "./tableNavigation";
+import { createTableEditing, isTableCellSelection } from "./tableEditing";
+import { getTableFidelityIssues } from "./tableFidelity";
+import { getTableSelectionContext as getSharedTableSelectionContext } from "./tableCommands";
 import type { TableCellInfo } from "./tableTypes";
-import type { ActiveImageInfo, EditorUiControllers, ImageEditorOverlay, LinkEditorOverlay, TableToolbarOverlay } from "./uiTypes";
+import type { ActiveImageInfo, EditorUiControllers, ImageEditorOverlay, LinkEditorOverlay, TableToolbarOverlay, TableUiContext } from "./uiTypes";
 import { createNoopUiControllers } from "./uiTypes";
 import { createTaskListHelpers } from "./taskListUtils";
 import { createTaskListItemViewClass } from "./taskListItemView";
@@ -294,6 +303,10 @@ function resolveSelectionTarget(
 }
 
 function getSelectionKind(selection: Selection): MarkdownEditorSelectionKind {
+  if (isTableCellSelection(selection)) {
+    return "table-cell";
+  }
+
   if (selection instanceof ManagedBlockCursor) {
     return "managed-block";
   }
@@ -586,44 +599,46 @@ function updateHeadingLevel(view: EditorView, nextLevel: number | null) {
 }
 
 function getTableCellContext(state: EditorState): TableCellInfo | null {
-  const { selection } = state;
-  const { $from } = selection;
-  let tableDepth = -1;
-  let rowDepth = -1;
-  let cellDepth = -1;
+  return getSharedTableSelectionContext(state, schema);
+}
 
-  for (let depth = $from.depth; depth > 0; depth -= 1) {
-    const node = $from.node(depth);
+function getTableUiContext(state: EditorState): TableUiContext | null {
+  const info = getSharedTableSelectionContext(state, schema);
 
-    if (cellDepth < 0 && (node.type === schema.nodes.table_cell || node.type === schema.nodes.table_header)) {
-      cellDepth = depth;
-      continue;
-    }
-
-    if (rowDepth < 0 && node.type === schema.nodes.table_row) {
-      rowDepth = depth;
-      continue;
-    }
-
-    if (tableDepth < 0 && node.type === schema.nodes.table) {
-      tableDepth = depth;
-      break;
-    }
-  }
-
-  if (tableDepth < 0 || rowDepth < 0 || cellDepth < 0) {
+  if (!info) {
     return null;
   }
 
+  let columnCount = 0;
+  info.table.forEach((row) => {
+    columnCount = Math.max(columnCount, row.childCount);
+  });
+  let selectedAlignment: TableUiContext["selectedAlignment"] | undefined;
+  info.table.forEach((row) => {
+    for (let column = info.columnFrom; column <= info.columnTo; column += 1) {
+      const cell = row.maybeChild(column);
+      if (!cell || selectedAlignment === "mixed") continue;
+      const alignment = normalizeTableAlignment(cell.attrs.align);
+      if (selectedAlignment === undefined) {
+        selectedAlignment = alignment;
+      } else if (selectedAlignment !== alignment) {
+        selectedAlignment = "mixed";
+      }
+    }
+  });
+
   return {
-    table: $from.node(tableDepth),
-    row: $from.node(rowDepth),
-    cell: $from.node(cellDepth),
-    tablePos: $from.before(tableDepth),
-    rowPos: $from.before(rowDepth),
-    cellPos: $from.before(cellDepth),
-    rowIndex: $from.index(tableDepth),
-    cellIndex: $from.index(rowDepth),
+    tablePos: info.tablePos,
+    cell: info.cell,
+    selectedAlignment: selectedAlignment ?? null,
+    rowIndex: info.rowIndex,
+    columnIndex: info.cellIndex,
+    rowCount: info.table.childCount,
+    columnCount,
+    selectedRowFrom: info.rowFrom,
+    selectedRowTo: info.rowTo,
+    selectedColumnFrom: info.columnFrom,
+    selectedColumnTo: info.columnTo,
   };
 }
 
@@ -719,8 +734,12 @@ const {
 
 const {
   createEmptyTableRow,
+  addTableRow,
+  addTableColumn,
   appendTableRow,
   appendTableColumn,
+  moveTableRow,
+  moveTableColumn,
   removeTableRow,
   removeTableColumn,
   setTableColumnAlignment,
@@ -767,6 +786,7 @@ const { convertPipeTable } = createPipeTableHelpers({
     getActiveLineMarker,
     updateHeadingLevel,
     getTableCellContext,
+    getTableUiContext,
     selectionTouchesNodeType,
     maybeExtendSelectionAcrossCodeBlock,
     isManagedBlockNode,
@@ -778,8 +798,12 @@ const { convertPipeTable } = createPipeTableHelpers({
     getManagedBlockBoundary,
     getTableBoundaryEscapeInfo,
     createEmptyTableRow,
+    addTableRow,
+    addTableColumn,
     appendTableRow,
     appendTableColumn,
+    moveTableRow,
+    moveTableColumn,
     removeTableRow,
     removeTableColumn,
     setTableColumnAlignment,
@@ -855,6 +879,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     getActiveLineMarker,
     updateHeadingLevel,
     getTableCellContext,
+    getTableUiContext,
     selectionTouchesNodeType,
     maybeExtendSelectionAcrossCodeBlock,
     isManagedBlockNode,
@@ -865,8 +890,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     removeManagedBlockAtBoundary,
     getManagedBlockBoundary,
     getTableBoundaryEscapeInfo,
+    addTableRow,
+    addTableColumn,
     appendTableRow,
     appendTableColumn,
+    moveTableRow,
+    moveTableColumn,
     removeTableRow,
     removeTableColumn,
     setTableColumnAlignment,
@@ -1157,6 +1186,35 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
   let releaseHostOwnership: () => void;
 
+  const canRunUiAction = (targetView: EditorView) => (
+    lifecycle === "active"
+    && !targetView.isDestroyed
+    && targetView.editable
+  );
+  const canRunUiMutation = (targetView: EditorView) => (
+    canRunUiAction(targetView)
+    && !targetView.composing
+    && !CodeBlockView.isComposing()
+  );
+  const runUiTableMutation = (
+    targetView: EditorView,
+    action: () => boolean,
+  ) => canRunUiMutation(targetView) && action();
+  const runUiStructuralCommand = (targetView: EditorView, command: EditorCommand) => {
+    if (!canRunUiMutation(targetView)) {
+      return false;
+    }
+
+    return command(
+      targetView.state,
+      (transaction) => {
+        setBuiltinMarkdownEditorTransactionOrigin(transaction, "command");
+        targetView.dispatch(transaction);
+      },
+      targetView,
+    );
+  };
+
   try {
     releaseHostOwnership = claimEditorHost(element);
   } catch (error) {
@@ -1170,11 +1228,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   }
 
   try {
-    const canRunUiAction = (targetView: EditorView) => (
-      lifecycle === "active"
-      && !targetView.isDestroyed
-      && targetView.editable
-    );
     uiControllers = ui?.({
       updateLinkHref: (view, href) => canRunUiAction(view) && updateLinkHref(view, href),
       removeActiveLink: (view) => { if (canRunUiAction(view)) removeActiveLink(view); },
@@ -1200,13 +1253,36 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       },
       removeActiveImage: (view) => { if (canRunUiAction(view)) removeActiveImage(view); },
       hostElement: element,
-      appendTableColumn: (view) => { if (canRunUiAction(view)) appendTableColumn(view); },
-      appendTableRow: (view) => { if (canRunUiAction(view)) appendTableRow(view); },
-      removeTableColumn: (view) => { if (canRunUiAction(view)) removeTableColumn(view); },
-      removeTableRow: (view) => { if (canRunUiAction(view)) removeTableRow(view); },
-      setTableColumnAlignment: (view, alignment) => { if (canRunUiAction(view)) setTableColumnAlignment(view, alignment); },
-      removeActiveTable: (view) => { if (canRunUiAction(view)) removeActiveTable(view); },
-      getTableContext: getTableCellContext,
+      addTableColumn: (view, side) => runUiTableMutation(view, () => addTableColumn(view, side)),
+      addTableRow: (view, side) => runUiTableMutation(view, () => addTableRow(view, side)),
+      appendTableColumn: (view) => runUiTableMutation(view, () => appendTableColumn(view)),
+      appendTableRow: (view) => runUiTableMutation(view, () => appendTableRow(view)),
+      insertTable: (view, dimensions) => {
+        const handled = runUiStructuralCommand(
+          view,
+          structuralCommandSet.commands.insertTable(dimensions),
+        );
+
+        if (handled && lifecycle === "active" && !view.isDestroyed) {
+          uiControllers.clearSelectionAnchor();
+        }
+
+        return handled;
+      },
+      moveTableColumn: (view, direction) => runUiTableMutation(view, () => moveTableColumn(view, direction)),
+      moveTableRow: (view, direction) => runUiTableMutation(view, () => moveTableRow(view, direction)),
+      removeTableColumn: (view) => runUiTableMutation(view, () => removeTableColumn(view)),
+      removeTableRow: (view) => runUiTableMutation(view, () => removeTableRow(view)),
+      resizeTable: (view, dimensions) => runUiStructuralCommand(
+        view,
+        structuralCommandSet.commands.resizeTable(dimensions),
+      ),
+      setTableColumnAlignment: (view, alignment) => runUiTableMutation(
+        view,
+        () => setTableColumnAlignment(view, alignment),
+      ),
+      removeActiveTable: (view) => runUiTableMutation(view, () => removeActiveTable(view)),
+      getTableContext: getTableUiContext,
       normalizeTableAlignment,
     }) ?? createNoopUiControllers();
     uiFactoryReturned = true;
@@ -1260,6 +1336,20 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     resources,
     schema,
   });
+  const advancedTables = createTableEditing({
+    schema,
+    reportBrowserError(error) {
+      if (lifecycle !== "active" || view.isDestroyed) return;
+      eventDispatcher.emit("error", {
+        code: "table-operation-rejected",
+        context: { phase: "clipboard" },
+        editor,
+        error,
+        recoverable: true,
+        type: "error",
+      });
+    },
+  });
   const clipboard = createClipboardSemantics({
     codec,
     reportBrowserError(error) {
@@ -1269,6 +1359,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         reportUnhandled(error);
       }
     },
+    tableClipboard: advancedTables.clipboard,
     takeExtensionFailure: extensionAssembly.contributions.takeClipboardFailure,
   });
 
@@ -1360,6 +1451,9 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       "Shift-Tab": (state, dispatch, view) => moveTableCell(view!, -1) || liftListItem(listItemType)(state, dispatch, view),
       ArrowUp: (_state, _dispatch, view) => moveTableCellVertical(view!, -1),
       ArrowDown: (_state, _dispatch, view) => moveTableCellVertical(view!, 1),
+      "Alt-F10": (_state, _dispatch, view) => (
+        canRunUiMutation(view!) && (tableToolbar.focus?.(view!) ?? false)
+      ),
       "Mod-b": commands.toggleBold,
       "Mod-i": commands.toggleItalic,
       "Mod-e": commands.toggleCode,
@@ -1368,6 +1462,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       "Shift-Mod-z": commands.redo,
       "Mod-y": commands.redo,
     }),
+    ...advancedTables.plugins,
     keymap(baseKeymap),
   ];
 
@@ -1746,6 +1841,49 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     return true;
   };
 
+  const createTableValue = () => {
+    assertActive("create a table");
+
+    if (
+      !runtimeOptions.editable
+      || !uiEnabled
+      || typeof tableToolbar.create !== "function"
+      || view.composing
+      || CodeBlockView.isComposing()
+      || !structuralCommandSet.commands.insertTable()(view.state)
+    ) {
+      return false;
+    }
+
+    const selectionAnchor = uiControllers.createSelectionAnchor(view);
+
+    if (!selectionAnchor || lifecycle !== "active" || view.isDestroyed) {
+      return false;
+    }
+
+    const opened = tableToolbar.create(
+      view,
+      selectionAnchor,
+      () => uiControllers.clearSelectionAnchor(),
+    );
+
+    if (!opened) {
+      uiControllers.clearSelectionAnchor();
+    }
+
+    return opened;
+  };
+
+  const editTableValue = () => {
+    assertActive("edit a table");
+    return Boolean(
+      runtimeOptions.editable
+      && uiEnabled
+      && canRunUiMutation(view)
+      && tableToolbar.focus?.(view),
+    );
+  };
+
   const getBuiltinMarkState = (
     name: MarkdownEditorMark,
     command: EditorCommand,
@@ -1808,6 +1946,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   };
 
   const editorStateApi: MarkdownEditorState = {
+    tableIssues() {
+      assertActive("inspect table fidelity issues");
+      return getTableFidelityIssues(view.state.doc);
+    },
     can: {
       pasteMarkdown() {
         return runStateQuery(
@@ -1927,16 +2069,37 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
           structuralCommandSet.commands.insertTable(options),
         );
       },
-      addTableRow() {
+      addTableRow(side) {
         return canRunCommand(
           "query whether a table row can be added",
-          structuralCommandSet.commands.addTableRow,
+          structuralCommandSet.commands.addTableRow(side),
         );
       },
-      addTableColumn() {
+      addTableColumn(side) {
         return canRunCommand(
           "query whether a table column can be added",
-          structuralCommandSet.commands.addTableColumn,
+          structuralCommandSet.commands.addTableColumn(side),
+        );
+      },
+      resizeTable(options) {
+        assertActive("query whether a table can be resized");
+        return canRunCommand(
+          "query whether a table can be resized",
+          structuralCommandSet.commands.resizeTable(options),
+        );
+      },
+      moveTableRow(direction) {
+        assertActive("query whether a table row can be moved");
+        return canRunCommand(
+          "query whether a table row can be moved",
+          structuralCommandSet.commands.moveTableRow(direction),
+        );
+      },
+      moveTableColumn(direction) {
+        assertActive("query whether a table column can be moved");
+        return canRunCommand(
+          "query whether a table column can be moved",
+          structuralCommandSet.commands.moveTableColumn(direction),
         );
       },
       deleteTableRow() {
@@ -2048,6 +2211,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
           () => structuralCommandSet.isActive.table(view.state),
         );
       },
+      tableCellSelection() {
+        return runStateQuery(
+          "query an active table cell selection",
+          () => structuralCommandSet.isActive.tableCellSelection(view.state),
+        );
+      },
       tableColumnAlignment(alignment) {
         return runStateQuery(
           "query active table column alignment",
@@ -2135,11 +2304,23 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       assertActive("insert a table");
       return runStructuralCommand(structuralCommandSet.commands.insertTable(options));
     },
-    addTableRow() {
-      return runStructuralCommand(structuralCommandSet.commands.addTableRow);
+    addTableRow(side) {
+      return runStructuralCommand(structuralCommandSet.commands.addTableRow(side));
     },
-    addTableColumn() {
-      return runStructuralCommand(structuralCommandSet.commands.addTableColumn);
+    addTableColumn(side) {
+      return runStructuralCommand(structuralCommandSet.commands.addTableColumn(side));
+    },
+    resizeTable(options) {
+      assertActive("resize a table");
+      return runStructuralCommand(structuralCommandSet.commands.resizeTable(options));
+    },
+    moveTableRow(direction) {
+      assertActive("move a table row");
+      return runStructuralCommand(structuralCommandSet.commands.moveTableRow(direction));
+    },
+    moveTableColumn(direction) {
+      assertActive("move a table column");
+      return runStructuralCommand(structuralCommandSet.commands.moveTableColumn(direction));
     },
     deleteTableRow() {
       return runStructuralCommand(structuralCommandSet.commands.deleteTableRow);
@@ -2574,8 +2755,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     commands: editorCommandApi,
     state: editorStateApi,
     ui: uiEnabled ? {
+      createTable: createTableValue,
       editLink: editLinkValue,
       editImage: editImageValue,
+      editTable: editTableValue,
     } : null,
     blur() {
       assertActive("blur the editor");

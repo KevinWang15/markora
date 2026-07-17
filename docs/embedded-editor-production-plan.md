@@ -100,8 +100,8 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-015 | DONE | L | Lazily activate CodeMirror blocks and reduce base bundle cost |
 | EE-016 | DONE | M | Make task and overlay interactions keyboard and screen-reader complete |
 | EE-017 | DONE | M | Add deliberate Markdown, rich HTML, and plain-text clipboard behavior |
-| EE-018 | NEXT | L | Add mature table resize, reorder, selection, and keyboard operations |
-| EE-019 | QUEUED | M | Add configurable auto-pairing, shortcuts, and code-language editing |
+| EE-018 | DONE | L | Add mature table resize, reorder, selection, and keyboard operations |
+| EE-019 | NEXT | M | Add configurable auto-pairing, shortcuts, and code-language editing |
 | EE-020 | QUEUED | M | Tokenize styling and add dark, high-contrast, reduced-motion, RTL, and i18n support |
 | EE-021 | QUEUED | L | Ship optional front matter, footnote, math, callout, TOC, HTML, and diagram extensions |
 
@@ -591,7 +591,7 @@ Interoperate predictably with rich editors, code editors, and Markdown tools.
 
 ### EE-018 — Mature table editing
 
-Status: `NEXT`
+Status: `DONE` (2026-07-17)
 
 #### Goal
 
@@ -605,9 +605,20 @@ Move beyond basic insertion/deletion/alignment toward a production table workflo
 - Define keyboard navigation for empty, multiline, nested, and ragged cells.
 - Preserve valid GFM output or report constructs that GFM cannot represent.
 
+#### Completion notes
+
+- The root compatibility entry now uses a lifecycle-safe rectangular cell-selection and table-editing layer. The independently bundled minimal entry retains the same typed host surface while leaving table commands unavailable and does not import `prosemirror-tables` or Markora's table-editing/fidelity bridges.
+- The typed table surface now includes before/after row and column insertion, contiguous row/column movement, exact row/column-count resizing, rectangular delete/alignment operations, `tableCellSelection()` activity, and `tableIssues()` fidelity diagnostics. The first row remains the pinned GFM column-header row. Shrinking refuses to remove non-empty cells unless the host explicitly sets `discardContent: true`; “resize” in this iteration means logical table dimensions, not persisted pixel widths.
+- Rectangular copy offers semantic HTML, quoted TSV plain text, and a valid standalone GFM table. Rectangular cut clears only the selected cells, and table paste clips or repeats a parsed matrix to the selected rectangle. Built-in creation, dimension changes, and caret matrix paste enforce 100-row/100-column limits; TSV table-text parsing is additionally capped at 1 MiB. Merged or over-limit transfers are rejected atomically through the typed recoverable-error channel.
+- The optional UI work now groups row, column, alignment, and table actions; exposes insertion side and movement choices; skips disabled boundary actions in its roving focus order; and uses a polite status to describe the rectangle and completed mutation. `editor.ui.createTable()` and the toolbar Resize action share an owner-document/Shadow DOM-safe numeric dimension dialog with 1–100 bounds, validation, command-rejection feedback, and focus-safe submit/cancel/Escape/read-only/destroy behavior.
+- The fidelity scanner reports ragged rows, missing column headers, merged cells, multi-block cells, and HTML-only row-header scope without mutating the document. Simple rectangular, single-paragraph tables retain canonical GFM output.
+- The required production-preview matrix passes 148 cases with 20 intentional engine/capability skips across Chromium, Firefox, and WebKit. Retained coverage includes document and Shadow roots, pointer/keyboard rectangular selection, matrix clipboard behavior, structural mutations, validated creation/resizing, roving toolbar focus, axe, read-only/composition boundaries, teardown, and Chromium CDP mouse/key/clipboard input. The matrix found and fixed WebKit's button-focus handoff after a successful resize.
+- `pnpm pack:smoke` passes at 886,734 raw / 243,163 gzip initial compatibility JavaScript, 1,965,736 raw / 581,998 gzip total JavaScript, 18,479 raw / 3,474 gzip CSS, and 151 static modules. Minimal remains one 700,726 raw / 197,151 gzip static chunk with 129 modules and no table-editing runtime. Only the crossed root byte failure ceilings were raised; all warning, lazy, module-count, and minimal ceilings remain unchanged so the accepted cost stays visible.
+- Final verification: `pnpm check` passes 910 tests plus every build, type, declaration, browser-type, and Node ESM check; `pnpm test:browser:required` passes 148 cases with 20 intentional skips; `pnpm pack:smoke`, `pnpm perf:ci`, and `git diff --check` pass. The performance run passes every 100 KiB, 500 KiB, and 1 MiB latency, hot-path, bounded-editor, memory, teardown, and zero-retention check.
+
 ### EE-019 — Add configurable typing ergonomics
 
-Status: `QUEUED`
+Status: `NEXT`
 
 #### Goal
 
@@ -681,6 +692,6 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-017` are complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, and Gate C now has its keyboard/screen-reader and deliberate clipboard foundations. Completed work includes the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, lazy code-editor, semantic embedded-control, and rich/Markdown/plain clipboard foundations.
+`EE-001` through `EE-018` are complete. Gate A's content-safety requirements and Gate B's production-embed requirements are satisfied, and Gate C now has its keyboard/screen-reader, deliberate clipboard, and mature table foundations. Completed work includes the browser, complex-input, accessibility, host-lifecycle, external-update, extension-kernel, headless command/state, host-controlled resource, performance-budget, responsive-snapshot, lazy code-editor, semantic embedded-control, rich/Markdown/plain clipboard, and production table-editing foundations.
 
-The next iteration is `EE-018 — Mature table editing`.
+The next iteration is `EE-019 — Add configurable typing ergonomics`.

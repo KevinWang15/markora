@@ -20,8 +20,26 @@ export type ImageEditorOverlay = {
 };
 
 export type TableToolbarOverlay = {
+  /** Optional default-UI entry point for inserting a table at the current selection. */
+  create?: (view: EditorView, marker: HTMLElement, onClose?: () => void) => boolean;
   update: (view: EditorView) => void;
+  /** Optional keyboard-entry hook for custom table toolbars. */
+  focus?: (view: EditorView) => boolean;
   destroy: () => void;
+};
+
+export type TableUiContext = {
+  tablePos: number;
+  cell: { attrs: Record<string, unknown> };
+  selectedAlignment: TableAlignment | null | "mixed";
+  rowIndex: number;
+  columnIndex: number;
+  rowCount: number;
+  columnCount: number;
+  selectedRowFrom: number;
+  selectedRowTo: number;
+  selectedColumnFrom: number;
+  selectedColumnTo: number;
 };
 
 export type EditorUiControllers = {
@@ -34,17 +52,25 @@ export type EditorUiControllers = {
 };
 
 export type EditorUiFactory = (options: {
-  appendTableColumn: (view: EditorView) => void;
-  appendTableRow: (view: EditorView) => void;
-  getTableContext: (state: EditorView["state"]) => { tablePos: number; cell: { attrs: Record<string, unknown> } } | null;
+  addTableColumn: (view: EditorView, side: "before" | "after") => boolean;
+  addTableRow: (view: EditorView, side: "before" | "after") => boolean;
+  /** @deprecated Use addTableColumn(view, "after"). */
+  appendTableColumn: (view: EditorView) => boolean;
+  /** @deprecated Use addTableRow(view, "after"). */
+  appendTableRow: (view: EditorView) => boolean;
+  getTableContext: (state: EditorView["state"]) => TableUiContext | null;
   hostElement: HTMLElement;
+  insertTable: (view: EditorView, dimensions: { rows: number; columns: number }) => boolean;
+  moveTableColumn: (view: EditorView, direction: "left" | "right") => boolean;
+  moveTableRow: (view: EditorView, direction: "up" | "down") => boolean;
   normalizeTableAlignment: (value: unknown) => TableAlignment | null;
   removeActiveImage: (view: EditorView) => void;
   removeActiveLink: (view: EditorView) => void;
-  removeActiveTable: (view: EditorView) => void;
-  removeTableColumn: (view: EditorView) => void;
-  removeTableRow: (view: EditorView) => void;
-  setTableColumnAlignment: (view: EditorView, align: TableAlignment) => void;
+  removeActiveTable: (view: EditorView) => boolean;
+  removeTableColumn: (view: EditorView) => boolean;
+  removeTableRow: (view: EditorView) => boolean;
+  resizeTable: (view: EditorView, dimensions: { rows: number; columns: number }) => boolean;
+  setTableColumnAlignment: (view: EditorView, align: TableAlignment | null) => boolean;
   updateActiveImage: (view: EditorView, attrs: { src: string; alt: string | null; title: string | null }) => boolean;
   updateLinkHref: (view: EditorView, href: string) => boolean;
 }) => EditorUiControllers;
@@ -63,6 +89,9 @@ const noopImageEditor: ImageEditorOverlay = {
 
 const noopTableToolbar: TableToolbarOverlay = {
   update() {},
+  focus() {
+    return false;
+  },
   destroy() {},
 };
 

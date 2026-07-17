@@ -474,6 +474,158 @@ describe('editor runtime', () => {
     expect(linkEditorDestroyed).toBe(true);
   });
 
+  it('opens the provided table-creation UI and routes exact dimensions through the UI callback', () => {
+    const clearSelectionAnchor = vi.fn();
+    let openedMarker: HTMLElement | null = null;
+    const ui: EditorUiFactory = (actions) => ({
+      enabled: true,
+      clearSelectionAnchor,
+      createSelectionAnchor() {
+        return document.createElement('span');
+      },
+      imageEditor: {
+        close() {},
+        destroy() {},
+        open() {},
+      },
+      linkEditor: {
+        close() {},
+        destroy() {},
+        open() {},
+      },
+      tableToolbar: {
+        create(view, marker) {
+          openedMarker = marker;
+          return actions.insertTable(view, { columns: 4, rows: 3 });
+        },
+        destroy() {},
+        update() {},
+      },
+    });
+    const editor = createEditor({
+      element: createHost(),
+      markdown: 'before',
+      ui,
+    });
+
+    expect(editor.ui?.createTable()).toBe(true);
+    expect(openedMarker).toBeInstanceOf(HTMLElement);
+    expect(clearSelectionAnchor).toHaveBeenCalledOnce();
+    expect(editor.getMarkdown()).toContain('|  |  |  |  |');
+    expect(editor.view.dom.querySelectorAll('tr')).toHaveLength(3);
+    expect(editor.view.dom.querySelector('tr')?.children).toHaveLength(4);
+
+    editor.updateOptions({ editable: false });
+    expect(editor.ui?.createTable()).toBe(false);
+  });
+
+  it('clears the table creation anchor when a custom overlay closes without inserting', () => {
+    const anchor = document.createElement('span');
+    const clearSelectionAnchor = vi.fn(() => anchor.remove());
+    let closeTableCreator: (() => void) | undefined;
+    const ui: EditorUiFactory = () => ({
+      enabled: true,
+      clearSelectionAnchor,
+      createSelectionAnchor() {
+        document.body.append(anchor);
+        return anchor;
+      },
+      imageEditor: {
+        close() {},
+        destroy() {},
+        open() {},
+      },
+      linkEditor: {
+        close() {},
+        destroy() {},
+        open() {},
+      },
+      tableToolbar: {
+        create(_view, _marker, onClose) {
+          closeTableCreator = onClose;
+          return true;
+        },
+        destroy() {},
+        update() {},
+      },
+    });
+    const editor = createEditor({ element: createHost(), markdown: 'before', ui });
+
+    expect(editor.ui?.createTable()).toBe(true);
+    expect(anchor.isConnected).toBe(true);
+    expect(clearSelectionAnchor).not.toHaveBeenCalled();
+    closeTableCreator?.();
+    expect(clearSelectionAnchor).toHaveBeenCalledOnce();
+    expect(anchor.isConnected).toBe(false);
+
+    editor.destroy();
+  });
+
+  it('keeps every table UI mutation and focus handoff inert during composition', () => {
+    let actions!: Parameters<EditorUiFactory>[0];
+    const focusTableToolbar = vi.fn(() => true);
+    const ui: EditorUiFactory = (nextActions) => {
+      actions = nextActions;
+      return {
+        enabled: true,
+        clearSelectionAnchor() {},
+        createSelectionAnchor() {
+          return document.createElement('span');
+        },
+        imageEditor: {
+          close() {},
+          destroy() {},
+          open() {},
+        },
+        linkEditor: {
+          close() {},
+          destroy() {},
+          open() {},
+        },
+        tableToolbar: {
+          destroy() {},
+          focus: focusTableToolbar,
+          update() {},
+        },
+      };
+    };
+    const markdown = ['| H1 | H2 |', '| --- | --- |', '| a | b |'].join('\n');
+    const editor = createEditor({ element: createHost(), markdown, ui });
+    expect(editor.state.can.addTableColumn()).toBe(true);
+    editor.view.dom.dispatchEvent(new CompositionEvent('compositionstart', {
+      bubbles: true,
+      data: 'x',
+    }));
+    expect(editor.view.composing).toBe(true);
+
+    expect(actions.addTableColumn(editor.view, 'after')).toBe(false);
+    expect(actions.addTableRow(editor.view, 'after')).toBe(false);
+    expect(actions.appendTableColumn(editor.view)).toBe(false);
+    expect(actions.appendTableRow(editor.view)).toBe(false);
+    expect(actions.insertTable(editor.view, { columns: 3, rows: 3 })).toBe(false);
+    expect(actions.moveTableColumn(editor.view, 'right')).toBe(false);
+    expect(actions.moveTableRow(editor.view, 'down')).toBe(false);
+    expect(actions.removeTableColumn(editor.view)).toBe(false);
+    expect(actions.removeTableRow(editor.view)).toBe(false);
+    expect(actions.resizeTable(editor.view, { columns: 3, rows: 3 })).toBe(false);
+    expect(actions.setTableColumnAlignment(editor.view, 'center')).toBe(false);
+    expect(actions.removeActiveTable(editor.view)).toBe(false);
+    expect(editor.ui?.editTable()).toBe(false);
+    editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', {
+      altKey: true,
+      bubbles: true,
+      cancelable: true,
+      key: 'F10',
+    }));
+    expect(focusTableToolbar).not.toHaveBeenCalled();
+    expect(editor.getMarkdown()).toBe(markdown);
+
+    editor.view.dom.dispatchEvent(new CompositionEvent('compositionend', {
+      bubbles: true,
+      data: 'x',
+    }));
+  });
+
   it('closes plugin-managed overlays before destroying their controllers', () => {
     const lifecycle: string[] = [];
     const ui: EditorUiFactory = () => ({

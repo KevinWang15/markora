@@ -1354,8 +1354,20 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       assertActive("insert a table");
       return runCommand(structuralCommandSet.commands.insertTable(options));
     },
-    addTableRow: () => runCommand(structuralCommandSet.commands.addTableRow),
-    addTableColumn: () => runCommand(structuralCommandSet.commands.addTableColumn),
+    addTableRow: (side) => runCommand(structuralCommandSet.commands.addTableRow(side)),
+    addTableColumn: (side) => runCommand(structuralCommandSet.commands.addTableColumn(side)),
+    resizeTable(options) {
+      assertActive("resize a table");
+      return runCommand(structuralCommandSet.commands.resizeTable(options));
+    },
+    moveTableRow(direction) {
+      assertActive("move a table row");
+      return runCommand(structuralCommandSet.commands.moveTableRow(direction));
+    },
+    moveTableColumn(direction) {
+      assertActive("move a table column");
+      return runCommand(structuralCommandSet.commands.moveTableColumn(direction));
+    },
     deleteTableRow: () => runCommand(structuralCommandSet.commands.deleteTableRow),
     deleteTableColumn: () => runCommand(structuralCommandSet.commands.deleteTableColumn),
     setTableColumnAlignment(alignment) {
@@ -1367,6 +1379,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     redo: () => runCommand(redo),
   };
   const state: MarkdownEditorState = {
+    tableIssues() {
+      assertActive("inspect table fidelity issues");
+      return Object.freeze([]);
+    },
     can: {
       pasteMarkdown() {
         return runStateQuery(
@@ -1499,16 +1515,37 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
           structuralCommandSet.commands.insertTable(options),
         );
       },
-      addTableRow() {
+      addTableRow(side) {
         return canRunCommand(
           "query whether a table row can be added",
-          structuralCommandSet.commands.addTableRow,
+          structuralCommandSet.commands.addTableRow(side),
         );
       },
-      addTableColumn() {
+      addTableColumn(side) {
         return canRunCommand(
           "query whether a table column can be added",
-          structuralCommandSet.commands.addTableColumn,
+          structuralCommandSet.commands.addTableColumn(side),
+        );
+      },
+      resizeTable(options) {
+        assertActive("query whether a table can be resized");
+        return canRunCommand(
+          "query whether a table can be resized",
+          structuralCommandSet.commands.resizeTable(options),
+        );
+      },
+      moveTableRow(direction) {
+        assertActive("query whether a table row can be moved");
+        return canRunCommand(
+          "query whether a table row can be moved",
+          structuralCommandSet.commands.moveTableRow(direction),
+        );
+      },
+      moveTableColumn(direction) {
+        assertActive("query whether a table column can be moved");
+        return canRunCommand(
+          "query whether a table column can be moved",
+          structuralCommandSet.commands.moveTableColumn(direction),
         );
       },
       deleteTableRow() {
@@ -1622,6 +1659,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         return runStateQuery(
           "query an active table",
           () => structuralCommandSet.isActive.table(view.state),
+        );
+      },
+      tableCellSelection() {
+        return runStateQuery(
+          "query an active table cell selection",
+          () => structuralCommandSet.isActive.tableCellSelection(view.state),
         );
       },
       tableColumnAlignment(alignment) {

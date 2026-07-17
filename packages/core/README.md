@@ -12,7 +12,7 @@ Write Markdown at the speed of thought.
 - Inline marks for bold, italic, code, strike, and links
 - Exact, lightweight source-text code-fence shells with viewport-lazy CodeMirror editing
 - Lazy-loaded CodeMirror runtime and built-in languages with host-extensible loaders
-- Toolbar-friendly commands for formatting, links, images, and undo/redo
+- Toolbar-friendly commands for formatting, links, images, mature table workflows, and undo/redo
 - Per-editor URL/image/navigation/upload policy plus managed navigation around tables and code blocks
 
 ## Markdown compatibility
@@ -90,7 +90,7 @@ const editor = createEditor({
 
 ## Optional default UI
 
-`markora` is headless by default. Add `markora-ui` when you want the repo's built-in link editor, image editor, and table toolbar overlays.
+`markora` is headless by default. Add `markora-ui` when you want the repo's built-in link editor, image editor, table-creation/dimension dialog, and table toolbar overlays. `editor.ui.createTable()` opens the creation dialog. The toolbar exposes before/after insertion, row/column movement and deletion, automatic/left/center/right alignment, exact logical resizing, and table deletion; Alt+F10 or `editor.ui.editTable()` moves focus into it from an active table. Hosts can use the same command surface without this package, including `insertTable()` and `resizeTable()`.
 
 ```ts
 import { createEditor } from "markora";
@@ -142,6 +142,8 @@ For a non-empty outer selection, copy and cut synchronously attempt these event 
 - `text/plain`: human-readable text with list/task markers, hard line breaks, tab-separated table cells, and exact code text.
 
 `transformCopied` runs before all three representations are derived. Inbound extension clipboard transforms are not reused on outbound data. Failure to write the optional Markdown MIME leaves HTML/plain copy working. Copy is read-only safe and does not change history or selection. Cut writes first and then performs one `"user"` transaction with `uiEvent: "cut"`; in read-only mode it writes without deleting.
+
+A rectangular table-cell selection has an explicit matrix contract. `text/plain` is TSV, with cells containing tabs, line breaks, or quotes encoded using CSV-style double-quote escaping. `text/markdown` is a complete standalone GFM table; when a body-only rectangle is copied, its first selected row necessarily becomes the header of that clipboard table. HTML remains a semantic table slice. Cut clears the selected cells without removing their rows or columns. A pasted table or TSV matrix is clipped to a smaller selected rectangle or repeated across a larger one, and the resulting edit is one undo step. TSV table-text parsing is bounded to 1 MiB and 100 rows by 100 columns; a caret table-matrix paste is refused when it would exceed the 100-row or 100-column table bound.
 
 Active CodeMirror and passive code shells remain literal code surfaces: plain text wins unless a configured nested HTML transform explicitly changes the rich representation; otherwise Markdown is preferred to HTML-derived text when plain text is absent. Their native source selection copies plain code so CodeMirror's linewise copy/cut behavior remains intact. Selecting a complete code block through the outer ProseMirror surface produces fenced `text/markdown`. Nested code always rejects files.
 
@@ -407,7 +409,7 @@ The headless command surface operates on the current model selection; a host doe
 | Inline and media | `toggleMark`, `setLink`, `removeLink`, `insertImage`, `removeImage` | `mark`, generic `node` |
 | Text and blocks | `setParagraph`, `setHeading`, `toggleBlockquote`, `insertHardBreak`, `insertHorizontalRule`, `setCodeBlock` | `paragraph`, `heading`, `blockquote`, `hardBreak`, `horizontalRule`, `codeBlock`, generic `node` |
 | Lists and tasks | `toggleBulletList`, `toggleOrderedList`, `sinkListItem`, `liftListItem`, `toggleTaskList`, `setTaskChecked` | `bulletList`, `orderedList`, `taskList`, `taskChecked`, generic `node` |
-| Tables | `insertTable`, `addTableRow`, `addTableColumn`, `deleteTableRow`, `deleteTableColumn`, `setTableColumnAlignment`, `deleteTable` | `table`, `tableColumnAlignment`, generic `node` |
+| Tables | `insertTable`, `addTableRow`, `addTableColumn`, `resizeTable`, `moveTableRow`, `moveTableColumn`, `deleteTableRow`, `deleteTableColumn`, `setTableColumnAlignment`, `deleteTable` | `table`, `tableCellSelection`, `tableColumnAlignment`, generic `node` |
 | History | `undo`, `redo` | — |
 
 Every interactive Boolean command has a same-named `editor.state.can.*` check. Link and image capability checks take no payload because they test only whether the current selection can accept the operation. `editor.state.isActive.*` is observational: use the specialized checks in the table, `isActive.mark(mark)` for `"strong"`, `"em"`, `"code"`, `"strike"`, or `"link"`, and `isActive.node(node)` for a generic node query.
@@ -440,13 +442,19 @@ The command contract is designed for toolbar and keyboard integrations:
 - `state.can.*` performs a pure dry run. It does not dispatch, focus, add history, or emit an event. It returns `false` in read-only mode, while an IME composition is active, when a feature is absent, when the selection is inapplicable, or when the operation would be a no-op.
 - `state.isActive.*` remains available and accurate in read-only mode and during composition.
 - A successful interactive command focuses the outer editor. A successful built-in interactive document-changing command other than undo/redo is one transaction with origin `"command"` and contributes one undoable history step. A successful stored-mark-only command emits `state` with `docChanged: false` and does not emit `update`.
-- A command that returns `false` does not focus the editor, mutate history, or emit state/update/change activity. Invalid programmer arguments still throw instead of returning `false`: heading levels are integers from 1 through 6; table dimensions are integers from 1 through 100; task values are Boolean; alignments are `"left"`, `"center"`, `"right"`, or `null`; and a code-block language is a string or `null`, trimmed on input, with a normalized limit of 128 characters and no line break or backtick.
+- A command that returns `false` does not focus the editor, mutate history, or emit state/update/change activity. Invalid programmer arguments still throw instead of returning `false`: heading levels are integers from 1 through 6; table dimensions are integers from 1 through 100; table insertion sides are `"before"` or `"after"`; row directions are `"up"` or `"down"`; column directions are `"left"` or `"right"`; task values are Boolean; alignments are `"left"`, `"center"`, `"right"`, or `null`; and a code-block language is a string or `null`, trimmed on input, with a normalized limit of 128 characters and no line break or backtick.
 
 The root compatibility preset supports tasks and tables. Tasks are deliberately flat: task items are direct bullet-list children, new tasks are unchecked, and `sinkListItem()`/`liftListItem()` return `false` for them rather than creating unsupported nesting. `setTaskChecked(checked)` applies only to task items and returns `false` when the item is already in the requested state.
 
-`insertTable()` defaults to three columns and two total rows, including the header row. Its `rows` and `columns` options accept integers from 1 through 100; a one-row table contains only its header. Column alignment is `"left"`, `"center"`, `"right"`, or `null`, where `null` restores the default alignment.
+`insertTable()` defaults to three columns and two total rows, including the header row. Its `rows` and `columns` options accept integers from 1 through 100; a one-row table contains only its header. `addTableRow(side)` and `addTableColumn(side)` default to `"after"`; for a rectangular cell selection they insert before its first row/column or after its last. Deleting, moving, or aligning applies to the selected contiguous rows or columns. Body rows can move without crossing the pinned header row, and columns carry their alignment with them.
 
-`markora/minimal` and the root entry with `createMinimalMarkdownEditorPreset()` expose the same typed methods, so shared host toolbar code does not need a different interface. Because tasks and tables are absent from that schema, their commands and matching `can`/`isActive` checks consistently return `false`. The minimal preset still supports paragraphs, headings, blockquotes, ordinary bullet and ordered lists (including indent/lift), hard breaks, horizontal rules, and plain code blocks.
+`resizeTable({ rows, columns, discardContent })` changes logical row and column counts, not CSS or persisted pixel widths. Supply at least one target dimension. Growth adds empty cells while preserving existing alignments. Shrinking returns `false` if it would remove non-empty cells unless `discardContent: true` explicitly authorizes that data loss. A semantic no-op also returns `false`. Column alignment is `"left"`, `"center"`, `"right"`, or `null`, where `null` restores automatic/default alignment.
+
+Cell rectangles can be selected by pointer drag, Shift-click from a table caret or existing cell selection, or Shift+Arrow at a cell boundary. Plain Arrow, Escape, Enter, or F2 collapses a cell rectangle back to a caret; Backspace/Delete clears its contents. Tab and Shift-Tab traverse cells in row-major order regardless of empty, multiline, or nested block content. Tab from the last cell appends a row unless the table is already at the 100-row limit, in which case navigation moves after the table. Vertical arrows stay within multiline/nested content until the caret reaches the first or last visual line, then move to the same column in the adjacent row; a shorter ragged row uses its last available cell. Crossing the first or last row reaches the managed boundary before or after the table.
+
+Valid GFM output requires a rectangular table, column headers in the first row, unmerged cells, and one paragraph of supported inline content per cell. `editor.state.tableIssues()` scans every live table and returns frozen diagnostics for `"ragged-row"`, `"missing-column-header"`, `"merged-cell"`, `"multi-block-cell"`, and `"row-header-scope"`. Each issue includes the table document position and zero-based row and nullable column coordinates. The query is observational: it does not repair or reject a document, and it is not a general Markdown preflight validator. Call it before persistence when HTML paste, extensions, or advanced `editor.view` transactions may have introduced structures that GFM cannot encode.
+
+`markora/minimal` and the root entry with `createMinimalMarkdownEditorPreset()` expose the same typed methods, so shared host toolbar code does not need a different interface. Because tasks and tables are absent from that schema, their commands and matching `can`/`isActive` checks consistently return `false`, while `tableIssues()` returns an empty frozen list. The minimal preset still supports paragraphs, headings, blockquotes, ordinary bullet and ordered lists (including indent/lift), hard breaks, horizontal rules, and plain code blocks.
 
 ## Reconciled updates and hard resets
 
@@ -571,7 +579,7 @@ const stopErrors = editor.subscribe("error", ({ code, context, error, recoverabl
 - Selection events provide `previousSelection`, `selection`, and `origin`. Each host snapshot contains `anchor`, `head`, `from`, `to`, `empty`, and `kind`.
 - State, selection, and update events are ordered state first, then selection when the selection changed, then update when the document changed. Update events contain the accepted change's `origin` and current selection, neither Markdown nor a ProseMirror transaction, and are not affected by `onChangeMode`; call `event.editor.getMarkdown()` only when that subscriber intentionally needs a synchronous snapshot.
 - Asset events report upload lifecycle independently of ProseMirror state; only successful batch insertion subsequently produces ordinary state/update/change activity.
-- Error events report recoverable code-runtime-load, code-language-load, and resource-callback failures plus attributed extension runtime failures. A code-runtime failure leaves the exact static source shell usable and reports phase `"runtime"`. Resource events use code `"resource-callback-failed"` with a resolve/open/load/cleanup phase. Extension events use an `EXTENSION_*` code plus `context.phase` and, when known, `context.extension`, `context.contribution`, or `context.participants`. Runtime activation, language loaders, and extensions run outside the current editor state update, so deferred failures use the same event path without re-entering that update.
+- Error events report recoverable code-runtime-load, code-language-load, resource-callback, and table-clipboard rejections plus attributed extension runtime failures. A rejected merged or over-limit table transfer uses `"table-operation-rejected"` with clipboard phase and leaves the document unchanged. A code-runtime failure leaves the exact static source shell usable and reports phase `"runtime"`. Resource events use code `"resource-callback-failed"` with a resolve/open/load/cleanup phase. Extension events use an `EXTENSION_*` code plus `context.phase` and, when known, `context.extension`, `context.contribution`, or `context.participants`. Runtime activation, language loaders, and extensions run outside the current editor state update, so deferred failures use the same event path without re-entering that update.
 
 If a recoverable runtime failure has no error subscriber, Markora forwards it to the editor window's global error reporting path rather than silently swallowing it.
 
@@ -684,7 +692,14 @@ import type {
   MarkdownEditorState,
   MarkdownEditorStateEvent,
   MarkdownEditorTableAlignment,
+  MarkdownEditorTableColumnMoveDirection,
   MarkdownEditorTableInsertOptions,
+  MarkdownEditorTableInsertSide,
+  MarkdownEditorTableIssue,
+  MarkdownEditorTableIssueCode,
+  MarkdownEditorTableResizeOptions,
+  MarkdownEditorTableRowMoveDirection,
+  MarkdownEditorTableOperationErrorEvent,
   MarkdownEditorUi,
   MarkdownEditorUnsubscribe,
   MarkdownEditorUpdateEvent,

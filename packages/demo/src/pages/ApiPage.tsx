@@ -24,9 +24,12 @@ const apiRows = [
   ["editor.commands.toggleBulletList() / toggleOrderedList() / sinkListItem() / liftListItem()", "Creates, switches, indents, or outdents list content."],
   ["editor.commands.toggleTaskList() / setTaskChecked(checked)", "Toggles selected task-list items or sets their completion state."],
   ["editor.commands.insertHardBreak() / insertHorizontalRule() / setCodeBlock(options)", "Inserts structural breaks or converts selected text blocks to fenced code."],
-  ["editor.commands.insertTable(options) / addTableRow() / addTableColumn()", "Inserts a basic table or adds a row or column after the active cell."],
-  ["editor.commands.deleteTableRow() / deleteTableColumn() / setTableColumnAlignment() / deleteTable()", "Deletes or aligns the active table structure without requiring the optional UI."],
-  ["editor.ui?.editLink() / editor.ui?.editImage()", "Optional namespaced UI entry points when overlays are attached."],
+  ["editor.commands.insertTable(options) / resizeTable(options)", "Creates a table or changes its row and column counts, with explicit opt-in before discarding non-empty cells."],
+  ["editor.commands.addTableRow(side) / addTableColumn(side)", "Adds rows or columns before or after the current cell selection."],
+  ["editor.commands.moveTableRow(direction) / moveTableColumn(direction)", "Moves the selected rows or columns while keeping the header row pinned."],
+  ["editor.commands.deleteTableRow() / deleteTableColumn() / setTableColumnAlignment() / deleteTable()", "Deletes or aligns the selected table structure without requiring the optional UI."],
+  ["editor.state.tableIssues()", "Reports table shapes that cannot be represented faithfully as GFM pipe tables."],
+  ["editor.ui?.createTable() / editLink() / editImage() / editTable()", "Optional namespaced UI entry points when overlays are attached."],
   ["editor.commands.undo() / editor.commands.redo()", "Runs history commands."],
   ["editor.destroy()", "Idempotently flushes pending output and releases the editor, nested code views, optional UI, listeners, and subscriptions."],
 ] as const;
@@ -271,7 +274,7 @@ const markdownEditorEventTypes = `type MarkdownEditorSelectionSnapshot = {
   empty: boolean;
   from: number;
   head: number;
-  kind: "all" | "managed-block" | "node" | "other" | "text";
+  kind: "all" | "managed-block" | "node" | "other" | "table-cell" | "text";
   to: number;
 };
 
@@ -322,7 +325,22 @@ const markdownEditorCommandsType = `type MarkdownEditorMarkdownUpdateOptions = {
 type MarkdownEditorHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 type MarkdownEditorCodeBlockOptions = { language?: string | null };
 type MarkdownEditorTableAlignment = "left" | "center" | "right" | null;
+type MarkdownEditorTableInsertSide = "before" | "after";
+type MarkdownEditorTableRowMoveDirection = "up" | "down";
+type MarkdownEditorTableColumnMoveDirection = "left" | "right";
 type MarkdownEditorTableInsertOptions = { columns?: number; rows?: number };
+type MarkdownEditorTableResizeOptions = {
+  columns?: number;
+  discardContent?: boolean;
+  rows?: number;
+};
+type MarkdownEditorTableIssue = Readonly<{
+  code: "merged-cell" | "missing-column-header" | "multi-block-cell" | "ragged-row" | "row-header-scope";
+  column: number | null;
+  message: string;
+  row: number;
+  tablePos: number;
+}>;
 
 type MarkdownEditorCommands = {
   reconcileMarkdown: (
@@ -356,8 +374,11 @@ type MarkdownEditorCommands = {
   insertHorizontalRule: () => boolean;
   setCodeBlock: (options?: MarkdownEditorCodeBlockOptions) => boolean;
   insertTable: (options?: MarkdownEditorTableInsertOptions) => boolean;
-  addTableRow: () => boolean;
-  addTableColumn: () => boolean;
+  addTableRow: (side?: MarkdownEditorTableInsertSide) => boolean;
+  addTableColumn: (side?: MarkdownEditorTableInsertSide) => boolean;
+  resizeTable: (options: MarkdownEditorTableResizeOptions) => boolean;
+  moveTableRow: (direction: MarkdownEditorTableRowMoveDirection) => boolean;
+  moveTableColumn: (direction: MarkdownEditorTableColumnMoveDirection) => boolean;
   deleteTableRow: () => boolean;
   deleteTableColumn: () => boolean;
   setTableColumnAlignment: (alignment: MarkdownEditorTableAlignment) => boolean;
@@ -380,6 +401,7 @@ const markdownEditorStateType = `type MarkdownEditorActiveNode =
   | "table";
 
 type MarkdownEditorState = {
+  tableIssues: () => readonly MarkdownEditorTableIssue[];
   can: {
     toggleMark: (mark: "strong" | "em" | "code" | "strike") => boolean;
     setLink: () => boolean;
@@ -399,8 +421,11 @@ type MarkdownEditorState = {
     insertHorizontalRule: () => boolean;
     setCodeBlock: (options?: MarkdownEditorCodeBlockOptions) => boolean;
     insertTable: (options?: MarkdownEditorTableInsertOptions) => boolean;
-    addTableRow: () => boolean;
-    addTableColumn: () => boolean;
+    addTableRow: (side?: MarkdownEditorTableInsertSide) => boolean;
+    addTableColumn: (side?: MarkdownEditorTableInsertSide) => boolean;
+    resizeTable: (options: MarkdownEditorTableResizeOptions) => boolean;
+    moveTableRow: (direction: MarkdownEditorTableRowMoveDirection) => boolean;
+    moveTableColumn: (direction: MarkdownEditorTableColumnMoveDirection) => boolean;
     deleteTableRow: () => boolean;
     deleteTableColumn: () => boolean;
     setTableColumnAlignment: (alignment: MarkdownEditorTableAlignment) => boolean;
@@ -422,6 +447,7 @@ type MarkdownEditorState = {
     horizontalRule: () => boolean;
     codeBlock: (options?: MarkdownEditorCodeBlockOptions) => boolean;
     table: () => boolean;
+    tableCellSelection: () => boolean;
     tableColumnAlignment: (alignment: MarkdownEditorTableAlignment) => boolean;
   };
 };`;

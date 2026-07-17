@@ -31,7 +31,13 @@ import {
   type MarkdownEditorState,
   type MarkdownEditorStateEvent,
   type MarkdownEditorTableAlignment,
+  type MarkdownEditorTableColumnMoveDirection,
   type MarkdownEditorTableInsertOptions,
+  type MarkdownEditorTableInsertSide,
+  type MarkdownEditorTableIssue,
+  type MarkdownEditorTableOperationErrorEvent,
+  type MarkdownEditorTableResizeOptions,
+  type MarkdownEditorTableRowMoveDirection,
   type MarkdownEditorUi,
   type MarkdownEditorUnsubscribe,
   type OpaqueMarkdownEditRequest,
@@ -174,6 +180,11 @@ const unsubscribeError = editor.subscribe("error", (event: MarkdownEditorErrorEv
     void phase;
     void language;
     void recoverable;
+  } else if (event.code === "table-operation-rejected") {
+    const tableEvent: MarkdownEditorTableOperationErrorEvent = event;
+    const phase: "clipboard" = event.context.phase;
+    void tableEvent;
+    void phase;
   } else {
     const phase: string = event.context.phase;
     const recoverable: boolean = event.recoverable;
@@ -219,6 +230,10 @@ const headingLevel: MarkdownEditorHeadingLevel = 3;
 const codeBlockOptions: MarkdownEditorCodeBlockOptions = { language: "ts" };
 const tableOptions: MarkdownEditorTableInsertOptions = { columns: 3, rows: 2 };
 const tableAlignment: MarkdownEditorTableAlignment = "center";
+const tableInsertSide: MarkdownEditorTableInsertSide = "before";
+const tableResizeOptions: MarkdownEditorTableResizeOptions = { columns: 4, rows: 3 };
+const tableRowMoveDirection: MarkdownEditorTableRowMoveDirection = "down";
+const tableColumnMoveDirection: MarkdownEditorTableColumnMoveDirection = "right";
 commands.setParagraph();
 commands.setHeading(headingLevel);
 commands.toggleBlockquote();
@@ -232,8 +247,11 @@ commands.insertHardBreak();
 commands.insertHorizontalRule();
 commands.setCodeBlock(codeBlockOptions);
 commands.insertTable(tableOptions);
-commands.addTableRow();
-commands.addTableColumn();
+commands.addTableRow(tableInsertSide);
+commands.addTableColumn("after");
+commands.resizeTable(tableResizeOptions);
+commands.moveTableRow(tableRowMoveDirection);
+commands.moveTableColumn(tableColumnMoveDirection);
 commands.deleteTableRow();
 commands.deleteTableColumn();
 commands.setTableColumnAlignment(tableAlignment);
@@ -268,8 +286,11 @@ stateApi.can.insertHardBreak();
 stateApi.can.insertHorizontalRule();
 stateApi.can.setCodeBlock(codeBlockOptions);
 stateApi.can.insertTable(tableOptions);
-stateApi.can.addTableRow();
-stateApi.can.addTableColumn();
+stateApi.can.addTableRow(tableInsertSide);
+stateApi.can.addTableColumn("after");
+stateApi.can.resizeTable({ rows: 4, discardContent: true });
+stateApi.can.moveTableRow("up");
+stateApi.can.moveTableColumn("left");
 stateApi.can.deleteTableRow();
 stateApi.can.deleteTableColumn();
 stateApi.can.setTableColumnAlignment(null);
@@ -292,10 +313,16 @@ stateApi.isActive.hardBreak();
 stateApi.isActive.horizontalRule();
 stateApi.isActive.codeBlock(codeBlockOptions);
 stateApi.isActive.table();
+stateApi.isActive.tableCellSelection();
 stateApi.isActive.tableColumnAlignment(tableAlignment);
 
+const tableIssues: readonly MarkdownEditorTableIssue[] = stateApi.tableIssues();
+void tableIssues;
+
+editor.ui?.createTable();
 editor.ui?.editLink();
 editor.ui?.editImage();
+editor.ui?.editTable();
 editor.destroy();
 
 const registry: CodeBlockLanguageRegistry = {
@@ -332,6 +359,9 @@ const uiFactory: EditorUiFactory = (_options) => {
     },
     tableToolbar: {
       update() {},
+      focus() {
+        return true;
+      },
       destroy() {},
     },
   };

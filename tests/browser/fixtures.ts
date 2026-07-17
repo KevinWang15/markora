@@ -13,7 +13,7 @@ export type LabSelectionSnapshot = {
   empty: boolean;
   from: number;
   head: number;
-  kind: "all" | "managed-block" | "node" | "other" | "text";
+  kind: "all" | "managed-block" | "node" | "other" | "table-cell" | "text";
   to: number;
 };
 
@@ -38,6 +38,7 @@ export type LabEventRecord = {
 type BrowserLabWindowApi = NonNullable<Window["__MARKORA_BROWSER_LAB__"]>;
 export type LabCommandRequest = Parameters<BrowserLabWindowApi["command"]>[1];
 export type LabActiveRequest = Parameters<BrowserLabWindowApi["active"]>[1];
+export type LabTableIssue = ReturnType<BrowserLabWindowApi["tableIssues"]>[number];
 
 export type LabUpdateOptions = {
   ariaLabel?: string | null;
@@ -184,7 +185,7 @@ export const test = base.extend<BrowserFixtures>({
     const teardown = await page.evaluate(() => ({
       editors: document.querySelectorAll("[data-e2e-editor], .ProseMirror, .cm-editor").length,
       listeners: window.__MARKORA_BROWSER_LAB__?.listenerSnapshot() ?? { total: -1, byTargetAndType: {} },
-      overlays: document.querySelectorAll(".mdw-link-editor, .mdw-image-editor, .mdw-table-toolbar").length,
+      overlays: document.querySelectorAll(".mdw-link-editor, .mdw-image-editor, .mdw-table-size-editor, .mdw-table-toolbar").length,
     }));
 
     await attachDiagnostics(testInfo, failures, page);
@@ -248,6 +249,24 @@ export async function getEditorActiveState(page: Page, id: string, request: LabA
   return page.evaluate(
     ({ editorId, active }) => window.__MARKORA_BROWSER_LAB__!.active(editorId, active),
     { active: request, editorId: id },
+  );
+}
+
+export async function getTableIssues(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.tableIssues(editorId),
+    id,
+  ) as Promise<readonly LabTableIssue[]>;
+}
+
+export async function openEditorUi(
+  page: Page,
+  id: string,
+  kind: "image" | "link" | "table" | "table-create",
+) {
+  return page.evaluate(
+    ({ editorId, uiKind }) => window.__MARKORA_BROWSER_LAB__!.openUi(editorId, uiKind),
+    { editorId: id, uiKind: kind },
   );
 }
 

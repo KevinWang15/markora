@@ -61,7 +61,6 @@
     "smoke:node-esm": "node --input-type=module -e \"const [root, minimal, extensionApi] = await Promise.all([import('./dist/index.js'), import('./dist/minimal.js'), import('./dist/extension-api.js')]); if (typeof root.createEditor !== 'function') throw new Error('createEditor export missing'); if (typeof minimal.createEditor !== 'function') throw new Error('minimal createEditor export missing'); if (typeof extensionApi.defineMarkdownEditorExtension !== 'function') throw new Error('extension API export missing');\""
   },
   "dependencies": {
-    "@types/markdown-it": "^14.1.2",
     "@codemirror/commands": "^6.8.1",
     "@codemirror/lang-cpp": "^6.0.3",
     "@codemirror/lang-css": "^6.3.1",
@@ -77,6 +76,7 @@
     "@codemirror/legacy-modes": "^6.5.0",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.2",
+    "@types/markdown-it": "^14.1.2",
     "markdown-it": "^14.1.0",
     "prosemirror-commands": "^1.7.1",
     "prosemirror-gapcursor": "^1.4.0",
@@ -87,6 +87,7 @@
     "prosemirror-model": "^1.25.4",
     "prosemirror-schema-list": "^1.5.1",
     "prosemirror-state": "^1.4.3",
+    "prosemirror-tables": "^1.8.5",
     "prosemirror-view": "^1.41.0"
   },
   "sideEffects": [

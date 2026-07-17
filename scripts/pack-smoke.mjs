@@ -494,9 +494,12 @@ function assertBundleIsolation(rootReport, minimalReport) {
     "/node_modules/markora/dist/opaqueMarkdown.js",
     "/node_modules/markora/dist/opaqueNodeView.js",
     "/node_modules/markora/dist/pipeTable.js",
+    "/node_modules/markora/dist/tableEditing.js",
+    "/node_modules/markora/dist/tableFidelity.js",
     "/node_modules/markora/dist/tableNavigation.js",
     "/node_modules/markora/dist/taskListUtils.js",
     "/node_modules/markora-ui/",
+    "/node_modules/prosemirror-tables/",
     "/node_modules/@codemirror/",
     "/node_modules/@lezer/",
   ];
@@ -1340,7 +1343,7 @@ const options: UpdateEditorOptions = {
 editor.updateOptions(options);
 const unsubscribe = editor.subscribe("selection", (event: MarkdownEditorEventMap["selection"]) => {
   const origin: MarkdownEditorChangeOrigin = event.origin;
-  event.selection.kind satisfies "all" | "managed-block" | "node" | "other" | "text";
+  event.selection.kind satisfies "all" | "managed-block" | "node" | "other" | "table-cell" | "text";
   void origin;
 });
 const unsubscribeUpdate = editor.subscribe("update", (event: MarkdownEditorEventMap["update"]) => {

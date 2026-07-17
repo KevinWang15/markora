@@ -20,6 +20,7 @@ Write Markdown at the speed of thought.
 - Inline marks for bold, italic, code, strike, and links
 - Exact source-text code-fence shells with viewport-lazy CodeMirror editing and lazy-loaded built-in grammars
 - Headless command/state APIs plus optional overlays from `markora-ui`
+- Rectangular table selection, matrix clipboard, row/column reordering, dimension controls, and GFM fidelity diagnostics
 - A versioned creation-time extension kernel and an independently bundled minimal entry
 - Per-editor URL, image-loading, link-opening, and asynchronous asset-upload policy with secure defaults
 - Managed navigation around tables and code blocks
@@ -198,7 +199,7 @@ editor.updateOptions({
 ## Architecture notes
 
 - `markora` is headless by default: it owns parsing, serialization, commands, state, and embedded code-block editing
-- `markora-ui` adds the repo's default link editor, image editor, and table toolbar overlays
+- `markora-ui` adds the repo's default link editor, image editor, table creation/dimension dialog, and table toolbar overlays
 - Code fences keep an exact selectable/searchable source shell in the document; CodeMirror activates near the viewport or for caret/edit interactions, while native range selection can remain on the shell and host-extensible `codeBlockLanguages` loaders run only after activation
 - `editor.commands.reconcileMarkdown(markdown)` is the ordinary authoritative host-update path; it preserves editor state and is silent by default
 - `editor.commands.resetMarkdown(markdown)` is an explicit hard reset that resets selection and clears history/plugin state; deprecated `setMarkdown()` remains a hard-reset alias
@@ -236,7 +237,7 @@ The implemented [extension system RFC](./docs/extension-system-rfc.md) defines t
 
 Hosts preparing a release should also review the [embedded input and accessibility contract](./docs/input-accessibility-certification.md) and run the [assistive-technology checklist](./docs/assistive-technology-checklist.md) on their supported platform matrix.
 
-Compatibility task controls are stable native buttons with checkbox semantics. The optional link/image UI uses named non-modal dialogs, and its table toolbar has one roving Tab stop; all preserve an explicit host focus handoff. The real VoiceOver/NVDA checklist remains a host release obligation even when the automated browser and axe gates pass.
+Compatibility task controls are stable native buttons with checkbox semantics. The optional link/image UI and table creation/resize UI use named non-modal dialogs, and the grouped table toolbar has one roving Tab stop, skips unavailable movement actions, and announces rectangular selection/mutation status; all preserve an explicit host focus handoff. The real VoiceOver/NVDA checklist remains a host release obligation even when the automated browser and axe gates pass.
 
 ## Development
 

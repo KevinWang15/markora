@@ -91,10 +91,32 @@ export type MarkdownEditorCodeBlockOptions = {
   language?: string | null;
 };
 export type MarkdownEditorTableAlignment = "left" | "center" | "right" | null;
+export type MarkdownEditorTableInsertSide = "before" | "after";
+export type MarkdownEditorTableRowMoveDirection = "up" | "down";
+export type MarkdownEditorTableColumnMoveDirection = "left" | "right";
 export type MarkdownEditorTableInsertOptions = {
   columns?: number;
   rows?: number;
 };
+export type MarkdownEditorTableResizeOptions = {
+  columns?: number;
+  /** Required to shrink through non-empty cells or rows. */
+  discardContent?: boolean;
+  rows?: number;
+};
+export type MarkdownEditorTableIssueCode =
+  | "merged-cell"
+  | "missing-column-header"
+  | "multi-block-cell"
+  | "ragged-row"
+  | "row-header-scope";
+export type MarkdownEditorTableIssue = Readonly<{
+  code: MarkdownEditorTableIssueCode;
+  column: number | null;
+  message: string;
+  row: number;
+  tablePos: number;
+}>;
 
 export type MarkdownEditorCommands = {
   reconcileMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => boolean;
@@ -121,8 +143,11 @@ export type MarkdownEditorCommands = {
   insertHorizontalRule: () => boolean;
   setCodeBlock: (options?: MarkdownEditorCodeBlockOptions) => boolean;
   insertTable: (options?: MarkdownEditorTableInsertOptions) => boolean;
-  addTableRow: () => boolean;
-  addTableColumn: () => boolean;
+  addTableRow: (side?: MarkdownEditorTableInsertSide) => boolean;
+  addTableColumn: (side?: MarkdownEditorTableInsertSide) => boolean;
+  resizeTable: (options: MarkdownEditorTableResizeOptions) => boolean;
+  moveTableRow: (direction: MarkdownEditorTableRowMoveDirection) => boolean;
+  moveTableColumn: (direction: MarkdownEditorTableColumnMoveDirection) => boolean;
   deleteTableRow: () => boolean;
   deleteTableColumn: () => boolean;
   setTableColumnAlignment: (alignment: MarkdownEditorTableAlignment) => boolean;
@@ -132,6 +157,7 @@ export type MarkdownEditorCommands = {
 };
 
 export type MarkdownEditorState = {
+  tableIssues: () => readonly MarkdownEditorTableIssue[];
   can: {
     pasteMarkdown: () => boolean;
     pastePlainText: () => boolean;
@@ -153,8 +179,11 @@ export type MarkdownEditorState = {
     insertHorizontalRule: () => boolean;
     setCodeBlock: (options?: MarkdownEditorCodeBlockOptions) => boolean;
     insertTable: (options?: MarkdownEditorTableInsertOptions) => boolean;
-    addTableRow: () => boolean;
-    addTableColumn: () => boolean;
+    addTableRow: (side?: MarkdownEditorTableInsertSide) => boolean;
+    addTableColumn: (side?: MarkdownEditorTableInsertSide) => boolean;
+    resizeTable: (options: MarkdownEditorTableResizeOptions) => boolean;
+    moveTableRow: (direction: MarkdownEditorTableRowMoveDirection) => boolean;
+    moveTableColumn: (direction: MarkdownEditorTableColumnMoveDirection) => boolean;
     deleteTableRow: () => boolean;
     deleteTableColumn: () => boolean;
     setTableColumnAlignment: (alignment: MarkdownEditorTableAlignment) => boolean;
@@ -176,13 +205,16 @@ export type MarkdownEditorState = {
     horizontalRule: () => boolean;
     codeBlock: (options?: MarkdownEditorCodeBlockOptions) => boolean;
     table: () => boolean;
+    tableCellSelection: () => boolean;
     tableColumnAlignment: (alignment: MarkdownEditorTableAlignment) => boolean;
   };
 };
 
 export type MarkdownEditorUi = {
+  createTable: () => boolean;
   editLink: () => boolean;
   editImage: () => boolean;
+  editTable: () => boolean;
 };
 
 export type ToolbarButtonState = {

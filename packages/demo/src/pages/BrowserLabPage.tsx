@@ -8,7 +8,12 @@ import {
   type MarkdownEditorSelectionSnapshot,
   type MarkdownEditorSelectionTarget,
   type MarkdownEditorTableAlignment,
+  type MarkdownEditorTableColumnMoveDirection,
   type MarkdownEditorTableInsertOptions,
+  type MarkdownEditorTableInsertSide,
+  type MarkdownEditorTableIssue,
+  type MarkdownEditorTableResizeOptions,
+  type MarkdownEditorTableRowMoveDirection,
   type OpaqueMarkdownEditRequest,
   type UpdateEditorOptions,
 } from "markora";
@@ -66,8 +71,6 @@ export type BrowserLabEventRecord = {
 };
 
 type BrowserLabNoArgumentCommand =
-  | "addTableColumn"
-  | "addTableRow"
   | "deleteTable"
   | "deleteTableColumn"
   | "deleteTableRow"
@@ -87,9 +90,13 @@ type BrowserLabNoArgumentCommand =
 
 export type BrowserLabCommandRequest =
   | { type: BrowserLabNoArgumentCommand }
+  | { type: "addTableColumn" | "addTableRow"; side?: MarkdownEditorTableInsertSide }
   | { type: "insertImage"; attrs: { alt?: string | null; src: string; title?: string | null } }
   | { type: "insertTable"; options?: MarkdownEditorTableInsertOptions }
+  | { type: "moveTableColumn"; direction: MarkdownEditorTableColumnMoveDirection }
+  | { type: "moveTableRow"; direction: MarkdownEditorTableRowMoveDirection }
   | { type: "pasteMarkdown" | "pastePlainText"; text: string }
+  | { type: "resizeTable"; options: MarkdownEditorTableResizeOptions }
   | { type: "setCodeBlock"; options?: MarkdownEditorCodeBlockOptions }
   | { type: "setHeading"; level: MarkdownEditorHeadingLevel }
   | { type: "setLink"; href: string }
@@ -98,7 +105,7 @@ export type BrowserLabCommandRequest =
   | { type: "toggleMark"; mark: MarkdownEditorMark };
 
 export type BrowserLabActiveRequest =
-  | { type: "blockquote" | "bulletList" | "hardBreak" | "horizontalRule" | "orderedList" | "paragraph" | "table" | "taskList" }
+  | { type: "blockquote" | "bulletList" | "hardBreak" | "horizontalRule" | "orderedList" | "paragraph" | "table" | "tableCellSelection" | "taskList" }
   | { type: "codeBlock"; options?: MarkdownEditorCodeBlockOptions }
   | { type: "heading"; level?: MarkdownEditorHeadingLevel }
   | { type: "tableColumnAlignment"; alignment: MarkdownEditorTableAlignment }
@@ -210,7 +217,7 @@ export type BrowserLabApi = {
   listenerSnapshot: (id?: string) => ListenerSnapshot;
   mount: (spec: BrowserLabEditorSpec) => BrowserLabSnapshot;
   mountedIds: () => string[];
-  openUi: (id: string, kind: "image" | "link") => boolean;
+  openUi: (id: string, kind: "image" | "link" | "table" | "table-create") => boolean;
   pendingOpaqueEdit: (id: string) => Pick<OpaqueMarkdownEditRequest, "kind" | "source"> | null;
   ready: true;
   reconcile: (
@@ -227,6 +234,7 @@ export type BrowserLabApi = {
   selectText: (id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number) => boolean;
   settle: (id?: string) => Promise<void>;
   snapshot: (id: string) => BrowserLabSnapshot;
+  tableIssues: (id: string) => readonly MarkdownEditorTableIssue[];
   unsubscribe: (id: string, type: MarkdownEditorEventName) => boolean;
   updateOpaque: (id: string, source: string) => boolean;
   updateOptions: (id: string, options: BrowserLabUpdateOptions) => BrowserLabUpdateResult;
@@ -260,7 +268,7 @@ type MountedEditor = {
   transactionCount: number;
 };
 
-const OVERLAY_SELECTOR = ".mdw-link-editor, .mdw-image-editor, .mdw-table-toolbar";
+const OVERLAY_SELECTOR = ".mdw-link-editor, .mdw-image-editor, .mdw-table-size-editor, .mdw-table-toolbar";
 const EVENT_NAMES: MarkdownEditorEventName[] = ["focus", "blur", "selection", "state", "update", "error", "asset"];
 
 function createEventCounts(): Record<MarkdownEditorEventName, number> {
@@ -349,8 +357,8 @@ function recordEvent(mounted: MountedEditor, event: BrowserLabEventRecord) {
 
 function runBrowserLabCommand(editor: MarkdownEditor, request: BrowserLabCommandRequest) {
   switch (request.type) {
-    case "addTableColumn": return editor.commands.addTableColumn();
-    case "addTableRow": return editor.commands.addTableRow();
+    case "addTableColumn": return editor.commands.addTableColumn(request.side);
+    case "addTableRow": return editor.commands.addTableRow(request.side);
     case "deleteTable": return editor.commands.deleteTable();
     case "deleteTableColumn": return editor.commands.deleteTableColumn();
     case "deleteTableRow": return editor.commands.deleteTableRow();
@@ -359,11 +367,14 @@ function runBrowserLabCommand(editor: MarkdownEditor, request: BrowserLabCommand
     case "insertImage": return editor.commands.insertImage(request.attrs);
     case "insertTable": return editor.commands.insertTable(request.options);
     case "liftListItem": return editor.commands.liftListItem();
+    case "moveTableColumn": return editor.commands.moveTableColumn(request.direction);
+    case "moveTableRow": return editor.commands.moveTableRow(request.direction);
     case "pasteMarkdown": return editor.commands.pasteMarkdown(request.text);
     case "pastePlainText": return editor.commands.pastePlainText(request.text);
     case "redo": return editor.commands.redo();
     case "removeImage": return editor.commands.removeImage();
     case "removeLink": return editor.commands.removeLink();
+    case "resizeTable": return editor.commands.resizeTable(request.options);
     case "setCodeBlock": return editor.commands.setCodeBlock(request.options);
     case "setHeading": return editor.commands.setHeading(request.level);
     case "setLink": return editor.commands.setLink(request.href);
@@ -382,8 +393,8 @@ function runBrowserLabCommand(editor: MarkdownEditor, request: BrowserLabCommand
 
 function canRunBrowserLabCommand(editor: MarkdownEditor, request: BrowserLabCommandRequest) {
   switch (request.type) {
-    case "addTableColumn": return editor.state.can.addTableColumn();
-    case "addTableRow": return editor.state.can.addTableRow();
+    case "addTableColumn": return editor.state.can.addTableColumn(request.side);
+    case "addTableRow": return editor.state.can.addTableRow(request.side);
     case "deleteTable": return editor.state.can.deleteTable();
     case "deleteTableColumn": return editor.state.can.deleteTableColumn();
     case "deleteTableRow": return editor.state.can.deleteTableRow();
@@ -392,11 +403,14 @@ function canRunBrowserLabCommand(editor: MarkdownEditor, request: BrowserLabComm
     case "insertImage": return editor.state.can.insertImage();
     case "insertTable": return editor.state.can.insertTable(request.options);
     case "liftListItem": return editor.state.can.liftListItem();
+    case "moveTableColumn": return editor.state.can.moveTableColumn(request.direction);
+    case "moveTableRow": return editor.state.can.moveTableRow(request.direction);
     case "pasteMarkdown": return editor.state.can.pasteMarkdown();
     case "pastePlainText": return editor.state.can.pastePlainText();
     case "redo": return editor.state.can.redo();
     case "removeImage": return editor.state.can.removeImage();
     case "removeLink": return editor.state.can.removeLink();
+    case "resizeTable": return editor.state.can.resizeTable(request.options);
     case "setCodeBlock": return editor.state.can.setCodeBlock(request.options);
     case "setHeading": return editor.state.can.setHeading(request.level);
     case "setLink": return editor.state.can.setLink();
@@ -424,6 +438,7 @@ function readBrowserLabActiveState(editor: MarkdownEditor, request: BrowserLabAc
     case "orderedList": return editor.state.isActive.orderedList();
     case "paragraph": return editor.state.isActive.paragraph();
     case "table": return editor.state.isActive.table();
+    case "tableCellSelection": return editor.state.isActive.tableCellSelection();
     case "tableColumnAlignment": return editor.state.isActive.tableColumnAlignment(request.alignment);
     case "taskChecked": return editor.state.isActive.taskChecked(request.checked);
     case "taskList": return editor.state.isActive.taskList();
@@ -1038,7 +1053,10 @@ export function BrowserLabPage() {
       },
       openUi(id, kind) {
         const ui = requireEditor(editors, id).editor.ui;
-        return kind === "link" ? Boolean(ui?.editLink()) : Boolean(ui?.editImage());
+        if (kind === "link") return Boolean(ui?.editLink());
+        if (kind === "image") return Boolean(ui?.editImage());
+        if (kind === "table-create") return Boolean(ui?.createTable());
+        return Boolean(ui?.editTable());
       },
       pendingOpaqueEdit(id) {
         const request = requireEditor(editors, id).opaqueEditRequest;
@@ -1057,6 +1075,9 @@ export function BrowserLabPage() {
         mounted.editor.flushChange();
         mounted.output.textContent = mounted.editor.getMarkdown();
         return true;
+      },
+      tableIssues(id) {
+        return requireEditor(editors, id).editor.state.tableIssues();
       },
       unsubscribe(id, type) {
         const mounted = requireEditor(editors, id);

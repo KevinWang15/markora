@@ -77,13 +77,28 @@ Record exact versions. Add iOS Safari + VoiceOver and Android Chrome + TalkBack 
 ## Table toolbar
 
 - [ ] Enter the toolbar as one Tab stop and hear “Table controls.”
-- [ ] Hear “Column alignment” as the grouping context for left, center, and right alignment.
-- [ ] Use Left/Right, Home, and End to reach all eight controls without returning to the editor after every action.
-- [ ] Hear pressed/not-pressed state for left, center, and right alignment.
-- [ ] Insert/delete a row and column and confirm focus remains on a predictable surviving control.
+- [ ] From a table, use Alt+F10 and the host action wired to `editor.ui.editTable()`; each enters the same toolbar without changing the cell selection.
+- [ ] Hear “Row,” “Column,” “Alignment,” and “Table” as the four grouping contexts.
+- [ ] Use Left/Right, Home, and End to reach all 16 controls without returning to the editor after every action; unavailable movement at an outer edge is disabled and skipped.
+- [ ] Hear pressed/not-pressed state for automatic, left, center, and right alignment.
+- [ ] With one cell and then a multi-cell rectangle selected, insert before/after, move, and delete rows and columns; confirm the operation covers the expected contiguous range and focus remains on a predictable surviving enabled control.
+- [ ] Hear the polite status describe the selected row/column range and each completed toolbar operation without duplicate or overly verbose announcements.
 - [ ] Delete the table and confirm focus returns to the editor at a valid position.
 - [ ] Press Escape and confirm focus returns without changing the table.
-- [ ] Read header/body relationships in the table and confirm column headers are identified.
+- [ ] Invoke `editor.ui.createTable()`, enter whole-number row and column counts from 1 through 100, and confirm Create, Cancel, and Escape return focus to the invoking control or editor without inserting twice.
+- [ ] Open “Resize table,” confirm the fields reflect the current logical dimensions, and verify rejected content-removing shrink operations remain open with an associated alert while a successful resize returns focus predictably.
+- [ ] Read header/body relationships in the table and confirm first-row column headers are identified; for pasted HTML row headers, record the live semantics and the documented GFM export limitation.
+
+## Table selection, keyboard, and clipboard
+
+- [ ] Create a rectangular cell selection by pointer drag, Shift-click, and Shift+Arrow from a cell boundary; hear or otherwise verify the same logical range and visible selected-cell state.
+- [ ] Press plain Arrow, Escape, Enter, and F2 from a cell rectangle; each returns to a caret without changing cell content. Backspace/Delete clears selected contents without deleting the rows or columns, and Undo restores them once.
+- [ ] Use Tab and Shift-Tab through empty, multiline, and nested-block cells. Movement is row-major, stays in the table until its boundary behavior applies, and never traps focus or invokes list indentation inside a cell.
+- [ ] From the final cell, press Tab to append one row; repeat at the 100-row limit and confirm navigation exits after the table instead. Cross the first/last row with vertical arrows and confirm the managed before/after boundary is reachable.
+- [ ] In multiline and nested content, use Up/Down within interior visual lines before crossing to an adjacent row at the first/last line. Repeat against a shorter imported/ragged row and confirm movement lands in its last available cell without an error.
+- [ ] Copy a body-only rectangle and inspect paste targets for semantic table HTML, standalone GFM whose first copied row is the required header, and quoted TSV plain text. Include a tab, line break, and double quote in cell content.
+- [ ] Paste smaller and larger table/TSV matrices into a rectangle and confirm repeat/clip behavior fills exactly that selection in one undo step. Cut a rectangle and confirm only cell contents clear after clipboard data is available.
+- [ ] If the host permits rich HTML or table extensions, introduce each reported non-GFM shape and verify its save UI gives useful text for `ragged-row`, `missing-column-header`, `merged-cell`, `multi-block-cell`, and `row-header-scope` without relying on color.
 
 ## Managed blocks and preserved source
 

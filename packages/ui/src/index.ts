@@ -42,15 +42,19 @@ export function createDefaultUi(config: { portalRoot?: PortalRoot } = {}): Edito
       win,
     });
     const tableToolbar = createTableToolbarOverlay({
-      appendTableColumn: options.appendTableColumn,
-      appendTableRow: options.appendTableRow,
+      addTableColumn: options.addTableColumn,
+      addTableRow: options.addTableRow,
       doc: ownerDocument,
       getTableContext: options.getTableContext,
+      insertTable: options.insertTable,
+      moveTableColumn: options.moveTableColumn,
+      moveTableRow: options.moveTableRow,
       normalizeTableAlignment: options.normalizeTableAlignment,
       portalRoot,
       removeActiveTable: options.removeActiveTable,
       removeTableColumn: options.removeTableColumn,
       removeTableRow: options.removeTableRow,
+      resizeTable: options.resizeTable,
       setTableColumnAlignment: options.setTableColumnAlignment,
       win,
     });

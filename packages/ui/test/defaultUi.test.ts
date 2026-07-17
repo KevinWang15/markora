@@ -18,21 +18,27 @@ function createControllers(
   const factory = createDefaultUi(config);
 
   return factory({
-    appendTableColumn() {},
-    appendTableRow() {},
+    addTableColumn() { return true; },
+    addTableRow() { return true; },
+    appendTableColumn() { return true; },
+    appendTableRow() { return true; },
     getTableContext() {
       return null;
     },
     hostElement,
+    insertTable() { return true; },
+    moveTableColumn() { return true; },
+    moveTableRow() { return true; },
     normalizeTableAlignment() {
       return null;
     },
     removeActiveImage() {},
     removeActiveLink() {},
-    removeActiveTable() {},
-    removeTableColumn() {},
-    removeTableRow() {},
-    setTableColumnAlignment() {},
+    removeActiveTable() { return true; },
+    removeTableColumn() { return true; },
+    removeTableRow() { return true; },
+    resizeTable() { return true; },
+    setTableColumnAlignment() { return true; },
     updateActiveImage() { return true; },
     updateLinkHref() { return true; },
     ...overrides,
@@ -52,6 +58,33 @@ function createView() {
       },
     },
   } as any;
+}
+
+function createTableContext(overrides: Partial<{
+  tablePos: number;
+  cell: { attrs: Record<string, unknown> };
+  rowIndex: number;
+  columnIndex: number;
+  rowCount: number;
+  columnCount: number;
+  selectedRowFrom: number;
+  selectedRowTo: number;
+  selectedColumnFrom: number;
+  selectedColumnTo: number;
+}> = {}) {
+  return {
+    tablePos: 0,
+    cell: { attrs: {} },
+    rowIndex: 0,
+    columnIndex: 0,
+    rowCount: 3,
+    columnCount: 3,
+    selectedRowFrom: 0,
+    selectedRowTo: 0,
+    selectedColumnFrom: 0,
+    selectedColumnTo: 0,
+    ...overrides,
+  };
 }
 
 function destroyControllers(controllers: ReturnType<ReturnType<typeof createDefaultUi>>) {
@@ -199,9 +232,9 @@ describe('createDefaultUi', () => {
     const imageRemovals = vi.fn();
     const tableUpdates = vi.fn();
     const controllers = createControllers(hostElement, undefined, {
-      appendTableColumn: tableUpdates,
+      addTableColumn: tableUpdates,
       getTableContext() {
-        return { cell: { attrs: {} }, tablePos: 0 };
+        return createTableContext();
       },
       removeActiveImage: imageRemovals,
       updateLinkHref() {
@@ -244,7 +277,7 @@ describe('createDefaultUi', () => {
     Array.from(imageEditor.querySelectorAll('button'))
       .find((button) => button.textContent === 'Remove')
       ?.click();
-    tableToolbar.querySelector<HTMLButtonElement>('[aria-label="Insert column"]')?.click();
+    tableToolbar.querySelector<HTMLButtonElement>('[aria-label="Insert column after"]')?.click();
     controllers.tableToolbar.update(view);
 
     expect(linkUpdates).not.toHaveBeenCalled();
@@ -460,7 +493,7 @@ describe('createDefaultUi', () => {
     const focus = vi.fn();
     const controllers = createControllers(hostElement, undefined, {
       getTableContext() {
-        return { cell: { attrs: { align: 'right' } }, tablePos: 0 };
+        return createTableContext({ cell: { attrs: { align: 'right' } } });
       },
       normalizeTableAlignment(value) {
         return value === 'right' ? 'right' : null;
@@ -893,11 +926,11 @@ describe('createDefaultUi', () => {
     let linkUpdates = 0;
     let tableUpdates = 0;
     const controllers = createControllers(hostElement, undefined, {
-      appendTableColumn() {
+      addTableColumn() {
         tableUpdates += 1;
       },
       getTableContext() {
-        return { cell: { attrs: {} }, tablePos: 0 };
+        return createTableContext();
       },
       updateActiveImage() {
         imageUpdates += 1;
@@ -923,7 +956,7 @@ describe('createDefaultUi', () => {
       .find((button) => button.textContent === 'Save');
     const imageSave = Array.from(document.querySelectorAll<HTMLButtonElement>('.mdw-image-editor button'))
       .find((button) => button.textContent === 'Save');
-    const insertColumn = document.querySelector<HTMLButtonElement>('.mdw-table-toolbar [aria-label="Insert column"]');
+    const insertColumn = document.querySelector<HTMLButtonElement>('.mdw-table-toolbar [aria-label="Insert column after"]');
     const linkDialog = document.querySelector<HTMLElement>('.mdw-link-editor')!;
     const imageDialog = document.querySelector<HTMLElement>('.mdw-image-editor')!;
     const tableToolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
@@ -1035,7 +1068,7 @@ describe('createDefaultUi', () => {
       value: new foreignWindow.EventTarget(),
     });
     destroyControllers(controllers);
-    expect(removeViewportListener).toHaveBeenCalledTimes(6);
+    expect(removeViewportListener).toHaveBeenCalledTimes(8);
   });
 
   it('clamps and flips the table toolbar within a narrow viewport', () => {
@@ -1049,7 +1082,7 @@ describe('createDefaultUi', () => {
 
     const controllers = createControllers(hostElement, undefined, {
       getTableContext() {
-        return { cell: { attrs: { align: 'center' } }, tablePos: 0 };
+        return createTableContext({ cell: { attrs: { align: 'center' } } });
       },
       normalizeTableAlignment() {
         return 'center';
@@ -1104,12 +1137,17 @@ describe('createDefaultUi', () => {
       },
     };
     controllers = createControllers(hostElement, undefined, {
-      appendTableColumn() {
+      addTableColumn() {
         columnInsertions += 1;
         controllers.tableToolbar.update(view);
       },
       getTableContext() {
-        return { cell: { attrs: { align: alignment } }, tablePos: 0 };
+        return createTableContext({
+          cell: { attrs: { align: alignment } },
+          columnIndex: 1,
+          selectedColumnFrom: 1,
+          selectedColumnTo: 1,
+        });
       },
       normalizeTableAlignment(value) {
         return value === 'left' || value === 'center' || value === 'right' ? value : null;
@@ -1122,7 +1160,7 @@ describe('createDefaultUi', () => {
     controllers.tableToolbar.update(view);
 
     const toolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
-    const insertColumn = toolbar.querySelector<HTMLButtonElement>('[aria-label="Insert column"]')!;
+    const insertColumn = toolbar.querySelector<HTMLButtonElement>('[aria-label="Insert column after"]')!;
     const alignCenter = toolbar.querySelector<HTMLButtonElement>('[aria-label="Align center"]')!;
     const mouseDown = new MouseEvent('mousedown', { bubbles: true, button: 0, cancelable: true });
     insertColumn.dispatchEvent(mouseDown);
@@ -1162,7 +1200,7 @@ describe('createDefaultUi', () => {
     };
     controllers = createControllers(hostElement, undefined, {
       getTableContext() {
-        return hasTable ? { cell: { attrs: {} }, tablePos: 0 } : null;
+        return hasTable ? createTableContext() : null;
       },
       removeActiveTable() {
         hasTable = false;
@@ -1202,11 +1240,11 @@ describe('createDefaultUi', () => {
     const marker = document.createElement('table');
     document.body.append(hostElement, marker);
     const focus = vi.fn();
-    const alignments: string[] = [];
+    const alignments: Array<string | null> = [];
     let tableRemovals = 0;
     const controllers = createControllers(hostElement, undefined, {
       getTableContext() {
-        return { cell: { attrs: { align: 'center' } }, tablePos: 0 };
+        return createTableContext({ cell: { attrs: { align: 'center' } } });
       },
       normalizeTableAlignment(value) {
         return value === 'center' ? 'center' : null;
@@ -1229,6 +1267,7 @@ describe('createDefaultUi', () => {
 
     const toolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
     const buttons = Array.from(toolbar.querySelectorAll<HTMLButtonElement>('button'));
+    const alignAutomatic = toolbar.querySelector<HTMLButtonElement>('[aria-label="Automatic alignment"]')!;
     const alignLeft = toolbar.querySelector<HTMLButtonElement>('[aria-label="Align left"]')!;
     const alignCenter = toolbar.querySelector<HTMLButtonElement>('[aria-label="Align center"]')!;
     const alignRight = toolbar.querySelector<HTMLButtonElement>('[aria-label="Align right"]')!;
@@ -1236,18 +1275,30 @@ describe('createDefaultUi', () => {
 
     expect(toolbar.getAttribute('aria-orientation')).toBe('horizontal');
     expect(toolbar.getAttribute('aria-label')).toBe('Table controls');
-    expect(toolbar.querySelector('[role="group"]')?.getAttribute('aria-label')).toBe('Column alignment');
+    expect(Array.from(toolbar.querySelectorAll('[role="group"]')).map((group) => group.getAttribute('aria-label')))
+      .toEqual(['Row', 'Column', 'Alignment', 'Table']);
     expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
-      'Insert column',
-      'Delete column',
-      'Insert row',
+      'Insert row before',
+      'Insert row after',
+      'Move row up',
+      'Move row down',
       'Delete row',
+      'Insert column before',
+      'Insert column after',
+      'Move column left',
+      'Move column right',
+      'Delete column',
+      'Automatic alignment',
       'Align left',
       'Align center',
       'Align right',
+      'Resize table',
       'Delete table',
     ]);
-    expect(buttons.map((button) => button.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1, -1]);
+    expect(buttons.map((button) => button.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]);
+    expect(toolbar.querySelector<HTMLButtonElement>('[aria-label="Move row up"]')?.disabled).toBe(true);
+    expect(toolbar.querySelector<HTMLButtonElement>('[aria-label="Move column left"]')?.disabled).toBe(true);
+    expect(alignAutomatic.getAttribute('aria-pressed')).toBe('false');
     expect(alignLeft.getAttribute('aria-pressed')).toBe('false');
     expect(alignCenter.getAttribute('aria-pressed')).toBe('true');
     expect(alignRight.getAttribute('aria-pressed')).toBe('false');
@@ -1255,7 +1306,7 @@ describe('createDefaultUi', () => {
     buttons[0]!.focus();
     buttons[0]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowRight' }));
     expect(document.activeElement).toBe(buttons[1]);
-    expect(buttons.map((button) => button.tabIndex)).toEqual([-1, 0, -1, -1, -1, -1, -1, -1]);
+    expect(buttons.map((button) => button.tabIndex)).toEqual([-1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]);
 
     buttons[1]!.dispatchEvent(new KeyboardEvent('keydown', {
       bubbles: true,
@@ -1265,6 +1316,10 @@ describe('createDefaultUi', () => {
     }));
     expect(document.activeElement).toBe(buttons[1]);
 
+    buttons[1]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowRight' }));
+    expect(document.activeElement).toBe(buttons[4]);
+    buttons[4]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowLeft' }));
+    expect(document.activeElement).toBe(buttons[1]);
     buttons[1]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowLeft' }));
     expect(document.activeElement).toBe(buttons[0]);
     buttons[0]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowLeft' }));
@@ -1275,6 +1330,9 @@ describe('createDefaultUi', () => {
     buttons[0]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'End' }));
     expect(document.activeElement).toBe(deleteTable);
     deleteTable.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Home' }));
+    expect(document.activeElement).toBe(buttons[0]);
+
+    expect(controllers.tableToolbar.focus(view)).toBe(true);
     expect(document.activeElement).toBe(buttons[0]);
 
     alignCenter.focus();
@@ -1291,5 +1349,267 @@ describe('createDefaultUi', () => {
     expect(focus).toHaveBeenCalledTimes(2);
 
     destroyControllers(controllers);
+  });
+
+  it('routes explicit table operations, moves focus off disabled boundaries, and announces selections', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('table');
+    document.body.append(hostElement, marker);
+    let context = createTableContext({
+      cell: { attrs: {} },
+      columnCount: 4,
+      columnIndex: 1,
+      rowIndex: 2,
+      rowCount: 5,
+      selectedColumnFrom: 1,
+      selectedColumnTo: 2,
+      selectedRowFrom: 2,
+      selectedRowTo: 3,
+    });
+    const rowInsertions: string[] = [];
+    const columnInsertions: string[] = [];
+    const rowMoves: string[] = [];
+    const columnMoves: string[] = [];
+    const alignments: Array<string | null> = [];
+    let rowRemovals = 0;
+    let columnRemovals = 0;
+    const controllers = createControllers(hostElement, undefined, {
+      addTableColumn(_view, side) {
+        columnInsertions.push(side);
+      },
+      addTableRow(_view, side) {
+        rowInsertions.push(side);
+      },
+      getTableContext() {
+        return context;
+      },
+      moveTableColumn(_view, direction) {
+        columnMoves.push(direction);
+      },
+      moveTableRow(_view, direction) {
+        rowMoves.push(direction);
+      },
+      removeTableColumn() {
+        columnRemovals += 1;
+      },
+      removeTableRow() {
+        rowRemovals += 1;
+      },
+      setTableColumnAlignment(_view, alignment) {
+        alignments.push(alignment);
+      },
+    });
+    const view = {
+      ...createView(),
+      nodeDOM() {
+        return marker;
+      },
+    };
+    controllers.tableToolbar.update(view);
+
+    const toolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
+    const click = (label: string) => toolbar.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!.click();
+    expect(toolbar.querySelector('[role="status"]')?.textContent)
+      .toBe('Rectangular selection: rows 3 through 4 and columns 2 through 3.');
+    expect(toolbar.querySelector('[aria-label="Automatic alignment"]')?.getAttribute('aria-pressed')).toBe('true');
+
+    click('Insert row before');
+    click('Insert row after');
+    click('Move row up');
+    click('Move row down');
+    click('Delete row');
+    click('Insert column before');
+    click('Insert column after');
+    click('Move column left');
+    click('Move column right');
+    click('Delete column');
+    click('Automatic alignment');
+    click('Align right');
+
+    expect(rowInsertions).toEqual(['before', 'after']);
+    expect(columnInsertions).toEqual(['before', 'after']);
+    expect(rowMoves).toEqual(['up', 'down']);
+    expect(columnMoves).toEqual(['left', 'right']);
+    expect(rowRemovals).toBe(1);
+    expect(columnRemovals).toBe(1);
+    expect(alignments).toEqual([null, 'right']);
+    expect(toolbar.querySelector('[role="status"]')?.textContent)
+      .toBe('Aligned column right. Rectangular selection: rows 3 through 4 and columns 2 through 3.');
+
+    const moveRowUp = toolbar.querySelector<HTMLButtonElement>('[aria-label="Move row up"]')!;
+    const moveRowDown = toolbar.querySelector<HTMLButtonElement>('[aria-label="Move row down"]')!;
+    moveRowUp.focus();
+    context = createTableContext();
+    controllers.tableToolbar.update(view);
+
+    expect(moveRowUp.disabled).toBe(true);
+    expect(moveRowDown.disabled).toBe(true);
+    const deleteRow = toolbar.querySelector<HTMLButtonElement>('[aria-label="Delete row"]')!;
+    expect(document.activeElement).toBe(deleteRow);
+    expect(Array.from(toolbar.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.tabIndex === 0))
+      .toEqual([deleteRow]);
+
+    destroyControllers(controllers);
+  });
+
+  it('creates tables through validated dimensions and restores focus on submit and cancel', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('span');
+    const trigger = document.createElement('button');
+    document.body.append(hostElement, marker, trigger);
+    const insertions: Array<{ rows: number; columns: number }> = [];
+    let editable = true;
+    const controllers = createControllers(hostElement, undefined, {
+      insertTable(_view, dimensions) {
+        insertions.push(dimensions);
+        return true;
+      },
+    });
+    const view = {
+      ...createView(),
+      get editable() {
+        return editable;
+      },
+    };
+
+    trigger.focus();
+    const onCancelClose = vi.fn();
+    expect(controllers.tableToolbar.create?.(view, marker, onCancelClose)).toBe(true);
+    const dialog = document.querySelector<HTMLElement>('.mdw-table-size-editor')!;
+    const form = dialog.querySelector<HTMLFormElement>('form')!;
+    const rows = dialog.querySelector<HTMLInputElement>('[aria-label="Rows"]')!;
+    const columns = dialog.querySelector<HTMLInputElement>('[aria-label="Columns"]')!;
+    const cancel = Array.from(dialog.querySelectorAll('button')).find((button) => button.textContent === 'Cancel')!;
+
+    expect(dialog.getAttribute('role')).toBe('dialog');
+    expect(dialog.getAttribute('aria-label')).toBe('Create table');
+    expect(dialog.getAttribute('aria-modal')).toBe('false');
+    expect(rows.value).toBe('2');
+    expect(columns.value).toBe('3');
+    expect([rows.min, rows.max, rows.step]).toEqual(['1', '100', '1']);
+    expect([columns.min, columns.max, columns.step]).toEqual(['1', '100', '1']);
+    expect(document.activeElement).toBe(rows);
+
+    rows.value = '0';
+    columns.value = '1.5';
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    expect(insertions).toEqual([]);
+    expect(rows.getAttribute('aria-invalid')).toBe('true');
+    expect(columns.getAttribute('aria-invalid')).toBe('true');
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toBe('Enter whole numbers from 1 through 100.');
+    expect(dialog.hidden).toBe(false);
+
+    cancel.click();
+    expect(dialog.hidden).toBe(true);
+    expect(document.activeElement).toBe(trigger);
+    expect(onCancelClose).toHaveBeenCalledOnce();
+
+    const onSubmitClose = vi.fn();
+    expect(controllers.tableToolbar.create?.(view, marker, onSubmitClose)).toBe(true);
+    rows.value = '4';
+    columns.value = '5';
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    expect(insertions).toEqual([{ columns: 5, rows: 4 }]);
+    expect(dialog.hidden).toBe(true);
+    expect(document.activeElement).toBe(trigger);
+    expect(onSubmitClose).toHaveBeenCalledOnce();
+
+    editable = false;
+    expect(controllers.tableToolbar.create?.(view, marker)).toBe(false);
+    expect(dialog.hidden).toBe(true);
+
+    destroyControllers(controllers);
+  });
+
+  it('resizes from current dimensions in a Shadow DOM and handles rejection, Escape, read-only, and destroy', () => {
+    const foreignWindow = trackWindow(new JSDOM('<!doctype html><html><body></body></html>').window as unknown as Window);
+    const shadowHost = foreignWindow.document.createElement('div');
+    const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
+    const hostElement = foreignWindow.document.createElement('div');
+    const marker = foreignWindow.document.createElement('table');
+    shadowRoot.append(hostElement, marker);
+    foreignWindow.document.body.append(shadowHost);
+    let editable = true;
+    let acceptResize = false;
+    const resizes: Array<{ rows: number; columns: number }> = [];
+    const controllers = createControllers(hostElement, undefined, {
+      getTableContext() {
+        return createTableContext({ columnCount: 5, rowCount: 4 });
+      },
+      resizeTable(_view, dimensions) {
+        resizes.push(dimensions);
+        return acceptResize;
+      },
+    });
+    const view = {
+      ...createView(),
+      get editable() {
+        return editable;
+      },
+      nodeDOM() {
+        return marker;
+      },
+    };
+    controllers.tableToolbar.update(view);
+
+    const toolbar = shadowRoot.querySelector<HTMLElement>('.mdw-table-toolbar')!;
+    const resize = toolbar.querySelector<HTMLButtonElement>('[aria-label="Resize table"]')!;
+    const dialog = shadowRoot.querySelector<HTMLElement>('.mdw-table-size-editor')!;
+    const form = dialog.querySelector<HTMLFormElement>('form')!;
+    const rows = dialog.querySelector<HTMLInputElement>('[aria-label="Rows"]')!;
+    const columns = dialog.querySelector<HTMLInputElement>('[aria-label="Columns"]')!;
+
+    resize.focus();
+    resize.click();
+    expect(dialog.hidden).toBe(false);
+    expect(dialog.getAttribute('aria-label')).toBe('Resize table');
+    expect(rows.value).toBe('4');
+    expect(columns.value).toBe('5');
+    rows.value = '2';
+    columns.value = '2';
+    form.dispatchEvent(new foreignWindow.Event('submit', { bubbles: true, cancelable: true }));
+
+    expect(resizes).toEqual([{ columns: 2, rows: 2 }]);
+    expect(dialog.hidden).toBe(false);
+    expect(dialog.querySelector('[role="alert"]')?.textContent)
+      .toContain('Clear content outside the new size');
+
+    acceptResize = true;
+    rows.value = '6';
+    columns.value = '7';
+    marker.tabIndex = -1;
+    marker.focus();
+    form.dispatchEvent(new foreignWindow.Event('submit', { bubbles: true, cancelable: true }));
+    expect(resizes.at(-1)).toEqual({ columns: 7, rows: 6 });
+    expect(dialog.hidden).toBe(true);
+    expect(shadowRoot.activeElement).toBe(resize);
+
+    resize.click();
+    rows.dispatchEvent(new foreignWindow.KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Escape',
+    }));
+    expect(dialog.hidden).toBe(true);
+    expect(shadowRoot.activeElement).toBe(resize);
+
+    resize.click();
+    editable = false;
+    controllers.tableToolbar.update(view);
+    expect(dialog.hidden).toBe(true);
+    expect(toolbar.hidden).toBe(true);
+
+    editable = true;
+    controllers.tableToolbar.update(view);
+    resize.click();
+    const submissionsBeforeDestroy = resizes.length;
+    controllers.tableToolbar.destroy();
+    form.dispatchEvent(new foreignWindow.Event('submit', { bubbles: true, cancelable: true }));
+    expect(resizes).toHaveLength(submissionsBeforeDestroy);
+    expect(dialog.isConnected).toBe(false);
+    expect(controllers.tableToolbar.create?.(view, marker)).toBe(false);
+
+    controllers.linkEditor.destroy();
+    controllers.imageEditor.destroy();
   });
 });

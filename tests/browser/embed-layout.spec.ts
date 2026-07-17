@@ -267,7 +267,7 @@ test("keeps the responsive table toolbar usable in a transformed portal", async 
   await settleEditor(labPage, "responsive-table");
   expectOverlayWithinViewport(await readOverlayGeometry(toolbar));
 
-  await toolbar.getByRole("button", { name: "Insert column" }).click();
+  await toolbar.getByRole("button", { name: "Insert column after" }).click();
   await settleEditor(labPage, "responsive-table");
 
   await expect(editorLocator(labPage, "responsive-table").locator("tbody tr").first().locator("th"))

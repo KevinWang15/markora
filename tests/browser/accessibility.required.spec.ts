@@ -318,19 +318,28 @@ test("@required table toolbar exposes pressed state and roving keyboard focus", 
   await expect(toolbar).toHaveAttribute("role", "toolbar");
   await expect(toolbar).toHaveAttribute("aria-orientation", "horizontal");
   await expect(toolbar).toHaveAccessibleName("Table controls");
-  await expect(toolbar.getByRole("group", { name: "Column alignment" })).toBeVisible();
+  await expect(toolbar.getByRole("group", { name: "Row" })).toBeVisible();
+  await expect(toolbar.getByRole("group", { name: "Column" })).toBeVisible();
+  await expect(toolbar.getByRole("group", { name: "Alignment" })).toBeVisible();
+  await expect(toolbar.getByRole("group", { name: "Table" })).toBeVisible();
   expect((await copyEditorSelection(labPage, id)).plain).toBe("two");
   const selectionBeforeToolbarFocus = (await snapshotEditor(labPage, id)).selection;
 
   const buttons = toolbar.getByRole("button");
-  await expect(buttons).toHaveCount(8);
+  await expect(buttons).toHaveCount(16);
   await expect(toolbar.locator("button[tabindex='0']")).toHaveCount(1);
+  await expect(toolbar.getByRole("button", { name: "Move row up" })).toBeDisabled();
+  await expect(toolbar.getByRole("button", { name: "Move row down" })).toBeDisabled();
+  await expect(toolbar.getByRole("button", { name: "Move column right" })).toBeDisabled();
 
   const firstButton = toolbar.locator("button[tabindex='0']");
-  await firstButton.focus();
+  await labPage.keyboard.press("Alt+F10");
+  await expect(firstButton).toBeFocused();
   await labPage.keyboard.press("ArrowRight");
   await expect(buttons.nth(1)).toBeFocused();
-  await labPage.keyboard.press("ArrowLeft");
+  await labPage.keyboard.press("ArrowRight");
+  await expect(toolbar.getByRole("button", { name: "Delete row" })).toBeFocused();
+  await labPage.keyboard.press("Home");
   await expect(buttons.first()).toBeFocused();
   await labPage.keyboard.press("ArrowLeft");
   await expect(buttons.last()).toBeFocused();
@@ -348,7 +357,7 @@ test("@required table toolbar exposes pressed state and roving keyboard focus", 
   await expect(alignCenter).toBeFocused();
   expect(await getMarkdown(labPage, id)).toContain("| --- | :---: |");
 
-  const insertColumn = toolbar.getByRole("button", { name: "Insert column" });
+  const insertColumn = toolbar.getByRole("button", { name: "Insert column after" });
   await insertColumn.focus();
   await labPage.keyboard.press("Enter");
   await settleEditor(labPage, id);
@@ -362,7 +371,7 @@ test("@required table toolbar exposes pressed state and roving keyboard focus", 
   await expect(editor.locator("table tr").first().locator("th")).toHaveCount(2);
   await expect(deleteColumn).toBeFocused();
 
-  const insertRow = toolbar.getByRole("button", { name: "Insert row" });
+  const insertRow = toolbar.getByRole("button", { name: "Insert row after" });
   await insertRow.focus();
   await labPage.keyboard.press("Enter");
   await settleEditor(labPage, id);
@@ -430,10 +439,10 @@ test("@required task, dialog, and toolbar semantics remain keyboard complete in 
   const toolbar = ownedOverlay(labPage, id, ".mdw-table-toolbar");
   await expect(toolbar).toBeVisible();
   expect(await toolbar.evaluate((element) => element.getRootNode() instanceof ShadowRoot)).toBe(true);
-  const insertColumn = toolbar.getByRole("button", { name: "Insert column" });
+  const insertColumn = toolbar.getByRole("button", { name: "Insert column after" });
   await insertColumn.focus();
   await labPage.keyboard.press("ArrowRight");
-  await expect(toolbar.getByRole("button", { name: "Delete column" })).toBeFocused();
+  await expect(toolbar.getByRole("button", { name: "Move column left" })).toBeFocused();
   await labPage.keyboard.press("Escape");
   await expect(editor).toBeFocused();
 });

@@ -1,6 +1,6 @@
 import { Fragment, Slice, type Node as ProseMirrorNode } from "prosemirror-model";
 import { closeHistory } from "prosemirror-history";
-import { Plugin, type Command, type Transaction } from "prosemirror-state";
+import { Plugin, type Command, type Selection, type Transaction } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import type { MarkdownEditorCodec } from "./markdownCodec";
 
@@ -10,8 +10,20 @@ const LEGACY_MARKDOWN_MIME = "text/x-markdown";
 type ClipboardSemanticsOptions = {
   codec: MarkdownEditorCodec;
   reportBrowserError: (error: unknown) => void;
+  tableClipboard?: TableClipboardAdapter | null;
   takeExtensionFailure: () => unknown | null;
 };
+
+export type TableClipboardSelection = Readonly<{
+  markdownDocument: ProseMirrorNode;
+  rows: readonly (readonly ProseMirrorNode[])[];
+}>;
+
+export type TableClipboardAdapter = Readonly<{
+  clearSelection: (transaction: Transaction) => Transaction;
+  readSelection: (selection: Selection) => TableClipboardSelection | null;
+  reportError?: (error: unknown) => void;
+}>;
 
 function readData(data: DataTransfer, type: string) {
   try {
@@ -101,6 +113,16 @@ function plainText(node: ProseMirrorNode, depth = 0): string {
       }
       return childText(node, node.isBlock ? "\n\n" : "", depth);
   }
+}
+
+function quoteTsvCell(value: string) {
+  return /[\t\r\n"]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function tableSelectionText(selection: TableClipboardSelection) {
+  return selection.rows
+    .map((row) => row.map((cell) => quoteTsvCell(plainText(cell))).join("\t"))
+    .join("\n");
 }
 
 function documentForSlice(codec: MarkdownEditorCodec, slice: Slice) {
@@ -311,7 +333,7 @@ function assertClipboardText(value: string, name: string) {
 }
 
 export function createClipboardSemantics(options: ClipboardSemanticsOptions) {
-  const { codec, reportBrowserError, takeExtensionFailure } = options;
+  const { codec, reportBrowserError, tableClipboard, takeExtensionFailure } = options;
   let shiftKey = false;
   let lastKeyCode = 0;
   const throwExtensionFailure = () => {
@@ -349,6 +371,8 @@ export function createClipboardSemantics(options: ClipboardSemanticsOptions) {
     }
 
     let serialized: ReturnType<EditorView["serializeForClipboard"]>;
+    let tableSelection: TableClipboardSelection | null = null;
+    let tableSelectionReadFailed = false;
 
     try {
       serialized = view.serializeForClipboard(selection.content());
@@ -356,6 +380,16 @@ export function createClipboardSemantics(options: ClipboardSemanticsOptions) {
       reportBrowserError(error);
       event.preventDefault();
       return true;
+    }
+
+    try {
+      tableSelection = tableClipboard?.readSelection(selection) ?? null;
+    } catch (error) {
+      // HTML and ordinary text are still useful fidelity representations for
+      // a host-provided table shape that GFM cannot encode. Report the gap,
+      // omit Markdown, and never mutate the unsupported selection on cut.
+      tableSelectionReadFailed = true;
+      (tableClipboard?.reportError ?? reportBrowserError)(error);
     }
 
     if (view.isDestroyed) {
@@ -366,7 +400,10 @@ export function createClipboardSemantics(options: ClipboardSemanticsOptions) {
     try {
       event.clipboardData.clearData();
       event.clipboardData.setData("text/html", serialized.dom.innerHTML);
-      event.clipboardData.setData("text/plain", serialized.text);
+      event.clipboardData.setData(
+        "text/plain",
+        tableSelection ? tableSelectionText(tableSelection) : serialized.text,
+      );
     } catch {
       event.preventDefault();
       return true;
@@ -374,10 +411,14 @@ export function createClipboardSemantics(options: ClipboardSemanticsOptions) {
 
     let markdown: string | null = null;
 
-    try {
-      markdown = codec.serialize(documentForSlice(codec, serialized.slice));
-    } catch (error) {
-      reportBrowserError(error);
+    if (!tableSelectionReadFailed) {
+      try {
+        markdown = codec.serialize(
+          tableSelection?.markdownDocument ?? documentForSlice(codec, serialized.slice),
+        );
+      } catch (error) {
+        reportBrowserError(error);
+      }
     }
 
     if (markdown != null) {
@@ -390,13 +431,25 @@ export function createClipboardSemantics(options: ClipboardSemanticsOptions) {
 
     event.preventDefault();
 
-    if (event.type === "cut" && view.editable && !view.isDestroyed && view.state === state) {
-      view.dispatch(isolateClipboardHistory(
-        view.state.tr
-          .deleteSelection()
-          .scrollIntoView()
-          .setMeta("uiEvent", "cut"),
-      ));
+    if (
+      event.type === "cut"
+      && !tableSelectionReadFailed
+      && view.editable
+      && !view.isDestroyed
+      && view.state === state
+    ) {
+      try {
+        const transaction = tableSelection && tableClipboard
+          ? tableClipboard.clearSelection(view.state.tr)
+          : view.state.tr.deleteSelection();
+        view.dispatch(isolateClipboardHistory(
+          transaction
+            .scrollIntoView()
+            .setMeta("uiEvent", "cut"),
+        ));
+      } catch (error) {
+        reportBrowserError(error);
+      }
     }
 
     return true;

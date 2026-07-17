@@ -15,6 +15,7 @@ export type MarkdownEditorSelectionKind =
   | "managed-block"
   | "node"
   | "other"
+  | "table-cell"
   | "text";
 
 export type MarkdownEditorSelectionSnapshot = {
@@ -61,6 +62,7 @@ export type MarkdownEditorErrorCode =
   | "code-block-language-load-failed"
   | "code-block-runtime-load-failed"
   | "resource-callback-failed"
+  | "table-operation-rejected"
   | `EXTENSION_${string}`;
 
 export type MarkdownEditorAssetEvent = MarkdownEditorEventBase<"asset"> & {
@@ -96,6 +98,15 @@ export type MarkdownEditorCodeBlockRuntimeErrorEvent = MarkdownEditorEventBase<"
   recoverable: true;
 };
 
+export type MarkdownEditorTableOperationErrorEvent = MarkdownEditorEventBase<"error"> & {
+  code: "table-operation-rejected";
+  context: {
+    phase: "clipboard";
+  };
+  error: unknown;
+  recoverable: true;
+};
+
 export type MarkdownEditorExtensionErrorEvent = MarkdownEditorEventBase<"error"> & {
   code: `EXTENSION_${string}`;
   context: {
@@ -112,6 +123,7 @@ export type MarkdownEditorErrorEvent =
   | MarkdownEditorCodeBlockLanguageErrorEvent
   | MarkdownEditorCodeBlockRuntimeErrorEvent
   | MarkdownEditorResourceErrorEvent
+  | MarkdownEditorTableOperationErrorEvent
   | MarkdownEditorExtensionErrorEvent;
 
 export type MarkdownEditorEventMap = {

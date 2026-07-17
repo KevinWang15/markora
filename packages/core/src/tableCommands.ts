@@ -14,9 +14,13 @@ import {
 } from "prosemirror-state";
 import type {
   MarkdownEditorTableAlignment,
+  MarkdownEditorTableColumnMoveDirection,
   MarkdownEditorTableInsertOptions,
+  MarkdownEditorTableInsertSide,
+  MarkdownEditorTableResizeOptions,
+  MarkdownEditorTableRowMoveDirection,
 } from "./editorApi";
-import type { TableCellInfo } from "./tableTypes";
+import type { TableCellInfo, TableSelectionInfo } from "./tableTypes";
 
 export type TableAlignment = Exclude<MarkdownEditorTableAlignment, null>;
 
@@ -27,6 +31,12 @@ const MAX_TABLE_DIMENSION = 100;
 type NormalizedTableInsertOptions = Readonly<{
   columns: number;
   rows: number;
+}>;
+
+type NormalizedTableResizeOptions = Readonly<{
+  columns?: number;
+  discardContent: boolean;
+  rows?: number;
 }>;
 
 type TableInfo = Readonly<{
@@ -52,6 +62,60 @@ export function normalizeTableInsertOptions(
   const columns = assertTableDimension(options?.columns ?? DEFAULT_TABLE_COLUMNS, "columns");
   const rows = assertTableDimension(options?.rows ?? DEFAULT_TABLE_ROWS, "rows");
   return Object.freeze({ columns, rows });
+}
+
+export function normalizeTableInsertSide(
+  side: MarkdownEditorTableInsertSide | undefined,
+): MarkdownEditorTableInsertSide {
+  if (side !== undefined && side !== "before" && side !== "after") {
+    throw new RangeError('Table insertion side must be "before" or "after".');
+  }
+
+  return side ?? "after";
+}
+
+export function normalizeTableResizeOptions(
+  options: MarkdownEditorTableResizeOptions,
+): NormalizedTableResizeOptions {
+  if (typeof options !== "object" || options === null) {
+    throw new TypeError("Table resize options must be an object.");
+  }
+
+  if (options.rows === undefined && options.columns === undefined) {
+    throw new TypeError("Table resize options must include rows, columns, or both.");
+  }
+
+  if (options.discardContent !== undefined && typeof options.discardContent !== "boolean") {
+    throw new TypeError("Table resize discardContent must be a boolean.");
+  }
+
+  return Object.freeze({
+    ...(options.columns === undefined
+      ? {}
+      : { columns: assertTableDimension(options.columns, "columns") }),
+    discardContent: options.discardContent ?? false,
+    ...(options.rows === undefined
+      ? {}
+      : { rows: assertTableDimension(options.rows, "rows") }),
+  });
+}
+
+export function normalizeTableRowMoveDirection(
+  direction: MarkdownEditorTableRowMoveDirection,
+): MarkdownEditorTableRowMoveDirection {
+  if (direction !== "up" && direction !== "down") {
+    throw new RangeError('Table row move direction must be "up" or "down".');
+  }
+  return direction;
+}
+
+export function normalizeTableColumnMoveDirection(
+  direction: MarkdownEditorTableColumnMoveDirection,
+): MarkdownEditorTableColumnMoveDirection {
+  if (direction !== "left" && direction !== "right") {
+    throw new RangeError('Table column move direction must be "left" or "right".');
+  }
+  return direction;
 }
 
 export function normalizeTableAlignment(
@@ -142,16 +206,130 @@ function getTableCellContextAtPos(
   };
 }
 
+type CellSelectionLike = Selection & {
+  $anchorCell: ResolvedPos;
+  $headCell: ResolvedPos;
+};
+
+function isCellSelectionLike(selection: Selection): selection is CellSelectionLike {
+  const candidate = selection as Partial<CellSelectionLike>;
+  return Boolean(
+    candidate.$anchorCell
+    && candidate.$headCell
+    && typeof candidate.$anchorCell.pos === "number"
+    && typeof candidate.$headCell.pos === "number",
+  );
+}
+
+function tableHasMergedCells(table: ProseMirrorNode) {
+  let merged = false;
+  table.forEach((row) => {
+    row.forEach((cell) => {
+      if (cell.attrs.colspan !== 1 || cell.attrs.rowspan !== 1) {
+        merged = true;
+      }
+    });
+  });
+  return merged;
+}
+
+function getTableCellContextAtBoundary(
+  $cell: ResolvedPos,
+  schema: Schema,
+): TableCellInfo | null {
+  const rowType = schema.nodes.table_row;
+  const tableType = schema.nodes.table;
+  const cell = $cell.nodeAfter;
+
+  if (
+    !rowType
+    || !tableType
+    || $cell.parent.type !== rowType
+    || $cell.depth < 2
+    || $cell.node($cell.depth - 1).type !== tableType
+    || !cell
+    || (cell.type !== schema.nodes.table_cell && cell.type !== schema.nodes.table_header)
+  ) {
+    return null;
+  }
+
+  const tableDepth = $cell.depth - 1;
+  return {
+    table: $cell.node(tableDepth),
+    row: $cell.parent,
+    cell,
+    tablePos: $cell.before(tableDepth),
+    rowPos: $cell.before($cell.depth),
+    cellPos: $cell.pos,
+    rowIndex: $cell.index(tableDepth),
+    cellIndex: $cell.index(),
+  };
+}
+
+export function tableCellSelectionIsActive(state: EditorState) {
+  return isCellSelectionLike(state.selection);
+}
+
+export function getTableSelectionContext(
+  state: EditorState,
+  schema: Schema,
+): TableSelectionInfo | null {
+  if (isCellSelectionLike(state.selection)) {
+    const anchor = getTableCellContextAtBoundary(state.selection.$anchorCell, schema);
+    const head = getTableCellContextAtBoundary(state.selection.$headCell, schema);
+
+    if (!anchor || !head || anchor.tablePos !== head.tablePos) {
+      return null;
+    }
+
+    // Public structural commands use physical row children as GFM columns.
+    // Merged cells have logical TableMap coordinates instead, so keep the
+    // document inspectable/deletable without risking a corrupt mutation.
+    if (tableHasMergedCells(head.table)) {
+      return null;
+    }
+
+    return {
+      ...head,
+      anchorCellIndex: anchor.cellIndex,
+      anchorRowIndex: anchor.rowIndex,
+      columnFrom: Math.min(anchor.cellIndex, head.cellIndex),
+      columnTo: Math.max(anchor.cellIndex, head.cellIndex),
+      isCellSelection: true,
+      rowFrom: Math.min(anchor.rowIndex, head.rowIndex),
+      rowTo: Math.max(anchor.rowIndex, head.rowIndex),
+    };
+  }
+
+  const from = getTableCellContextAtPos(state.selection.$from, schema);
+  const to = getTableCellContextAtPos(state.selection.$to, schema);
+
+  if (!from || !to || from.tablePos !== to.tablePos || from.cellPos !== to.cellPos) {
+    return null;
+  }
+
+
+  if (tableHasMergedCells(from.table)) {
+    return null;
+  }
+
+  return {
+    ...from,
+    anchorCellIndex: from.cellIndex,
+    anchorRowIndex: from.rowIndex,
+    columnFrom: from.cellIndex,
+    columnTo: from.cellIndex,
+    isCellSelection: false,
+    rowFrom: from.rowIndex,
+    rowTo: from.rowIndex,
+  };
+}
+
 export function getTableCellContext(
   state: EditorState,
   schema: Schema,
 ): TableCellInfo | null {
-  const from = getTableCellContextAtPos(state.selection.$from, schema);
-  const to = getTableCellContextAtPos(state.selection.$to, schema);
-
-  return from && to && from.tablePos === to.tablePos && from.cellPos === to.cellPos
-    ? from
-    : null;
+  return getTableSelectionContext(state, schema);
 }
 
 function getActiveTableInfo(state: EditorState, schema: Schema): TableInfo | null {
@@ -247,6 +425,27 @@ function promoteRowToColumnHeaders(schema: Schema, row: ProseMirrorNode) {
   return row.type.create(row.attrs, cells, row.marks);
 }
 
+function demoteColumnHeaderRow(schema: Schema, row: ProseMirrorNode) {
+  const cellType = schema.nodes.table_cell;
+
+  if (!cellType) {
+    return row;
+  }
+
+  const cells: ProseMirrorNode[] = [];
+  row.forEach((cell) => {
+    cells.push(cell.type === schema.nodes.table_header && cell.attrs.scope !== "row"
+      ? cellType.create({
+          align: readAlignment(cell.attrs.align),
+          colspan: cell.attrs.colspan,
+          rowspan: cell.attrs.rowspan,
+          colwidth: cell.attrs.colwidth,
+        }, cell.content, cell.marks)
+      : cell);
+  });
+  return row.type.create(row.attrs, cells, row.marks);
+}
+
 function readAlignment(value: unknown): MarkdownEditorTableAlignment {
   return value === "left" || value === "center" || value === "right" ? value : null;
 }
@@ -258,14 +457,84 @@ function getTableColumnAlignments(table: ProseMirrorNode) {
   ));
 }
 
+function getTableColumnCount(table: ProseMirrorNode) {
+  let columnCount = 0;
+  table.forEach((row) => {
+    columnCount = Math.max(columnCount, row.childCount);
+  });
+  return columnCount;
+}
+
+function normalizeRowWidth(
+  schema: Schema,
+  row: ProseMirrorNode,
+  rowIndex: number,
+  columnCount: number,
+  alignments: readonly MarkdownEditorTableAlignment[],
+) {
+  if (row.childCount === columnCount) {
+    return row;
+  }
+
+  const cells: ProseMirrorNode[] = [];
+  row.forEach((cell) => cells.push(cell));
+  const cellType = rowIndex === 0 ? schema.nodes.table_header : schema.nodes.table_cell;
+
+  if (!cellType) {
+    return row;
+  }
+
+  while (cells.length < columnCount) {
+    cells.push(createParagraphCell(
+      schema,
+      cellType,
+      alignments[cells.length] ?? null,
+      rowIndex === 0 ? "col" : null,
+    ));
+  }
+
+  return row.type.create(row.attrs, cells.slice(0, columnCount), row.marks);
+}
+
+function getCellPosition(
+  tablePos: number,
+  rows: readonly ProseMirrorNode[],
+  rowIndex: number,
+  cellIndex: number,
+) {
+  let cellPos = tablePos + 1;
+
+  for (let index = 0; index < rowIndex; index += 1) {
+    cellPos += rows[index].nodeSize;
+  }
+
+  cellPos += 1;
+
+  for (let index = 0; index < cellIndex; index += 1) {
+    cellPos += rows[rowIndex].child(index).nodeSize;
+  }
+
+  return cellPos;
+}
+
+function clampCellIndex(row: ProseMirrorNode, cellIndex: number) {
+  return Math.max(0, Math.min(cellIndex, row.childCount - 1));
+}
+
 function updateTableWithSelection(
   state: EditorState,
   dispatch: ((transaction: Transaction) => void) | undefined,
   schema: Schema,
-  info: TableCellInfo,
+  info: TableSelectionInfo,
   rows: readonly ProseMirrorNode[],
   targetRowIndex: number,
   targetCellIndex: number,
+  targetRange?: Readonly<{
+    columnFrom: number;
+    columnTo: number;
+    rowFrom: number;
+    rowTo: number;
+  }>,
 ) {
   const tableType = schema.nodes.table;
 
@@ -288,19 +557,47 @@ function updateTableWithSelection(
     info.tablePos + info.table.nodeSize,
     nextTable,
   );
-  let cellPos = info.tablePos + 1;
+  const safeRowIndex = Math.max(0, Math.min(targetRowIndex, rows.length - 1));
+  const safeCellIndex = clampCellIndex(rows[safeRowIndex], targetCellIndex);
+  const cellPos = getCellPosition(info.tablePos, rows, safeRowIndex, safeCellIndex);
+  let nextSelection: Selection = getTableCellSelection(transaction.doc, cellPos);
 
-  for (let rowIndex = 0; rowIndex < targetRowIndex; rowIndex += 1) {
-    cellPos += rows[rowIndex].nodeSize;
+  if (targetRange && info.isCellSelection && isCellSelectionLike(state.selection)) {
+    const rowFrom = Math.max(0, Math.min(targetRange.rowFrom, rows.length - 1));
+    const rowTo = Math.max(rowFrom, Math.min(targetRange.rowTo, rows.length - 1));
+    const columnFrom = clampCellIndex(rows[rowFrom], targetRange.columnFrom);
+    const columnTo = clampCellIndex(rows[rowTo], targetRange.columnTo);
+    const anchorUsesStartRow = info.anchorRowIndex <= info.rowIndex;
+    const anchorUsesStartColumn = info.anchorCellIndex <= info.cellIndex;
+    const anchorRow = anchorUsesStartRow ? rowFrom : rowTo;
+    const headRow = anchorUsesStartRow ? rowTo : rowFrom;
+    const anchorColumn = clampCellIndex(
+      rows[anchorRow],
+      anchorUsesStartColumn ? columnFrom : columnTo,
+    );
+    const headColumn = clampCellIndex(
+      rows[headRow],
+      anchorUsesStartColumn ? columnTo : columnFrom,
+    );
+    const anchorPos = getCellPosition(info.tablePos, rows, anchorRow, anchorColumn);
+    const headPos = getCellPosition(info.tablePos, rows, headRow, headColumn);
+
+    try {
+      const CellSelectionConstructor = state.selection.constructor as new (
+        $anchorCell: ResolvedPos,
+        $headCell: ResolvedPos,
+      ) => Selection;
+      nextSelection = new CellSelectionConstructor(
+        transaction.doc.resolve(anchorPos),
+        transaction.doc.resolve(headPos),
+      );
+    } catch {
+      // A third-party cell selection can decline reconstruction. The edit is
+      // still valid and falls back to an ordinary caret in the target cell.
+    }
   }
 
-  cellPos += 1;
-
-  for (let cellIndex = 0; cellIndex < targetCellIndex; cellIndex += 1) {
-    cellPos += rows[targetRowIndex].child(cellIndex).nodeSize;
-  }
-
-  transaction.setSelection(getTableCellSelection(transaction.doc, cellPos));
+  transaction.setSelection(nextSelection);
   dispatch(transaction.scrollIntoView());
   return true;
 }
@@ -414,28 +711,37 @@ function insertTableCommand(
   };
 }
 
-function addTableRowCommand(schema: Schema): Command {
+function addTableRowCommand(
+  schema: Schema,
+  side: MarkdownEditorTableInsertSide,
+): Command {
   return (state, dispatch) => {
-    const info = getTableCellContext(state, schema);
+    const info = getTableSelectionContext(state, schema);
 
-    if (!info) {
+    if (!info || info.table.childCount >= MAX_TABLE_DIMENSION) {
       return false;
     }
 
+    const columnCount = getTableColumnCount(info.table);
     const alignments = getTableColumnAlignments(info.table);
-    const nextRow = createEmptyTableRow(schema, info.row.childCount, alignments);
+    let nextRow = createEmptyTableRow(schema, columnCount, alignments);
 
     if (!nextRow) {
       return false;
     }
 
     const rows: ProseMirrorNode[] = [];
-    info.table.forEach((row, _offset, index) => {
-      rows.push(row);
-      if (index === info.rowIndex) {
-        rows.push(nextRow);
-      }
+    info.table.forEach((row, _offset, rowIndex) => {
+      rows.push(normalizeRowWidth(schema, row, rowIndex, columnCount, alignments));
     });
+    const insertionIndex = side === "before" ? info.rowFrom : info.rowTo + 1;
+
+    if (insertionIndex === 0) {
+      nextRow = promoteRowToColumnHeaders(schema, nextRow);
+      rows[0] = demoteColumnHeaderRow(schema, rows[0]);
+    }
+
+    rows.splice(insertionIndex, 0, nextRow);
 
     return updateTableWithSelection(
       state,
@@ -443,34 +749,46 @@ function addTableRowCommand(schema: Schema): Command {
       schema,
       info,
       rows,
-      info.rowIndex + 1,
-      0,
+      insertionIndex,
+      Math.min(info.columnFrom, columnCount - 1),
     );
   };
 }
 
-function addTableColumnCommand(schema: Schema): Command {
+function addTableColumnCommand(
+  schema: Schema,
+  side: MarkdownEditorTableInsertSide,
+): Command {
   return (state, dispatch) => {
-    const info = getTableCellContext(state, schema);
+    const info = getTableSelectionContext(state, schema);
+    const columnCount = info ? getTableColumnCount(info.table) : 0;
 
-    if (!info) {
+    if (!info || columnCount >= MAX_TABLE_DIMENSION) {
       return false;
     }
 
+    const insertionIndex = side === "before" ? info.columnFrom : info.columnTo + 1;
+    const alignments = getTableColumnAlignments(info.table);
+    const sourceAlignment = alignments[Math.min(info.columnFrom, alignments.length - 1)] ?? null;
     const rows: ProseMirrorNode[] = [];
-    info.table.forEach((row) => {
+    info.table.forEach((rawRow, _offset, rowIndex) => {
+      const row = normalizeRowWidth(schema, rawRow, rowIndex, columnCount, alignments);
       const cells: ProseMirrorNode[] = [];
-      row.forEach((cell, _offset, cellIndex) => {
-        cells.push(cell);
-        if (cellIndex === info.cellIndex) {
-          const cellType = isColumnHeaderRow(schema, row)
-            ? schema.nodes.table_header
-            : schema.nodes.table_cell;
-          if (cellType) {
-            cells.push(createParagraphCell(schema, cellType, readAlignment(cell.attrs.align)));
-          }
-        }
-      });
+      row.forEach((cell) => cells.push(cell));
+      const cellType = rowIndex === 0
+        ? schema.nodes.table_header
+        : schema.nodes.table_cell;
+
+      if (!cellType) {
+        return;
+      }
+
+      cells.splice(insertionIndex, 0, createParagraphCell(
+        schema,
+        cellType,
+        sourceAlignment,
+        rowIndex === 0 ? "col" : null,
+      ));
       rows.push(row.type.create(row.attrs, cells, row.marks));
     });
 
@@ -481,7 +799,196 @@ function addTableColumnCommand(schema: Schema): Command {
       info,
       rows,
       info.rowIndex,
-      info.cellIndex + 1,
+      insertionIndex,
+    );
+  };
+}
+
+function cellIsEmpty(schema: Schema, cell: ProseMirrorNode) {
+  const paragraph = schema.nodes.paragraph?.create();
+  return Boolean(paragraph && cell.childCount === 1 && cell.firstChild?.eq(paragraph));
+}
+
+function resizeTableCommand(
+  schema: Schema,
+  options: NormalizedTableResizeOptions,
+): Command {
+  return (state, dispatch) => {
+    const info = getTableSelectionContext(state, schema);
+
+    if (!info) {
+      return false;
+    }
+
+    const currentRows = info.table.childCount;
+    const currentColumns = getTableColumnCount(info.table);
+    const targetRows = options.rows ?? currentRows;
+    const targetColumns = options.columns ?? currentColumns;
+
+    if (targetRows === currentRows && targetColumns === currentColumns) {
+      return false;
+    }
+
+    if (!options.discardContent && (targetRows < currentRows || targetColumns < currentColumns)) {
+      let removesContent = false;
+      info.table.forEach((row, _offset, rowIndex) => {
+        row.forEach((cell, _cellOffset, cellIndex) => {
+          if (
+            (rowIndex >= targetRows || cellIndex >= targetColumns)
+            && !cellIsEmpty(schema, cell)
+          ) {
+            removesContent = true;
+          }
+        });
+      });
+
+      if (removesContent) {
+        return false;
+      }
+    }
+
+    const alignments = getTableColumnAlignments(info.table);
+    const rows: ProseMirrorNode[] = [];
+    info.table.forEach((rawRow, _offset, rowIndex) => {
+      if (rowIndex >= targetRows) {
+        return;
+      }
+
+      const row = normalizeRowWidth(schema, rawRow, rowIndex, currentColumns, alignments);
+      const cells: ProseMirrorNode[] = [];
+      row.forEach((cell, _cellOffset, cellIndex) => {
+        if (cellIndex < targetColumns) {
+          cells.push(cell);
+        }
+      });
+      const cellType = rowIndex === 0 ? schema.nodes.table_header : schema.nodes.table_cell;
+
+      if (!cellType) {
+        return;
+      }
+
+      while (cells.length < targetColumns) {
+        cells.push(createParagraphCell(
+          schema,
+          cellType,
+          alignments[cells.length] ?? null,
+          rowIndex === 0 ? "col" : null,
+        ));
+      }
+      rows.push(row.type.create(row.attrs, cells, row.marks));
+    });
+
+    while (rows.length < targetRows) {
+      const row = createEmptyTableRow(schema, targetColumns, alignments);
+      if (!row) return false;
+      rows.push(row);
+    }
+
+    rows[0] = promoteRowToColumnHeaders(schema, rows[0]);
+    const rowFrom = Math.min(info.rowFrom, targetRows - 1);
+    const rowTo = Math.min(info.rowTo, targetRows - 1);
+    const columnFrom = Math.min(info.columnFrom, targetColumns - 1);
+    const columnTo = Math.min(info.columnTo, targetColumns - 1);
+
+    return updateTableWithSelection(
+      state,
+      dispatch,
+      schema,
+      info,
+      rows,
+      Math.min(info.rowIndex, targetRows - 1),
+      Math.min(info.cellIndex, targetColumns - 1),
+      { rowFrom, rowTo, columnFrom, columnTo },
+    );
+  };
+}
+
+function moveTableRowCommand(
+  schema: Schema,
+  direction: MarkdownEditorTableRowMoveDirection,
+): Command {
+  return (state, dispatch) => {
+    const info = getTableSelectionContext(state, schema);
+
+    if (
+      !info
+      || info.rowFrom === 0
+      || (direction === "up" ? info.rowFrom <= 1 : info.rowTo >= info.table.childCount - 1)
+    ) {
+      return false;
+    }
+
+    const columnCount = getTableColumnCount(info.table);
+    const alignments = getTableColumnAlignments(info.table);
+    const rows: ProseMirrorNode[] = [];
+    info.table.forEach((row, _offset, rowIndex) => {
+      rows.push(normalizeRowWidth(schema, row, rowIndex, columnCount, alignments));
+    });
+    const count = info.rowTo - info.rowFrom + 1;
+    const moved = rows.splice(info.rowFrom, count);
+    const targetFrom = direction === "up" ? info.rowFrom - 1 : info.rowFrom + 1;
+    rows.splice(targetFrom, 0, ...moved);
+
+    return updateTableWithSelection(
+      state,
+      dispatch,
+      schema,
+      info,
+      rows,
+      targetFrom + (info.rowIndex - info.rowFrom),
+      info.cellIndex,
+      {
+        rowFrom: targetFrom,
+        rowTo: targetFrom + count - 1,
+        columnFrom: info.columnFrom,
+        columnTo: info.columnTo,
+      },
+    );
+  };
+}
+
+function moveTableColumnCommand(
+  schema: Schema,
+  direction: MarkdownEditorTableColumnMoveDirection,
+): Command {
+  return (state, dispatch) => {
+    const info = getTableSelectionContext(state, schema);
+    const columnCount = info ? getTableColumnCount(info.table) : 0;
+
+    if (
+      !info
+      || (direction === "left" ? info.columnFrom === 0 : info.columnTo >= columnCount - 1)
+    ) {
+      return false;
+    }
+
+    const alignments = getTableColumnAlignments(info.table);
+    const count = info.columnTo - info.columnFrom + 1;
+    const targetFrom = direction === "left" ? info.columnFrom - 1 : info.columnFrom + 1;
+    const rows: ProseMirrorNode[] = [];
+    info.table.forEach((rawRow, _offset, rowIndex) => {
+      const row = normalizeRowWidth(schema, rawRow, rowIndex, columnCount, alignments);
+      const cells: ProseMirrorNode[] = [];
+      row.forEach((cell) => cells.push(cell));
+      const moved = cells.splice(info.columnFrom, count);
+      cells.splice(targetFrom, 0, ...moved);
+      rows.push(row.type.create(row.attrs, cells, row.marks));
+    });
+
+    return updateTableWithSelection(
+      state,
+      dispatch,
+      schema,
+      info,
+      rows,
+      info.rowIndex,
+      targetFrom + (info.cellIndex - info.columnFrom),
+      {
+        rowFrom: info.rowFrom,
+        rowTo: info.rowTo,
+        columnFrom: targetFrom,
+        columnTo: targetFrom + count - 1,
+      },
     );
   };
 }
@@ -511,28 +1018,29 @@ function deleteTableCommand(schema: Schema): Command {
 
 function deleteTableRowCommand(schema: Schema, deleteTable: Command): Command {
   return (state, dispatch, view) => {
-    const info = getTableCellContext(state, schema);
+    const info = getTableSelectionContext(state, schema);
 
     if (!info) {
       return false;
     }
 
-    if (info.table.childCount <= 1) {
+    const removedCount = info.rowTo - info.rowFrom + 1;
+    if (removedCount >= info.table.childCount) {
       return deleteTable(state, dispatch, view);
     }
 
     const rows: ProseMirrorNode[] = [];
     info.table.forEach((row, _offset, rowIndex) => {
-      if (rowIndex !== info.rowIndex) {
+      if (rowIndex < info.rowFrom || rowIndex > info.rowTo) {
         rows.push(row);
       }
     });
 
-    if (info.rowIndex === 0 && isColumnHeaderRow(schema, info.row) && rows[0]) {
+    if (info.rowFrom === 0 && rows[0]) {
       rows[0] = promoteRowToColumnHeaders(schema, rows[0]);
     }
 
-    const targetRowIndex = Math.min(info.rowIndex, rows.length - 1);
+    const targetRowIndex = Math.min(info.rowFrom, rows.length - 1);
     const targetCellIndex = Math.min(info.cellIndex, rows[targetRowIndex].childCount - 1);
 
     return updateTableWithSelection(
@@ -549,23 +1057,21 @@ function deleteTableRowCommand(schema: Schema, deleteTable: Command): Command {
 
 function deleteTableColumnCommand(schema: Schema, deleteTable: Command): Command {
   return (state, dispatch, view) => {
-    const info = getTableCellContext(state, schema);
+    const info = getTableSelectionContext(state, schema);
 
     if (!info) {
       return false;
     }
 
-    let columnCount = 0;
-    info.table.forEach((row) => {
-      columnCount = Math.max(columnCount, row.childCount);
-    });
+    const columnCount = getTableColumnCount(info.table);
+    const removedCount = info.columnTo - info.columnFrom + 1;
 
-    if (columnCount <= 1) {
+    if (removedCount >= columnCount) {
       return deleteTable(state, dispatch, view);
     }
 
     const remainingAlignments = getTableColumnAlignments(info.table).filter(
-      (_alignment, index) => index !== info.cellIndex,
+      (_alignment, index) => index < info.columnFrom || index > info.columnTo,
     );
     const fallbackAlignment = remainingAlignments[0] ?? null;
     const rows: ProseMirrorNode[] = [];
@@ -573,7 +1079,7 @@ function deleteTableColumnCommand(schema: Schema, deleteTable: Command): Command
     info.table.forEach((row) => {
       const cells: ProseMirrorNode[] = [];
       row.forEach((cell, _offset, cellIndex) => {
-        if (cellIndex !== info.cellIndex) {
+        if (cellIndex < info.columnFrom || cellIndex > info.columnTo) {
           cells.push(cell);
         }
       });
@@ -589,7 +1095,7 @@ function deleteTableColumnCommand(schema: Schema, deleteTable: Command): Command
 
       rows.push(row.type.create(row.attrs, cells, row.marks));
     });
-    const targetCellIndex = Math.min(info.cellIndex, rows[info.rowIndex].childCount - 1);
+    const targetCellIndex = Math.min(info.columnFrom, rows[info.rowIndex].childCount - 1);
 
     return updateTableWithSelection(
       state,
@@ -608,7 +1114,7 @@ function setTableColumnAlignmentCommand(
   alignment: MarkdownEditorTableAlignment,
 ): Command {
   return (state, dispatch) => {
-    const info = getTableCellContext(state, schema);
+    const info = getTableSelectionContext(state, schema);
 
     if (!info) {
       return false;
@@ -619,7 +1125,11 @@ function setTableColumnAlignmentCommand(
     info.table.forEach((row) => {
       const cells: ProseMirrorNode[] = [];
       row.forEach((cell, _offset, cellIndex) => {
-        if (cellIndex === info.cellIndex && readAlignment(cell.attrs.align) !== alignment) {
+        if (
+          cellIndex >= info.columnFrom
+          && cellIndex <= info.columnTo
+          && readAlignment(cell.attrs.align) !== alignment
+        ) {
           changed = true;
           cells.push(cell.type.create({ ...cell.attrs, align: alignment }, cell.content, cell.marks));
         } else {
@@ -637,6 +1147,12 @@ function setTableColumnAlignmentCommand(
       rows,
       info.rowIndex,
       info.cellIndex,
+      {
+        rowFrom: info.rowFrom,
+        rowTo: info.rowTo,
+        columnFrom: info.columnFrom,
+        columnTo: info.columnTo,
+      },
     );
   };
 }
@@ -646,7 +1162,7 @@ export function tableColumnAlignmentIsActive(
   schema: Schema,
   alignment: MarkdownEditorTableAlignment,
 ) {
-  const info = getTableCellContext(state, schema);
+  const info = getTableSelectionContext(state, schema);
 
   if (!info) {
     return false;
@@ -654,9 +1170,12 @@ export function tableColumnAlignmentIsActive(
 
   let active = true;
   info.table.forEach((row) => {
-    const cell = row.maybeChild(info.cellIndex);
-    if (!cell || readAlignment(cell.attrs.align) !== alignment) {
-      active = false;
+    for (let column = info.columnFrom; column <= info.columnTo; column += 1) {
+      const cell = row.maybeChild(column);
+      if (!cell || readAlignment(cell.attrs.align) !== alignment) {
+        active = false;
+        break;
+      }
     }
   });
   return active;
@@ -669,8 +1188,21 @@ export function createTableCommandSet(schema: Schema) {
     insertTable(options?: MarkdownEditorTableInsertOptions) {
       return insertTableCommand(schema, normalizeTableInsertOptions(options));
     },
-    addTableRow: addTableRowCommand(schema),
-    addTableColumn: addTableColumnCommand(schema),
+    addTableRow(side?: MarkdownEditorTableInsertSide) {
+      return addTableRowCommand(schema, normalizeTableInsertSide(side));
+    },
+    addTableColumn(side?: MarkdownEditorTableInsertSide) {
+      return addTableColumnCommand(schema, normalizeTableInsertSide(side));
+    },
+    resizeTable(options: MarkdownEditorTableResizeOptions) {
+      return resizeTableCommand(schema, normalizeTableResizeOptions(options));
+    },
+    moveTableRow(direction: MarkdownEditorTableRowMoveDirection) {
+      return moveTableRowCommand(schema, normalizeTableRowMoveDirection(direction));
+    },
+    moveTableColumn(direction: MarkdownEditorTableColumnMoveDirection) {
+      return moveTableColumnCommand(schema, normalizeTableColumnMoveDirection(direction));
+    },
     deleteTableRow: deleteTableRowCommand(schema, deleteTable),
     deleteTableColumn: deleteTableColumnCommand(schema, deleteTable),
     setTableColumnAlignment(alignment: MarkdownEditorTableAlignment) {

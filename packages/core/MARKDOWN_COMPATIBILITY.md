@@ -1,6 +1,6 @@
 # Markdown dialect and fidelity contract
 
-Status: current `markora` `0.0.x` behavior, verified on 2026-07-15.
+Status: current `markora` `0.0.x` contract, updated and verified for `EE-018` on 2026-07-17.
 
 This contract applies to Markdown passed through `createEditor({ markdown })`, `editor.commands.reconcileMarkdown()`, or `editor.commands.resetMarkdown()` and returned by `editor.getMarkdown()` or `onChange`. Deprecated `setMarkdown()` uses the same parsing boundary as `resetMarkdown()`.
 
@@ -47,7 +47,7 @@ Syntax outside both the supported dialect and the recognized opaque shapes can s
 | Hard breaks | Backslash or two-space line breaks | Normalized to a backslash followed by LF. A soft line break is not a hard break. |
 | Links | Inline links, CommonMark angle autolinks, and full/collapsed reference links, with optional titles | Normalized to inline links. Reference labels, definitions, and autolink spelling are not retained. Bare GFM URL/email autolinks are not enabled. |
 | Images | Inline and reference images with alt text and optional titles | Normalized to inline image syntax after the per-editor URL policy. The default `data:` subset and limits are described below. |
-| Pipe tables | Rectangular header/delimiter/body tables, optional outer pipes, alignment colons, and supported inline cell content | Normalized to outer pipes and `---` dividers. Default, left, center, and right alignment are retained. Literal pipes, including pipes in code spans, must be escaped. |
+| Pipe tables | Rectangular header/delimiter/body tables, optional outer pipes, alignment colons, and supported inline cell content | Normalized to outer pipes and `---` dividers. Default, left, center, and right alignment are retained. Literal pipes, including pipes in code spans, must be escaped. The semantic round-trip promise requires one unmerged cell with one paragraph per grid position and column headers in the first row. |
 
 Code-block language loading affects only the embedded CodeMirror experience. Any fenced info string is accepted as generic code metadata even when no language package or renderer exists.
 
@@ -129,6 +129,24 @@ Supported external HTML is converted through schema DOM rules. Paragraphs, marks
 
 Outer copy exposes semantic HTML, canonical Markdown, and a human-readable plain representation when the event clipboard accepts them. Canonical Markdown is the fidelity representation for code fences/languages, table alignment, list/task state, links, images, marks, opaque source, and extension syntax. HTML additionally carries private slice context for same-editor structure. Plain text is intended for human-readable destinations and can omit syntax-only information such as link destinations or code-fence language. Nested code selection is deliberately plain source; select the complete outer code block when fenced Markdown is required. A browser-native range split across active CodeMirror and outer ProseMirror is a safety boundary: Markora emits browser-projected plain text and prevents destructive cut because Firefox/WebKit do not expose one consistent cross-owner range.
 
+A rectangular table-cell selection is exported as semantic table HTML, quoted TSV in `text/plain`, and a complete standalone pipe table in `text/markdown`. Tabs, line breaks, and double quotes inside TSV cells use CSV-style double-quote escaping. Because a standalone pipe table requires a header, the first row of a body-only selection becomes the clipboard Markdown header; this does not change the source table. Cut clears the selected cell contents without deleting rows or columns. When pasting a table or TSV matrix into a cell rectangle, a larger matrix is clipped and a smaller matrix is repeated to fill that rectangle. TSV parsing is limited to 1 MiB and 100 rows by 100 columns. Merged or over-limit table transfers are rejected atomically and emit the recoverable `"table-operation-rejected"` error event.
+
+## Table editing and GFM diagnostics
+
+Table creation, before/after insertion, row/column movement, rectangular deletion/alignment, and exact row/column-count resizing preserve the simple rectangular GFM shape. The first row is always the pinned column-header row. “Resize” means changing logical row or column counts; Markora does not persist pixel column widths in Markdown. Shrinking refuses to discard non-empty cells unless the caller explicitly passes `discardContent: true`.
+
+Rich HTML and trusted extensions or `editor.view` transactions can represent table structures outside the pipe-table dialect. `editor.state.tableIssues()` reports the current live occurrences of:
+
+| Code | GFM fidelity problem |
+| --- | --- |
+| `ragged-row` | A row does not have the table's required rectangular width. |
+| `missing-column-header` | A first-row cell is not a column header. |
+| `merged-cell` | A cell has a row or column span. |
+| `multi-block-cell` | A cell does not contain exactly one paragraph. |
+| `row-header-scope` | A body header has HTML-only row scope. |
+
+Diagnostics contain the table's document position plus zero-based row and optional column coordinates. The query is non-mutating and reports model shapes, not source syntax: it is neither an import rejection path nor a general unsupported-Markdown validator. Hosts that accept rich HTML, custom table extensions, or raw ProseMirror transactions should check it before treating serialized Markdown as the sole stored representation. GFM serialization cannot retain merged cells, multiple/nested blocks, or row-header scope.
+
 ## URL and embedded-content policy
 
 `CreateEditorOptions.resources` defines one per-editor stored-URL policy. Markora applies its final sanitizer after Markdown parsing, rich paste (including extension clipboard and raw-plugin slice transforms), input rules, built-in UI and commands, asset-upload results, and runtime URL resolution. A host-approved custom scheme therefore reaches the final policy instead of being discarded by Markdown-it's fixed allowlist, while an earlier paste contribution cannot bypass the clamp.
@@ -178,8 +196,8 @@ Even a supported construct must stay within the shapes listed above:
 - escaping an `[x]`-like prefix at the start of a bullet item does not reliably opt out of task conversion;
 - adjacent lists distinguished only by bullet marker or ordered delimiter can merge after normalization;
 - ordered lists starting at zero normalize incorrectly to one;
-- pipe-table rows should match the header width; missing cells can be padded and extra cells can be discarded;
-- table cells should contain supported inline content in one paragraph; multi-block cells do not round-trip as pipe-table structure;
+- pipe-table rows must match the header width; permissive imports can pad missing cells or discard extras, while live ragged rows created through trusted escape hatches are reported by `state.tableIssues()`;
+- table cells must remain unmerged and contain supported inline content in one paragraph; merged, multi-block, and HTML row-header structures are reported but do not round-trip as pipe-table structure;
 - bare URLs, `www.` addresses, and bare email addresses remain plain text unless written as CommonMark angle autolinks.
 
 These limitations are outside the semantic round-trip promise. They are candidates for conformance coverage and later editor work, not implicit extensions of the dialect.
@@ -193,6 +211,7 @@ These limitations are outside the semantic round-trip promise. They are candidat
 5. Use `onEditOpaqueMarkdown` when users must edit protected source, and handle a stale `update()` result explicitly.
 6. Configure `resources` before import when stored URLs need a non-default scheme or data policy; use runtime resolution instead of rewriting stable Markdown for signed/display URLs.
 7. If `resources.assets` is enabled, persist upload results in the host service and provide accessible progress, failure, cancel, and retry UI around the headless event/API surface.
-8. Sanitize the final rendering surface independently; inert editor rendering is not an HTML-rendering security boundary.
+8. Call `state.tableIssues()` before persistence when rich HTML, extensions, or advanced ProseMirror transactions can introduce non-GFM table shapes, and retain another representation when any reported construct must survive.
+9. Sanitize the final rendering surface independently; inert editor rendering is not an HTML-rendering security boundary.
 
 The characterization tests are in [`markdownDialect.test.ts`](https://github.com/KevinWang15/markora/blob/main/packages/core/test/markdownDialect.test.ts), with representative [golden documents](https://github.com/KevinWang15/markora/tree/main/packages/core/test/fixtures/markdown-roundtrip) and reviewed [opaque-source cases](https://github.com/KevinWang15/markora/tree/main/packages/core/test/fixtures/opaque-markdown). Broader CommonMark/GFM conformance and corpus tests live alongside them in the core test suite.

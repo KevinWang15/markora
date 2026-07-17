@@ -21,11 +21,16 @@ import type {
   MarkdownEditorCodeBlockOptions,
   MarkdownEditorHeadingLevel,
   MarkdownEditorTableAlignment,
+  MarkdownEditorTableColumnMoveDirection,
   MarkdownEditorTableInsertOptions,
+  MarkdownEditorTableInsertSide,
+  MarkdownEditorTableResizeOptions,
+  MarkdownEditorTableRowMoveDirection,
 } from "./editorApi";
 import {
   createTableCommandSet,
   normalizeTableAlignment,
+  tableCellSelectionIsActive,
   tableColumnAlignmentIsActive,
   tableIsActive,
 } from "./tableCommands";
@@ -602,8 +607,21 @@ export function createStructuralCommandSet(schema: Schema) {
       insertTable(options?: MarkdownEditorTableInsertOptions) {
         return tables.insertTable(options);
       },
-      addTableRow: tables.addTableRow,
-      addTableColumn: tables.addTableColumn,
+      addTableRow(side?: MarkdownEditorTableInsertSide) {
+        return tables.addTableRow(side);
+      },
+      addTableColumn(side?: MarkdownEditorTableInsertSide) {
+        return tables.addTableColumn(side);
+      },
+      resizeTable(options: MarkdownEditorTableResizeOptions) {
+        return tables.resizeTable(options);
+      },
+      moveTableRow(direction: MarkdownEditorTableRowMoveDirection) {
+        return tables.moveTableRow(direction);
+      },
+      moveTableColumn(direction: MarkdownEditorTableColumnMoveDirection) {
+        return tables.moveTableColumn(direction);
+      },
       deleteTableRow: tables.deleteTableRow,
       deleteTableColumn: tables.deleteTableColumn,
       setTableColumnAlignment(alignment: MarkdownEditorTableAlignment) {
@@ -657,6 +675,9 @@ export function createStructuralCommandSet(schema: Schema) {
       },
       table(state: EditorState) {
         return tableIsActive(state, schema);
+      },
+      tableCellSelection(state: EditorState) {
+        return tableCellSelectionIsActive(state);
       },
       tableColumnAlignment(state: EditorState, alignment: MarkdownEditorTableAlignment) {
         return tableColumnAlignmentIsActive(
