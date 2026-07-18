@@ -125,6 +125,9 @@ importers:
       markora:
         specifier: workspace:*
         version: link:../core
+      markora-extension-alerts:
+        specifier: workspace:*
+        version: link:../extension-alerts
       markora-extension-footnotes:
         specifier: workspace:*
         version: link:../extension-footnotes
@@ -165,6 +168,12 @@ importers:
       vite:
         specifier: ^6.2.1
         version: 6.4.1
+
+  packages/extension-alerts:
+    devDependencies:
+      markora:
+        specifier: workspace:*
+        version: link:../core
 
   packages/extension-footnotes:
     devDependencies:

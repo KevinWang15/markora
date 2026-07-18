@@ -38,6 +38,9 @@ export type LabEventRecord = {
 type BrowserLabWindowApi = NonNullable<Window["__MARKORA_BROWSER_LAB__"]>;
 export type LabCommandRequest = Parameters<BrowserLabWindowApi["command"]>[1];
 export type LabActiveRequest = Parameters<BrowserLabWindowApi["active"]>[1];
+export type LabAlertsCommandRequest = Parameters<BrowserLabWindowApi["alertsCommand"]>[1];
+export type LabAlertsStateRequest = Parameters<BrowserLabWindowApi["alertsState"]>[1];
+export type LabAlertsSnapshot = ReturnType<BrowserLabWindowApi["alertsSnapshot"]>;
 export type LabFootnotesCommandRequest = Parameters<BrowserLabWindowApi["footnotesCommand"]>[1];
 export type LabFootnoteSelectionRequest = Parameters<BrowserLabWindowApi["selectFootnote"]>[1];
 export type LabFootnotesSnapshot = ReturnType<BrowserLabWindowApi["footnotesSnapshot"]>;
@@ -57,6 +60,16 @@ export type LabUpdateOptions = {
 };
 
 export type LabEditorSpec = {
+  alertsMessages?: Partial<{
+    alertLabel: string;
+    cautionKindLabel: string;
+    importantKindLabel: string;
+    invalidDocumentDiagnostic: string;
+    noteKindLabel: string;
+    tipKindLabel: string;
+    toggleAlert: string;
+    warningKindLabel: string;
+  }>;
   ariaLabel?: string;
   ariaLabelledBy?: string;
   attributes?: Record<string, string>;
@@ -65,7 +78,7 @@ export type LabEditorSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "footnotes" | "frontmatter" | "math" | "public-example";
+  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example";
   footnotesMessages?: Partial<Record<
     | "backReferenceLabel"
     | "backReferenceText"
@@ -446,6 +459,39 @@ export async function getExtensionSnapshot(page: Page, id: string) {
     (editorId) => window.__MARKORA_BROWSER_LAB__!.extensionSnapshot(editorId),
     id,
   ) as Promise<LabExtensionSnapshot>;
+}
+
+export async function runAlertsCommand(
+  page: Page,
+  id: string,
+  request: LabAlertsCommandRequest,
+) {
+  return page.evaluate(
+    ({ editorId, nextRequest }) => (
+      window.__MARKORA_BROWSER_LAB__!.alertsCommand(editorId, nextRequest)
+    ),
+    { editorId: id, nextRequest: request },
+  );
+}
+
+export async function getAlertsState(
+  page: Page,
+  id: string,
+  request: LabAlertsStateRequest,
+) {
+  return page.evaluate(
+    ({ editorId, nextRequest }) => (
+      window.__MARKORA_BROWSER_LAB__!.alertsState(editorId, nextRequest)
+    ),
+    { editorId: id, nextRequest: request },
+  );
+}
+
+export async function getAlertsSnapshot(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.alertsSnapshot(editorId),
+    id,
+  ) as Promise<LabAlertsSnapshot>;
 }
 
 export async function runFootnotesCommand(

@@ -23,6 +23,16 @@ import {
 import { createEditor as createMinimalEditor } from "markora/minimal";
 import { NodeSelection, TextSelection, type Selection } from "markora/extension-api";
 import {
+  createAlertsExtension,
+  defaultAlertsMessages,
+  type AlertKind,
+  type AlertSnapshot,
+  type AlertsExtension,
+  type AlertsMessageOverrides,
+  type AlertsMessages,
+} from "markora-extension-alerts";
+import "markora-extension-alerts/styles.css";
+import {
   createFrontmatterExtension,
   type FrontmatterEditRequest,
   type FrontmatterExtension,
@@ -64,6 +74,7 @@ export type BrowserLabPortal = "body" | "default" | "local" | "positioned" | "tr
 export type BrowserLabFootnotesMessages = Partial<
   Record<keyof FootnotesMessageOverrides, string>
 >;
+export type BrowserLabAlertsMessages = Partial<Record<keyof AlertsMessages, string>>;
 export type BrowserLabMathMessages = Partial<Record<keyof MathMessages, string>>;
 export type BrowserLabMathRendererMode =
   | "connected"
@@ -75,6 +86,21 @@ export type BrowserLabMathRendererMode =
   | "unsafe"
   | "wrong-document";
 
+export type BrowserLabAlertsCommandRequest =
+  | { kind?: AlertKind; type: "toggle" | "wrap" }
+  | { kind: AlertKind; type: "setKind" }
+  | { type: "unwrap" };
+
+export type BrowserLabAlertsStateRequest =
+  | { kind?: AlertKind; type: "canToggle" | "canWrap" }
+  | { kind: AlertKind; type: "canSetKind" }
+  | { type: "canUnwrap" | "isActive" };
+
+export type BrowserLabAlertsSnapshot = Readonly<{
+  active: AlertSnapshot | null;
+  alerts: readonly AlertSnapshot[];
+}>;
+
 export type BrowserLabEditorSpec = {
   ariaLabel?: string;
   ariaLabelledBy?: string;
@@ -84,7 +110,8 @@ export type BrowserLabEditorSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "footnotes" | "frontmatter" | "math" | "public-example";
+  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example";
+  alertsMessages?: BrowserLabAlertsMessages;
   footnotesMessages?: BrowserLabFootnotesMessages;
   frontmatterMessages?: FrontmatterMessageOverrides;
   id: string;
@@ -311,6 +338,9 @@ export type BrowserLabResourceLog = {
 };
 
 export type BrowserLabApi = {
+  alertsCommand: (id: string, request: BrowserLabAlertsCommandRequest) => boolean;
+  alertsSnapshot: (id: string) => BrowserLabAlertsSnapshot;
+  alertsState: (id: string, request: BrowserLabAlertsStateRequest) => boolean;
   blur: (id: string) => void;
   clearEvents: (id: string) => void;
   active: (id: string, request: BrowserLabActiveRequest) => boolean;
@@ -384,6 +414,7 @@ declare global {
 
 type MountedEditor = {
   activationObserver: MutationObserver;
+  alertsExtension: AlertsExtension | null;
   changeCount: number;
   controlledEcho: boolean;
   editor: MarkdownEditor;
@@ -392,7 +423,7 @@ type MountedEditor = {
   eventLog: BrowserLabEventRecord[];
   eventUnsubscribes: Map<MarkdownEditorEventName, () => void>;
   extensionActions?: HTMLElement;
-  extensionMode?: "footnotes" | "frontmatter" | "math" | "public-example";
+  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example";
   footnotesExtension: FootnotesExtension | null;
   frontmatterEditRequest: FrontmatterEditRequest | null;
   frontmatterExtension: FrontmatterExtension | null;
@@ -665,6 +696,14 @@ function requireEditor(editors: Map<string, MountedEditor>, id: string) {
   return mounted;
 }
 
+function requireAlertsHandle(mounted: MountedEditor) {
+  if (!mounted.alertsExtension) {
+    throw new Error(`Browser lab editor "${mounted.id}" has no alerts extension.`);
+  }
+
+  return mounted.editor.extensions.get(mounted.alertsExtension);
+}
+
 function requireFrontmatterHandle(mounted: MountedEditor) {
   if (!mounted.frontmatterExtension) {
     throw new Error(`Browser lab editor "${mounted.id}" has no front matter extension.`);
@@ -687,6 +726,21 @@ function requireMathHandle(mounted: MountedEditor) {
   }
 
   return mounted.editor.extensions.get(mounted.mathExtension);
+}
+
+function normalizeBrowserLabAlertsMessages(
+  overrides: BrowserLabAlertsMessages | undefined,
+): AlertsMessageOverrides | undefined {
+  if (!overrides) {
+    return undefined;
+  }
+
+  return Object.fromEntries(Object.entries(overrides).map(([key, message]) => [
+    key,
+    typeof defaultAlertsMessages[key as keyof AlertsMessages] === "function"
+      ? () => message
+      : message,
+  ])) as AlertsMessageOverrides;
 }
 
 function normalizeBrowserLabMathMessages(
@@ -803,6 +857,35 @@ function runBrowserLabMathCommand(
     case "retryPreview": return commands.retryPreview(request.target);
     case "togglePreview": return commands.togglePreview(request.target);
     case "update": return commands.update(request.target, request.source);
+  }
+}
+
+function runBrowserLabAlertsCommand(
+  mounted: MountedEditor,
+  request: BrowserLabAlertsCommandRequest,
+) {
+  const commands = requireAlertsHandle(mounted).commands;
+
+  switch (request.type) {
+    case "setKind": return commands.setKind(request.kind);
+    case "toggle": return commands.toggle(request.kind);
+    case "unwrap": return commands.unwrap();
+    case "wrap": return commands.wrap(request.kind);
+  }
+}
+
+function readBrowserLabAlertsState(
+  mounted: MountedEditor,
+  request: BrowserLabAlertsStateRequest,
+) {
+  const state = requireAlertsHandle(mounted).state;
+
+  switch (request.type) {
+    case "canSetKind": return state.canSetKind(request.kind);
+    case "canToggle": return state.canToggle(request.kind);
+    case "canUnwrap": return state.canUnwrap();
+    case "canWrap": return state.canWrap(request.kind);
+    case "isActive": return state.isActive();
   }
 }
 
@@ -963,6 +1046,11 @@ export function BrowserLabPage() {
       mounted.mathRendererDeferred.clear();
       clearMathRendererArtifacts(mounted);
       delete mounted.section.dataset.pendingMathEdit;
+      mounted.alertsExtension = extensionMode === "alerts"
+        ? createAlertsExtension({
+            messages: normalizeBrowserLabAlertsMessages(spec.alertsMessages),
+          })
+        : null;
       mounted.frontmatterExtension = extensionMode === "frontmatter"
         ? createFrontmatterExtension({
             messages: spec.frontmatterMessages,
@@ -999,13 +1087,15 @@ export function BrowserLabPage() {
         : null;
       const extensions = extensionMode === "public-example"
         ? publicExampleExtensions
-        : mounted.frontmatterExtension
-          ? [mounted.frontmatterExtension]
-          : mounted.footnotesExtension
-            ? [mounted.footnotesExtension]
-            : mounted.mathExtension
-              ? [mounted.mathExtension]
-              : undefined;
+        : mounted.alertsExtension
+          ? [mounted.alertsExtension]
+          : mounted.frontmatterExtension
+            ? [mounted.frontmatterExtension]
+            : mounted.footnotesExtension
+              ? [mounted.footnotesExtension]
+              : mounted.mathExtension
+                ? [mounted.mathExtension]
+                : undefined;
       const existingOverlays = new Set(
         mounted.portalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR),
       );
@@ -1103,6 +1193,28 @@ export function BrowserLabPage() {
 
     const api: BrowserLabApi = {
       ready: true,
+      alertsCommand(id, request) {
+        const mounted = requireEditor(editors, id);
+        const handled = runBrowserLabAlertsCommand(mounted, request);
+
+        if (handled) {
+          mounted.editor.flushChange();
+          mounted.output.textContent = mounted.editor.getMarkdown();
+          renderExtensionActions(mounted);
+        }
+
+        return handled;
+      },
+      alertsSnapshot(id) {
+        const state = requireAlertsHandle(requireEditor(editors, id)).state;
+        return {
+          active: state.getActive(),
+          alerts: state.getAlerts(),
+        };
+      },
+      alertsState(id, request) {
+        return readBrowserLabAlertsState(requireEditor(editors, id), request);
+      },
       blur(id) {
         requireEditor(editors, id).editor.blur();
       },
@@ -1203,6 +1315,7 @@ export function BrowserLabPage() {
         activationObserver.observe(host, { childList: true, subtree: true });
         const mounted: MountedEditor = {
           activationObserver,
+          alertsExtension: null,
           changeCount: 0,
           controlledEcho: false,
           editor: null as unknown as MarkdownEditor,

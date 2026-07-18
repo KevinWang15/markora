@@ -81,6 +81,26 @@ describe('table markdown fidelity', () => {
     expect(editor.getMarkdown()).toBe(markdown);
   });
 
+  it('keeps every serialized pipe-table line inside its blockquote', () => {
+    const markdown = [
+      '> | A |',
+      '> | --- |',
+      '> | x |',
+    ].join('\n');
+    const editor = createEditor({
+      element: createHost(),
+      markdown,
+    });
+
+    expect(editor.view.state.doc.firstChild?.type.name).toBe('blockquote');
+    expect(editor.view.state.doc.firstChild?.firstChild?.type.name).toBe('table');
+    expect(editor.getMarkdown()).toBe(markdown);
+
+    editor.commands.resetMarkdown(markdown);
+    expect(editor.view.state.doc.firstChild?.firstChild?.type.name).toBe('table');
+    expect(editor.getMarkdown()).toBe(markdown);
+  });
+
   it('preserves explicit HTML row and column header scope through the clipboard parser', () => {
     const editor = createEditor({
       element: createHost(),

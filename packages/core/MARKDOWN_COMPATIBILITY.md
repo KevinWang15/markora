@@ -1,6 +1,6 @@
 # Markdown dialect and fidelity contract
 
-Status: current `markora` `0.0.x` contract, updated through the `EE-021` math package on 2026-07-18.
+Status: current `markora` `0.0.x` contract, updated through the `EE-021` alerts package on 2026-07-18.
 
 This contract applies to Markdown passed through `createEditor({ markdown })`, `editor.commands.reconcileMarkdown()`, or `editor.commands.resetMarkdown()` and returned by `editor.getMarkdown()` or `onChange`. Deprecated `setMarkdown()` uses the same parsing boundary as `resetMarkdown()`.
 
@@ -144,6 +144,41 @@ Live controls are localized, keyboard-operable siblings of the semantic
 `markora-extension-math/styles.css` explicitly; its public custom properties
 use the `--mdw-math-*` prefix.
 
+`markora-extension-alerts` works with both `markora` and `markora/minimal` and
+claims a CommonMark blockquote only when its first immediate content line is an
+ASCII-space/tab-padded `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, or
+`[!CAUTION]` marker. Kind matching is case-insensitive on import, the semantic
+model stores the lowercase kind, and output uses an uppercase marker. The
+remaining quote content stays ordinary editable block content, including
+paragraphs, headings, thematic breaks, lists, code, nested quotes or alerts,
+root-entry tables, and contributed blocks such as footnote definitions when the
+owning extension is installed. A marker-only alert keeps one empty editable
+paragraph but serializes without a terminal newline.
+
+Authored marker claims run before the generic blockquote rule; a namespaced
+core promotion then reuses Markdown-it's completed CommonMark blockquote
+boundaries instead of duplicating its lazy-continuation and nested-container
+state machine. Unknown, escaped, formatted, titled, non-first-line, excessively
+indented, or non-ASCII-padded markers therefore remain ordinary blockquotes.
+The demo-only `:::note` form is not part of this package. Literal later
+`[!KIND]` body paragraphs are escaped on output so they cannot become a new
+alert boundary after reparsing. Authored no-blank Setext headings and `---`
+thematic breaks are recovered from Markdown-it's look-behind tokens; a marker
+followed only by `===` remains ordinary Markdown because `===` is not a
+standalone supported body block. A non-paragraph first body block serializes
+after a bare quoted blank line so the marker cannot absorb it on reparse.
+
+The package exposes typed wrap, toggle, set-kind, and unwrap commands plus
+frozen active/document snapshots and capability queries. Kind changes retain a
+stable editable body DOM and every successful mutation is one guarded extension
+transaction. Invalid raw kinds are rejected in every intermediate transaction
+document and again at serialization rather than silently becoming notes. The
+visible localized kind label, formatter-owned accessible name, `role="note"`,
+logical styles, forced-colors behavior, and selected-node focus treatment do
+not rely on color alone. The package has no renderer or network surface. Import
+`markora-extension-alerts/styles.css` explicitly; public custom properties use
+the `--mdw-alert-*` prefix.
+
 ## Canonical output
 
 These transformations are intentional and happen on import/export even when the user makes no visual edit.
@@ -172,6 +207,9 @@ These transformations are intentional and happen on import/export even when the 
 | Inline math, when `markora-extension-math` is installed | Canonical single-dollar `$expression$` shell |
 | Block math, when `markora-extension-math` is installed | Canonical multiline `$$` shell with LF expression lines, including empty source |
 | Literal dollars, when `markora-extension-math` is installed | Backslash-escaped in ordinary text and plain image alt text so reparsing cannot claim semantic math |
+| Alert marker, when `markora-extension-alerts` is installed | First quoted line with an uppercase kind and canonical `> ` prefixes; marker padding and input case are discarded |
+| Marker-only alert, when `markora-extension-alerts` is installed | Canonical `> [!KIND]` with no terminal newline |
+| Non-paragraph first alert body block, when `markora-extension-alerts` is installed | One bare `>` separator line between the marker and body; nested table lines retain the quote prefix |
 | Angle URL or email autolink | Inline link syntax |
 | Character entity such as `&copy;` | Decoded Unicode text |
 | Backslash escape | Re-emitted only where the serializer needs an escape |
@@ -193,6 +231,13 @@ With `markora-extension-math` installed, Markdown and plain-text copy contain
 only the canonical source shell. Rich HTML contains inert semantic source
 markup that reparses as the same math node; it never contains renderer DOM,
 preview/status UI, event listeners, or action controls.
+
+With `markora-extension-alerts` installed, copying a complete alert emits its
+canonical marker and body in Markdown and plain text. Rich HTML contains the
+semantic inert `aside`, lowercase kind attribute, visible localized label, and
+editable body structure rather than NodeView-only controls. A selection wholly
+inside the body remains body-only. Markdown and rich paste recreate semantics;
+plain-text paste keeps marker punctuation literal.
 
 A rectangular table-cell selection is exported as semantic table HTML, quoted TSV in `text/plain`, and a complete standalone pipe table in `text/markdown`. Tabs, line breaks, and double quotes inside TSV cells use CSV-style double-quote escaping. Because a standalone pipe table requires a header, the first row of a body-only selection becomes the clipboard Markdown header; this does not change the source table. Cut clears the selected cell contents without deleting rows or columns. When pasting a table or TSV matrix into a cell rectangle, a larger matrix is clipped and a smaller matrix is repeated to fill that rectangle. TSV parsing is limited to 1 MiB and 100 rows by 100 columns. Merged or over-limit table transfers are rejected atomically and emit the recoverable `"table-operation-rejected"` error event.
 
@@ -244,7 +289,7 @@ This table distinguishes the narrow shapes protected as opaque source from relat
 | YAML front matter | Exact optional syntax when `markora-extension-frontmatter` is installed; otherwise opaque only in the compatibility entry's recognized head shape | The package owns one validated head node and typed source workflow. Without it, compatibility `markora` preserves the conservative shape as `raw_block`; `markora/minimal` and other metadata syntaxes have no fidelity guarantee. |
 | Footnotes | Semantic optional syntax when `markora-extension-footnotes` is installed; otherwise unsupported — unreported | The package retains references, definitions, repeated-reference order, and canonical four-space continuations in root and minimal. Without it, labels and definitions can become ordinary reference links or escaped text, and definitions can disappear. |
 | Math | Semantic optional syntax when `markora-extension-math` is installed; otherwise opaque only for recognized standalone display math in the compatibility entry | The package retains guarded inline expressions and canonical inline/block shells in root and minimal. Without it, compatibility `markora` preserves recognized standalone `$$` shapes as `raw_block`; inline math and all minimal-entry math have no fidelity guarantee. |
-| GitHub alerts/callouts | Unsupported — unreported | Parsed as an ordinary blockquote; the alert marker is text and source lines can fold together. |
+| GitHub alerts/callouts | Semantic optional syntax when `markora-extension-alerts` is installed; otherwise unsupported — unreported | The package retains one of five kinds plus supported editable body blocks and writes canonical uppercase markers in root and minimal. Without it, the source is an ordinary blockquote whose marker can escape and whose soft lines can fold. |
 | Raw HTML and comments | Opaque for CommonMark-recognized block and inline shapes | Stored and displayed as inert source atoms, not rendered HTML. Syntax outside the tokenizer's recognized HTML shapes remains unsupported. |
 | Directives and container syntax | Opaque for the balanced container, leaf, and inline shapes above; otherwise unsupported — unreported | Recognized shapes are preserved. Unbalanced or different directive dialects can still be treated as ordinary Markdown text. |
 | TOC markers such as `[TOC]` | Unsupported — unreported | Treated as literal text and normally backslash-escaped on output. |

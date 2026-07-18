@@ -164,6 +164,25 @@
       },
       "staticModuleCount": { "warning": 128, "failure": 135 }
     },
+    "alerts": {
+      "initialJs": {
+        "rawBytes": { "warning": 105000, "failure": 118500 },
+        "gzipBytes": { "warning": 28000, "failure": 31000 }
+      },
+      "lazyJs": {
+        "rawBytes": { "warning": 0, "failure": 0 },
+        "gzipBytes": { "warning": 0, "failure": 0 }
+      },
+      "totalJs": {
+        "rawBytes": { "warning": 105000, "failure": 118500 },
+        "gzipBytes": { "warning": 28000, "failure": 31000 }
+      },
+      "css": {
+        "rawBytes": { "warning": 2000, "failure": 2275 },
+        "gzipBytes": { "warning": 700, "failure": 800 }
+      },
+      "staticModuleCount": { "warning": 96, "failure": 106 }
+    },
     "frontmatter": {
       "initialJs": {
         "rawBytes": { "warning": 92000, "failure": 100000 },

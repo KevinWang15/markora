@@ -781,7 +781,12 @@ const serializerNodes: Record<
         }
       });
 
-      state.write(lines.join("\n"));
+      lines.forEach((line, index) => {
+        if (index > 0) {
+          state.ensureNewLine();
+        }
+        state.write(line);
+      });
       state.closeBlock(node);
     },
     bullet_list(state: MarkdownSerializerState, node: ProseMirrorNode) {

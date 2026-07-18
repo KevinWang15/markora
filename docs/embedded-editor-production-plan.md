@@ -690,8 +690,8 @@ and verification decisions are frozen in the
 | YAML front matter | DONE | `markora-extension-frontmatter` |
 | Footnotes | DONE | `markora-extension-footnotes` |
 | Inline and block math | DONE | `markora-extension-math` |
-| GitHub-style alerts | NEXT | `markora-extension-alerts` |
-| Generated TOC | QUEUED | `markora-extension-toc` |
+| GitHub-style alerts | DONE | `markora-extension-alerts` |
+| Generated TOC | NEXT | `markora-extension-toc` |
 | Sanitized raw HTML | QUEUED | `markora-extension-html` |
 | Mermaid and GitHub diagrams | QUEUED | `markora-extension-diagrams` |
 
@@ -842,6 +842,52 @@ and verification decisions are frozen in the
   `maxNesting: 20` can drop content at roughly ten nested list items in both
   codecs. It is unrelated to the footnote scanner and must be resolved as a
   core Markdown fidelity issue rather than hidden inside this package milestone.
+- `markora-extension-alerts` provides semantic GitHub blockquote alerts in root
+  and minimal for note, tip, important, warning, and caution. A lightweight
+  authored-marker claim runs before the foundation blockquote rule, while a
+  namespaced core promotion deliberately reuses Markdown-it's complete lazy-line
+  and nested-container state machine. Case and horizontal marker whitespace
+  normalize, marker-only nodes retain an editable empty paragraph without a
+  terminal newline, and authored no-blank Setext headings or thematic breaks
+  are recovered after Markdown-it look-behind. Malformed, escaped, formatted,
+  titled, indented-code, non-first-line, non-ASCII-padded, and demo-directive
+  forms remain ordinary fallback Markdown.
+- Typed wrap, toggle, set-kind, and unwrap commands preserve selection and body
+  content in one extension-origin undo step, with read-only, composition, and
+  semantic-no-op guards. Capability queries and frozen position snapshots expose
+  active/document state. Changed-range validation rejects invalid kinds in every
+  intermediate raw transaction document, and the serializer fails defensively
+  rather than coercing malformed nodes.
+- Static clipboard DOM and a stable live NodeView share truthful semantic
+  `aside` structure. Kind changes retain the same editable content DOM; visible
+  localized kind text and a formatter-owned accessible name identify every kind
+  independently of color. Logical host-overridable CSS covers RTL, contrast,
+  forced colors, reduced motion, and selected-node focus. The package bundles no
+  renderer, performs no network work, and keeps whole-alert Markdown/plain/rich
+  clipboard representations semantic while partial body selections stay local.
+- Non-paragraph first body blocks receive a canonical bare quoted separator, so
+  thematic breaks and extension-contributed footnote definitions cannot merge
+  into the marker. The shared pipe-table serializer now emits every line through
+  its enclosing delimiter, fixing table fidelity in ordinary quotes and alerts.
+- The packed feature graph is one 108,546 raw / 28,440 gzip JavaScript chunk
+  with no lazy chunks, plus 2,064 raw / 728 gzip CSS and 96 static modules. It
+  contains no sibling extension or renderer engine and remains absent from both
+  baseline bundles. Measurement-derived warning lines expose current size while
+  failure ceilings retain roughly 9–11% headroom; root and minimal budgets do
+  not move.
+- Final verification for alerts: package tests pass 62 cases; `pnpm check`
+  passes every build, declaration/API check, Node ESM smoke, browser typecheck,
+  and 1,206 unit/integration tests. The focused production-browser matrix passes
+  13 cases across Chromium, Firefox, and WebKit with two expected non-Chromium
+  CDP skips, including a real Chromium DevTools Protocol edit/copy path and Axe.
+  The complete required matrix passes 239 cases with 28 intentional capability
+  skips. `pnpm pack:smoke`, `pnpm perf:ci`, frozen offline installation,
+  release-harness syntax/JSON checks, and `git diff --check` pass. All failure
+  thresholds through 1 MiB pass with zero retained nodes, listeners, or
+  documents; the current run has one non-failing 500 KiB parse-variance warning.
+  Independent review found and closed thematic-break, Setext-heading, nested
+  table, footnote-boundary, and partial-copy defects; its 95-case supported-body
+  scan found no fixed-point failures and no release blockers remain.
 
 #### Recommended order
 
@@ -880,7 +926,7 @@ An item is `DONE` only when all applicable requirements below are met:
 ## Completed iterations
 
 `EE-001` through `EE-020` are complete. The `EE-021` extension foundation,
-YAML front-matter, footnotes, and math packages are also complete. Gate A's
+YAML front-matter, footnotes, math, and alerts packages are also complete. Gate A's
 content-safety requirements and Gate B's production-embed requirements are
 satisfied, and Gate C now has keyboard/screen-reader, deliberate clipboard,
 mature table, configurable typing, theme, localization, bidirectional-text, and
@@ -890,9 +936,9 @@ extension-kernel, headless command/state, host-controlled resource,
 performance-budget, responsive-snapshot, lazy code-editor, semantic
 embedded-control, rich/Markdown/plain clipboard, production table-editing,
 host-configurable typing/keymap, design-system/internationalization,
-exact-source extension, front-matter, footnote, and math foundations.
+exact-source extension, front-matter, footnote, math, and alert foundations.
 
 The current iteration is `EE-021 — Ship advanced syntax as optional extensions`.
-Its foundation, YAML front-matter, footnotes, and inline/block math packages are
-complete; GitHub-style alerts are next, and the remaining four feature packages
-are queued.
+Its foundation, YAML front-matter, footnotes, inline/block math, and GitHub-style
+alerts packages are complete; generated TOC is next, and the remaining three
+feature packages are queued.

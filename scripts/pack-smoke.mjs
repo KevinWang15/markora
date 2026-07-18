@@ -40,6 +40,15 @@ let availableMeasurements = null;
 const availablePackages = [];
 const extensionBundleSpecs = Object.freeze([
   Object.freeze({
+    cssSelectors: Object.freeze([
+      ".mdw-alert",
+      ".mdw-alert__body",
+    ]),
+    graphName: "alerts",
+    label: "Alerts",
+    packageName: "markora-extension-alerts",
+  }),
+  Object.freeze({
     cssSelectors: Object.freeze([".mdw-frontmatter"]),
     graphName: "frontmatter",
     label: "Front matter",
@@ -1055,6 +1064,8 @@ function writeMeasurementReport({
       footnotesHasNoRendererEngine: true,
       mathHasNoLazyChunks: measurements.math.lazyJs.chunkCount === 0,
       mathHasNoBundledRendererEngine: true,
+      alertsHasNoLazyChunks: measurements.alerts.lazyJs.chunkCount === 0,
+      alertsHasNoRendererEngine: true,
       packedEntriesAndStylesResolved: true,
       packedPackageVersionsMatched: true,
       rootAndMinimalGraphsIndependent: true,
@@ -1112,6 +1123,12 @@ const mathPackage = packPackage(join(
   "packages/extension-math",
 ));
 rememberPackage(mathPackage);
+currentPhase = "alerts-package";
+const alertsPackage = packPackage(join(
+  rootDir,
+  "packages/extension-alerts",
+));
+rememberPackage(alertsPackage);
 
 currentPhase = "packed-dependency-isolation";
 copyWorkspaceDependencies();
@@ -1120,6 +1137,7 @@ unpackPackage(uiPackage.name, uiPackage.tarballPath);
 unpackPackage(frontmatterPackage.name, frontmatterPackage.tarballPath);
 unpackPackage(footnotesPackage.name, footnotesPackage.tarballPath);
 unpackPackage(mathPackage.name, mathPackage.tarballPath);
+unpackPackage(alertsPackage.name, alertsPackage.tarballPath);
 assertPackedPackage(corePackage);
 assertPackedPackage(uiPackage);
 assertPackedPackage(frontmatterPackage, {
@@ -1133,6 +1151,10 @@ assertPackedPackage(footnotesPackage, {
 assertPackedPackage(mathPackage, {
   rootSelector: ".mdw-math--inline",
   tokenPrefix: "--mdw-math-",
+});
+assertPackedPackage(alertsPackage, {
+  rootSelector: ".mdw-alert",
+  tokenPrefix: "--mdw-alert-",
 });
 
 currentPhase = "consumer-generation";
@@ -1406,6 +1428,28 @@ export const packedFootnotesSurface = [
 ].join(":");
 `);
 
+writeFileSync(join(smokeAppDir, "src/alerts.js"), `import {
+  alertKinds,
+  createAlertsExtension,
+  defaultAlertsMessages,
+} from "markora-extension-alerts";
+import "markora-extension-alerts/styles.css";
+
+export const packedAlertsDefinitions = [
+  createAlertsExtension(),
+  createAlertsExtension({
+    messages: { toggleAlert: "Toggle packed note alert" },
+  }),
+];
+
+export const packedAlertsSurface = [
+  alertKinds.join(","),
+  defaultAlertsMessages.alertLabel("note", defaultAlertsMessages.noteKindLabel),
+  defaultAlertsMessages.invalidDocumentDiagnostic("unknown"),
+  ...packedAlertsDefinitions.map(({ name, version }) => name + "@" + version),
+].join(":");
+`);
+
 writeFileSync(join(smokeAppDir, "src/math.js"), `import {
   MATH_MAX_CONCURRENT_RENDERS,
   MATH_MAX_RENDERED_NODES,
@@ -1476,6 +1520,19 @@ import {
   type Transaction,
 } from "markora/extension-api";
 import {
+  alertKinds,
+  createAlertsExtension,
+  defaultAlertsMessages,
+  type AlertKind,
+  type AlertSnapshot,
+  type AlertsCommands,
+  type AlertsExtension,
+  type AlertsExtensionOptions,
+  type AlertsMessageOverrides,
+  type AlertsMessages,
+  type AlertsState,
+} from "markora-extension-alerts";
+import {
   FRONTMATTER_MAX_SOURCE_BYTES,
   createFrontmatterExtension,
   defaultFrontmatterMessages,
@@ -1534,6 +1591,16 @@ import {
 declare const element: HTMLElement;
 declare const transaction: Transaction;
 
+const alertsMessageOverrides: AlertsMessageOverrides = {
+  alertLabel: (kind, kindLabel) => kind + ":" + kindLabel,
+  invalidDocumentDiagnostic: (kind) => "Invalid packed alert: " + kind,
+  toggleAlert: "Toggle packed alert",
+};
+const alertsOptions: AlertsExtensionOptions = {
+  messages: alertsMessageOverrides,
+};
+const rootAlertsExtension: AlertsExtension = createAlertsExtension(alertsOptions);
+const minimalAlertsExtension: AlertsExtension = createAlertsExtension();
 const frontmatterOptions: FrontmatterExtensionOptions = {
   messages: { editSource: "Edit packed metadata" },
   onEditSource(request: FrontmatterEditRequest) {
@@ -1592,6 +1659,7 @@ const editor = createEditor({
   editable: true,
   element,
   extensions: [
+    rootAlertsExtension,
     rootFrontmatterExtension,
     rootFootnotesExtension,
     rootMathExtension,
@@ -1629,6 +1697,7 @@ const editor = createEditor({
 const externalExtensions: readonly AnyMarkdownEditorExtension[] = [
   packedCalloutExtension,
   packedHighlightExtension,
+  minimalAlertsExtension,
   minimalFrontmatterExtension,
   minimalFootnotesExtension,
   minimalMathExtension,
@@ -1656,12 +1725,34 @@ const rootCommands: MarkdownEditorCommands = editor.commands;
 const rootState: MarkdownEditorState = editor.state;
 const minimalCommands: MinimalMarkdownEditorCommands = minimalEditor.commands;
 const minimalState: MinimalMarkdownEditorState = minimalEditor.state;
+const rootAlertsHandle = editor.extensions.get(rootAlertsExtension);
+const minimalAlertsHandle = minimalEditor.extensions.get(minimalAlertsExtension);
 const rootFrontmatterHandle = editor.extensions.get(rootFrontmatterExtension);
 const minimalFrontmatterHandle = minimalEditor.extensions.get(minimalFrontmatterExtension);
 const rootFootnotesHandle = editor.extensions.get(rootFootnotesExtension);
 const minimalFootnotesHandle = minimalEditor.extensions.get(minimalFootnotesExtension);
 const rootMathHandle = editor.extensions.get(rootMathExtension);
 const minimalMathHandle = minimalEditor.extensions.get(minimalMathExtension);
+const alertsCommands: AlertsCommands = rootAlertsHandle.commands;
+const alertsState: AlertsState = minimalAlertsHandle.state;
+const alertsMessages: AlertsMessages = defaultAlertsMessages;
+const alertKind: AlertKind = alertKinds[0];
+const alertLabel: string = alertsMessages.alertLabel(
+  alertKind,
+  alertsMessages.noteKindLabel,
+);
+const invalidAlertDiagnostic: string = alertsMessages.invalidDocumentDiagnostic("danger");
+const alerts: readonly AlertSnapshot[] = rootAlertsHandle.state.getAlerts();
+const activeAlert: AlertSnapshot | null = minimalAlertsHandle.state.getActive();
+const wrappedAlert: boolean = rootAlertsHandle.commands.wrap("warning");
+const toggledAlert: boolean = minimalAlertsHandle.commands.toggle();
+const changedAlertKind: boolean = rootAlertsHandle.commands.setKind("caution");
+const unwrappedAlert: boolean = minimalAlertsHandle.commands.unwrap();
+const canWrapAlert: boolean = rootAlertsHandle.state.canWrap("important");
+const canToggleAlert: boolean = minimalAlertsHandle.state.canToggle("tip");
+const canSetAlertKind: boolean = rootAlertsHandle.state.canSetKind("warning");
+const canUnwrapAlert: boolean = minimalAlertsHandle.state.canUnwrap();
+const alertIsActive: boolean = rootAlertsHandle.state.isActive();
 const rootFrontmatterSnapshot: FrontmatterSnapshot | null =
   rootFrontmatterHandle.state.getSnapshot();
 const frontmatterMessages: FrontmatterMessages = defaultFrontmatterMessages;
@@ -1729,6 +1820,23 @@ const mathKind = mathKinds[0];
 const mathDiagnosticCode = mathDiagnosticCodes[0];
 const mathRenderErrorCode = mathRenderErrorCodes[0];
 const closedTransaction: Transaction = closeHistory(transaction);
+void alertsCommands;
+void alertsState;
+void alertsMessages;
+void alertKind;
+void alertLabel;
+void invalidAlertDiagnostic;
+void alerts;
+void activeAlert;
+void wrappedAlert;
+void toggledAlert;
+void changedAlertKind;
+void unwrappedAlert;
+void canWrapAlert;
+void canToggleAlert;
+void canSetAlertKind;
+void canUnwrapAlert;
+void alertIsActive;
 void rootFrontmatterSnapshot;
 void frontmatterMessages;
 void frontmatterMaximum;
@@ -1941,6 +2049,16 @@ void minimalIdleChangeMode;
 void reconciled;
 void transactionOrigin;
 void unavailableSourceSlice;
+// @ts-expect-error Alert commands reject unsupported kinds.
+rootAlertsHandle.commands.wrap("danger");
+// @ts-expect-error Alert factory options reject undeclared keys.
+createAlertsExtension({ unknownOption: true });
+// @ts-expect-error Alert messages reject undeclared keys.
+createAlertsExtension({ messages: { unknownLabel: "Unknown" } });
+// @ts-expect-error The public alert kind tuple is immutable.
+alertKinds.push("note");
+// @ts-expect-error Public alert snapshot arrays are immutable.
+alerts.push({ kind: "note", position: 0 });
 // @ts-expect-error Front matter source commands only accept strings.
 rootFrontmatterHandle.commands.update(42);
 // @ts-expect-error Front matter messages reject undeclared keys.
@@ -2026,18 +2144,21 @@ if (!ownerWindow.Range.prototype.getBoundingClientRect) {
 const [
   { createEditor },
   { createEditor: createMinimalEditor },
+  alerts,
   frontmatter,
   footnotes,
   math,
 ] = await Promise.all([
   import("markora"),
   import("markora/minimal"),
+  import("markora-extension-alerts"),
   import("markora-extension-frontmatter"),
   import("markora-extension-footnotes"),
   import("markora-extension-math"),
 ]);
 const SOURCE = "\\uFEFF---\\r\\ntitle: Packed\\r\\nanchor: &base value\\r\\ncopy: *base\\r\\n...";
 const OPTIONAL_EXTENSION_NAMES = new Set([
+  "markora-extension-alerts",
   "markora-extension-frontmatter",
   "markora-extension-footnotes",
   "markora-extension-math",
@@ -2054,6 +2175,48 @@ for (const [label, create] of [["root", createEditor], ["minimal", createMinimal
   }
   baseline.destroy();
   element.replaceChildren();
+
+  const alertsDefinition = alerts.createAlertsExtension({
+    messages: { toggleAlert: "Toggle packed alert" },
+  });
+  const alertsEditor = create({
+    element,
+    extensions: [alertsDefinition],
+    markdown: "> [!warning]\\n> Packed alert.",
+  });
+  const alertsHandle = alertsEditor.extensions.get(alertsDefinition);
+  alertsEditor.focus("start");
+  const alertsSnapshot = alertsHandle.state.getAlerts();
+  if (
+    alertsSnapshot.length !== 1
+    || alertsSnapshot[0]?.kind !== "warning"
+    || alertsHandle.state.getActive()?.kind !== "warning"
+    || !alertsHandle.state.isActive()
+    || alertsEditor.getMarkdown() !== "> [!WARNING]\\n> Packed alert."
+    || alertsEditor.view.dom.querySelector("[data-mdw-alert-kind=warning]") === null
+    || !alertsEditor.extensions.manifest.extensions.some(({ name }) => (
+      name === "markora-extension-alerts"
+    ))
+  ) {
+    throw new Error("Packed alerts " + label + " consumer lost semantic or manifest state.");
+  }
+  if (
+    !alertsHandle.state.canSetKind("caution")
+    || !alertsHandle.commands.setKind("caution")
+    || alertsHandle.state.canSetKind("caution")
+    || alertsEditor.getMarkdown() !== "> [!CAUTION]\\n> Packed alert."
+    || !alertsEditor.commands.undo()
+    || alertsEditor.getMarkdown() !== "> [!WARNING]\\n> Packed alert."
+    || !alertsHandle.commands.toggle()
+    || alertsEditor.getMarkdown() !== "Packed alert."
+    || !alertsEditor.commands.undo()
+    || alertsHandle.state.getAlerts()[0]?.kind !== "warning"
+  ) {
+    throw new Error("Packed alerts " + label + " command, state, or history smoke failed.");
+  }
+  alertsEditor.destroy();
+  element.replaceChildren();
+
   const definition = frontmatter.createFrontmatterExtension();
   const editor = create({
     element,
@@ -2170,6 +2333,7 @@ run("node", [tscCliPath, "-p", "tsconfig.json"], { cwd: smokeAppDir });
 currentPhase = "node-import-smoke";
 run("node", ["--input-type=module", "-e", `
   const extensionApi = await import("markora/extension-api");
+  const alerts = await import("markora-extension-alerts");
   const frontmatter = await import("markora-extension-frontmatter");
   const footnotes = await import("markora-extension-footnotes");
   const math = await import("markora-extension-math");
@@ -2182,6 +2346,24 @@ run("node", ["--input-type=module", "-e", `
   }
   if (typeof extensionApi.closeHistory !== "function") {
     throw new Error("closeHistory export missing");
+  }
+  if (
+    typeof alerts.createAlertsExtension !== "function"
+    || !Object.isFrozen(alerts.defaultAlertsMessages)
+    || !Object.isFrozen(alerts.alertKinds)
+  ) {
+    throw new Error("alerts package Node ESM surface is incomplete");
+  }
+  const alertsDefinition = alerts.createAlertsExtension({
+    messages: { toggleAlert: "Toggle packed alert" },
+  });
+  if (
+    alertsDefinition.name !== "markora-extension-alerts"
+    || alerts.alertKinds.join(":") !== "note:tip:important:warning:caution"
+    || alerts.defaultAlertsMessages.alertLabel("note", "Note") !== "Note alert"
+    || typeof alerts.defaultAlertsMessages.invalidDocumentDiagnostic("danger") !== "string"
+  ) {
+    throw new Error("alerts package factory returned the wrong identity, kinds, or messages");
   }
   if (
     typeof frontmatter.createFrontmatterExtension !== "function"
@@ -2253,6 +2435,7 @@ const minimalBundleReport = readBundleReport("minimal");
 const extensionBundleReports = Object.freeze(Object.fromEntries(
   extensionBundleSpecs.map((spec) => [spec.graphName, readBundleReport(spec.graphName)]),
 ));
+const alertsBundleReport = extensionBundleReports.alerts;
 const frontmatterBundleReport = extensionBundleReports.frontmatter;
 const footnotesBundleReport = extensionBundleReports.footnotes;
 const mathBundleReport = extensionBundleReports.math;
@@ -2264,6 +2447,7 @@ const extensionBundleMeasurements = Object.freeze(Object.fromEntries(
     measureBundleGraph(extensionBundleReports[spec.graphName]),
   ]),
 ));
+const alertsBundleMeasurement = extensionBundleMeasurements.alerts;
 const frontmatterBundleMeasurement = extensionBundleMeasurements.frontmatter;
 const footnotesBundleMeasurement = extensionBundleMeasurements.footnotes;
 const mathBundleMeasurement = extensionBundleMeasurements.math;
@@ -2296,6 +2480,20 @@ run("node", ["--input-type=module", "-e", `
   const names = consumer.packedExternalExtensions?.map((extension) => extension.name);
   if (names?.join(":") !== "@pack-smoke/callout:@pack-smoke/highlight") {
     throw new Error("Packed external extensions did not execute through the public API");
+  }
+`], { cwd: smokeAppDir });
+
+const alertsEntryChunk = alertsBundleReport.chunks.find((chunk) => chunk.isEntry);
+if (!alertsEntryChunk) {
+  throw new Error("The alerts feature bundle did not emit an entry chunk.");
+}
+const alertsEntrySpecifier = `./dist/alerts/${alertsEntryChunk.fileName}`;
+currentPhase = "alerts-feature-runtime-smoke";
+run("node", ["--input-type=module", "-e", `
+  const consumer = await import(${JSON.stringify(alertsEntrySpecifier)});
+  const names = consumer.packedAlertsDefinitions?.map((extension) => extension.name);
+  if (names?.join(":") !== "markora-extension-alerts:markora-extension-alerts") {
+    throw new Error("Packed alerts feature bundle did not execute");
   }
 `], { cwd: smokeAppDir });
 
@@ -2342,6 +2540,7 @@ run("node", ["--input-type=module", "-e", `
 `], { cwd: smokeAppDir });
 
 const measurements = Object.freeze({
+  alerts: alertsBundleMeasurement,
   footnotes: footnotesBundleMeasurement,
   frontmatter: frontmatterBundleMeasurement,
   math: mathBundleMeasurement,

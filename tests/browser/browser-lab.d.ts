@@ -74,6 +74,28 @@ type BrowserLabActiveRequest =
   | { type: "tableColumnAlignment"; alignment: "center" | "left" | "right" | null }
   | { type: "taskChecked"; checked?: boolean };
 
+type BrowserLabAlertKind = "caution" | "important" | "note" | "tip" | "warning";
+
+type BrowserLabAlertsCommandRequest =
+  | { kind?: BrowserLabAlertKind; type: "toggle" | "wrap" }
+  | { kind: BrowserLabAlertKind; type: "setKind" }
+  | { type: "unwrap" };
+
+type BrowserLabAlertsStateRequest =
+  | { kind?: BrowserLabAlertKind; type: "canToggle" | "canWrap" }
+  | { kind: BrowserLabAlertKind; type: "canSetKind" }
+  | { type: "canUnwrap" | "isActive" };
+
+type BrowserLabAlertSnapshot = {
+  kind: BrowserLabAlertKind;
+  position: number;
+};
+
+type BrowserLabAlertsSnapshot = {
+  active: BrowserLabAlertSnapshot | null;
+  alerts: ReadonlyArray<BrowserLabAlertSnapshot>;
+};
+
 type BrowserLabUpdateOptions = {
   ariaLabel?: string | null;
   ariaLabelledBy?: string | null;
@@ -83,6 +105,16 @@ type BrowserLabUpdateOptions = {
 };
 
 type BrowserLabTestSpec = {
+  alertsMessages?: Partial<{
+    alertLabel: string;
+    cautionKindLabel: string;
+    importantKindLabel: string;
+    invalidDocumentDiagnostic: string;
+    noteKindLabel: string;
+    tipKindLabel: string;
+    toggleAlert: string;
+    warningKindLabel: string;
+  }>;
   ariaLabel?: string;
   ariaLabelledBy?: string;
   attributes?: Record<string, string>;
@@ -91,7 +123,7 @@ type BrowserLabTestSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "footnotes" | "frontmatter" | "math" | "public-example";
+  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example";
   footnotesMessages?: Partial<Record<
     | "backReferenceLabel"
     | "backReferenceText"
@@ -399,6 +431,9 @@ type BrowserLabMathRendererCall = {
 interface Window {
   __MARKORA_BROWSER_LAB__?: {
     active(id: string, request: BrowserLabActiveRequest): boolean;
+    alertsCommand(id: string, request: BrowserLabAlertsCommandRequest): boolean;
+    alertsSnapshot(id: string): BrowserLabAlertsSnapshot;
+    alertsState(id: string, request: BrowserLabAlertsStateRequest): boolean;
     blur(id: string): void;
     can(id: string, request: BrowserLabCommandRequest): boolean;
     clearEvents(id: string): void;
