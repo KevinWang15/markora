@@ -365,7 +365,7 @@ Design the stable customization contract before adding more built-in syntax.
 
 #### Completion notes
 
-- The accepted [extension system RFC](./extension-system-rfc.md) versions the API independently; its current additive contract is `1.2.0` and defines a compile-before-mount architecture for schema, Markdown codec, runtime behavior, typed handles, and lifecycle resources.
+- The accepted [extension system RFC](./extension-system-rfc.md) versions the API independently; its current additive contract is `1.3.0` and defines a compile-before-mount architecture for schema, Markdown codec, runtime behavior, typed handles, and lifecycle resources.
 - The contract now covers branded heterogeneous definitions, exact-object typed lookup, a single inferred per-editor `createRuntime()` boundary, required/optional dependency and order edges, stable tokenizer anchors, compiler-qualified local token IDs, additive schema ownership, deterministic fixed runtime lanes, collision policy, clipboard pipelines, NodeViews, and headless UI actions.
 - Per-editor storage, the late-bound state/dispatch/command bridge, reset behavior, phase-owned cleanup scopes, reverse teardown, structured system/extension errors, trusted runtime-only callbacks, persistence manifests, SemVer rules, compatibility adapters, and the separate `markora/minimal` bundle boundary are specified before implementation.
 - The private, non-publishable `@markora-internal/extension-rfc-prototype` package implements an external multiline callout block and inline highlight mark using only public Markdown-it/ProseMirror APIs. Ten runtime tests prove semantic round-trip, registration-independent tokenizer precedence, optional fallback composition, host-shaped commands, storage isolation, fixed contribution lanes, key fallback chains, and ownership failures.
@@ -692,8 +692,8 @@ and verification decisions are frozen in the
 | Inline and block math | DONE | `markora-extension-math` |
 | GitHub-style alerts | DONE | `markora-extension-alerts` |
 | Generated TOC | DONE | `markora-extension-toc` |
-| Sanitized raw HTML | NEXT | `markora-extension-html` |
-| Mermaid and GitHub diagrams | QUEUED | `markora-extension-diagrams` |
+| Sanitized raw HTML | DONE | `markora-extension-html` |
+| Mermaid and GitHub diagrams | NEXT | `markora-extension-diagrams` |
 
 #### Progress notes
 
@@ -933,6 +933,75 @@ and verification decisions are frozen in the
   passes. Independent source review found no lifecycle, codec, command,
   accessibility, security, or embedded-mode blocker; adversarial review found
   and closed the three browser-coverage gaps above.
+- `markora-extension-html` requires the additive `^1.3.0` extension API and its
+  dependency-free exact opaque-token source reader. It claims recognized
+  CommonMark HTML blocks, inline HTML, and comments as owned atoms in the
+  compatibility root runtime only; minimal and incompatible custom runtimes
+  fail resolution with `EXTENSION_INCOMPATIBLE` before any host claim or
+  mutation. Top-level lexical islands preserve their exact source, including
+  internal CRLF line endings, while recognized nested HTML retains the
+  documented compatibility normalization boundary. Opening and closing inline
+  HTML tokens remain separate atoms rather than being merged across content.
+- Frozen typed state, snapshots, diagnostics, update/remove/toggle/retry
+  commands, and host-edit handoff all use stale-safe occurrence identities.
+  Whole-document invariants validate every intermediate transaction document,
+  including zero-map attribute and mark steps; an update preserves one token at
+  the same placement. Reset, reconciliation, history, removal, preview toggles,
+  and destruction invalidate or abort late render generations, while
+  composition defers rendering without surrendering source ownership.
+- Authored HTML is always inert source text. Only non-comment block HTML is
+  preview eligible, and the optional host renderer must return a detached
+  same-owner-document `Node` or `DocumentFragment`, never a string or
+  `TrustedHTML`. The package copies a strict static HTML allowlist into fresh
+  DOM, drops active, URL-bearing, presentation, identity, ARIA, and data
+  surfaces, rejects foreign or connected output, and bundles no parser or
+  renderer engine. Its inert, `aria-hidden`, pointer-disabled preview is bounded
+  to 256 KiB of source, 4,096 rendered nodes, depth 128, 1 MiB of output, 64
+  attributes per element, four concurrent jobs, and viewport activation.
+  Missing, failed, rejected, stale, or oversized output leaves the exact source
+  authoritative and visible with bounded diagnostics.
+- The permanent source remains exposed to assistive technology even while a
+  preview is visible. Localized labels, status, and actions retain keyboard,
+  read-only, IME, logical RTL, reflow, forced-color, and reduced-motion
+  behavior; inline HTML inside links adds no nested action or navigation.
+  Markdown and plain-text clipboard output always contain authored source and
+  never derived preview DOM.
+- Retained required-browser coverage exercises exact block, inline, and comment
+  source in document and Shadow roots; root-only preclaim rejection; hostile,
+  missing, failed, and stale renderers; lifecycle generations; commands, paste,
+  host edits, history, read-only and composition guards; localized RTL/reflow;
+  link nesting; source-only clipboard; and accessibility across Chromium,
+  Firefox, and WebKit. Chromium DevTools Protocol additionally performs a real
+  edit and source-only copy, and the accessibility path includes Axe.
+- Packed tarball evidence covers files, exports, styles, provenance, public
+  types, Node ESM, exact root-runtime update/undo, safe rendering, intentional
+  minimal preclaim rejection, and bundle isolation. The feature graph is one
+  258,459 raw / 81,858 gzip JavaScript chunk with zero lazy chunks, plus one
+  4,863 raw / 1,227 gzip CSS file and 99 static modules. It contains no renderer
+  engine or sibling optional extension, remains absent from the baseline root
+  and minimal graphs, passes its roughly 10%-headroom feature budgets, and does
+  not change either baseline budget.
+- The retained source-only workload mounts 512 block HTML atoms, preserves exact
+  parse/serialization, retains every NodeView across ordinary preamble typing,
+  performs no synchronous renderer call, and exercises reconciliation, hard
+  reset, and teardown under a broad 20-second CI ceiling. The measured body
+  completes below 0.7 seconds in the current full-suite and package-only runs;
+  separate pressure tests enforce viewport activation, four-job concurrency,
+  output limits, cancellation, and stale-result cleanup.
+- Final verification for sanitized HTML: package tests pass 64 cases;
+  `pnpm check` passes every build, declaration/API check, Node ESM smoke,
+  browser typecheck, and 1,318 unit/integration tests. The focused
+  production-browser matrix passes 28 cases across Chromium, Firefox, and
+  WebKit with two expected non-Chromium CDP skips; the complete required matrix
+  passes 280 cases with 32 intentional engine/capability skips. `pnpm build`,
+  `pnpm pack:smoke`, `pnpm perf:ci`, frozen offline installation, the core
+  release dry-run, release-harness syntax/JSON checks, and `git diff --check`
+  pass. Every performance failure threshold through 1 MiB passes with zero
+  retained nodes, listeners, or documents, and the HTML source contains no raw
+  DOM parsing/injection sink. Independent source, security, package, and
+  browser reviews found and closed the transaction-invariant, stale-generation,
+  composition, link-nesting, accessibility, hostile-output, retry, and package
+  isolation gaps; no remaining sub-item blocker was found.
 
 #### Recommended order
 
@@ -971,9 +1040,9 @@ An item is `DONE` only when all applicable requirements below are met:
 ## Completed iterations
 
 `EE-001` through `EE-020` are complete. The `EE-021` extension foundation,
-YAML front-matter, footnotes, math, alerts, and generated-TOC packages are also
-complete. Gate A's content-safety requirements and Gate B's production-embed
-requirements are satisfied, and Gate C now has keyboard/screen-reader,
+YAML front-matter, footnotes, math, alerts, generated-TOC, and sanitized-HTML
+packages are also complete. Gate A's content-safety requirements and Gate B's
+production-embed requirements are satisfied, and Gate C now has keyboard/screen-reader,
 deliberate clipboard, mature table, configurable typing, theme, localization,
 bidirectional-text, and independently packaged advanced-syntax foundations.
 Completed work includes the browser, complex-input, accessibility,
@@ -982,9 +1051,9 @@ host-controlled resource, performance-budget, responsive-snapshot, lazy
 code-editor, semantic embedded-control, rich/Markdown/plain clipboard,
 production table-editing, host-configurable typing/keymap,
 design-system/internationalization, exact-source extension, front-matter,
-footnote, math, alert, and generated-TOC foundations.
+footnote, math, alert, generated-TOC, and sanitized-HTML foundations.
 
 The current iteration is `EE-021 — Ship advanced syntax as optional extensions`.
-Its foundation, YAML front-matter, footnotes, inline/block math, and GitHub-style
-alerts and generated-TOC packages are complete; sanitized raw HTML is next, and
-the remaining two feature packages are queued.
+Its foundation, YAML front-matter, footnotes, inline/block math, GitHub-style
+alerts, generated-TOC, and sanitized-raw-HTML packages are complete. Mermaid and
+GitHub diagrams are `NEXT` and are the only remaining `EE-021` package.

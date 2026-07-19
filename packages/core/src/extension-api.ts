@@ -3,6 +3,7 @@ export {
   MarkdownEditorExtensionError,
   defineMarkdownEditorExtension,
   defineMarkdownEditorPreset,
+  readMarkdownEditorOpaqueTokenSource,
 } from "./extensionApi";
 export { sliceMarkdownEditorOriginalSourceLines } from "./markdownSource";
 export type {

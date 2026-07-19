@@ -142,7 +142,7 @@ type BrowserLabTestSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example" | "toc";
+  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "html" | "math" | "public-example" | "toc";
   footnotesMessages?: Partial<Record<
     | "backReferenceLabel"
     | "backReferenceText"
@@ -176,6 +176,38 @@ type BrowserLabTestSpec = {
     tabIndentationDiagnostic: string;
     unbalancedFlowDiagnostic: string;
   }>;
+  htmlMessages?: Partial<Record<
+    | "blockKindLabel"
+    | "commentKindLabel"
+    | "editSource"
+    | "inlineKindLabel"
+    | "invalidDocumentDiagnostic"
+    | "invalidRendererOutputDiagnostic"
+    | "invalidSourceDiagnostic"
+    | "previewFailed"
+    | "previewLabel"
+    | "previewLoading"
+    | "rendererFailedDiagnostic"
+    | "rendererUnavailable"
+    | "renderOutputLimitDiagnostic"
+    | "retryPreview"
+    | "showPreview"
+    | "showSource"
+    | "sourceLabel"
+    | "sourceTooLargeDiagnostic"
+    | "unsafeRendererOutputDiagnostic",
+    string
+  >>;
+  htmlRendererMode?:
+    | "connected"
+    | "deferred"
+    | "missing"
+    | "reject"
+    | "string"
+    | "sync"
+    | "throw"
+    | "unsafe"
+    | "wrong-document";
   id: string;
   initialSelection?: BrowserLabSelectionTarget;
   language?: string;
@@ -396,6 +428,68 @@ type BrowserLabFootnotesSnapshot = {
   }>;
 };
 
+type BrowserLabHtmlDisplay = "block" | "inline";
+type BrowserLabHtmlKind = "html-block" | "html-comment" | "inline-html";
+
+type BrowserLabHtmlNodeTarget = {
+  display: BrowserLabHtmlDisplay;
+  identity: number;
+  kind: BrowserLabHtmlKind;
+  position: number;
+  source: string;
+};
+
+type BrowserLabHtmlRenderErrorCode =
+  | "connected-output"
+  | "invalid-output"
+  | "node-limit"
+  | "output-byte-limit"
+  | "renderer-failed"
+  | "renderer-missing"
+  | "unsafe-output"
+  | "wrong-document";
+
+type BrowserLabHtmlRenderSnapshot = {
+  enabled: boolean;
+  errorCode: BrowserLabHtmlRenderErrorCode | null;
+  status:
+    | "error"
+    | "offscreen"
+    | "queued"
+    | "rendered"
+    | "rendering"
+    | "source"
+    | "source-too-large";
+};
+
+type BrowserLabHtmlSnapshot = {
+  diagnostics: ReadonlyArray<{
+    code: "source-too-large";
+    display: BrowserLabHtmlDisplay;
+    kind: BrowserLabHtmlKind;
+    message: string;
+    position: number;
+  }>;
+  nodes: ReadonlyArray<BrowserLabHtmlNodeTarget & {
+    render: BrowserLabHtmlRenderSnapshot;
+  }>;
+};
+
+type BrowserLabHtmlCommandRequest =
+  | { source: string; target: BrowserLabHtmlNodeTarget; type: "update" }
+  | {
+      target: BrowserLabHtmlNodeTarget;
+      type: "remove" | "retryPreview" | "togglePreview";
+    };
+
+type BrowserLabHtmlRendererCall = {
+  aborted: boolean;
+  id: number;
+  kind: "html-block";
+  settled: "pending" | "rejected" | "resolved" | "threw";
+  source: string;
+};
+
 type BrowserLabMathKind = "block" | "inline";
 
 type BrowserLabMathNodeTarget = {
@@ -499,6 +593,15 @@ interface Window {
     footnotesSnapshot(id: string): BrowserLabFootnotesSnapshot;
     focus(id: string, selection?: BrowserLabSelectionTarget): void;
     getMarkdown(id: string): string;
+    htmlCommand(id: string, request: BrowserLabHtmlCommandRequest): boolean;
+    htmlEditRemove(id: string): boolean;
+    htmlEditUpdate(id: string, source: string): boolean;
+    htmlRendererCalls(id: string): ReadonlyArray<BrowserLabHtmlRendererCall>;
+    htmlRendererSettle(
+      id: string,
+      settlement?: { callId?: number; outcome?: "reject" | "resolve" },
+    ): boolean;
+    htmlSnapshot(id: string): BrowserLabHtmlSnapshot;
     isDestroyed(id: string): boolean;
     listenerSnapshot(id?: string): { total: number; byTargetAndType: Record<string, number> };
     mathCommand(id: string, request: BrowserLabMathCommandRequest): boolean;
@@ -516,6 +619,9 @@ interface Window {
     openUi(id: string, kind: "code-language" | "image" | "link" | "table" | "table-create"): boolean;
     pendingOpaqueEdit(id: string): { kind: string; source: string } | null;
     pendingFrontmatterEdit(id: string): Pick<BrowserLabFrontmatterSnapshot, "diagnostics" | "source"> | null;
+    pendingHtmlEdit(id: string): (BrowserLabHtmlNodeTarget & {
+      render: BrowserLabHtmlRenderSnapshot;
+    }) | null;
     pendingMathEdit(id: string): ({
       kind: BrowserLabMathKind;
       position: number;
@@ -535,6 +641,7 @@ interface Window {
     resourceLog(id: string): BrowserLabResourceLog;
     reset(id: string, markdown: string): string;
     selectFootnote(id: string, request: BrowserLabFootnoteSelectionRequest): boolean;
+    selectHtml(id: string, target: BrowserLabHtmlNodeTarget): boolean;
     selectMath(id: string, target: BrowserLabMathNodeTarget): boolean;
     selectToc(id: string, occurrence?: number): boolean;
     selectText(id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number): boolean;

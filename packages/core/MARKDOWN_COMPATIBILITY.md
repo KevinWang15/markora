@@ -1,6 +1,6 @@
 # Markdown dialect and fidelity contract
 
-Status: current `markora` `0.0.x` contract, updated through the `EE-021` generated-TOC package on 2026-07-19.
+Status: current `markora` `0.0.x` contract, updated through the `EE-021` sanitized-HTML package on 2026-07-19.
 
 This contract applies to Markdown passed through `createEditor({ markdown })`, `editor.commands.reconcileMarkdown()`, or `editor.commands.resetMarkdown()` and returned by `editor.getMarkdown()` or `onChange`. Deprecated `setMarkdown()` uses the same parsing boundary as `resetMarkdown()`.
 
@@ -220,6 +220,51 @@ network work, and uses owner-document text/DOM construction. Import
 properties use the `--mdw-toc-*` prefix and include RTL, forced-color, and
 reduced-motion treatment.
 
+`markora-extension-html` works only with the root `markora` entry and its exact
+default preset. It claims the CommonMark HTML block, inline HTML, and comment
+tokens already recognized and exactly hydrated by that compatibility codec; it
+does not broaden the HTML grammar. `markora/minimal` and a custom preset passed
+through the root entry reject the definition with an attributed
+`EXTENSION_INCOMPATIBLE` error before claiming the editor host.
+
+Top-level block and inline atoms retain their exact hydrated source, including
+CRLF/CR/LF inside the atom. HTML blocks nested inside supported containers are
+also claimed, but retain the existing opaque-source limitation: container
+markers, indentation, and line endings may already have normalized. Opening and
+closing inline tags remain separate atoms, and inline HTML and every comment
+remain source-only. Only a non-comment block atom is eligible for preview.
+
+The package exposes frozen source, diagnostic, and render snapshots plus typed
+update, remove, preview-toggle, and retry commands. Targets carry an opaque
+occurrence identity with their current position, display, kind, and exact
+source. A moved unchanged occurrence retains identity; source mutation,
+replacement, reset, or stale position invalidates an old target. An update must
+reparse as exactly one atom in the same block or inline placement and rederives
+its kind. Mutations are single undo steps and are guarded during read-only and
+composition states. Hosts using the package should move HTML editing from the
+core `onEditOpaqueMarkdown` hook to the extension's stale-safe `onEditSource`
+callback.
+
+Preview rendering is optional, block-only presentation supplied by trusted host
+code. The host renderer is responsible for parsing and sanitizing authored HTML
+under the product's policy and must return detached, network-inert DOM created
+by the supplied owner document. Markora then manually rebuilds a fresh subtree
+through a strict static-HTML allowlist. Version 1 permits no links, URLs, media,
+forms, styles, classes, IDs, custom elements, SVG, or MathML. It rejects strings,
+foreign- or connected-document output, active nodes and attributes, and output
+over 4,096 nodes, depth 128, 1 MiB, or 64 attributes per element. Authored source
+over 256 KiB stays available but is not previewed. Work is task-queued,
+viewport-gated with an 800-pixel margin, limited to four concurrent renders,
+aborted across stale generations and teardown, and deferred during composition.
+
+The permanent localized source shell is the accessible and persistence
+representation. Preview DOM is inert, hidden from assistive technology, and
+never enters Markdown, model state, history, or any clipboard representation.
+Markdown and plain copy retain exact source; rich copy contains inert source
+markup only. Import `markora-extension-html/styles.css` explicitly. Without the
+package, the root entry continues to use its exact opaque HTML atoms but exposes
+none of the package's typed state, identity, source-edit, or preview surface.
+
 ## Canonical output
 
 These transformations are intentional and happen on import/export even when the user makes no visual edit.
@@ -289,6 +334,13 @@ the marker at a valid top-level insertion point; plain-text paste deliberately
 keeps `[TOC]` literal and it normally serializes with backslash escapes. Copying
 a larger document does not duplicate heading text through the generated outline.
 
+With `markora-extension-html` installed, selecting an HTML atom copies its exact
+authored source in Markdown and plain text. Rich HTML contains only the inert,
+text-backed source shell that reparses as the same package atom. It never
+contains host renderer DOM, preview/status UI, action controls, event listeners,
+or any sanitized visual output. Preview state therefore cannot change any
+clipboard representation.
+
 A rectangular table-cell selection is exported as semantic table HTML, quoted TSV in `text/plain`, and a complete standalone pipe table in `text/markdown`. Tabs, line breaks, and double quotes inside TSV cells use CSV-style double-quote escaping. Because a standalone pipe table requires a header, the first row of a body-only selection becomes the clipboard Markdown header; this does not change the source table. Cut clears the selected cell contents without deleting rows or columns. When pasting a table or TSV matrix into a cell rectangle, a larger matrix is clipped and a smaller matrix is repeated to fill that rectangle. TSV parsing is limited to 1 MiB and 100 rows by 100 columns. Merged or over-limit table transfers are rejected atomically and emit the recoverable `"table-operation-rejected"` error event.
 
 ## Table editing and GFM diagnostics
@@ -340,7 +392,7 @@ This table distinguishes the narrow shapes protected as opaque source from relat
 | Footnotes | Semantic optional syntax when `markora-extension-footnotes` is installed; otherwise unsupported — unreported | The package retains references, definitions, repeated-reference order, and canonical four-space continuations in root and minimal. Without it, labels and definitions can become ordinary reference links or escaped text, and definitions can disappear. |
 | Math | Semantic optional syntax when `markora-extension-math` is installed; otherwise opaque only for recognized standalone display math in the compatibility entry | The package retains guarded inline expressions and canonical inline/block shells in root and minimal. Without it, compatibility `markora` preserves recognized standalone `$$` shapes as `raw_block`; inline math and all minimal-entry math have no fidelity guarantee. |
 | GitHub alerts/callouts | Semantic optional syntax when `markora-extension-alerts` is installed; otherwise unsupported — unreported | The package retains one of five kinds plus supported editable body blocks and writes canonical uppercase markers in root and minimal. Without it, the source is an ordinary blockquote whose marker can escape and whose soft lines can fold. |
-| Raw HTML and comments | Opaque for CommonMark-recognized block and inline shapes | Stored and displayed as inert source atoms, not rendered HTML. Syntax outside the tokenizer's recognized HTML shapes remains unsupported. |
+| Raw HTML and comments | Exact optional syntax in the root default runtime when `markora-extension-html` is installed; otherwise opaque for CommonMark-recognized block and inline shapes | The package owns exact source atoms, typed editing, and optional sanitized block previews. Without it, root stores and displays recognized HTML as inert opaque source. Minimal is outside the package contract, and syntax outside the tokenizer's recognized shapes remains unsupported. |
 | Directives and container syntax | Opaque for the balanced container, leaf, and inline shapes above; otherwise unsupported — unreported | Recognized shapes are preserved. Unbalanced or different directive dialects can still be treated as ordinary Markdown text. |
 | TOC markers such as `[TOC]` | Semantic optional syntax when `markora-extension-toc` is installed; otherwise unsupported — unreported | The package retains top-level markers and derives a live position-based heading outline in root and minimal. Without it, the marker is literal text and normally backslash-escaped on output. |
 | Mermaid and other diagrams | Diagram semantics unsupported; fenced code normalized | A fenced `mermaid` block survives only as a generic code block. Markora does not render or validate the diagram. |
@@ -368,7 +420,7 @@ These limitations are outside the semantic round-trip promise. They are candidat
 2. Treat `getMarkdown()` as normalized output with exact source islands, not the original document string.
 3. Do not use raw string equality as the only dirty-state check across initial import.
 4. If syntax outside the documented supported and opaque shapes is possible, retain the original separately and provide a recovery or broader source-editing path.
-5. Use `onEditOpaqueMarkdown` when users must edit protected source, and handle a stale `update()` result explicitly.
+5. Use `onEditOpaqueMarkdown` when users must edit protected source, and handle a stale `update()` result explicitly. When `markora-extension-html` is installed, use its `onEditSource` callback for package-owned HTML atoms instead.
 6. Configure `resources` before import when stored URLs need a non-default scheme or data policy; use runtime resolution instead of rewriting stable Markdown for signed/display URLs.
 7. If `resources.assets` is enabled, persist upload results in the host service and provide accessible progress, failure, cancel, and retry UI around the headless event/API surface.
 8. Call `state.tableIssues()` before persistence when rich HTML, extensions, or advanced ProseMirror transactions can introduce non-GFM table shapes, and retain another representation when any reported construct must survive.

@@ -1,9 +1,9 @@
 # Markora Extension System RFC
 
 - Status: Accepted design for `EE-009`
-- Extension API version: `1.2.0`
+- Extension API version: `1.3.0`
 - Accepted: 2026-07-15
-- Implemented: `EE-010`; host resource boundary integrated by `EE-012`; additive source, tokenizer-anchor, and serializer literal-escape contracts integrated for `EE-021`
+- Implemented: `EE-010`; host resource boundary integrated by `EE-012`; additive source, tokenizer-anchor, serializer literal-escape, exact opaque-token source, and root-runtime compatibility contracts integrated for `EE-021`
 
 ## Decision summary
 
@@ -72,7 +72,7 @@ Parsing during creation, reconciliation, and reset must use the same immutable a
 The following is the approved public boundary. Supporting contribution interfaces may be split across files, but the branded carrier, definition identity, typed lookup, and behavioral rules are normative. `EE-010` must add declaration tests before refining any mechanical generic shape.
 
 ```ts
-export const MARKORA_EXTENSION_API_VERSION = "1.2.0" as const;
+export const MARKORA_EXTENSION_API_VERSION = "1.3.0" as const;
 
 export type MarkdownEditorExtensionName = string;
 
@@ -100,6 +100,8 @@ export type MarkdownEditorExtensionDependency = Readonly<{
 export type MarkdownEditorExtensionCompatibility = Readonly<{
   extensionApi: string;
   markora: string;
+  // Omit for definitions supported by both compiled runtimes.
+  runtime?: "root-default";
 }>;
 
 declare const markdownEditorExtensionBrand: unique symbol;
@@ -348,6 +350,11 @@ Local contribution IDs use lowercase letters, digits, dots, dashes, or underscor
 - `version` is the extension definition's SemVer.
 - `compatibility.extensionApi` is a SemVer range for `MARKORA_EXTENSION_API_VERSION`.
 - `compatibility.markora` is a SemVer range for the tested `markora` package.
+- `compatibility.runtime: "root-default"` declares a dependency on the root
+  entry's exact default compatibility runtime. Omitting it declares no
+  runtime-specific requirement. A root-default definition passed to
+  `markora/minimal`, or to the root entry with any other preset object, fails
+  with an attributed `EXTENSION_INCOMPATIBLE` error before the host is claimed.
 - Required dependencies must be installed and satisfy their declared ranges.
 - Optional dependencies add a dependency and ordering edge only when present; an installed but incompatible optional dependency is still an error.
 - Markora validates metadata and ranges; it never installs a dependency.
@@ -450,6 +457,8 @@ function sliceMarkdownEditorOriginalSourceLines(
   endLine: number,
 ): string | null;
 
+function readMarkdownEditorOpaqueTokenSource(token: unknown): string | null;
+
 type MarkdownEditorTokenizerRule = MarkdownEditorOrderedContribution &
   Readonly<{
     phase: "block" | "inline" | "inline-post" | "core";
@@ -467,6 +476,17 @@ Tokenizer rules declare:
 Markora publishes virtual IDs for the foundation anchors extensions need: `@markora/foundation/block/fence`, `@markora/foundation/block/blockquote`, `@markora/foundation/block/hr`, `@markora/foundation/block/reference`, `@markora/foundation/block/paragraph`, `@markora/foundation/inline/text`, `@markora/foundation/inline/emphasis`, `@markora/foundation/core/block`, and `@markora/foundation/core/inline`. The compatibility codec also publishes optional `@markora/table/table`, `@markora/opaque/frontmatter`, `@markora/opaque/display-math`, `@markora/opaque/directive`, `@markora/opaque/inline-directive`, `@markora/opaque/html-source`, and `@markora/opaque/inline-source` anchors. These IDs follow their underlying Markdown-it order and are stable even if the internal rule names change. Optional built-in anchors must be targeted with `{ id, optional: true }` by extensions that also support the minimal codec. Adding an anchor is additive, but removing or changing an anchor's ordering semantics is an extension API major change.
 
 `sliceMarkdownEditorOriginalSourceLines(environment, startLine, endLine)` exposes an exact, half-open, zero-based line slice to tokenizer callbacks without exposing mutable source bookkeeping. It retains authored BOMs and CRLF/CR/LF line endings between the selected lines, returns `null` for a foreign environment or invalid/out-of-bounds range, and is available in both compatibility and minimal codec parses. Markora keeps the original source metadata private rather than adding writable fields to the Markdown-it environment; extensions may continue to use their own namespaced environment entries.
+
+`readMarkdownEditorOpaqueTokenSource(token)` exposes the exact source attached
+by the compatibility codec's opaque-source hydration rules without publishing
+their private token metadata keys. It returns `null` for tokens without that
+own string data field, inherited or accessor-backed metadata, non-object input,
+and unreadable proxy values; it never invokes token or metadata accessors. A
+root-only extension uses it from a core rule ordered after
+`@markora/opaque/html-source` or `@markora/opaque/inline-source`. The minimal
+codec has no corresponding hydration contract, so such an extension also
+declares `compatibility.runtime: "root-default"` rather than silently accepting
+normalized token content.
 
 `markora/extension-api` also re-exports ProseMirror history's `closeHistory()` helper. Extension commands use it when successive host-driven source replacements must remain distinct undo steps; this preserves constructor identity without requiring a second `prosemirror-history` installation.
 

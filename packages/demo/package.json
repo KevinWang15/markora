@@ -13,6 +13,7 @@
     "markora-extension-alerts": "workspace:*",
     "markora-extension-frontmatter": "workspace:*",
     "markora-extension-footnotes": "workspace:*",
+    "markora-extension-html": "workspace:*",
     "markora-extension-math": "workspace:*",
     "markora-extension-toc": "workspace:*",
     "markora-ui": "workspace:*",

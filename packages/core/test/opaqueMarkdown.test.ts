@@ -7,7 +7,18 @@ import {
   type Node as ProseMirrorNode,
 } from 'prosemirror-model';
 import { describe, expect, it } from 'vitest';
-import { markdownSerializer, parseMarkdown, schema } from '../src/markdownCodec';
+import {
+  defineMarkdownEditorExtension,
+  readMarkdownEditorOpaqueTokenSource,
+} from '../src/extension-api';
+import { resolveMarkdownEditorExtensions } from '../src/extensionResolver';
+import { MARKORA_VERSION } from '../src/extensionVersion';
+import {
+  createCompatibilityMarkdownCodec,
+  markdownSerializer,
+  parseMarkdown,
+  schema,
+} from '../src/markdownCodec';
 
 type OpaqueClassification = 'opaque-block' | 'opaque-inline' | 'negative';
 
@@ -60,6 +71,94 @@ function collectOpaqueNodes(doc: ProseMirrorNode) {
 function collectOpaqueAttrs(doc: ProseMirrorNode): OpaqueNodeExpectation[] {
   return collectOpaqueNodes(doc).map(({ kind, source }) => ({ kind, source }));
 }
+
+describe('opaque token exact-source API', () => {
+  it('reads only own data properties and never invokes hostile accessors', () => {
+    expect(readMarkdownEditorOpaqueTokenSource({
+      meta: { markoraOpaqueSource: '<aside>\r\nsource\r\n</aside>' },
+    })).toBe('<aside>\r\nsource\r\n</aside>');
+    expect(readMarkdownEditorOpaqueTokenSource(null)).toBeNull();
+    expect(readMarkdownEditorOpaqueTokenSource({})).toBeNull();
+    expect(readMarkdownEditorOpaqueTokenSource(Object.create({
+      meta: { markoraOpaqueSource: 'inherited' },
+    }))).toBeNull();
+    expect(readMarkdownEditorOpaqueTokenSource({
+      meta: Object.create({ markoraOpaqueSource: 'inherited' }),
+    })).toBeNull();
+    expect(readMarkdownEditorOpaqueTokenSource(new Proxy({}, {
+      getOwnPropertyDescriptor() {
+        throw new Error('foreign proxy');
+      },
+    }))).toBeNull();
+
+    let metaReads = 0;
+    const tokenWithAccessor = Object.defineProperty({}, 'meta', {
+      enumerable: true,
+      get() {
+        metaReads += 1;
+        throw new Error('must not run');
+      },
+    });
+    expect(readMarkdownEditorOpaqueTokenSource(tokenWithAccessor)).toBeNull();
+    expect(metaReads).toBe(0);
+
+    let sourceReads = 0;
+    const metaWithAccessor = Object.defineProperty({}, 'markoraOpaqueSource', {
+      enumerable: true,
+      get() {
+        sourceReads += 1;
+        throw new Error('must not run');
+      },
+    });
+    expect(readMarkdownEditorOpaqueTokenSource({ meta: metaWithAccessor })).toBeNull();
+    expect(sourceReads).toBe(0);
+  });
+
+  it('exposes hydrated block and inline HTML spans with exact legacy line endings', () => {
+    const captured: string[] = [];
+    const probe = defineMarkdownEditorExtension({
+      name: 'acme-opaque-source-probe',
+      version: '1.0.0',
+      compatibility: {
+        extensionApi: '^1.3.0',
+        markora: '^0.0.1',
+        runtime: 'root-default',
+      },
+      markdown: {
+        tokenizerRules: [{
+          id: 'capture-html-source',
+          phase: 'core',
+          after: ['@markora/opaque/inline-source'],
+          createRule: () => (state) => {
+            for (const token of state.tokens) {
+              if (token.type === 'html_block') {
+                const source = readMarkdownEditorOpaqueTokenSource(token);
+                if (source !== null) captured.push(source);
+              }
+
+              for (const child of token.children ?? []) {
+                if (child.type !== 'html_inline') continue;
+                const source = readMarkdownEditorOpaqueTokenSource(child);
+                if (source !== null) captured.push(source);
+              }
+            }
+          },
+        }],
+      },
+    });
+    const resolution = resolveMarkdownEditorExtensions({
+      extensions: [probe],
+      markoraVersion: MARKORA_VERSION,
+    });
+    const codec = createCompatibilityMarkdownCodec(resolution.extensions);
+    const block = '<div data-kind="exact">\r\nblock\r\n</div>';
+    const inline = '<!-- inline\r\ncomment -->';
+
+    codec.parse(`${block}\r\n\r\nBefore ${inline} after.\r\n`);
+
+    expect(captured).toEqual([block, inline]);
+  });
+});
 
 describe('versioned opaque Markdown fixture manifest', () => {
   const allowedClassifications: OpaqueClassification[] = ['opaque-block', 'opaque-inline', 'negative'];

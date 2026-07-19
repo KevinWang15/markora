@@ -41,6 +41,18 @@ import {
 } from "markora-extension-frontmatter";
 import "markora-extension-frontmatter/styles.css";
 import {
+  createHtmlExtension,
+  defaultHtmlMessages,
+  type HtmlEditRequest,
+  type HtmlExtension,
+  type HtmlMessageOverrides,
+  type HtmlMessages,
+  type HtmlNodeTarget,
+  type HtmlRenderRequest,
+  type HtmlSnapshot,
+} from "markora-extension-html";
+import "markora-extension-html/styles.css";
+import {
   createFootnotesExtension,
   type FootnoteDefinitionTarget,
   type FootnotesExtension,
@@ -84,8 +96,19 @@ export type BrowserLabFootnotesMessages = Partial<
   Record<keyof FootnotesMessageOverrides, string>
 >;
 export type BrowserLabAlertsMessages = Partial<Record<keyof AlertsMessages, string>>;
+export type BrowserLabHtmlMessages = Partial<Record<keyof HtmlMessages, string>>;
 export type BrowserLabMathMessages = Partial<Record<keyof MathMessages, string>>;
 export type BrowserLabTocMessages = Partial<Record<keyof TocMessages, string>>;
+export type BrowserLabHtmlRendererMode =
+  | "connected"
+  | "deferred"
+  | "missing"
+  | "reject"
+  | "string"
+  | "sync"
+  | "throw"
+  | "unsafe"
+  | "wrong-document";
 export type BrowserLabMathRendererMode =
   | "connected"
   | "deferred"
@@ -128,10 +151,12 @@ export type BrowserLabEditorSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example" | "toc";
+  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "html" | "math" | "public-example" | "toc";
   alertsMessages?: BrowserLabAlertsMessages;
   footnotesMessages?: BrowserLabFootnotesMessages;
   frontmatterMessages?: FrontmatterMessageOverrides;
+  htmlMessages?: BrowserLabHtmlMessages;
+  htmlRendererMode?: BrowserLabHtmlRendererMode;
   id: string;
   initialSelection?: MarkdownEditorSelectionTarget;
   language?: string;
@@ -282,6 +307,28 @@ export type BrowserLabMathCommandRequest =
   | { source: string; target: MathNodeTarget; type: "update" }
   | { target: MathNodeTarget; type: "remove" | "retryPreview" | "togglePreview" };
 
+export type BrowserLabHtmlCommandRequest =
+  | { source: string; target: HtmlNodeTarget; type: "update" }
+  | { target: HtmlNodeTarget; type: "remove" | "retryPreview" | "togglePreview" };
+
+export type BrowserLabHtmlEditSnapshot = Pick<
+  HtmlEditRequest,
+  "display" | "identity" | "kind" | "position" | "render" | "source"
+>;
+
+export type BrowserLabHtmlRendererCall = Readonly<{
+  aborted: boolean;
+  id: number;
+  kind: HtmlRenderRequest["kind"];
+  settled: "pending" | "rejected" | "resolved" | "threw";
+  source: string;
+}>;
+
+export type BrowserLabHtmlRendererSettlement = Readonly<{
+  callId?: number;
+  outcome?: "reject" | "resolve";
+}>;
+
 export type BrowserLabMathEditSnapshot = Pick<
   MathEditRequest,
   "kind" | "position" | "render" | "source"
@@ -377,6 +424,15 @@ export type BrowserLabApi = {
   frontmatterEditRemove: (id: string) => boolean;
   frontmatterEditUpdate: (id: string, source: string) => boolean;
   frontmatterSnapshot: (id: string) => FrontmatterSnapshot | null;
+  htmlCommand: (id: string, request: BrowserLabHtmlCommandRequest) => boolean;
+  htmlEditRemove: (id: string) => boolean;
+  htmlEditUpdate: (id: string, source: string) => boolean;
+  htmlRendererCalls: (id: string) => readonly BrowserLabHtmlRendererCall[];
+  htmlRendererSettle: (
+    id: string,
+    settlement?: BrowserLabHtmlRendererSettlement,
+  ) => boolean;
+  htmlSnapshot: (id: string) => HtmlSnapshot;
   footnotesCommand: (id: string, request: BrowserLabFootnotesCommandRequest) => boolean;
   footnotesSnapshot: (id: string) => FootnotesSnapshot;
   focus: (id: string, selection?: MarkdownEditorSelectionTarget) => void;
@@ -401,6 +457,7 @@ export type BrowserLabApi = {
     FrontmatterEditRequest,
     "diagnostics" | "source"
   > | null;
+  pendingHtmlEdit: (id: string) => BrowserLabHtmlEditSnapshot | null;
   pendingMathEdit: (id: string) => BrowserLabMathEditSnapshot | null;
   ready: true;
   reconcile: (
@@ -415,6 +472,7 @@ export type BrowserLabApi = {
   resourceLog: (id: string) => BrowserLabResourceLog;
   reset: (id: string, markdown: string) => string;
   selectFootnote: (id: string, request: BrowserLabFootnoteSelectionRequest) => boolean;
+  selectHtml: (id: string, target: HtmlNodeTarget) => boolean;
   selectMath: (id: string, target: MathNodeTarget) => boolean;
   selectToc: (id: string, occurrence?: number) => boolean;
   selectText: (id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number) => boolean;
@@ -446,10 +504,25 @@ type MountedEditor = {
   eventLog: BrowserLabEventRecord[];
   eventUnsubscribes: Map<MarkdownEditorEventName, () => void>;
   extensionActions?: HTMLElement;
-  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example" | "toc";
+  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "html" | "math" | "public-example" | "toc";
   footnotesExtension: FootnotesExtension | null;
   frontmatterEditRequest: FrontmatterEditRequest | null;
   frontmatterExtension: FrontmatterExtension | null;
+  htmlEditRequest: HtmlEditRequest | null;
+  htmlExtension: HtmlExtension | null;
+  htmlRendererArtifacts: Set<Node>;
+  htmlRendererCalls: Array<{
+    aborted: boolean;
+    id: number;
+    kind: HtmlRenderRequest["kind"];
+    settled: "pending" | "rejected" | "resolved" | "threw";
+    source: string;
+  }>;
+  htmlRendererDeferred: Map<number, {
+    reject(reason: unknown): void;
+    request: HtmlRenderRequest;
+    resolve(value: Node | DocumentFragment): void;
+  }>;
   explicitPortalRoot?: HTMLElement | ShadowRoot;
   host: HTMLElement;
   id: string;
@@ -736,6 +809,14 @@ function requireFrontmatterHandle(mounted: MountedEditor) {
   return mounted.editor.extensions.get(mounted.frontmatterExtension);
 }
 
+function requireHtmlHandle(mounted: MountedEditor) {
+  if (!mounted.htmlExtension) {
+    throw new Error(`Browser lab editor "${mounted.id}" has no HTML extension.`);
+  }
+
+  return mounted.editor.extensions.get(mounted.htmlExtension);
+}
+
 function requireFootnotesHandle(mounted: MountedEditor) {
   if (!mounted.footnotesExtension) {
     throw new Error(`Browser lab editor "${mounted.id}" has no footnotes extension.`);
@@ -790,6 +871,21 @@ function normalizeBrowserLabMathMessages(
   ])) as MathMessageOverrides;
 }
 
+function normalizeBrowserLabHtmlMessages(
+  overrides: BrowserLabHtmlMessages | undefined,
+): HtmlMessageOverrides | undefined {
+  if (!overrides) {
+    return undefined;
+  }
+
+  return Object.fromEntries(Object.entries(overrides).map(([key, message]) => [
+    key,
+    typeof defaultHtmlMessages[key as keyof HtmlMessages] === "function"
+      ? () => message
+      : message,
+  ])) as HtmlMessageOverrides;
+}
+
 function normalizeBrowserLabTocMessages(
   overrides: BrowserLabTocMessages | undefined,
 ): TocMessageOverrides | undefined {
@@ -810,6 +906,124 @@ function createBrowserLabMathOutput(request: MathRenderRequest, callId: number) 
   output.className = "browser-lab-math-rendered";
   output.textContent = `Rendered ${request.kind} math ${callId}: ${request.source}`;
   return output;
+}
+
+function createBrowserLabHtmlOutput(request: HtmlRenderRequest, callId: number) {
+  const output = request.ownerDocument.createElement("article");
+  output.className = "browser-lab-html-rendered";
+  output.textContent = `Rendered ${request.kind} HTML ${callId}: ${request.source}`;
+  return output;
+}
+
+function clearHtmlRendererArtifacts(mounted: MountedEditor) {
+  for (const artifact of mounted.htmlRendererArtifacts) {
+    artifact.parentNode?.removeChild(artifact);
+  }
+
+  mounted.htmlRendererArtifacts.clear();
+}
+
+function createBrowserLabHtmlRenderer(
+  mounted: MountedEditor,
+  mode: BrowserLabHtmlRendererMode | undefined,
+) {
+  if (!mode || mode === "missing") {
+    return undefined;
+  }
+
+  return (request: HtmlRenderRequest): Node | DocumentFragment | Promise<Node | DocumentFragment> => {
+    const call = {
+      aborted: request.signal.aborted,
+      id: mounted.htmlRendererCalls.length + 1,
+      kind: request.kind,
+      settled: "pending" as "pending" | "rejected" | "resolved" | "threw",
+      source: request.source,
+    };
+    mounted.htmlRendererCalls.push(call);
+    request.signal.addEventListener("abort", () => {
+      call.aborted = true;
+    }, { once: true });
+
+    if (mode === "throw") {
+      call.settled = "threw";
+      throw new Error(`Browser lab HTML renderer threw for call ${call.id}.`);
+    }
+
+    if (mode === "reject") {
+      call.settled = "rejected";
+      return Promise.reject(new Error(
+        `Browser lab HTML renderer rejected call ${call.id}.`,
+      ));
+    }
+
+    if (mode === "deferred") {
+      return new Promise<Node | DocumentFragment>((resolve, reject) => {
+        mounted.htmlRendererDeferred.set(call.id, { reject, request, resolve });
+      });
+    }
+
+    call.settled = "resolved";
+
+    if (mode === "wrong-document") {
+      const foreignDocument = request.ownerDocument.implementation
+        .createHTMLDocument("Browser lab foreign HTML renderer");
+      const output = foreignDocument.createElement("article");
+      output.textContent = request.source;
+      return output;
+    }
+
+    const output = createBrowserLabHtmlOutput(request, call.id);
+
+    if (mode === "string") {
+      return "<article>renderer strings are forbidden</article>" as unknown as Node;
+    }
+
+    if (mode === "unsafe") {
+      const wrapper = request.ownerDocument.createElement("div");
+      const script = request.ownerDocument.createElement("script");
+      script.textContent = "window.__markoraUnsafeHtmlRenderer = true";
+      const image = request.ownerDocument.createElement("img");
+      const frame = request.ownerDocument.createElement("iframe");
+      const link = request.ownerDocument.createElement("a");
+      link.href = "https://markora-html.invalid/renderer-link";
+      link.textContent = "unsafe renderer link";
+      const form = request.ownerDocument.createElement("form");
+      form.action = "https://markora-html.invalid/renderer-submit";
+      form.append(request.ownerDocument.createElement("input"));
+      const svg = request.ownerDocument.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "svg",
+      );
+      wrapper.append(script, image, frame, link, form, svg);
+      return wrapper;
+    }
+
+    if (mode === "connected") {
+      output.dataset.e2eHtmlRendererArtifact = mounted.id;
+      request.ownerDocument.body.append(output);
+      mounted.htmlRendererArtifacts.add(output);
+      request.signal.addEventListener("abort", () => {
+        output.remove();
+        mounted.htmlRendererArtifacts.delete(output);
+      }, { once: true });
+    }
+
+    return output;
+  };
+}
+
+function runBrowserLabHtmlCommand(
+  mounted: MountedEditor,
+  request: BrowserLabHtmlCommandRequest,
+) {
+  const commands = requireHtmlHandle(mounted).commands;
+
+  switch (request.type) {
+    case "remove": return commands.remove(request.target);
+    case "retryPreview": return commands.retryPreview(request.target);
+    case "togglePreview": return commands.togglePreview(request.target);
+    case "update": return commands.update(request.target, request.source);
+  }
 }
 
 function clearMathRendererArtifacts(mounted: MountedEditor) {
@@ -1109,6 +1323,11 @@ export function BrowserLabPage() {
       mounted.extensionMode = extensionMode;
       mounted.frontmatterEditRequest = null;
       delete mounted.section.dataset.pendingFrontmatterEdit;
+      mounted.htmlEditRequest = null;
+      mounted.htmlRendererCalls.length = 0;
+      mounted.htmlRendererDeferred.clear();
+      clearHtmlRendererArtifacts(mounted);
+      delete mounted.section.dataset.pendingHtmlEdit;
       mounted.mathEditRequest = null;
       mounted.mathRendererCalls.length = 0;
       mounted.mathRendererDeferred.clear();
@@ -1140,6 +1359,19 @@ export function BrowserLabPage() {
               : undefined,
           })
         : null;
+      mounted.htmlExtension = extensionMode === "html"
+        ? createHtmlExtension({
+            messages: normalizeBrowserLabHtmlMessages(spec.htmlMessages),
+            onEditSource(request) {
+              mounted.htmlEditRequest = request;
+              mounted.section.dataset.pendingHtmlEdit = "true";
+            },
+            renderer: createBrowserLabHtmlRenderer(
+              mounted,
+              spec.htmlRendererMode,
+            ),
+          })
+        : null;
       mounted.mathExtension = extensionMode === "math"
         ? createMathExtension({
             messages: normalizeBrowserLabMathMessages(spec.mathMessages),
@@ -1166,11 +1398,13 @@ export function BrowserLabPage() {
             ? [mounted.frontmatterExtension]
             : mounted.footnotesExtension
               ? [mounted.footnotesExtension]
-              : mounted.mathExtension
-                ? [mounted.mathExtension]
-                : mounted.tocExtension
-                  ? [mounted.tocExtension]
-                  : undefined;
+              : mounted.htmlExtension
+                ? [mounted.htmlExtension]
+                : mounted.mathExtension
+                  ? [mounted.mathExtension]
+                  : mounted.tocExtension
+                    ? [mounted.tocExtension]
+                    : undefined;
       const existingOverlays = new Set(
         mounted.portalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR),
       );
@@ -1246,6 +1480,7 @@ export function BrowserLabPage() {
 
         mounted.editor.destroy();
       } finally {
+        clearHtmlRendererArtifacts(mounted);
         clearMathRendererArtifacts(mounted);
         for (const unsubscribe of mounted.eventUnsubscribes.values()) {
           unsubscribe();
@@ -1404,6 +1639,11 @@ export function BrowserLabPage() {
           frontmatterEditRequest: null,
           frontmatterExtension: null,
           host,
+          htmlEditRequest: null,
+          htmlExtension: null,
+          htmlRendererArtifacts: new Set(),
+          htmlRendererCalls: [],
+          htmlRendererDeferred: new Map(),
           id,
           mathEditRequest: null,
           mathExtension: null,
@@ -1423,6 +1663,7 @@ export function BrowserLabPage() {
         try {
           mountEditorInHost(mounted, spec);
         } catch (error) {
+          clearHtmlRendererArtifacts(mounted);
           activationObserver.disconnect();
           section.remove();
           throw error;
@@ -1469,6 +1710,7 @@ export function BrowserLabPage() {
         const mounted = requireEditor(editors, id);
         const wasDestroyed = mounted.editor.isDestroyed;
         mounted.editor.destroy();
+        clearHtmlRendererArtifacts(mounted);
         clearMathRendererArtifacts(mounted);
 
         for (const button of mounted.extensionActions?.querySelectorAll("button") ?? []) {
@@ -1595,6 +1837,84 @@ export function BrowserLabPage() {
       },
       isDestroyed(id) {
         return requireEditor(editors, id).editor.isDestroyed;
+      },
+      htmlCommand(id, request) {
+        const mounted = requireEditor(editors, id);
+        const handled = runBrowserLabHtmlCommand(mounted, request);
+
+        if (handled) {
+          mounted.editor.flushChange();
+          mounted.output.textContent = mounted.editor.getMarkdown();
+        }
+
+        return handled;
+      },
+      htmlEditRemove(id) {
+        const mounted = requireEditor(editors, id);
+        const request = mounted.htmlEditRequest;
+
+        if (!request || !request.remove()) {
+          return false;
+        }
+
+        mounted.htmlEditRequest = null;
+        delete mounted.section.dataset.pendingHtmlEdit;
+        mounted.editor.flushChange();
+        mounted.output.textContent = mounted.editor.getMarkdown();
+        return true;
+      },
+      htmlEditUpdate(id, source) {
+        const mounted = requireEditor(editors, id);
+        const request = mounted.htmlEditRequest;
+
+        if (!request || !request.update(source)) {
+          return false;
+        }
+
+        mounted.htmlEditRequest = null;
+        delete mounted.section.dataset.pendingHtmlEdit;
+        mounted.editor.flushChange();
+        mounted.output.textContent = mounted.editor.getMarkdown();
+        return true;
+      },
+      htmlRendererCalls(id) {
+        return requireEditor(editors, id).htmlRendererCalls.map((call) => ({
+          ...call,
+        }));
+      },
+      htmlRendererSettle(id, settlement = {}) {
+        const mounted = requireEditor(editors, id);
+        const pendingCallIds = [...mounted.htmlRendererDeferred.keys()];
+        const callId = settlement.callId
+          ?? pendingCallIds[pendingCallIds.length - 1];
+
+        if (callId === undefined) {
+          return false;
+        }
+
+        const deferred = mounted.htmlRendererDeferred.get(callId);
+        const call = mounted.htmlRendererCalls.find(({ id: nextId }) => nextId === callId);
+
+        if (!deferred || !call || call.settled !== "pending") {
+          return false;
+        }
+
+        mounted.htmlRendererDeferred.delete(callId);
+
+        if (settlement.outcome === "reject") {
+          call.settled = "rejected";
+          deferred.reject(new Error(
+            `Browser lab deferred HTML renderer rejected call ${callId}.`,
+          ));
+        } else {
+          call.settled = "resolved";
+          deferred.resolve(createBrowserLabHtmlOutput(deferred.request, callId));
+        }
+
+        return true;
+      },
+      htmlSnapshot(id) {
+        return requireHtmlHandle(requireEditor(editors, id)).state.getSnapshot();
       },
       mathCommand(id, request) {
         const mounted = requireEditor(editors, id);
@@ -1731,7 +2051,9 @@ export function BrowserLabPage() {
       },
       reset(id, markdown) {
         const mounted = requireEditor(editors, id);
+        mounted.htmlEditRequest = null;
         mounted.opaqueEditRequest = null;
+        delete mounted.section.dataset.pendingHtmlEdit;
         delete mounted.section.dataset.pendingOpaqueKind;
         mounted.editor.commands.resetMarkdown(markdown, { emitChange: true });
         mounted.editor.flushChange();
@@ -1749,7 +2071,9 @@ export function BrowserLabPage() {
       },
       reconcile(id, markdown, options) {
         const mounted = requireEditor(editors, id);
+        mounted.htmlEditRequest = null;
         mounted.opaqueEditRequest = null;
+        delete mounted.section.dataset.pendingHtmlEdit;
         delete mounted.section.dataset.pendingOpaqueKind;
         const changed = mounted.editor.commands.reconcileMarkdown(markdown, options);
         mounted.editor.flushChange();
@@ -1822,6 +2146,33 @@ export function BrowserLabPage() {
         if (!selection.eq(view.state.selection)) {
           view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
         }
+        view.focus();
+        return true;
+      },
+      selectHtml(id, target) {
+        const mounted = requireEditor(editors, id);
+        const snapshot = requireHtmlHandle(mounted).state.getNode(target);
+
+        if (!snapshot) {
+          return false;
+        }
+
+        const view = mounted.editor.view;
+        const node = view.state.doc.nodeAt(snapshot.position);
+        const expectedType = snapshot.display === "inline"
+          ? "html_inline"
+          : "html_block";
+
+        if (!node || node.type.name !== expectedType || view.composing) {
+          return false;
+        }
+
+        const selection = NodeSelection.create(view.state.doc, snapshot.position);
+
+        if (!selection.eq(view.state.selection)) {
+          view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
+        }
+
         view.focus();
         return true;
       },
@@ -1956,6 +2307,19 @@ export function BrowserLabPage() {
         const request = requireEditor(editors, id).frontmatterEditRequest;
         return request
           ? { diagnostics: request.diagnostics, source: request.source }
+          : null;
+      },
+      pendingHtmlEdit(id) {
+        const request = requireEditor(editors, id).htmlEditRequest;
+        return request
+          ? {
+              display: request.display,
+              identity: request.identity,
+              kind: request.kind,
+              position: request.position,
+              render: { ...request.render },
+              source: request.source,
+            }
           : null;
       },
       pendingMathEdit(id) {

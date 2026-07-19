@@ -1,0 +1,209 @@
+.mdw-html {
+  color: var(--mdw-html-color, var(--mdw-color-text, currentColor));
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  unicode-bidi: isolate;
+}
+
+.mdw-html--block {
+  background: var(--mdw-html-background, var(--mdw-color-surface-muted, #f6f8fa));
+  border: var(--mdw-border-width, 1px) solid
+    var(--mdw-html-border-color, var(--mdw-color-border, #d0d7de));
+  border-radius: var(--mdw-html-radius, var(--mdw-code-block-radius, 0.5rem));
+  margin-block: var(--mdw-html-margin, var(--mdw-block-spacing, 1rem));
+  overflow: clip;
+}
+
+.mdw-html--inline {
+  align-items: baseline;
+  background: var(--mdw-html-inline-background, var(--mdw-color-surface-muted, #f6f8fa));
+  border: var(--mdw-border-width, 1px) solid
+    var(--mdw-html-border-color, var(--mdw-color-border, #d0d7de));
+  border-radius: var(--mdw-html-inline-radius, var(--mdw-control-radius, 0.375rem));
+  display: inline-flex;
+  gap: 0.25em;
+  padding-block: 0.05em;
+  padding-inline: 0.25em;
+  vertical-align: baseline;
+}
+
+.mdw-html.ProseMirror-selectednode {
+  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
+  outline-offset: var(--mdw-focus-ring-offset, 2px);
+}
+
+.mdw-html__header {
+  align-items: center;
+  border-block-end: var(--mdw-border-width, 1px) solid
+    var(--mdw-html-border-color, var(--mdw-color-border, #d0d7de));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  justify-content: space-between;
+  min-block-size: var(--mdw-control-min-size, 2.75rem);
+  min-inline-size: 0;
+  padding-block: 0.25rem;
+  padding-inline: var(--mdw-html-padding-inline, var(--mdw-code-padding-inline, 1rem));
+}
+
+.mdw-html--inline .mdw-html__header {
+  border: 0;
+  display: inline-flex;
+  min-block-size: 0;
+  padding: 0;
+}
+
+.mdw-html__kind {
+  color: var(--mdw-html-label-color, var(--mdw-color-muted, #59636e));
+  font-size: var(--mdw-label-font-size, 0.75rem);
+  font-weight: var(--mdw-label-font-weight, 600);
+  letter-spacing: var(--mdw-label-letter-spacing, 0.04em);
+  overflow-wrap: anywhere;
+}
+
+.mdw-html__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  max-inline-size: 100%;
+}
+
+.mdw-html__action {
+  background: transparent;
+  border: var(--mdw-border-width, 1px) solid transparent;
+  border-radius: var(--mdw-control-radius, 0.375rem);
+  color: var(--mdw-html-action-color, var(--mdw-color-accent, #0969da));
+  cursor: pointer;
+  font: inherit;
+  min-block-size: var(--mdw-control-min-size, 2.75rem);
+  overflow-wrap: anywhere;
+  padding-block: 0.25rem;
+  padding-inline: 0.75rem;
+}
+
+.mdw-html__action:hover:not(:disabled) {
+  background: var(--mdw-html-action-hover-background, var(--mdw-color-surface, #fff));
+  border-color: var(--mdw-html-border-color, var(--mdw-color-border, #d0d7de));
+}
+
+.mdw-html__action:focus-visible {
+  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
+  outline-offset: var(--mdw-focus-ring-offset, 2px);
+}
+
+.mdw-html__action:disabled {
+  cursor: default;
+  opacity: var(--mdw-disabled-opacity, 0.55);
+}
+
+.mdw-html__source-shell {
+  margin: 0;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  overflow: auto;
+  padding-block: var(--mdw-html-source-padding-block, var(--mdw-code-padding-block, 0.75rem));
+  padding-inline: var(--mdw-html-padding-inline, var(--mdw-code-padding-inline, 1rem));
+}
+
+.mdw-html--inline .mdw-html__source-shell {
+  display: inline;
+  overflow: visible;
+  padding: 0;
+}
+
+.mdw-html__source {
+  color: inherit;
+  font-family: var(--mdw-font-mono, ui-monospace, monospace);
+  font-size: var(--mdw-code-font-size, 0.875rem);
+  line-height: var(--mdw-code-line-height, 1.5);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mdw-html__visually-hidden {
+  block-size: 1px;
+  clip-path: inset(50%);
+  inline-size: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+}
+
+.mdw-html__source-shell--visually-hidden {
+  block-size: 1px;
+  clip-path: inset(50%);
+  inline-size: 1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+}
+
+.mdw-html__preview {
+  box-sizing: border-box;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  overflow: auto;
+  padding-block: var(--mdw-html-preview-padding-block, 0.75rem);
+  padding-inline: var(--mdw-html-padding-inline, var(--mdw-code-padding-inline, 1rem));
+  pointer-events: none;
+}
+
+.mdw-html__preview * {
+  max-inline-size: 100%;
+}
+
+.mdw-html__status {
+  color: var(--mdw-html-status-color, var(--mdw-color-muted, #59636e));
+  font-size: var(--mdw-label-font-size, 0.75rem);
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding-block: 0.5rem;
+  padding-inline: var(--mdw-html-padding-inline, var(--mdw-code-padding-inline, 1rem));
+}
+
+.mdw-html[data-mdw-html-state="error"],
+.mdw-html[data-mdw-html-state="source-too-large"] {
+  border-color: var(--mdw-html-diagnostic-color, var(--mdw-color-danger, #cf222e));
+}
+
+.mdw-html [hidden] {
+  display: none;
+}
+
+@media (forced-colors: active) {
+  .mdw-html,
+  .mdw-html__header {
+    border-color: CanvasText;
+  }
+
+  .mdw-html.ProseMirror-selectednode {
+    outline-color: Highlight;
+  }
+
+  .mdw-html__action {
+    background: Canvas;
+    border-color: ButtonBorder;
+    color: LinkText;
+  }
+
+  .mdw-html[data-mdw-html-state="error"],
+  .mdw-html[data-mdw-html-state="source-too-large"] {
+    border-color: Mark;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mdw-html,
+  .mdw-html__action,
+  .mdw-html__preview,
+  .mdw-html__source-shell,
+  .mdw-html__status {
+    animation: none;
+    scroll-behavior: auto;
+    transition: none;
+  }
+}

@@ -36,6 +36,21 @@ export type LabEventRecord = {
 };
 
 type BrowserLabWindowApi = NonNullable<Window["__MARKORA_BROWSER_LAB__"]>;
+export type LabHtmlSnapshot = ReturnType<BrowserLabWindowApi["htmlSnapshot"]>;
+export type LabHtmlNodeTarget = Omit<LabHtmlSnapshot["nodes"][number], "render">;
+export type LabHtmlDisplay = LabHtmlNodeTarget["display"];
+export type LabHtmlKind = LabHtmlNodeTarget["kind"];
+export type LabHtmlRenderSnapshot = LabHtmlSnapshot["nodes"][number]["render"];
+export type LabHtmlCommandRequest = Parameters<BrowserLabWindowApi["htmlCommand"]>[1];
+export type LabHtmlEditSnapshot = NonNullable<
+  ReturnType<BrowserLabWindowApi["pendingHtmlEdit"]>
+>;
+export type LabHtmlRendererCall = ReturnType<
+  BrowserLabWindowApi["htmlRendererCalls"]
+>[number];
+export type LabHtmlRendererSettlement = NonNullable<
+  Parameters<BrowserLabWindowApi["htmlRendererSettle"]>[1]
+>;
 export type LabCommandRequest = Parameters<BrowserLabWindowApi["command"]>[1];
 export type LabActiveRequest = Parameters<BrowserLabWindowApi["active"]>[1];
 export type LabAlertsCommandRequest = Parameters<BrowserLabWindowApi["alertsCommand"]>[1];
@@ -81,7 +96,7 @@ export type LabEditorSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example" | "toc";
+  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "html" | "math" | "public-example" | "toc";
   footnotesMessages?: Partial<Record<
     | "backReferenceLabel"
     | "backReferenceText"
@@ -115,6 +130,38 @@ export type LabEditorSpec = {
     tabIndentationDiagnostic: string;
     unbalancedFlowDiagnostic: string;
   }>;
+  htmlMessages?: Partial<Record<
+    | "blockKindLabel"
+    | "commentKindLabel"
+    | "editSource"
+    | "inlineKindLabel"
+    | "invalidDocumentDiagnostic"
+    | "invalidRendererOutputDiagnostic"
+    | "invalidSourceDiagnostic"
+    | "previewFailed"
+    | "previewLabel"
+    | "previewLoading"
+    | "rendererFailedDiagnostic"
+    | "rendererUnavailable"
+    | "renderOutputLimitDiagnostic"
+    | "retryPreview"
+    | "showPreview"
+    | "showSource"
+    | "sourceLabel"
+    | "sourceTooLargeDiagnostic"
+    | "unsafeRendererOutputDiagnostic",
+    string
+  >>;
+  htmlRendererMode?:
+    | "connected"
+    | "deferred"
+    | "missing"
+    | "reject"
+    | "string"
+    | "sync"
+    | "throw"
+    | "unsafe"
+    | "wrong-document";
   id: string;
   initialSelection?: LabSelectionTarget;
   language?: string;
@@ -362,7 +409,10 @@ export const test = base.extend<BrowserFixtures>({
 export { expect } from "@playwright/test";
 
 export async function mountEditor(page: Page, spec: LabEditorSpec) {
-  return page.evaluate((nextSpec) => window.__MARKORA_BROWSER_LAB__!.mount(nextSpec), spec) as Promise<LabSnapshot>;
+  return page.evaluate(
+    (nextSpec) => (window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi).mount(nextSpec),
+    spec,
+  ) as Promise<LabSnapshot>;
 }
 
 export async function focusEditor(page: Page, id: string, selection?: LabSelectionTarget) {
@@ -458,7 +508,9 @@ export async function remountEditor(
   options: Omit<LabEditorSpec, "direction" | "id" | "placement" | "portal" | "root"> = {},
 ) {
   return page.evaluate(
-    ({ editorId, nextOptions }) => window.__MARKORA_BROWSER_LAB__!.remount(editorId, nextOptions),
+    ({ editorId, nextOptions }) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).remount(editorId, nextOptions),
     { editorId: id, nextOptions: options },
   ) as Promise<LabSnapshot>;
 }
@@ -525,6 +577,90 @@ export async function getFootnotesSnapshot(page: Page, id: string) {
     (editorId) => window.__MARKORA_BROWSER_LAB__!.footnotesSnapshot(editorId),
     id,
   ) as Promise<LabFootnotesSnapshot>;
+}
+
+export async function runHtmlCommand(
+  page: Page,
+  id: string,
+  request: LabHtmlCommandRequest,
+) {
+  return page.evaluate(
+    ({ editorId, nextRequest }) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).htmlCommand(editorId, nextRequest),
+    { editorId: id, nextRequest: request },
+  );
+}
+
+export async function getHtmlSnapshot(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).htmlSnapshot(editorId),
+    id,
+  ) as Promise<LabHtmlSnapshot>;
+}
+
+export async function getHtmlRendererCalls(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).htmlRendererCalls(editorId),
+    id,
+  ) as Promise<readonly LabHtmlRendererCall[]>;
+}
+
+export async function settleHtmlRenderer(
+  page: Page,
+  id: string,
+  settlement?: LabHtmlRendererSettlement,
+) {
+  return page.evaluate(
+    ({ editorId, nextSettlement }) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).htmlRendererSettle(editorId, nextSettlement),
+    { editorId: id, nextSettlement: settlement },
+  );
+}
+
+export async function getPendingHtmlEdit(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).pendingHtmlEdit(editorId),
+    id,
+  ) as Promise<LabHtmlEditSnapshot | null>;
+}
+
+export async function updatePendingHtmlEdit(page: Page, id: string, source: string) {
+  return page.evaluate(
+    ({ editorId, nextSource }) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).htmlEditUpdate(editorId, nextSource),
+    { editorId: id, nextSource: source },
+  );
+}
+
+export async function removePendingHtmlEdit(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).htmlEditRemove(editorId),
+    id,
+  );
+}
+
+export async function selectHtml(
+  page: Page,
+  id: string,
+  target: LabHtmlNodeTarget,
+) {
+  return page.evaluate(
+    ({ editorId, nextTarget }) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).selectHtml(editorId, nextTarget),
+    { editorId: id, nextTarget: target },
+  );
 }
 
 export async function runMathCommand(

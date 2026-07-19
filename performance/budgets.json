@@ -240,6 +240,25 @@
       },
       "staticModuleCount": { "warning": 100, "failure": 110 }
     },
+    "html": {
+      "initialJs": {
+        "rawBytes": { "warning": 270000, "failure": 282000 },
+        "gzipBytes": { "warning": 85500, "failure": 89600 }
+      },
+      "lazyJs": {
+        "rawBytes": { "warning": 0, "failure": 0 },
+        "gzipBytes": { "warning": 0, "failure": 0 }
+      },
+      "totalJs": {
+        "rawBytes": { "warning": 270000, "failure": 282000 },
+        "gzipBytes": { "warning": 85500, "failure": 89600 }
+      },
+      "css": {
+        "rawBytes": { "warning": 5000, "failure": 5225 },
+        "gzipBytes": { "warning": 1300, "failure": 1350 }
+      },
+      "staticModuleCount": { "warning": 105, "failure": 110 }
+    },
     "math": {
       "initialJs": {
         "rawBytes": { "warning": 135000, "failure": 150000 },

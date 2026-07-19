@@ -134,6 +134,9 @@ importers:
       markora-extension-frontmatter:
         specifier: workspace:*
         version: link:../extension-frontmatter
+      markora-extension-html:
+        specifier: workspace:*
+        version: link:../extension-html
       markora-extension-math:
         specifier: workspace:*
         version: link:../extension-math
@@ -185,6 +188,12 @@ importers:
         version: link:../core
 
   packages/extension-frontmatter:
+    devDependencies:
+      markora:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/extension-html:
     devDependencies:
       markora:
         specifier: workspace:*

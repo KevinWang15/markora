@@ -57,7 +57,7 @@ import { runInitialMarkdownParse } from "./extensionErrorBoundary";
 import { createMarkdownEditorExtensionAssembly } from "./extensionAssembly";
 import { createMinimalMarkdownEditorPreset } from "./minimalExtensionPreset";
 import {
-  assertMarkdownEditorCompatibilityAdaptersActive,
+  assertMarkdownEditorCompatibilityRuntimeActive,
   resolveMarkdownEditorExtensions,
 } from "./extensionResolver";
 import { MARKORA_VERSION } from "./extensionVersion";
@@ -541,7 +541,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     preset: options.extensionPreset ?? createMinimalMarkdownEditorPreset(),
     extensions: options.extensions,
   });
-  assertMarkdownEditorCompatibilityAdaptersActive(extensionResolution, false);
+  assertMarkdownEditorCompatibilityRuntimeActive(extensionResolution, false);
   const codec = createMinimalMarkdownCodec(extensionResolution.extensions, resources);
   const structuralCommandSet = createStructuralCommandSet(codec.schema);
   const doc = runInitialMarkdownParse(

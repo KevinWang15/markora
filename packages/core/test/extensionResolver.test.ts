@@ -184,6 +184,15 @@ describe("extension definition contract", () => {
       version: "1.0.0",
       compatibility: { extensionApi: "latest", markora: "^0.0.1" },
     }), "EXTENSION_INVALID_DEFINITION");
+    expectExtensionError(() => defineMarkdownEditorExtension({
+      name: "acme-runtime",
+      version: "1.0.0",
+      compatibility: {
+        extensionApi: "^1.3.0",
+        markora: "^0.0.1",
+        runtime: "minimal" as never,
+      },
+    }), "EXTENSION_INVALID_DEFINITION");
 
     const tokenizerError = expectExtensionError(() => extension("acme-tokenizer", {
       markdown: {
@@ -473,7 +482,7 @@ describe("extension graph resolution", () => {
     });
 
     expect(resolution.manifest).toEqual({
-      extensionApi: "1.2.0",
+      extensionApi: "1.3.0",
       preset: { name: "acme-default-preset", version: "3.2.1" },
       extensions: [
         { name: "acme-base", version: "1.0.0", configuration: { dialect: "base" } },

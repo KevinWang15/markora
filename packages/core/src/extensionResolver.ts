@@ -54,20 +54,23 @@ function isCompatibilityAdapterConfiguration(value: unknown) {
   );
 }
 
-/** @internal Prevent persistence manifests from advertising inactive adapters. */
-export function assertMarkdownEditorCompatibilityAdaptersActive(
+/** @internal Reject definitions whose declared runtime is not being compiled. */
+export function assertMarkdownEditorCompatibilityRuntimeActive(
   resolution: MarkdownEditorExtensionResolution,
-  active: boolean,
+  rootDefaultRuntimeActive: boolean,
 ) {
-  if (active) {
+  if (rootDefaultRuntimeActive) {
     return;
   }
 
   const inactive = resolution.extensions
     .filter(({ definition }) => {
       return (
-        definition.name.startsWith("@markora/")
-        && isCompatibilityAdapterConfiguration(definition.configuration)
+        definition.compatibility.runtime === "root-default"
+        || (
+          definition.name.startsWith("@markora/")
+          && isCompatibilityAdapterConfiguration(definition.configuration)
+        )
       );
     })
     .map(({ definition }) => definition.name);
@@ -75,8 +78,10 @@ export function assertMarkdownEditorCompatibilityAdaptersActive(
   if (inactive.length > 0) {
     resolutionError({
       code: "EXTENSION_INCOMPATIBLE",
-      message: `Compatibility-only extensions require the root entry's default preset: ${inactive.join(", ")}.`,
-      participants: inactive,
+      message: `Extensions requiring the compatibility runtime must use the root entry's exact default preset: ${inactive.join(", ")}.`,
+      ...(inactive.length === 1
+        ? { extension: inactive[0] }
+        : { participants: inactive }),
     });
   }
 }

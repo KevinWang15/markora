@@ -22,7 +22,7 @@ import {
   type MarkdownEditorCodec,
 } from "./markdownCodec";
 import {
-  assertMarkdownEditorCompatibilityAdaptersActive,
+  assertMarkdownEditorCompatibilityRuntimeActive,
   resolveMarkdownEditorExtensions,
 } from "./extensionResolver";
 import {
@@ -898,7 +898,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     preset: selectedExtensionPreset,
     extensions,
   });
-  assertMarkdownEditorCompatibilityAdaptersActive(
+  assertMarkdownEditorCompatibilityRuntimeActive(
     extensionResolution,
     usesCompatibilityPreset,
   );

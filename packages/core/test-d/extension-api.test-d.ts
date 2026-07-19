@@ -3,6 +3,7 @@ import {
   closeHistory,
   defineMarkdownEditorExtension,
   defineMarkdownEditorPreset,
+  readMarkdownEditorOpaqueTokenSource,
   sliceMarkdownEditorOriginalSourceLines,
   type AnyMarkdownEditorExtension,
   type MarkdownEditorExtension,
@@ -25,7 +26,11 @@ interface CalloutStorage {
   insertions: number;
 }
 
-const extensionApiVersion: "1.2.0" = MARKORA_EXTENSION_API_VERSION;
+const extensionApiVersion: "1.3.0" = MARKORA_EXTENSION_API_VERSION;
+const opaqueSource: string | null = readMarkdownEditorOpaqueTokenSource({
+  meta: { markoraOpaqueSource: "<aside>\r\n" },
+});
+void opaqueSource;
 const originalSourceSlice: string | null =
   sliceMarkdownEditorOriginalSourceLines({}, 0, 1);
 declare const transaction: Transaction;
@@ -55,6 +60,27 @@ const calloutExtension = defineMarkdownEditorExtension({
       isActive: () => ownerDocument.nodeType === Node.DOCUMENT_NODE && storage.insertions > 0,
     },
   }),
+});
+
+defineMarkdownEditorExtension({
+  name: "@example/root-runtime",
+  version: "1.0.0",
+  compatibility: {
+    extensionApi: "^1.3.0",
+    markora: "^0.0.1",
+    runtime: "root-default",
+  },
+});
+
+defineMarkdownEditorExtension({
+  name: "@example/invalid-runtime",
+  version: "1.0.0",
+  compatibility: {
+    extensionApi: "^1.3.0",
+    markora: "^0.0.1",
+    // @ts-expect-error Root-default is the only runtime-specific compatibility value.
+    runtime: "minimal",
+  },
 });
 
 // The configured zero-argument wrapper used by UI metadata is independently

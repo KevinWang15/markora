@@ -3,6 +3,7 @@ import {
   createDefaultMarkdownEditorPreset,
   createEditor,
   createMinimalMarkdownEditorPreset,
+  defineMarkdownEditorExtension,
   defineMarkdownEditorPreset,
   type MarkdownEditor,
 } from "../src";
@@ -70,5 +71,57 @@ describe("minimal preset through the compatibility entry", () => {
     }));
     expect(rootHost.classList.contains("mdw-host")).toBe(false);
     expect(minimalHost.classList.contains("mdw-host")).toBe(false);
+  });
+
+  it("rejects a public root-default runtime requirement before claiming either host", () => {
+    const rootOnly = defineMarkdownEditorExtension({
+      name: "acme-root-only",
+      version: "1.0.0",
+      compatibility: {
+        extensionApi: "^1.3.0",
+        markora: "^0.0.1",
+        runtime: "root-default",
+      },
+    });
+    const compatibleHost = document.createElement("div");
+    const customPreset = defineMarkdownEditorPreset({ extensions: [rootOnly] });
+    const rootHost = document.createElement("div");
+    const minimalHost = document.createElement("div");
+    document.body.append(compatibleHost);
+    const compatibleEditor = createEditor({
+      element: compatibleHost,
+      extensions: [rootOnly],
+    });
+    editors.push(compatibleEditor);
+    rootHost.append(document.createElement("span"));
+    minimalHost.append(document.createElement("span"));
+    document.body.append(rootHost, minimalHost);
+
+    expect(compatibleEditor.extensions.has(rootOnly)).toBe(true);
+    expect(compatibleEditor.extensions.manifest.extensions).toContainEqual({
+      name: "acme-root-only",
+      version: "1.0.0",
+    });
+
+    expect(() => createEditor({
+      element: rootHost,
+      extensionPreset: customPreset,
+    })).toThrow(expect.objectContaining({
+      code: "EXTENSION_INCOMPATIBLE",
+      extension: "acme-root-only",
+      phase: "resolve",
+    }));
+    expect(() => createMinimalEntryEditor({
+      element: minimalHost,
+      extensions: [rootOnly],
+    })).toThrow(expect.objectContaining({
+      code: "EXTENSION_INCOMPATIBLE",
+      extension: "acme-root-only",
+      phase: "resolve",
+    }));
+    expect(rootHost.classList.contains("mdw-host")).toBe(false);
+    expect(minimalHost.classList.contains("mdw-host")).toBe(false);
+    expect(rootHost.childNodes).toHaveLength(1);
+    expect(minimalHost.childNodes).toHaveLength(1);
   });
 });

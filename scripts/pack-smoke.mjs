@@ -65,6 +65,15 @@ const extensionBundleSpecs = Object.freeze([
   }),
   Object.freeze({
     cssSelectors: Object.freeze([
+      ".mdw-html--block",
+      ".mdw-html__preview",
+    ]),
+    graphName: "html",
+    label: "HTML",
+    packageName: "markora-extension-html",
+  }),
+  Object.freeze({
+    cssSelectors: Object.freeze([
       ".mdw-math--inline",
       ".mdw-math--block",
     ]),
@@ -1071,6 +1080,8 @@ function writeMeasurementReport({
       frontmatterHasNoRendererEngine: true,
       footnotesHasNoLazyChunks: measurements.footnotes.lazyJs.chunkCount === 0,
       footnotesHasNoRendererEngine: true,
+      htmlHasNoLazyChunks: measurements.html.lazyJs.chunkCount === 0,
+      htmlHasNoRendererEngine: true,
       mathHasNoLazyChunks: measurements.math.lazyJs.chunkCount === 0,
       mathHasNoBundledRendererEngine: true,
       alertsHasNoLazyChunks: measurements.alerts.lazyJs.chunkCount === 0,
@@ -1128,6 +1139,12 @@ const footnotesPackage = packPackage(join(
   "packages/extension-footnotes",
 ));
 rememberPackage(footnotesPackage);
+currentPhase = "html-package";
+const htmlPackage = packPackage(join(
+  rootDir,
+  "packages/extension-html",
+));
+rememberPackage(htmlPackage);
 currentPhase = "math-package";
 const mathPackage = packPackage(join(
   rootDir,
@@ -1153,6 +1170,7 @@ unpackPackage(corePackage.name, corePackage.tarballPath);
 unpackPackage(uiPackage.name, uiPackage.tarballPath);
 unpackPackage(frontmatterPackage.name, frontmatterPackage.tarballPath);
 unpackPackage(footnotesPackage.name, footnotesPackage.tarballPath);
+unpackPackage(htmlPackage.name, htmlPackage.tarballPath);
 unpackPackage(mathPackage.name, mathPackage.tarballPath);
 unpackPackage(alertsPackage.name, alertsPackage.tarballPath);
 unpackPackage(tocPackage.name, tocPackage.tarballPath);
@@ -1165,6 +1183,10 @@ assertPackedPackage(frontmatterPackage, {
 assertPackedPackage(footnotesPackage, {
   rootSelector: ".mdw-footnote-reference",
   tokenPrefix: "--mdw-footnotes-",
+});
+assertPackedPackage(htmlPackage, {
+  rootSelector: ".mdw-html",
+  tokenPrefix: "--mdw-html-",
 });
 assertPackedPackage(mathPackage, {
   rootSelector: ".mdw-math--inline",
@@ -1450,6 +1472,45 @@ export const packedFootnotesSurface = [
 ].join(":");
 `);
 
+writeFileSync(join(smokeAppDir, "src/html.js"), `import {
+  HTML_MAX_ATTRIBUTES_PER_ELEMENT,
+  HTML_MAX_CONCURRENT_RENDERS,
+  HTML_MAX_RENDERED_DEPTH,
+  HTML_MAX_RENDERED_NODES,
+  HTML_MAX_RENDERED_OUTPUT_BYTES,
+  HTML_MAX_SOURCE_BYTES,
+  createHtmlExtension,
+  defaultHtmlMessages,
+  htmlDiagnosticCodes,
+  htmlDisplays,
+  htmlRenderErrorCodes,
+  htmlSourceKinds,
+} from "markora-extension-html";
+import "markora-extension-html/styles.css";
+
+export const packedHtmlDefinitions = [
+  createHtmlExtension(),
+  createHtmlExtension({
+    messages: { showPreview: "Show packed HTML preview" },
+  }),
+];
+
+export const packedHtmlSurface = [
+  HTML_MAX_SOURCE_BYTES,
+  HTML_MAX_RENDERED_NODES,
+  HTML_MAX_RENDERED_DEPTH,
+  HTML_MAX_RENDERED_OUTPUT_BYTES,
+  HTML_MAX_ATTRIBUTES_PER_ELEMENT,
+  HTML_MAX_CONCURRENT_RENDERS,
+  defaultHtmlMessages.blockKindLabel,
+  htmlDiagnosticCodes.join(","),
+  htmlDisplays.join(","),
+  htmlRenderErrorCodes.join(","),
+  htmlSourceKinds.join(","),
+  ...packedHtmlDefinitions.map(({ name, version }) => name + "@" + version),
+].join(":");
+`);
+
 writeFileSync(join(smokeAppDir, "src/alerts.js"), `import {
   alertKinds,
   createAlertsExtension,
@@ -1608,6 +1669,39 @@ import {
   type FootnotesSnapshot,
 } from "markora-extension-footnotes";
 import {
+  HTML_MAX_ATTRIBUTES_PER_ELEMENT,
+  HTML_MAX_CONCURRENT_RENDERS,
+  HTML_MAX_RENDERED_DEPTH,
+  HTML_MAX_RENDERED_NODES,
+  HTML_MAX_RENDERED_OUTPUT_BYTES,
+  HTML_MAX_SOURCE_BYTES,
+  createHtmlExtension,
+  defaultHtmlMessages,
+  htmlDiagnosticCodes,
+  htmlDisplays,
+  htmlRenderErrorCodes,
+  htmlSourceKinds,
+  type HtmlCommands,
+  type HtmlDiagnostic,
+  type HtmlDiagnosticCode,
+  type HtmlDisplay,
+  type HtmlEditRequest,
+  type HtmlExtension,
+  type HtmlExtensionOptions,
+  type HtmlMessageOverrides,
+  type HtmlMessages,
+  type HtmlNodeSnapshot,
+  type HtmlNodeTarget,
+  type HtmlRenderer,
+  type HtmlRenderErrorCode,
+  type HtmlRenderRequest,
+  type HtmlRenderSnapshot,
+  type HtmlRenderStatus,
+  type HtmlSnapshot,
+  type HtmlSourceKind,
+  type HtmlState,
+} from "markora-extension-html";
+import {
   MATH_MAX_CONCURRENT_RENDERS,
   MATH_MAX_RENDERED_NODES,
   MATH_MAX_RENDERED_OUTPUT_BYTES,
@@ -1686,6 +1780,36 @@ const rootFootnotesExtension: FootnotesExtension =
   createFootnotesExtension(footnotesOptions);
 const minimalFootnotesExtension: FootnotesExtension =
   createFootnotesExtension();
+const htmlMessages: HtmlMessageOverrides = {
+  showPreview: "Show packed HTML preview",
+  sourceLabel: (kind) => "Packed " + kind + " source",
+};
+const htmlRenderer: HtmlRenderer = ({
+  kind,
+  ownerDocument,
+  signal,
+  source,
+}: HtmlRenderRequest) => {
+  const output = ownerDocument.createElement("article");
+  output.textContent = kind + ": " + source;
+  signal.addEventListener("abort", () => undefined, { once: true });
+  return output;
+};
+const htmlOptions: HtmlExtensionOptions = {
+  messages: htmlMessages,
+  onEditSource(request: HtmlEditRequest) {
+    const display: HtmlDisplay = request.display;
+    const kind: HtmlSourceKind = request.kind;
+    const render: HtmlRenderSnapshot = request.render;
+    const unchanged: boolean = request.update(request.source);
+    void display;
+    void kind;
+    void render;
+    void unchanged;
+  },
+  renderer: htmlRenderer,
+};
+const rootHtmlExtension: HtmlExtension = createHtmlExtension(htmlOptions);
 const mathMessages: MathMessageOverrides = {
   showPreview: "Show packed preview",
 };
@@ -1735,6 +1859,7 @@ const editor = createEditor({
     rootAlertsExtension,
     rootFrontmatterExtension,
     rootFootnotesExtension,
+    rootHtmlExtension,
     rootMathExtension,
     rootTocExtension,
   ],
@@ -1806,6 +1931,7 @@ const rootFrontmatterHandle = editor.extensions.get(rootFrontmatterExtension);
 const minimalFrontmatterHandle = minimalEditor.extensions.get(minimalFrontmatterExtension);
 const rootFootnotesHandle = editor.extensions.get(rootFootnotesExtension);
 const minimalFootnotesHandle = minimalEditor.extensions.get(minimalFootnotesExtension);
+const rootHtmlHandle = editor.extensions.get(rootHtmlExtension);
 const rootMathHandle = editor.extensions.get(rootMathExtension);
 const minimalMathHandle = minimalEditor.extensions.get(minimalMathExtension);
 const rootTocHandle = editor.extensions.get(rootTocExtension);
@@ -1869,6 +1995,38 @@ const removedFootnote: boolean = minimalFootnotesHandle.commands.removeDefinitio
   footnoteTarget,
   footnoteRemoveOptions,
 );
+const htmlTarget: HtmlNodeTarget = {
+  display: "block",
+  identity: 1,
+  kind: "html-block",
+  position: 0,
+  source: "<div>packed</div>",
+};
+const htmlCommands: HtmlCommands = rootHtmlHandle.commands;
+const htmlState: HtmlState = rootHtmlHandle.state;
+const htmlSnapshot: HtmlSnapshot = htmlState.getSnapshot();
+const htmlNode: HtmlNodeSnapshot | null = htmlState.getNode(htmlTarget);
+const htmlNodes: readonly HtmlNodeSnapshot[] = htmlState.getNodes("block");
+const htmlDiagnostics: readonly HtmlDiagnostic[] = htmlState.getDiagnostics();
+const htmlRender: HtmlRenderSnapshot | null = htmlState.getRenderState(htmlTarget);
+const updatedHtml: boolean = htmlCommands.update(htmlTarget, "<aside>packed</aside>");
+const removedHtml: boolean = htmlCommands.remove(htmlTarget);
+const toggledHtml: boolean = htmlCommands.togglePreview(htmlTarget);
+const retriedHtml: boolean = htmlCommands.retryPreview(htmlTarget);
+const publicHtmlMessages: HtmlMessages = defaultHtmlMessages;
+const htmlDisplay: HtmlDisplay = htmlDisplays[0];
+const htmlSourceKind: HtmlSourceKind = htmlSourceKinds[0];
+const htmlDiagnosticCode: HtmlDiagnosticCode = htmlDiagnosticCodes[0];
+const htmlRenderErrorCode: HtmlRenderErrorCode = htmlRenderErrorCodes[0];
+const htmlRenderStatus: HtmlRenderStatus = "rendering";
+const htmlLimits: readonly number[] = [
+  HTML_MAX_SOURCE_BYTES,
+  HTML_MAX_RENDERED_NODES,
+  HTML_MAX_RENDERED_DEPTH,
+  HTML_MAX_RENDERED_OUTPUT_BYTES,
+  HTML_MAX_ATTRIBUTES_PER_ELEMENT,
+  HTML_MAX_CONCURRENT_RENDERS,
+];
 const mathTarget: MathNodeTarget = {
   identity: 1,
   kind: "inline",
@@ -1955,6 +2113,24 @@ void navigatedToFootnoteDefinition;
 void navigatedToFootnoteReference;
 void renamedFootnote;
 void removedFootnote;
+void htmlCommands;
+void htmlState;
+void htmlSnapshot;
+void htmlNode;
+void htmlNodes;
+void htmlDiagnostics;
+void htmlRender;
+void updatedHtml;
+void removedHtml;
+void toggledHtml;
+void retriedHtml;
+void publicHtmlMessages;
+void htmlDisplay;
+void htmlSourceKind;
+void htmlDiagnosticCode;
+void htmlRenderErrorCode;
+void htmlRenderStatus;
+void htmlLimits;
 void mathSnapshot;
 void mathNodes;
 void mathDiagnostics;
@@ -2156,7 +2332,7 @@ editor.focus("start");
 editor.blur();
 editor.destroy();
 minimalEditor.destroy();
-MARKORA_EXTENSION_API_VERSION satisfies "1.2.0";
+MARKORA_EXTENSION_API_VERSION satisfies "1.3.0";
 const unavailableSourceSlice: string | null =
   sliceMarkdownEditorOriginalSourceLines({}, 0, 1);
 void new MarkdownEditorDestroyedError("focus the editor");
@@ -2188,6 +2364,24 @@ rootFootnotesHandle.commands.renameDefinition(footnoteTarget, "renamed", {});
 minimalFootnotesHandle.commands.removeDefinition(footnoteTarget, { references: "rename" });
 // @ts-expect-error Footnote messages reject undeclared keys.
 createFootnotesExtension({ messages: { unknownLabel: () => "Unknown" } });
+// @ts-expect-error HTML source commands accept strings only.
+rootHtmlHandle.commands.update(htmlTarget, 42);
+// @ts-expect-error HTML targets require an opaque occurrence identity.
+rootHtmlHandle.commands.remove({
+  display: "block",
+  kind: "html-block",
+  position: 0,
+  source: "<div>packed</div>",
+});
+// @ts-expect-error HTML renderers return owner-document DOM, never strings.
+createHtmlExtension({ renderer: () => "<p>packed</p>" });
+// @ts-expect-error HTML messages reject undeclared keys.
+createHtmlExtension({ messages: { unknownLabel: "Unknown" } });
+// @ts-expect-error HTML source kinds are a closed public union.
+const invalidHtmlKind: HtmlSourceKind = "script";
+// @ts-expect-error Public HTML snapshots are immutable.
+htmlSnapshot.nodes.push(htmlTarget);
+void invalidHtmlKind;
 // @ts-expect-error Math source commands accept strings only.
 rootMathHandle.commands.insertInline(42);
 // @ts-expect-error Math targets require their stale-safe source identity.
@@ -2281,6 +2475,7 @@ const [
   alerts,
   frontmatter,
   footnotes,
+  html,
   math,
   toc,
 ] = await Promise.all([
@@ -2289,6 +2484,7 @@ const [
   import("markora-extension-alerts"),
   import("markora-extension-frontmatter"),
   import("markora-extension-footnotes"),
+  import("markora-extension-html"),
   import("markora-extension-math"),
   import("markora-extension-toc"),
 ]);
@@ -2297,6 +2493,7 @@ const OPTIONAL_EXTENSION_NAMES = new Set([
   "markora-extension-alerts",
   "markora-extension-frontmatter",
   "markora-extension-footnotes",
+  "markora-extension-html",
   "markora-extension-math",
   "markora-extension-toc",
 ]);
@@ -2528,6 +2725,122 @@ for (const [label, create] of [["root", createEditor], ["minimal", createMinimal
   element.remove();
 }
 
+const htmlElement = ownerWindow.document.createElement("div");
+ownerWindow.document.body.append(htmlElement);
+const HTML_BLOCK = [
+  "<script>",
+  "globalThis.__markoraPackedHtmlExecuted = true;",
+  "</script>",
+].join("\\r\\n");
+const HTML_INLINE = '<img src="/must-not-load.png" onerror="globalThis.__markoraPackedHtmlExecuted = true">';
+const HTML_MARKDOWN = HTML_BLOCK + "\\r\\n\\r\\nBefore " + HTML_INLINE + " after.";
+const htmlDefinition = html.createHtmlExtension({
+  renderer({ ownerDocument, signal, source }) {
+    const article = ownerDocument.createElement("article");
+    article.className = "host-renderer-class";
+    article.id = "host-renderer-id";
+    article.dataset.hostRenderer = "dropped";
+    article.setAttribute("aria-label", "dropped");
+    article.setAttribute("role", "document");
+    article.title = "Packed sanitized preview";
+    const strong = ownerDocument.createElement("strong");
+    strong.textContent = source;
+    article.append(strong);
+    signal.addEventListener("abort", () => undefined, { once: true });
+    return article;
+  },
+});
+const htmlEditor = createEditor({
+  element: htmlElement,
+  extensions: [htmlDefinition],
+  markdown: HTML_MARKDOWN,
+});
+const htmlHandle = htmlEditor.extensions.get(htmlDefinition);
+const initialHtmlNodes = htmlHandle.state.getNodes();
+if (
+  initialHtmlNodes.length !== 2
+  || initialHtmlNodes[0]?.display !== "block"
+  || initialHtmlNodes[0]?.kind !== "html-block"
+  || initialHtmlNodes[0]?.source !== HTML_BLOCK
+  || initialHtmlNodes[1]?.display !== "inline"
+  || initialHtmlNodes[1]?.kind !== "inline-html"
+  || initialHtmlNodes[1]?.source !== HTML_INLINE
+  || htmlEditor.getMarkdown() !== HTML_BLOCK + "\\n\\nBefore " + HTML_INLINE + " after."
+  || !htmlEditor.extensions.manifest.extensions.some(({ name }) => (
+    name === "markora-extension-html"
+  ))
+) {
+  throw new Error("Packed HTML root consumer lost exact source, atom classification, or manifest state.");
+}
+
+let preview = null;
+for (let attempt = 0; attempt < 100; attempt += 1) {
+  preview = htmlEditor.view.dom.querySelector("[data-mdw-html-preview]");
+  if (preview?.querySelector("article > strong")) break;
+  await new Promise((resolve) => ownerWindow.setTimeout(resolve, 10));
+}
+const sanitizedArticle = preview?.querySelector("article");
+if (
+  !sanitizedArticle
+  || sanitizedArticle.textContent !== HTML_BLOCK
+  || sanitizedArticle.title !== "Packed sanitized preview"
+  || sanitizedArticle.hasAttribute("class")
+  || sanitizedArticle.hasAttribute("id")
+  || sanitizedArticle.hasAttribute("data-host-renderer")
+  || sanitizedArticle.hasAttribute("aria-label")
+  || sanitizedArticle.hasAttribute("role")
+  || preview.getAttribute("aria-hidden") !== "true"
+  || !preview.hasAttribute("inert")
+  || htmlEditor.view.dom.querySelector("script, img, iframe, object, embed") !== null
+  || globalThis.__markoraPackedHtmlExecuted !== undefined
+) {
+  throw new Error("Packed HTML root consumer failed the inert, clamped renderer smoke.");
+}
+
+const initialBlock = initialHtmlNodes[0];
+const UPDATED_HTML_BLOCK = '<section data-packed="updated">\\r\\nUpdated\\r\\n</section>';
+if (
+  !htmlHandle.commands.update(initialBlock, UPDATED_HTML_BLOCK)
+  || htmlHandle.state.getNodes("block")[0]?.source !== UPDATED_HTML_BLOCK
+  || htmlEditor.getMarkdown() !== UPDATED_HTML_BLOCK + "\\n\\nBefore " + HTML_INLINE + " after."
+  || !htmlEditor.commands.undo()
+  || htmlHandle.state.getNodes("block")[0]?.source !== HTML_BLOCK
+  || htmlEditor.getMarkdown() !== HTML_BLOCK + "\\n\\nBefore " + HTML_INLINE + " after."
+) {
+  throw new Error("Packed HTML root consumer command, exact-source, or history smoke failed.");
+}
+htmlEditor.destroy();
+htmlElement.remove();
+delete globalThis.__markoraPackedHtmlExecuted;
+
+const minimalHtmlElement = ownerWindow.document.createElement("div");
+const minimalHtmlSentinel = ownerWindow.document.createElement("span");
+minimalHtmlSentinel.textContent = "minimal HTML sentinel";
+minimalHtmlElement.append(minimalHtmlSentinel);
+ownerWindow.document.body.append(minimalHtmlElement);
+let minimalHtmlError;
+try {
+  const unexpectedEditor = createMinimalEditor({
+    element: minimalHtmlElement,
+    extensions: [html.createHtmlExtension()],
+    markdown: "<div>must not be claimed</div>",
+  });
+  unexpectedEditor.destroy();
+} catch (error) {
+  minimalHtmlError = error;
+}
+if (
+  minimalHtmlError?.code !== "EXTENSION_INCOMPATIBLE"
+  || minimalHtmlError?.extension !== "markora-extension-html"
+  || minimalHtmlError?.phase !== "resolve"
+  || minimalHtmlElement.firstChild !== minimalHtmlSentinel
+  || minimalHtmlElement.childNodes.length !== 1
+  || minimalHtmlElement.classList.contains("mdw-host")
+) {
+  throw new Error("Packed HTML minimal consumer was not rejected before host claim.");
+}
+minimalHtmlElement.remove();
+
 ownerWindow.close();
 `);
 
@@ -2539,6 +2852,7 @@ run("node", ["--input-type=module", "-e", `
   const alerts = await import("markora-extension-alerts");
   const frontmatter = await import("markora-extension-frontmatter");
   const footnotes = await import("markora-extension-footnotes");
+  const html = await import("markora-extension-html");
   const math = await import("markora-extension-math");
   const toc = await import("markora-extension-toc");
   const minimal = await import("markora/minimal");
@@ -2608,6 +2922,30 @@ run("node", ["--input-type=module", "-e", `
     throw new Error("math package factory returned the wrong identity");
   }
   if (
+    typeof html.createHtmlExtension !== "function"
+    || !Object.isFrozen(html.defaultHtmlMessages)
+    || !Object.isFrozen(html.htmlDiagnosticCodes)
+    || !Object.isFrozen(html.htmlDisplays)
+    || !Object.isFrozen(html.htmlRenderErrorCodes)
+    || !Object.isFrozen(html.htmlSourceKinds)
+    || html.HTML_MAX_CONCURRENT_RENDERS !== 4
+    || html.HTML_MAX_SOURCE_BYTES !== 262144
+  ) {
+    throw new Error("HTML package Node ESM surface is incomplete");
+  }
+  const htmlDefinition = html.createHtmlExtension({
+    messages: { showPreview: "Show packed HTML preview" },
+  });
+  if (
+    htmlDefinition.name !== "markora-extension-html"
+    || htmlDefinition.compatibility?.runtime !== "root-default"
+    || html.htmlDisplays.join(":") !== "block:inline"
+    || html.htmlSourceKinds.join(":") !== "html-block:inline-html:html-comment"
+    || typeof html.defaultHtmlMessages.sourceLabel("html-block") !== "string"
+  ) {
+    throw new Error("HTML package factory returned the wrong identity, compatibility, or surface");
+  }
+  if (
     typeof toc.createTocExtension !== "function"
     || !Object.isFrozen(toc.defaultTocMessages)
   ) {
@@ -2660,6 +2998,7 @@ const extensionBundleReports = Object.freeze(Object.fromEntries(
 const alertsBundleReport = extensionBundleReports.alerts;
 const frontmatterBundleReport = extensionBundleReports.frontmatter;
 const footnotesBundleReport = extensionBundleReports.footnotes;
+const htmlBundleReport = extensionBundleReports.html;
 const mathBundleReport = extensionBundleReports.math;
 const tocBundleReport = extensionBundleReports.toc;
 const rootBundleMeasurement = measureBundleGraph(rootBundleReport);
@@ -2673,6 +3012,7 @@ const extensionBundleMeasurements = Object.freeze(Object.fromEntries(
 const alertsBundleMeasurement = extensionBundleMeasurements.alerts;
 const frontmatterBundleMeasurement = extensionBundleMeasurements.frontmatter;
 const footnotesBundleMeasurement = extensionBundleMeasurements.footnotes;
+const htmlBundleMeasurement = extensionBundleMeasurements.html;
 const mathBundleMeasurement = extensionBundleMeasurements.math;
 const tocBundleMeasurement = extensionBundleMeasurements.toc;
 const extensionBundles = extensionBundleSpecs.map((spec) => ({
@@ -2749,6 +3089,23 @@ run("node", ["--input-type=module", "-e", `
   }
 `], { cwd: smokeAppDir });
 
+const htmlEntryChunk = htmlBundleReport.chunks.find((chunk) => chunk.isEntry);
+if (!htmlEntryChunk) {
+  throw new Error("The HTML feature bundle did not emit an entry chunk.");
+}
+const htmlEntrySpecifier = `./dist/html/${htmlEntryChunk.fileName}`;
+currentPhase = "html-feature-runtime-smoke";
+run("node", ["--input-type=module", "-e", `
+  const consumer = await import(${JSON.stringify(htmlEntrySpecifier)});
+  const names = consumer.packedHtmlDefinitions?.map((extension) => extension.name);
+  if (names?.join(":") !== "markora-extension-html:markora-extension-html") {
+    throw new Error("Packed HTML feature bundle did not execute");
+  }
+  if (!consumer.packedHtmlSurface?.includes("HTML block")) {
+    throw new Error("Packed HTML feature bundle omitted its public message surface");
+  }
+`], { cwd: smokeAppDir });
+
 const mathEntryChunk = mathBundleReport.chunks.find((chunk) => chunk.isEntry);
 if (!mathEntryChunk) {
   throw new Error("The math feature bundle did not emit an entry chunk.");
@@ -2784,6 +3141,7 @@ const measurements = Object.freeze({
   alerts: alertsBundleMeasurement,
   footnotes: footnotesBundleMeasurement,
   frontmatter: frontmatterBundleMeasurement,
+  html: htmlBundleMeasurement,
   math: mathBundleMeasurement,
   minimal: minimalBundleMeasurement,
   root: rootBundleMeasurement,
