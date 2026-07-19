@@ -1,8 +1,8 @@
 # markora-ui
 
-Optional default overlays and table controls for `markora`.
+Optional default overlays and table controls for embedded `markora` editors.
 
-`markora-ui` layers the repo's built-in UI on top of the headless `markora` editor. It is useful when you want polished default controls for links, images, code-fence metadata, and tables without building that overlay behavior yourself.
+`markora-ui` layers the repo's built-in UI on top of the headless `markora` editor. It is useful when you want polished default controls for links, images, code-fence metadata, and tables without building that overlay behavior yourself. It does not add an application shell, persistence, network behavior, or Markdown syntax; those stay with the host and the configured editor extensions.
 
 ## What it adds
 
@@ -10,7 +10,7 @@ Optional default overlays and table controls for `markora`.
 - named non-modal image editor dialog
 - named non-modal code-fence language/info editor dialog
 - named table-creation and exact-dimension dialog
-- one-stop, roving-focus table toolbar with grouped structural and alignment actions
+- single-tab-stop, roving-focus table toolbar with grouped structural and alignment actions
 - Shadow DOM-aware portal placement via `createDefaultUi({ portalRoot })`
 
 ## Install
@@ -25,14 +25,24 @@ npm install markora markora-ui
 import { createEditor } from "markora";
 import { createDefaultUi } from "markora-ui";
 import "markora/styles.css";
+import "markora/themes.css";
 import "markora-ui/styles.css";
 
+const hostElement = document.querySelector<HTMLElement>("#editor")!;
+hostElement.dataset.mdwTheme = "auto";
+
 const editor = createEditor({
-  element: document.querySelector("#editor")!,
+  element: hostElement,
   markdown: "# Hello Markora",
+  ariaLabel: "Document body",
   ui: createDefaultUi(),
+  onChange(markdown) {
+    saveDraft(markdown);
+  },
 });
 ```
+
+Keep the returned editor with the host view and call `editor.destroy()` when that view unmounts. Advanced syntax remains separate: install and pass the relevant `markora-extension-*` definitions to the core editor when the document format requires them.
 
 ## Localization
 
@@ -106,6 +116,7 @@ package styles into that root. The complete token and ownership contract is in
 ## Notes
 
 - `markora-ui` is optional; `markora` remains fully usable without it
+- the embedding application owns the editor mount, surrounding toolbar or product chrome, persistence, resource callbacks, and teardown
 - link and image dialogs select their primary URL on open, submit text inputs with Enter, cancel with Escape, ignore composition keys, and restore editor focus only when the host has not deliberately moved it elsewhere
 - a code block's language label becomes a button that edits its exact complete fence info string; Enter saves, Escape cancels, Save is IME-safe, stale updates are rejected, and focus returns to the label only when the host has not deliberately moved it elsewhere; read-only transitions and teardown close safely
 - `editor.ui.createTable()` opens numeric row/column controls initialized to a two-row, three-column table; both dimensions accept whole numbers from 1 through 100

@@ -4,6 +4,12 @@ Optional semantic diagram fences for embedded Markora editors. The package recog
 
 ## Install and use
 
+```bash
+npm install markora markora-extension-diagrams
+```
+
+Minimal-entry consumers should import `markora/minimal.css` in place of `markora/styles.css` below.
+
 ```ts
 import { createEditor } from "markora";
 import { createDiagramsExtension } from "markora-extension-diagrams";
@@ -20,7 +26,7 @@ const diagrams = createDiagramsExtension({
 });
 
 const editor = createEditor({
-  element: document.querySelector("#editor")!,
+  element: document.querySelector<HTMLElement>("#editor")!,
   extensions: [diagrams],
   markdown: "```mermaid theme=neutral\ngraph TD; A-->B\n```",
 });

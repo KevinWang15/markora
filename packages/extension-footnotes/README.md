@@ -4,6 +4,14 @@ Optional semantic GitHub-style footnotes for embedded Markora editors. The
 package works with both `markora` and `markora/minimal`; it is never included in
 either default editor graph.
 
+## Install and use
+
+```bash
+npm install markora markora-extension-footnotes
+```
+
+Minimal-entry consumers should import `markora/minimal.css` in place of `markora/styles.css` below.
+
 ```ts
 import { createEditor } from "markora";
 import { createFootnotesExtension } from "markora-extension-footnotes";
@@ -17,7 +25,7 @@ const footnotes = createFootnotesExtension({
 });
 
 const editor = createEditor({
-  element: document.querySelector("#editor")!,
+  element: document.querySelector<HTMLElement>("#editor")!,
   extensions: [footnotes],
   markdown: [
     "Text with a reference.[^note]",

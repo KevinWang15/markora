@@ -2,17 +2,17 @@
 
 - Status: Complete
 - Last updated: 2026-07-19
-- Scope: Embeddable Markdown editor packages (`markora` and `markora-ui`) only
+- Scope: Embeddable `markora`, `markora-ui`, and seven optional `markora-extension-*` packages
 
 ## Purpose
 
-This plan closes the gap between Markora's current early-stage editor kernel and a production-grade, Typora-like editing experience embedded inside another product.
+This plan records the completed progression from Markora's early-stage editor kernel to a production-minded, Typora-like editing experience embedded inside another product.
 
 The objective is not feature-for-feature desktop Typora parity. The objective is:
 
-> A trustworthy, extensible GFM editor component with Typora-quality interaction for supported syntax and lossless preservation for everything else.
+> A trustworthy, extensible Markdown editor component with Typora-quality interaction for its published dialect and explicit exact-source fallback for conservatively recognized unsupported forms.
 
-Work is intentionally ordered. We will complete, verify, and commit one item before starting the next one. The sequence may be amended when a completed item reveals new evidence, but a later feature must not bypass an earlier safety gate.
+Work was intentionally ordered: each item was completed, verified, and committed before the next began. The sequence could be amended when completed work revealed new evidence, but later features did not bypass earlier safety gates.
 
 ## Scope boundaries
 

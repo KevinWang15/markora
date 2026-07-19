@@ -1,33 +1,43 @@
 # markora
 
-![](./banner.png)
+![Markora logo](./banner.png)
 
-Write Markdown at the speed of thought.
+Write Markdown at the speed of thought, inside your product.
 
-`markora` is a Typora-style Markdown editor library built with ProseMirror and CodeMirror. This repository contains the headless editor core, the optional default UI package, and the docs/demo app used for development and verification.
+`markora` is an embedded Markdown editor toolkit built with ProseMirror and CodeMirror. It provides Typora-style editing without becoming a standalone application: the host owns mounting, persistence, product chrome, network access, and security policy, while Markora owns the editor model, interactions, and predictable Markdown conversion.
 
 ## Packages
 
 - `packages/core` — the npm package published as `markora`, including the `minimal` and `extension-api` entries
 - `packages/ui` — the npm package published as `markora-ui`
+- `packages/extension-alerts` — GitHub-style alerts
+- `packages/extension-diagrams` — Mermaid, GeoJSON, TopoJSON, and STL fences
+- `packages/extension-footnotes` — GitHub-style footnotes
+- `packages/extension-frontmatter` — exact-source YAML front matter
+- `packages/extension-html` — exact-source HTML with optional host previews
+- `packages/extension-math` — inline and block math with optional host rendering
+- `packages/extension-toc` — generated tables of contents
 - `packages/demo` — the Vite docs site, live playground, and internal regression surface
 
 ## Highlights
 
-- Typora-like visual editing with host-owned Markdown input and normalized Markdown output
+- Typora-like visual editing in a host-owned mount, with normalized Markdown output
 - Semantic import/edit/export for the documented dialect: a CommonMark-derived subset, pipe tables, strikethrough, and flat task items
 - Inert, exact-source atoms for conservatively recognized front matter, display math, HTML, comments, and directives
 - Inline marks for bold, italic, code, strike, and links
 - Exact source-text code-fence shells with viewport-lazy CodeMirror editing and lazy-loaded built-in grammars
-- Headless command/state APIs plus optional overlays from `markora-ui`
+- Headless command/state APIs plus optional, localizable overlays from `markora-ui`
+- Deliberate rich, Markdown, plain-text, table-matrix, and file-transfer clipboard behavior
 - Rectangular table selection, matrix clipboard, row/column reordering, dimension controls, and GFM fidelity diagnostics
-- A versioned creation-time extension kernel and an independently bundled minimal entry
+- Reconciled host updates, idle output delivery, deterministic reset, and complete teardown semantics
+- A versioned creation-time extension kernel, seven official optional syntax packages, and an independently bundled minimal entry
 - Per-editor URL, image-loading, link-opening, and asynchronous asset-upload policy with secure defaults
-- Managed navigation around tables and code blocks
+- Scoped themes, localization, RTL, forced-colors, reduced-motion, keyboard, and managed-focus support
+- Chromium, Firefox, and WebKit release gates plus package-isolation and performance budgets
 
 ## Markdown compatibility
 
-Markora is not a byte-for-byte source editor. Supported syntax is serialized to a canonical form. Conservatively recognized front matter, standalone display math, HTML, comments, and directives are preserved as inert source atoms; other unsupported extensions are not guaranteed to be preserved or rejected. Review the [Markdown dialect and fidelity contract](./packages/core/MARKDOWN_COMPATIBILITY.md) before importing existing or generated documents.
+Markora is not a byte-for-byte source editor. Supported syntax is serialized to a canonical form. With the root entry's exact default compatibility preset and no matching extension, Markora preserves conservatively recognized front matter, standalone display math, HTML, comments, and directives as inert source atoms; other unsupported extensions are not guaranteed to be preserved or rejected. Official extension packages claim their documented forms and give them semantic editing behavior. Review the [Markdown dialect and fidelity contract](./packages/core/MARKDOWN_COMPATIBILITY.md) before importing existing or generated documents.
 
 Opaque HTML is shown as text and never executed inside the editor, but serialized Markdown still contains its source. Hosts must sanitize any downstream HTML rendering independently. They can provide source editing for opaque atoms through `onEditOpaqueMarkdown`.
 
@@ -35,9 +45,45 @@ Opaque HTML is shown as text and never executed inside the editor, but serialize
 
 ```bash
 npm install markora markora-ui
+
+# Add only the document syntax your product needs.
+npm install markora-extension-footnotes markora-extension-math
 ```
 
 `markora-ui` is optional. Install it when you want the built-in link, image, code-fence metadata, and table overlays.
+
+### Official optional syntax
+
+| Package | Adds | Entry compatibility | External runtime |
+| --- | --- | --- | --- |
+| [`markora-extension-frontmatter`](./packages/extension-frontmatter/README.md) | Exact-source YAML-like document-head blocks | Root and minimal | No YAML parser |
+| [`markora-extension-footnotes`](./packages/extension-footnotes/README.md) | Semantic references, definitions, diagnostics, and navigation | Root and minimal | None |
+| [`markora-extension-math`](./packages/extension-math/README.md) | Semantic inline and block math | Root and minimal | No TeX renderer; host callback optional |
+| [`markora-extension-alerts`](./packages/extension-alerts/README.md) | Semantic `NOTE`, `TIP`, `IMPORTANT`, `WARNING`, and `CAUTION` blockquotes | Root and minimal | None |
+| [`markora-extension-toc`](./packages/extension-toc/README.md) | A generated outline backed by `[TOC]` | Root and minimal | None |
+| [`markora-extension-html`](./packages/extension-html/README.md) | Exact-source CommonMark HTML atoms and bounded block previews | Root default runtime only | No HTML parser; previews require a host renderer and sanitizer |
+| [`markora-extension-diagrams`](./packages/extension-diagrams/README.md) | Semantic Mermaid, GeoJSON, TopoJSON, and STL fences | Root and minimal | No diagram engine; host callbacks optional |
+
+Extensions are creation-time configuration. Import each installed package's stylesheet, and persist `editor.extensions.manifest` beside Markdown that depends on optional syntax:
+
+```ts
+import { createEditor } from "markora";
+import { createFootnotesExtension } from "markora-extension-footnotes";
+import { createMathExtension } from "markora-extension-math";
+import "markora/styles.css";
+import "markora-extension-footnotes/styles.css";
+import "markora-extension-math/styles.css";
+
+const extensions = [createFootnotesExtension(), createMathExtension()];
+const editor = createEditor({ element: hostElement, markdown, extensions });
+
+saveDocument({
+  markdown: editor.getMarkdown(),
+  extensionManifest: editor.extensions.manifest,
+});
+```
+
+Restore a compatible extension set before editing the stored Markdown. Renderer callbacks are host-owned runtime configuration and are not part of the manifest.
 
 ## Quick start
 
@@ -47,7 +93,7 @@ import { createDefaultUi } from "markora-ui";
 import "markora/styles.css";
 import "markora-ui/styles.css";
 
-const hostElement = document.querySelector("#editor");
+const hostElement = document.querySelector<HTMLElement>("#editor");
 
 if (!hostElement) {
   throw new Error("Editor host not found.");
@@ -262,9 +308,9 @@ Use `resetMarkdown()` only when switching documents or deliberately discarding t
 
 Document activity is classified as `"user"`, `"command"`, `"external"`, `"reset"`, or an extension-owned `"extension:name"`. `onChange` receives the context as its second argument, `onTransaction` as its third, and state/selection/update subscriptions expose `origin`. `onTransaction` observes dispatch attempts; `onChange` and typed state events reflect accepted state changes. Advanced extensions can tag a transaction with `setMarkdownEditorTransactionOrigin(transaction, "extension:my-plugin")` and inspect it with `getMarkdownEditorTransactionOrigin(transaction)`.
 
-## Roadmap
+## Production status
 
-See the [embedded editor production plan](./docs/embedded-editor-production-plan.md) for the ordered path from the current editor kernel to a production-grade embedded editing component.
+The [embedded editor production plan](./docs/embedded-editor-production-plan.md) is complete through EE-021 and remains the implementation and verification record for the production-minded embedded editor work.
 
 The implemented [extension system RFC](./docs/extension-system-rfc.md) defines the creation-time composition, lifecycle, compatibility, and packaging contract. Package-level examples and minimal-entry guidance live in the [`markora` README](./packages/core/README.md#extensions-and-the-minimal-entry).
 
@@ -281,23 +327,23 @@ pnpm dev
 
 Useful scripts:
 
-- `pnpm dev` — run the core watcher and docs/demo site together
+- `pnpm dev` — run the core, extension, UI, and docs/demo watchers together
 - `pnpm dev:core` — watch the `markora` package only
 - `pnpm dev:ui` — watch the `markora-ui` package only
 - `pnpm dev:demo` — run the docs/demo site only
-- `pnpm build` — build `markora`, `markora-ui`, and the demo app
+- `pnpm build` — build `markora`, all seven extension packages, `markora-ui`, and the demo app
 - `pnpm check` — build packages, run typechecks, verify API types, smoke-test Node ESM imports, and execute the test suite
 - `pnpm browser:install` — install the pinned Playwright Chromium, Firefox, and WebKit engines
 - `pnpm test:browser:required` — run the compact release-gate browser cases in all three engines
 - `pnpm test:browser` — run the complete embedded-editor browser matrix against a production demo build
-- `pnpm pack:smoke` — pack `markora` and `markora-ui`, install them into a tiny Vite app, and verify the build
-- `pnpm release:check` — dry-run the `markora` tarball and then run the packed-consumer smoke test
+- `pnpm pack:smoke` — pack all nine public packages and verify isolated, minimal, per-extension, and all-extension consumer graphs
+- `pnpm release:check` — dry-run the `markora` tarball and then run the complete packed-consumer smoke test
 - open `/__dev` in the demo app for fixture-driven regression checks while developing the editor itself
 - `/__browser` is the private deferred-mount fixture used by Playwright for lifecycle, portal, Shadow DOM, and multi-editor checks
 
 ## Publishing
 
-This repo ships two publishable packages: `markora` and `markora-ui`.
+This repo ships nine publishable packages: `markora`, `markora-ui`, and the seven `markora-extension-*` packages listed above.
 
 ```bash
 # Validate the core tarball and the packed consumer flow.
@@ -310,12 +356,14 @@ npm publish --tag test.2026031101
 # Publish a matching prerelease of markora-ui.
 cd ../ui
 npm publish --tag test.2026031101
+
+# Repeat from each extension package directory included in this release.
 ```
 
 Notes:
 
-- `pnpm release:check` dry-runs the `markora` tarball and smoke-tests a consumer app using both packed packages
-- `packages/core/package.json` and `packages/ui/package.json` should stay version-aligned when you release them together
+- `pnpm release:check` dry-runs the `markora` tarball and smoke-tests consumer graphs using all nine packed packages
+- keep `markora`, `markora-ui`, extension versions, and extension peer ranges compatible when releasing them together
 - publish prereleases with a dated tag such as `test.2026031101`
 - publish stable releases without the prerelease tag when you are ready for `latest`
 

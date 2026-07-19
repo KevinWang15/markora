@@ -5,9 +5,16 @@ Optional generated table-of-contents nodes for embedded `markora` and
 
 ## Install and use
 
+```bash
+npm install markora markora-extension-toc
+```
+
+Minimal-entry consumers should import `markora/minimal.css` in place of `markora/styles.css` below.
+
 ```ts
 import { createEditor } from "markora";
 import { createTocExtension } from "markora-extension-toc";
+import "markora/styles.css";
 import "markora-extension-toc/styles.css";
 
 const toc = createTocExtension();

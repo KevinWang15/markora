@@ -65,6 +65,43 @@ const editor = createEditor({
 });`,
   },
   {
+    title: "Opt-in advanced syntax",
+    summary: "Compose all seven official packages in source mode, then store the resolved extension manifest with the Markdown.",
+    snippet: `import { createEditor } from "markora";
+import { createAlertsExtension } from "markora-extension-alerts";
+import { createDiagramsExtension } from "markora-extension-diagrams";
+import { createFootnotesExtension } from "markora-extension-footnotes";
+import { createFrontmatterExtension } from "markora-extension-frontmatter";
+import { createHtmlExtension } from "markora-extension-html";
+import { createMathExtension } from "markora-extension-math";
+import { createTocExtension } from "markora-extension-toc";
+import "markora/styles.css";
+import "markora-extension-alerts/styles.css";
+import "markora-extension-diagrams/styles.css";
+import "markora-extension-footnotes/styles.css";
+import "markora-extension-frontmatter/styles.css";
+import "markora-extension-html/styles.css";
+import "markora-extension-math/styles.css";
+import "markora-extension-toc/styles.css";
+
+const extensions = [
+  createFrontmatterExtension(),
+  createFootnotesExtension(),
+  createMathExtension(),
+  createAlertsExtension(),
+  createTocExtension(),
+  createHtmlExtension(),
+  createDiagramsExtension(),
+];
+
+const editor = createEditor({ element, markdown, extensions });
+
+saveDocument({
+  markdown: editor.getMarkdown(),
+  extensionManifest: editor.extensions.manifest,
+});`,
+  },
+  {
     title: "Custom code block languages",
     summary: "Extend or override the lazy-loaded registry for app-specific fenced code blocks.",
     snippet: `import { createDefaultCodeBlockLanguageRegistry, createEditor } from "markora";
@@ -135,8 +172,8 @@ const recipes = [
     body: "Use `updateOptions()` to change editable state, placeholder, attributes, accessible naming, or callbacks without rebuilding editor state or emitting a document update.",
   },
   {
-    heading: "Lean on the internal dev lab",
-    body: "When developing Markora itself, open the demo app's `/__dev` route to load canned fixtures for tables, task lists, quotes, and code blocks.",
+    heading: "Theme and localize each embed",
+    body: "Import `markora/themes.css`, set `data-mdw-theme` on the editor host, and pass creation-time `messages` for product copy. Set `lang` and `dir` at the embedding boundary; forced-colors and reduced-motion preferences remain automatic.",
   },
 ] as const;
 
@@ -291,10 +328,10 @@ export function ExamplesPage() {
     <div className="doc-stack">
       <section className="panel doc-panel">
         <span className="card-kicker">Examples</span>
-        <h2>Patterns for real apps, not just toy demos.</h2>
+        <h1>Patterns for production embeds.</h1>
         <p>
-          These examples show where Markora fits best: places where you want a Typora-like writing
-          {" "}experience, but still need app-level control over storage, UI, and code-block support.
+          These examples show where Markora fits best: places where you want a focused visual writing
+          {" "}experience while keeping storage, security, resources, syntax, and surrounding UI under host control.
         </p>
       </section>
 
@@ -302,7 +339,7 @@ export function ExamplesPage() {
         {examples.map((example) => (
           <article key={example.title} className="doc-card example-card">
             <span className="card-kicker">Use case</span>
-            <h3>{example.title}</h3>
+            <h2>{example.title}</h2>
             <p>{example.summary}</p>
             <CodeBlock code={example.snippet} language="ts" />
           </article>
@@ -338,7 +375,7 @@ export function ExamplesPage() {
       <section className="docs-grid docs-grid-two">
         {recipes.map((recipe) => (
           <article key={recipe.heading} className="feature-card">
-            <h3>{recipe.heading}</h3>
+            <h2>{recipe.heading}</h2>
             <p>{recipe.body}</p>
           </article>
         ))}

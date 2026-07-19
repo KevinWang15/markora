@@ -350,9 +350,9 @@ export function EditorPlayground() {
 
   const notes = useMemo(
     () => [
-      "This page mounts the headless markora core with the optional markora-ui overlays.",
-      "Use the source panel to reconcile an authoritative snapshot into the live editor.",
-      "The output panel shows the exact serialized Markdown emitted from editor state.",
+      "This focused playground mounts the markora core with optional markora-ui overlays.",
+      "Try tasks, tables, code-fence metadata, rich or plain paste, and authoritative source reconciliation.",
+      "The seven advanced-syntax packages are deliberately not mounted here; their examples live in the guide.",
     ],
     [],
   );
@@ -514,6 +514,7 @@ export function EditorPlayground() {
     const editor = createEditor({
       element: editorElement,
       markdown: initialMarkdown,
+      ariaLabel: "Markdown document editor",
       ui: createDefaultUi(),
       onChange(markdown) {
         setOutput(markdown);
@@ -522,6 +523,18 @@ export function EditorPlayground() {
         }
       },
     });
+
+    const exposeNestedCodeEditorsToTabOrder = () => {
+      for (const content of editorElement.querySelectorAll<HTMLElement>(".cm-content[contenteditable]")) {
+        if (!content.hasAttribute("tabindex")) {
+          content.tabIndex = 0;
+          content.dataset.demoCodeTabstop = "true";
+        }
+      }
+    };
+    const codeEditorObserver = new MutationObserver(exposeNestedCodeEditorsToTabOrder);
+    codeEditorObserver.observe(editorElement, { childList: true, subtree: true });
+    exposeNestedCodeEditorsToTabOrder();
 
     editorRef.current = editor;
     const stopState = editor.subscribe("state", () => {
@@ -556,6 +569,7 @@ export function EditorPlayground() {
       sourceTextarea.removeEventListener("focus", closeFromFocus);
       editorElement.removeEventListener("mousedown", closeFromMouse);
       toolbarElement.removeEventListener("mousedown", preserveEditorSelection);
+      codeEditorObserver.disconnect();
       stopState();
       editor.destroy();
       editorRef.current = null;
@@ -570,12 +584,12 @@ export function EditorPlayground() {
     <div className="playground-shell">
       <div className="playground-intro">
         <div>
-          <span className="eyebrow">Interactive demo</span>
-          <h1>Test the headless core in a realistic host shell.</h1>
+          <span className="eyebrow">Core playground</span>
+          <h1>Exercise the core editor in a realistic embed.</h1>
           <p>
-            This playground mounts <code>markora</code> with optional <code>markora-ui</code> overlays,
-            uses the default idle/coalesced Markdown output, and shows both Markdown-in and Markdown-out
-            behavior side by side without serializing in the synchronous typing path.
+            This page pairs <code>markora</code> with optional <code>markora-ui</code> overlays, default
+            {" "}idle/coalesced output, and side-by-side Markdown input and output. It demonstrates the base
+            {" "}dialect and embedding API, not the optional advanced-syntax packages.
           </p>
         </div>
         <ul className="check-list">
@@ -588,7 +602,7 @@ export function EditorPlayground() {
       <div className="playground-layout">
         <section className="panel panel-editor">
           <div className="panel-header">
-            <h3>Visual editor</h3>
+            <h2>Visual editor</h2>
             <p>Use the toolbar or type directly into the mounted editor instance.</p>
           </div>
           <div ref={toolbarElementRef} className="mdw-toolbar" />
@@ -597,14 +611,20 @@ export function EditorPlayground() {
 
         <section className="panel panel-source">
           <div className="panel-header">
-            <h3>Markdown source</h3>
+            <h2 id="playground-source-heading">Markdown source</h2>
             <p>
               Applying source reconciles an authoritative snapshot while mapping selection and history.
-              {" "}Supported syntax is normalized; recognized opaque constructs retain their exact source while other
-              {" "}extensions may change.
+              {" "}Base semantic syntax is normalized and documented fallback forms stay inert and exact. Optional
+              {" "}package semantics require the matching persisted extension manifest and are not mounted on this page.
             </p>
           </div>
-          <textarea ref={sourceTextareaRef} id="source" spellCheck={false} defaultValue={initialMarkdown} />
+          <textarea
+            ref={sourceTextareaRef}
+            id="source"
+            aria-labelledby="playground-source-heading"
+            spellCheck={false}
+            defaultValue={initialMarkdown}
+          />
           <div className="source-actions">
             <button id="apply-markdown-button" type="button" className="button button-primary">Apply Markdown</button>
           </div>
@@ -613,10 +633,10 @@ export function EditorPlayground() {
 
       <section className="panel panel-output">
         <div className="panel-header">
-          <h3>Serialized output</h3>
+          <h2>Serialized output</h2>
           <p>Compare the idle <code>onChange</code> output with the published Markdown compatibility contract.</p>
         </div>
-        <pre id="output">{output}</pre>
+        <pre id="output" aria-label="Serialized Markdown output">{output}</pre>
       </section>
     </div>
   );

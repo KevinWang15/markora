@@ -18,11 +18,13 @@ const opaqueSyntax = [
 ] as const;
 
 const optionalSyntax = [
-  "YAML front matter",
-  "Footnotes and inline/block math",
-  "GitHub alerts and generated TOCs",
-  "Exact raw HTML with bounded host previews",
-  "Mermaid, GeoJSON, TopoJSON, and STL diagram fences",
+  ["markora-extension-frontmatter", "Exact-source document-head YAML-like front matter; no YAML runtime"],
+  ["markora-extension-footnotes", "Semantic references, definitions, indexing, and navigation"],
+  ["markora-extension-math", "Inline and block math source with an optional host renderer"],
+  ["markora-extension-alerts", "GitHub-style NOTE, TIP, IMPORTANT, WARNING, and CAUTION blocks"],
+  ["markora-extension-toc", "A generated heading outline represented in Markdown by [TOC]"],
+  ["markora-extension-html", "Exact-source HTML atoms with optional host-sanitized block previews (root default runtime only)"],
+  ["markora-extension-diagrams", "Mermaid, GeoJSON, TopoJSON, and STL fences with optional host renderers"],
 ] as const;
 
 const normalizationExamples = [
@@ -39,14 +41,15 @@ export function MarkdownCompatibilityPage() {
     <div className="doc-stack">
       <section className="panel doc-panel">
         <span className="card-kicker">Markdown compatibility</span>
-        <h2>A documented subset with normalized output.</h2>
+        <h1>A documented dialect with predictable output.</h1>
         <p>
           Markora parses Markdown into a structured document. It preserves supported meaning, but it does
           {" "}not retain original source spelling, whitespace, markers, or reference-definition layout.
         </p>
         <p>
-          Conservatively recognized front matter, display math, HTML, comments, and directives are retained
-          {" "}as inert exact-source atoms. Optional extension definitions add documented semantic syntax without increasing the base bundle.
+          With the root entry&apos;s exact default compatibility preset, conservatively recognized front matter,
+          {" "}display math, HTML, comments, and directives are retained as inert exact-source atoms. Optional extension definitions can claim documented
+          {" "}forms and add semantic editing without increasing the default bundle.
         </p>
         <a
           className="button button-secondary"
@@ -60,15 +63,15 @@ export function MarkdownCompatibilityPage() {
 
       <section className="docs-grid docs-three-up">
         <article className="doc-card">
-          <span className="card-kicker">Supported shapes</span>
-          <h3>Semantic import, normalized serialization</h3>
+          <span className="card-kicker">Base semantic dialect</span>
+          <h2>Semantic import, normalized serialization</h2>
           <ul className="check-list compact">
             {supportedSyntax.map((syntax) => <li key={syntax}>{syntax}</li>)}
           </ul>
         </article>
         <article className="doc-card">
-          <span className="card-kicker">Opaque source</span>
-          <h3>Exact, inert source islands</h3>
+          <span className="card-kicker">Base exact-source fallback</span>
+          <h2>Exact, inert source islands</h2>
           <ul className="check-list compact">
             {opaqueSyntax.map((syntax) => <li key={syntax}>{syntax}</li>)}
           </ul>
@@ -77,22 +80,45 @@ export function MarkdownCompatibilityPage() {
           </p>
         </article>
         <article className="doc-card">
-          <span className="card-kicker">Optional packages</span>
-          <h3>Install semantics deliberately</h3>
-          <ul className="check-list compact">
-            {optionalSyntax.map((syntax) => <li key={syntax}>{syntax}</li>)}
-          </ul>
+          <span className="card-kicker">Opt-in semantics</span>
+          <h2>Install syntax deliberately</h2>
           <p>
             Without <code>markora-extension-diagrams</code>, a fenced <code>mermaid</code> block remains generic code.
             The package adds source semantics and bounded host-rendered previews; it bundles no rendering engine.
           </p>
-          <p>Other unrecognized extensions still have no preservation guarantee.</p>
+          <p>
+            The same principle applies across the extension set: only an installed package may claim its documented
+            {" "}fallback form. Other unrecognized syntax still has no preservation guarantee.
+          </p>
         </article>
       </section>
 
       <section className="panel doc-panel">
+        <span className="card-kicker">Official syntax packages</span>
+        <h2>Choose the document semantics your product owns.</h2>
+        <dl className="extension-package-list">
+          {optionalSyntax.map(([packageName, description]) => (
+            <div className="extension-package-row" key={packageName}>
+              <dt>
+                <a href={`https://github.com/KevinWang15/markora/tree/main/packages/${packageName.slice("markora-".length)}`}>
+                  <code>{packageName}</code>
+                </a>
+              </dt>
+              <dd>{description}</dd>
+            </div>
+          ))}
+        </dl>
+        <p>
+          Math, HTML, and diagram packages do not bundle renderer engines. Source mode remains complete without
+          {" "}callbacks; if you add a renderer, the host still owns its dependency, policy, and output styling.
+          {" "}Import each package&apos;s stylesheet explicitly and persist <code>editor.extensions.manifest</code> beside
+          {" "}Markdown so future editors restore a compatible syntax graph before parsing the document.
+        </p>
+      </section>
+
+      <section className="panel doc-panel">
         <span className="card-kicker">Canonical serialization</span>
-        <h2>Expect source spelling to change.</h2>
+        <h2>Expect supported source spelling to change.</h2>
         <div className="api-table">
           <div className="api-table-head">Input</div>
           <div className="api-table-head">Output</div>

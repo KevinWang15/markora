@@ -1,8 +1,8 @@
 # markora
 
-Write Markdown at the speed of thought.
+Write Markdown at the speed of thought, inside your product.
 
-`markora` is a Typora-style Markdown editor built with ProseMirror and CodeMirror. It parses a documented Markdown subset into an editable ProseMirror document and serializes supported content to a predictable canonical form.
+`markora` is a headless, embedded Markdown editor toolkit built with ProseMirror and CodeMirror. It provides Typora-style editing while the host application owns mounting, persistence, product chrome, network access, and security policy. Markora parses a documented Markdown dialect into an editable ProseMirror document and serializes supported content to a predictable canonical form.
 
 ## Features
 
@@ -12,12 +12,15 @@ Write Markdown at the speed of thought.
 - Inline marks for bold, italic, code, strike, and links
 - Exact, lightweight source-text code-fence shells with viewport-lazy CodeMirror editing
 - Lazy-loaded CodeMirror runtime and built-in languages with host-extensible loaders
-- Toolbar-friendly commands for formatting, links, images, mature table workflows, and undo/redo
+- Toolbar-friendly commands for formatting, links, images, mature table workflows, clipboard modes, and undo/redo
 - Per-editor URL/image/navigation/upload policy plus managed navigation around tables and code blocks
+- Reconciled host updates, idle Markdown delivery, deterministic reset, and complete teardown semantics
+- Creation-time extension composition with seven official optional syntax packages
+- Localized, RTL-aware, themeable, keyboard-accessible embedded interactions
 
 ## Markdown compatibility
 
-`markdown`, `editor.commands.reconcileMarkdown()`, and `editor.commands.resetMarkdown()` are parsing boundaries. `editor.getMarkdown()` and `onChange` return normalized serialization, not the original document bytes. Conservatively recognized front matter, standalone display math, HTML, comments, and directives are retained as inert opaque source atoms; other unsupported extensions may still be reinterpreted without an error. Deprecated `setMarkdown()` has the same hard-reset behavior as `resetMarkdown()`.
+`markdown`, `editor.commands.reconcileMarkdown()`, and `editor.commands.resetMarkdown()` are parsing boundaries. `editor.getMarkdown()` and `onChange` return normalized serialization, not the original document bytes. With the root entry's exact default compatibility preset and no matching extension, Markora retains conservatively recognized front matter, standalone display math, HTML, comments, and directives as inert opaque source atoms; other unsupported extensions may still be reinterpreted without an error. Official extension packages claim their documented forms and give them semantic behavior. Deprecated `setMarkdown()` has the same hard-reset behavior as `resetMarkdown()`.
 
 Read the complete [Markdown dialect and fidelity contract](./MARKDOWN_COMPATIBILITY.md), which is also included in the published package.
 
@@ -28,7 +31,7 @@ Opaque HTML is displayed as text and never executed inside the editor. Serialize
 ```bash
 npm install markora
 
-# Optional built-in link/image/table overlays
+# Optional link, image, code-fence metadata, and table overlays
 npm install markora-ui
 ```
 
@@ -38,7 +41,7 @@ npm install markora-ui
 import { createEditor } from "markora";
 import "markora/styles.css";
 
-const hostElement = document.querySelector("#editor");
+const hostElement = document.querySelector<HTMLElement>("#editor");
 
 if (!hostElement) {
   throw new Error("Editor host not found.");
@@ -90,7 +93,7 @@ const editor = createEditor({
 
 ## Optional default UI
 
-`markora` is headless by default. Add `markora-ui` when you want the repo's built-in link editor, image editor, table-creation/dimension dialog, and table toolbar overlays. `editor.ui.createTable()` opens the creation dialog. The toolbar exposes before/after insertion, row/column movement and deletion, automatic/left/center/right alignment, exact logical resizing, and table deletion; Alt+F10 or `editor.ui.editTable()` moves focus into it from an active table. Hosts can use the same command surface without this package, including `insertTable()` and `resizeTable()`.
+`markora` is headless by default. Add `markora-ui` when you want the repo's built-in link, image, and code-fence metadata editors plus the table-creation/dimension dialog and table toolbar overlays. `editor.ui.createTable()` opens the creation dialog. The toolbar exposes before/after insertion, row/column movement and deletion, automatic/left/center/right alignment, exact logical resizing, and table deletion; Alt+F10 or `editor.ui.editTable()` moves focus into it from an active table. Hosts can use the same command surface without this package, including `insertTable()` and `resizeTable()`.
 
 ```ts
 import { createEditor } from "markora";
@@ -273,6 +276,24 @@ strike-through, opaque source, CodeMirror fences, and the existing optional UI
 adapter. Add public extensions with the `extensions` option; definitions are
 validated and compiled before the host element is claimed.
 
+### Official optional extensions
+
+Install only the syntax required by the embedding product. None of these packages is included in the root or minimal graph by default, and each package stylesheet is an explicit import.
+
+| Package | Semantic surface | Compatible entry | External runtime |
+| --- | --- | --- | --- |
+| [`markora-extension-frontmatter`](https://github.com/KevinWang15/markora/tree/main/packages/extension-frontmatter) | Exact-source YAML-like document-head blocks | Root and minimal | No YAML parser |
+| [`markora-extension-footnotes`](https://github.com/KevinWang15/markora/tree/main/packages/extension-footnotes) | References, definitions, diagnostics, and navigation | Root and minimal | None |
+| [`markora-extension-math`](https://github.com/KevinWang15/markora/tree/main/packages/extension-math) | Inline and block math | Root and minimal | Optional host renderer; no TeX engine |
+| [`markora-extension-alerts`](https://github.com/KevinWang15/markora/tree/main/packages/extension-alerts) | GitHub-style alert blockquotes | Root and minimal | None |
+| [`markora-extension-toc`](https://github.com/KevinWang15/markora/tree/main/packages/extension-toc) | Generated heading outline backed by `[TOC]` | Root and minimal | None |
+| [`markora-extension-html`](https://github.com/KevinWang15/markora/tree/main/packages/extension-html) | Exact-source CommonMark HTML and bounded block previews | Root default runtime only | No HTML parser; previews require a host renderer and sanitizer |
+| [`markora-extension-diagrams`](https://github.com/KevinWang15/markora/tree/main/packages/extension-diagrams) | Mermaid, GeoJSON, TopoJSON, and STL fences | Root and minimal | Optional host renderers; no diagram engine |
+
+The HTML extension deliberately rejects `markora/minimal` and a root editor using a custom preset. Every other official package in the table supports both entries. Math, HTML, and diagrams stay fully usable in accessible source mode when no renderer callback is supplied.
+
+Persist `editor.extensions.manifest` beside Markdown that depends on optional syntax, then restore compatible definitions before parsing that document again. The manifest records compatibility identity and ordering; host callbacks, messages, parsers, sanitizers, and renderer engines remain runtime configuration and are not serialized.
+
 Extension packages should define their schema, Markdown codec, commands, state,
 plugins, NodeViews, clipboard behavior, and headless UI actions through
 `markora/extension-api`. That entry also re-exports the supported Markdown-it
@@ -374,7 +395,7 @@ const messages = {
 } satisfies MarkdownEditorMessageOverrides;
 
 const editor = createEditor({
-  element: document.querySelector("#editor")!,
+  element: document.querySelector<HTMLElement>("#editor")!,
   markdown: "- [ ] À faire",
   messages,
 });
@@ -845,7 +866,7 @@ With `markora-ui`, the language label is an accessible button and `editor.ui?.ed
 
 ## Development
 
-- `pnpm dev` starts the core watcher and demo site together
-- `pnpm pack:smoke` verifies the packed `markora` and `markora-ui` tarballs, public extension declarations, and independent root/minimal bundle graphs in a tiny Vite consumer app
+- `pnpm dev` starts the core, extension, UI, and demo watchers together
+- `pnpm pack:smoke` verifies all nine public tarballs plus isolated root, minimal, per-extension, and all-extension consumer graphs
 - `pnpm release:check` dry-runs the core npm tarball and then runs the packed-consumer smoke test
 - `pnpm check` builds the workspace, runs typechecks, executes API type tests, smoke-tests Node ESM imports, and runs the shared test suite

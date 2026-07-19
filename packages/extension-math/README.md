@@ -4,6 +4,14 @@ Optional semantic inline and block math for embedded Markora editors. The
 package works with both `markora` and `markora/minimal`; it is never included in
 either default editor graph and does not bundle a TeX renderer.
 
+## Install and use
+
+```bash
+npm install markora markora-extension-math
+```
+
+Minimal-entry consumers should import `markora/minimal.css` in place of `markora/styles.css` below.
+
 ```ts
 import { createEditor } from "markora";
 import {
@@ -30,7 +38,7 @@ const math = createMathExtension({
 });
 
 const editor = createEditor({
-  element: document.querySelector("#editor")!,
+  element: document.querySelector<HTMLElement>("#editor")!,
   extensions: [math],
   markdown: "Inline $x^2$ and a block:\n\n$$\n\\sum_i x_i\n$$",
 });

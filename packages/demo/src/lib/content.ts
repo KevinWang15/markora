@@ -4,11 +4,13 @@ import "markora/styles.css";
 import "markora/themes.css";
 import "markora-ui/styles.css";
 
-const hostElement = document.querySelector("#editor");
+const hostElement = document.querySelector<HTMLElement>("#editor");
 
 if (!hostElement) {
   throw new Error("Editor host not found.");
 }
+
+hostElement.dataset.mdwTheme = "auto";
 
 const editor = createEditor({
   element: hostElement,
@@ -28,19 +30,19 @@ export const installCommand = "npm install markora markora-ui";
 export const initialMarkdown = [
   "# Markora",
   "",
-  "Write Markdown at the speed of thought.",
+  "A production-minded Markdown editor embedded in your product.",
   "",
-  "- [x] Typora-like surface",
-  "- [x] Tables with alignment",
-  "- [x] Code blocks with syntax-aware editing",
+  "- [x] Deliberate rich, Markdown, and plain-text paste",
+  "- [x] Keyboard-friendly tables and task lists",
+  "- [x] Lazy code editing with fence metadata",
   "",
-  "| Feature | Why it matters |",
+  "| Boundary | What Markora provides |",
   "| :--- | :--- |",
-  "| Documented Markdown subset | Predictable normalized storage |",
-  "| Managed cursors | Better movement around tables and code blocks |",
-  "| Compact API | Easy to wire into your app |",
+  "| Markdown contract | Predictable normalized storage |",
+  "| Host lifecycle | Reconcile, subscribe, flush, and destroy |",
+  "| Product integration | Scoped themes, localization, RTL, and resource policy |",
   "",
-  "```ts",
+  "```ts title=\"release.ts\"",
   "const ship = (feature: string) => console.log(`Ship ${feature}`);",
   "ship('great editing UX');",
   "```",
@@ -64,7 +66,7 @@ export const docsNavigation = [
     path: "/docs/examples",
   },
   {
-    title: "Playground demo",
+    title: "Core playground",
     path: "/demo",
   },
 ] as const;

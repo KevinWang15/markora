@@ -5,9 +5,16 @@ Optional semantic GitHub-style alerts for embedded `markora` and
 
 ## Install and use
 
+```bash
+npm install markora markora-extension-alerts
+```
+
+Minimal-entry consumers should import `markora/minimal.css` in place of `markora/styles.css` below.
+
 ```ts
 import { createEditor } from "markora";
 import { createAlertsExtension } from "markora-extension-alerts";
+import "markora/styles.css";
 import "markora-extension-alerts/styles.css";
 
 const alerts = createAlertsExtension();

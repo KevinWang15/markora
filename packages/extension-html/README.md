@@ -1,11 +1,18 @@
 # markora-extension-html
 
-Exact-source CommonMark HTML atoms and optional host-sanitized block previews
-for embedded Markora editors.
+Optional exact-source CommonMark HTML atoms for embedded Markora editors, with
+host-sanitized block previews when a renderer is configured.
+
+## Install and use
+
+```bash
+npm install markora markora-extension-html
+```
 
 ```ts
 import { createEditor } from "markora";
 import { createHtmlExtension } from "markora-extension-html";
+import "markora/styles.css";
 import "markora-extension-html/styles.css";
 
 const html = createHtmlExtension({
@@ -59,8 +66,8 @@ Update and remove calls are stale-safe. Targets include an opaque occurrence
 identity plus their current position, placement, kind, and exact source. An
 update is accepted only when its source reparses as exactly one HTML atom in the
 same block or inline placement; the kind is then rederived. Store the extension
-manifest with persisted Markdown and restore the same extension set before
-editing it.
+manifest from `editor.extensions.manifest` with persisted Markdown and restore
+the same compatible extension set before editing it.
 
 ## Renderer security boundary
 

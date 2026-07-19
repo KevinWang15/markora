@@ -13,7 +13,9 @@ const apiRows = [
   ["editor.commands.reconcileMarkdown(markdown, { emitChange })", "Applies an authoritative host snapshot while mapping selection/history and preserving plugin state; returns whether the parsed document changed."],
   ["editor.commands.resetMarkdown(markdown, { emitChange })", "Explicitly replaces EditorState, resetting selection and clearing history/plugin state."],
   ["editor.commands.setMarkdown(...) (deprecated)", "Retains the historical hard-reset behavior as an alias of resetMarkdown()."],
+  ["editor.commands.pasteMarkdown(markdown) / pastePlainText(text)", "Invokes the explicit Markdown or literal-text clipboard pipeline as one command transaction."],
   ["editor.flushChange()", "Synchronously delivers pending idle or animation-frame Markdown output."],
+  ["editor.extensions.get(...) / has(...) / manifest / uiActions", "Accesses typed extension handles, checks availability, and exposes persistence metadata plus host-renderable actions."],
   ["editor.state.can.* / editor.state.isActive.*", "Lets hosts derive command availability and active structural/formatting state without built-in UI."],
   ["editor.getToolbarState()", "Returns a compatibility snapshot for toolbar buttons."],
   [`editor.commands.toggleMark("strong" | "em" | "code" | "strike")`, "Applies inline formatting commands."],
@@ -270,6 +272,10 @@ type CreateEditorOptions = {
   onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
   shortcuts?: MarkdownEditorShortcutMap;
   typing?: MarkdownEditorTypingOptions;
+  extensionPreset?: MarkdownEditorExtensionPreset;
+  extensions?: readonly AnyMarkdownEditorExtension[];
+  messages?: MarkdownEditorMessageOverrides;
+  resources?: MarkdownEditorResourceOptions;
   ui?: EditorUiFactory;
   codeBlockLanguages?: CodeBlockLanguageRegistry;
 };`;
@@ -280,7 +286,7 @@ const updateEditorOptionsType = `type UpdateEditorOptions = {
   attributes?: MarkdownEditorDomAttributes | null;
   ariaLabel?: string | null;
   ariaLabelledBy?: string | null;
-  onChange?: ((markdown: string) => void) | null;
+  onChange?: CreateEditorOptions["onChange"] | null;
   onTransaction?: CreateEditorOptions["onTransaction"] | null;
   onChangeMode?: MarkdownEditorChangeMode;
   onEditOpaqueMarkdown?: ((request: OpaqueMarkdownEditRequest) => void) | null;
@@ -289,6 +295,8 @@ const updateEditorOptionsType = `type UpdateEditorOptions = {
 const markdownEditorType = `type MarkdownEditor = {
   readonly isDestroyed: boolean;
   readonly view: EditorView;
+  readonly extensions: MarkdownEditorExtensionRegistry;
+  readonly assets: MarkdownEditorAssets;
   commands: MarkdownEditorCommands;
   state: MarkdownEditorState;
   ui: MarkdownEditorUi | null;
@@ -315,6 +323,7 @@ const markdownEditorEventTypes = `type MarkdownEditorSelectionSnapshot = {
 };
 
 type MarkdownEditorEventMap = {
+  asset: MarkdownEditorAssetEvent;
   focus: { editor: MarkdownEditor; type: "focus"; nativeEvent: FocusEvent };
   blur: { editor: MarkdownEditor; type: "blur"; nativeEvent: FocusEvent };
   selection: {
@@ -338,15 +347,15 @@ type MarkdownEditorEventMap = {
     origin: MarkdownEditorChangeOrigin;
     selection: MarkdownEditorSelectionSnapshot;
   };
-  error: {
-    editor: MarkdownEditor;
-    type: "error";
-    code: "code-block-language-load-failed";
-    context: { language: string };
-    error: unknown;
-    recoverable: true;
-  };
+  error: MarkdownEditorErrorEvent;
 };
+
+type MarkdownEditorErrorCode =
+  | "code-block-language-load-failed"
+  | "code-block-runtime-load-failed"
+  | "resource-callback-failed"
+  | "table-operation-rejected"
+  | \`EXTENSION_\${string}\`;
 
 type MarkdownEditorEventName = keyof MarkdownEditorEventMap;
 type MarkdownEditorEventListener<Type extends MarkdownEditorEventName> = (
@@ -392,6 +401,8 @@ type MarkdownEditorCommands = {
     markdown: string,
     options?: MarkdownEditorMarkdownUpdateOptions,
   ) => void;
+  pasteMarkdown: (markdown: string) => boolean;
+  pastePlainText: (text: string) => boolean;
   toggleMark: (mark: "strong" | "em" | "code" | "strike") => boolean;
   setLink: (href: string) => boolean;
   removeLink: () => boolean;
@@ -439,6 +450,8 @@ const markdownEditorStateType = `type MarkdownEditorActiveNode =
 type MarkdownEditorState = {
   tableIssues: () => readonly MarkdownEditorTableIssue[];
   can: {
+    pasteMarkdown: () => boolean;
+    pastePlainText: () => boolean;
     toggleMark: (mark: "strong" | "em" | "code" | "strike") => boolean;
     setLink: () => boolean;
     removeLink: () => boolean;
@@ -522,10 +535,11 @@ export function ApiPage() {
     <div className="doc-stack">
       <section className="panel doc-panel">
         <span className="card-kicker">API overview</span>
-        <h2>Small surface area, enough control for real apps.</h2>
+        <h1>A compact host API with explicit product boundaries.</h1>
         <p>
           <code>createEditor()</code> returns a tight host API: Markdown in, normalized Markdown out, structured
-          {" "}commands and state, plus optional UI hooks when you attach <code>markora-ui</code>.
+          {" "}commands and state, an extension registry, asset controls, and optional UI hooks when you attach
+          {" "}<code>markora-ui</code>.
         </p>
       </section>
 
@@ -545,7 +559,7 @@ export function ApiPage() {
       <section className="docs-grid docs-grid-two">
         <article className="doc-card">
           <span className="card-kicker">CreateEditor options</span>
-          <h3>Wire only the pieces you need</h3>
+          <h2>Wire only the pieces you need</h2>
           <ul className="check-list compact">
             <li><code>element</code> is required and owns the mounted editor view.</li>
             <li><code>markdown</code> seeds the initial document content.</li>
@@ -558,12 +572,14 @@ export function ApiPage() {
             <li><code>onEditOpaqueMarkdown</code> opens a host-owned source editor for inert unsupported syntax.</li>
             <li><code>resources</code> configures stored URL policy, resolution/open/load hooks, image privacy, and optional file uploads. It is creation-only because it defines document validity.</li>
             <li><code>typing</code> opts into generated-delimiter pairing and selection wrapping; <code>shortcuts</code> remaps or disables stable built-in and qualified extension keymap IDs.</li>
+            <li><code>extensionPreset</code> selects a base graph; <code>extensions</code> adds creation-time package definitions. Persist the resolved manifest with Markdown.</li>
+            <li><code>messages</code> replaces creation-time core copy and accessible labels for localization.</li>
             <li><code>ui</code> and <code>codeBlockLanguages</code> are optional extension points.</li>
           </ul>
         </article>
         <article className="doc-card">
           <span className="card-kicker">Built-in languages</span>
-          <h3>Lazy-loaded code-block editing</h3>
+          <h2>Lazy-loaded code-block editing</h2>
           <p>
             The default registry provides CodeMirror editing and highlighting for the languages below,
             {" "}loading a grammar only when a matching fenced block is encountered.
@@ -574,6 +590,23 @@ export function ApiPage() {
             ))}
           </ul>
         </article>
+      </section>
+
+      <section className="panel doc-panel">
+        <span className="card-kicker">Extension kernel</span>
+        <h2>Compose document semantics before parsing.</h2>
+        <p>
+          Pass official or product-specific definitions through <code>extensions</code>, or supply a named
+          {" "}<code>extensionPreset</code> for a complete base graph. The resolver validates compatibility,
+          {" "}dependencies, schema and contribution ordering before it creates editor state. Definitions are
+          {" "}creation-time because they determine how Markdown is interpreted.
+        </p>
+        <p>
+          Use <code>editor.extensions.get(definition)</code> for typed package commands, state, and storage;
+          {" "}<code>editor.extensions.uiActions</code> exposes host-renderable actions. Persist
+          {" "}<code>editor.extensions.manifest</code> beside the Markdown and restore a compatible graph before
+          {" "}loading it again. Extension failures use namespaced error codes and include their lifecycle phase.
+        </p>
       </section>
 
       <section className="panel doc-panel">
@@ -596,15 +629,17 @@ export function ApiPage() {
       <section className="docs-grid docs-grid-two">
         <article className="doc-card">
           <span className="card-kicker">Typed subscriptions</span>
-          <h3>Observe the editor without serializing</h3>
+          <h2>Observe the editor without serializing</h2>
           <p>
             Focus, blur, state, selection, and update events expose host-facing activity. The synchronous <code>state</code>
             {" "}event runs first for an accepted editor-state transition and is the preferred toolbar refresh signal; it carries
             {" "}<code>docChanged</code>, <code>selectionChanged</code>, the current selection, and its origin without Markdown or
             {" "}a ProseMirror transaction. A specialized selection event follows when the selection changed, and an update event
             {" "}follows when the document changed. Focus and blur each cross one microtask boundary so callbacks run outside nested
-            {" "}editor focus internals and movement within the composite surface does not create a false boundary. Error events report recoverable code-language-load failures;
-            {" "}loaders and extensions run after the current editor update completes. Initial focus and selection actions are
+            {" "}editor focus internals and movement within the composite surface does not create a false boundary. Asset events
+            {" "}report upload progress and state. Error events cover code language/runtime loading, resource callbacks, rejected
+            {" "}table clipboard operations, and extension lifecycle failures; deferred loaders and extensions run after the
+            {" "}current editor update completes. Initial focus and selection actions are
             {" "}not replayed to subscriptions added after creation; call <code>event.editor.getMarkdown()</code> only
             {" "}when a particular listener intentionally needs a synchronous serialized snapshot.
           </p>
@@ -612,12 +647,12 @@ export function ApiPage() {
         </article>
         <article className="doc-card">
           <span className="card-kicker">Dynamic configuration</span>
-          <h3>Change options without rebuilding state</h3>
+          <h2>Change options without rebuilding state</h2>
           <p>
             <code>updateOptions()</code> changes editable state, presentation attributes, accessible naming, and callbacks.
             {" "}It does not reconstruct EditorState or emit a document update. Idle is the default change mode; changing <code>onChange</code> or its mode
             {" "}first flushes pending output once through the previous listener. The mount element, initial Markdown,
-            {" "}initial focus/selection actions, UI factory, and language registry remain creation-only. Use
+            {" "}initial focus/selection actions, messages, resources, extension graph, UI factory, and language registry remain creation-only. Use
             {" "}<code>reconcileMarkdown()</code> or <code>resetMarkdown()</code> for later document values.
           </p>
           <CodeBlock code={dynamicOptionsCode} language="ts" title="Runtime options" />
@@ -640,7 +675,7 @@ export function ApiPage() {
       <section className="docs-grid docs-grid-two">
         <article className="doc-card">
           <span className="card-kicker">External updates</span>
-          <h3>Reconcile ordinary snapshots; reset deliberately</h3>
+          <h2>Reconcile ordinary snapshots; reset deliberately</h2>
           <p>
             <code>reconcileMarkdown()</code> is silent by default and returns <code>false</code> for a strict semantic no-op.
             {" "}A changed update maps selection/history and preserves plugin state, including in read-only mode. Disjoint
@@ -656,7 +691,7 @@ export function ApiPage() {
         </article>
         <article className="doc-card">
           <span className="card-kicker">Change origins</span>
-          <h3>Trace where accepted activity entered</h3>
+          <h2>Trace where accepted activity entered</h2>
           <p>
             Change callbacks and state/selection/update events report <code>user</code>, <code>command</code>, <code>external</code>,
             {" "}<code>reset</code>, or a namespaced extension origin. <code>onTransaction</code> also reports origins for dispatch
@@ -697,16 +732,16 @@ export function ApiPage() {
       <section className="docs-grid docs-grid-two">
         <article className="doc-card">
           <span className="card-kicker">Optional UI</span>
-          <h3>Use built-in overlays when they help</h3>
+          <h2>Use built-in overlays when they help</h2>
           <p>
-            Pass <code>createDefaultUi()</code> for default link, image, and table controls. Use
+            Pass <code>createDefaultUi()</code> for default link, image, table, and code-fence metadata controls. Use
             {" "}<code>portalRoot</code> when the editor lives in a Shadow DOM host.
           </p>
           <CodeBlock code={portalRootCode} language="ts" title="Shadow DOM host" />
         </article>
         <article className="doc-card">
           <span className="card-kicker">Custom languages</span>
-          <h3>Extend the registry for app-specific fences</h3>
+          <h2>Extend the registry for app-specific fences</h2>
           <p>
             Merge your own entries with <code>createDefaultCodeBlockLanguageRegistry()</code> when you
             {" "}need extra fenced-code support.

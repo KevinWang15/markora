@@ -1,7 +1,7 @@
 {
   "name": "markora",
   "version": "0.0.1",
-  "description": "A Typora-style Markdown editor built with ProseMirror and CodeMirror.",
+  "description": "A headless, embeddable Markdown editor toolkit built with ProseMirror and CodeMirror.",
   "type": "module",
   "license": "MIT",
   "author": "Kevin Wang",
@@ -17,6 +17,8 @@
   "keywords": [
     "markdown",
     "editor",
+    "embedded",
+    "headless",
     "wysiwyg",
     "typora",
     "prosemirror",

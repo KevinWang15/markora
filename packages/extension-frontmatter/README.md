@@ -4,6 +4,14 @@ Optional exact-source YAML front matter for embedded Markora editors. The
 package works with both `markora` and `markora/minimal`; it is never included in
 either default editor graph.
 
+## Install and use
+
+```bash
+npm install markora markora-extension-frontmatter
+```
+
+Minimal-entry consumers should import `markora/minimal.css` in place of `markora/styles.css` below.
+
 ```ts
 import { createEditor } from "markora";
 import { createFrontmatterExtension } from "markora-extension-frontmatter";
@@ -22,7 +30,7 @@ const frontmatter = createFrontmatterExtension({
 });
 
 const editor = createEditor({
-  element: document.querySelector("#editor")!,
+  element: document.querySelector<HTMLElement>("#editor")!,
   extensions: [frontmatter],
   markdown: "---\ntitle: Embedded\n---\n\n# Document",
 });
@@ -60,3 +68,7 @@ extension transaction. No form, YAML parser, or standalone UI is bundled.
 Import `markora-extension-frontmatter/styles.css` explicitly. Package tokens
 use the `--mdw-frontmatter-*` prefix and fall back to Markora's public design
 tokens; hosts may override them within their embed scope.
+
+Hosts that persist front-matter Markdown must also persist
+`editor.extensions.manifest` and restore a compatible extension definition
+before editing it.
