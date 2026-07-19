@@ -5,6 +5,7 @@ import {
   mountEditor,
   ownedOverlay,
   settleEditor,
+  snapshotEditor,
   test,
 } from "./fixtures";
 
@@ -21,6 +22,47 @@ const ARABIC_UI_MESSAGES = {
   saveButtonLabel: "حفظ",
   unlinkButtonLabel: "إلغاء الرابط",
 } as const;
+
+for (const [entry, root] of [
+  ["root", "document"],
+  ["minimal", "shadow"],
+] as const) {
+  test(`@required keeps native text selection visible in an unthemed ${entry} ${root} embed`, async ({ labPage }) => {
+    const id = `unthemed-selection-${entry}-${root}`;
+    await mountEditor(labPage, {
+      entry,
+      id,
+      markdown: "alpha beta gamma",
+      root,
+    });
+
+    const selected = await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta"),
+      id,
+    );
+    expect(selected).toBe(true);
+    expect((await snapshotEditor(labPage, id)).selection).toMatchObject({
+      from: 7,
+      to: 11,
+    });
+
+    const appearance = await editorLocator(labPage, id).locator("p").evaluate((element) => {
+      const elementStyle = getComputedStyle(element);
+      const selectionStyle = getComputedStyle(element, "::selection");
+      return {
+        background: selectionStyle.backgroundColor,
+        backgroundToken: elementStyle.getPropertyValue("--mdw-color-selection").trim(),
+        color: selectionStyle.color,
+        colorToken: elementStyle.getPropertyValue("--mdw-color-selection-text").trim(),
+      };
+    });
+
+    expect(appearance.backgroundToken).toBe("");
+    expect(appearance.colorToken).toBe("");
+    expect(["rgba(0, 0, 0, 0)", "transparent"]).not.toContain(appearance.background);
+    expect(["rgba(0, 0, 0, 0)", "transparent"]).not.toContain(appearance.color);
+  });
+}
 
 async function openLocalizedLinkEditor(
   page: Parameters<typeof editorLocator>[0],

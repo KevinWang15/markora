@@ -58,6 +58,19 @@ describe("public theme styles", () => {
     expect(undocumented).toEqual([]);
   });
 
+  it("keeps a compatibility fallback on every component token use", () => {
+    for (const [name, source] of productionStyles) {
+      const missingFallbacks = matchingLines(source, (line) => (
+        /var\(--mdw-[\w-]+\)/u.test(line)
+      ));
+
+      expect(
+        missingFallbacks,
+        `${name} contains a Markora token without a fallback`,
+      ).toEqual([]);
+    }
+  });
+
   it("keeps inline-direction presentation logical while leaving coordinate math to runtime", () => {
     const physicalBoxProperty = /^(?:top|bottom|left|right|margin-(?:top|bottom|left|right)|padding-(?:top|bottom|left|right)|border-(?:top|bottom|left|right))(?:-[\w-]+)?:/u;
 

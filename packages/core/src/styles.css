@@ -17,8 +17,8 @@
 }
 
 .mdw-host .ProseMirror ::selection {
-  background: var(--mdw-color-selection);
-  color: var(--mdw-color-selection-text);
+  background: var(--mdw-color-selection, Highlight);
+  color: var(--mdw-color-selection-text, HighlightText);
 }
 
 .mdw-host .ProseMirror .mdw-placeholder::before {
