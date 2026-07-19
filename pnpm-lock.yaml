@@ -128,6 +128,9 @@ importers:
       markora-extension-alerts:
         specifier: workspace:*
         version: link:../extension-alerts
+      markora-extension-diagrams:
+        specifier: workspace:*
+        version: link:../extension-diagrams
       markora-extension-footnotes:
         specifier: workspace:*
         version: link:../extension-footnotes
@@ -176,6 +179,12 @@ importers:
         version: 6.4.1
 
   packages/extension-alerts:
+    devDependencies:
+      markora:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/extension-diagrams:
     devDependencies:
       markora:
         specifier: workspace:*

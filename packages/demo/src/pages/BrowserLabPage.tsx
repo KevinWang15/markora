@@ -23,6 +23,20 @@ import {
 import { createEditor as createMinimalEditor } from "markora/minimal";
 import { NodeSelection, TextSelection, type Selection } from "markora/extension-api";
 import {
+  createDiagramsExtension,
+  defaultDiagramMessages,
+  type DiagramEditRequest,
+  type DiagramKind,
+  type DiagramMessageOverrides,
+  type DiagramMessages,
+  type DiagramNodeTarget,
+  type DiagramRenderer,
+  type DiagramRenderRequest,
+  type DiagramsExtension,
+  type DiagramsSnapshot,
+} from "markora-extension-diagrams";
+import "markora-extension-diagrams/styles.css";
+import {
   createAlertsExtension,
   defaultAlertsMessages,
   type AlertKind,
@@ -96,6 +110,7 @@ export type BrowserLabFootnotesMessages = Partial<
   Record<keyof FootnotesMessageOverrides, string>
 >;
 export type BrowserLabAlertsMessages = Partial<Record<keyof AlertsMessages, string>>;
+export type BrowserLabDiagramMessages = Partial<Record<keyof DiagramMessages, string>>;
 export type BrowserLabHtmlMessages = Partial<Record<keyof HtmlMessages, string>>;
 export type BrowserLabMathMessages = Partial<Record<keyof MathMessages, string>>;
 export type BrowserLabTocMessages = Partial<Record<keyof TocMessages, string>>;
@@ -109,6 +124,7 @@ export type BrowserLabHtmlRendererMode =
   | "throw"
   | "unsafe"
   | "wrong-document";
+export type BrowserLabDiagramRendererMode = BrowserLabHtmlRendererMode | "unsafe-css-var";
 export type BrowserLabMathRendererMode =
   | "connected"
   | "deferred"
@@ -118,6 +134,8 @@ export type BrowserLabMathRendererMode =
   | "throw"
   | "unsafe"
   | "wrong-document";
+
+const BROWSER_LAB_DIAGRAM_KINDS = ["mermaid", "geojson", "topojson", "stl"] as const;
 
 export type BrowserLabAlertsCommandRequest =
   | { kind?: AlertKind; type: "toggle" | "wrap" }
@@ -142,6 +160,16 @@ export type BrowserLabTocStateRequest = Readonly<{
   type: "canInsert" | "canRemove" | "isActive";
 }>;
 
+export type BrowserLabDiagramCommandRequest =
+  | { options: Readonly<{ info: string; source: string }>; type: "insert" }
+  | { kind: DiagramKind; target: DiagramNodeTarget; type: "convert" }
+  | { kind: DiagramKind; type: "convertCodeBlock" }
+  | { patch: Readonly<{ info?: string; source?: string }>; target: DiagramNodeTarget; type: "update" }
+  | {
+      target: DiagramNodeTarget;
+      type: "remove" | "restoreCodeBlock" | "retryPreview" | "togglePreview";
+    };
+
 export type BrowserLabEditorSpec = {
   ariaLabel?: string;
   ariaLabelledBy?: string;
@@ -149,9 +177,11 @@ export type BrowserLabEditorSpec = {
   autofocus?: boolean;
   controlledEcho?: boolean;
   direction?: "auto" | "ltr" | "rtl";
+  diagramMessages?: BrowserLabDiagramMessages;
+  diagramRendererModes?: Partial<Record<DiagramKind, BrowserLabDiagramRendererMode>>;
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "html" | "math" | "public-example" | "toc";
+  extensionMode?: "alerts" | "all-advanced" | "diagrams" | "footnotes" | "frontmatter" | "html" | "math" | "public-example" | "toc";
   alertsMessages?: BrowserLabAlertsMessages;
   footnotesMessages?: BrowserLabFootnotesMessages;
   frontmatterMessages?: FrontmatterMessageOverrides;
@@ -347,6 +377,25 @@ export type BrowserLabMathRendererSettlement = Readonly<{
   outcome?: "reject" | "resolve";
 }>;
 
+export type BrowserLabDiagramEditSnapshot = Pick<
+  DiagramEditRequest,
+  "identity" | "info" | "kind" | "position" | "render" | "source"
+>;
+
+export type BrowserLabDiagramRendererCall = Readonly<{
+  aborted: boolean;
+  id: number;
+  info: string;
+  kind: DiagramKind;
+  settled: "pending" | "rejected" | "resolved" | "threw";
+  source: string;
+}>;
+
+export type BrowserLabDiagramRendererSettlement = Readonly<{
+  callId?: number;
+  outcome?: "reject" | "resolve";
+}>;
+
 export type BrowserLabReconcileResult = {
   changed: boolean;
   snapshot: BrowserLabSnapshot;
@@ -413,6 +462,20 @@ export type BrowserLabApi = {
   can: (id: string, request: BrowserLabCommandRequest) => boolean;
   command: (id: string, request: BrowserLabCommandRequest) => boolean;
   copySelection: (id: string) => BrowserLabCopyResult;
+  diagramCommand: (id: string, request: BrowserLabDiagramCommandRequest) => boolean;
+  diagramEditConvert: (id: string, kind: DiagramKind) => boolean;
+  diagramEditRemove: (id: string) => boolean;
+  diagramEditRestoreCodeBlock: (id: string) => boolean;
+  diagramEditUpdate: (
+    id: string,
+    patch: Readonly<{ info?: string; source?: string }>,
+  ) => boolean;
+  diagramRendererCalls: (id: string) => readonly BrowserLabDiagramRendererCall[];
+  diagramRendererSettle: (
+    id: string,
+    settlement?: BrowserLabDiagramRendererSettlement,
+  ) => boolean;
+  diagramSnapshot: (id: string) => DiagramsSnapshot;
   destroy: (id: string) => boolean;
   destroyEditor: (id: string) => boolean;
   destroyAll: () => void;
@@ -457,6 +520,7 @@ export type BrowserLabApi = {
     FrontmatterEditRequest,
     "diagnostics" | "source"
   > | null;
+  pendingDiagramEdit: (id: string) => BrowserLabDiagramEditSnapshot | null;
   pendingHtmlEdit: (id: string) => BrowserLabHtmlEditSnapshot | null;
   pendingMathEdit: (id: string) => BrowserLabMathEditSnapshot | null;
   ready: true;
@@ -472,6 +536,7 @@ export type BrowserLabApi = {
   resourceLog: (id: string) => BrowserLabResourceLog;
   reset: (id: string, markdown: string) => string;
   selectFootnote: (id: string, request: BrowserLabFootnoteSelectionRequest) => boolean;
+  selectDiagram: (id: string, target: DiagramNodeTarget) => boolean;
   selectHtml: (id: string, target: HtmlNodeTarget) => boolean;
   selectMath: (id: string, target: MathNodeTarget) => boolean;
   selectToc: (id: string, occurrence?: number) => boolean;
@@ -498,13 +563,29 @@ type MountedEditor = {
   alertsExtension: AlertsExtension | null;
   changeCount: number;
   controlledEcho: boolean;
+  diagramEditRequest: DiagramEditRequest | null;
+  diagramExtension: DiagramsExtension | null;
+  diagramRendererArtifacts: Set<Node>;
+  diagramRendererCalls: Array<{
+    aborted: boolean;
+    id: number;
+    info: string;
+    kind: DiagramKind;
+    settled: "pending" | "rejected" | "resolved" | "threw";
+    source: string;
+  }>;
+  diagramRendererDeferred: Map<number, {
+    reject(reason: unknown): void;
+    request: DiagramRenderRequest;
+    resolve(value: Node | DocumentFragment): void;
+  }>;
   editor: MarkdownEditor;
   entry: "minimal" | "root";
   eventCounts: Record<MarkdownEditorEventName, number>;
   eventLog: BrowserLabEventRecord[];
   eventUnsubscribes: Map<MarkdownEditorEventName, () => void>;
   extensionActions?: HTMLElement;
-  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "html" | "math" | "public-example" | "toc";
+  extensionMode?: "alerts" | "all-advanced" | "diagrams" | "footnotes" | "frontmatter" | "html" | "math" | "public-example" | "toc";
   footnotesExtension: FootnotesExtension | null;
   frontmatterEditRequest: FrontmatterEditRequest | null;
   frontmatterExtension: FrontmatterExtension | null;
@@ -801,6 +882,14 @@ function requireAlertsHandle(mounted: MountedEditor) {
   return mounted.editor.extensions.get(mounted.alertsExtension);
 }
 
+function requireDiagramsHandle(mounted: MountedEditor) {
+  if (!mounted.diagramExtension) {
+    throw new Error(`Browser lab editor "${mounted.id}" has no diagrams extension.`);
+  }
+
+  return mounted.editor.extensions.get(mounted.diagramExtension);
+}
+
 function requireFrontmatterHandle(mounted: MountedEditor) {
   if (!mounted.frontmatterExtension) {
     throw new Error(`Browser lab editor "${mounted.id}" has no front matter extension.`);
@@ -856,6 +945,21 @@ function normalizeBrowserLabAlertsMessages(
   ])) as AlertsMessageOverrides;
 }
 
+function normalizeBrowserLabDiagramMessages(
+  overrides: BrowserLabDiagramMessages | undefined,
+): DiagramMessageOverrides | undefined {
+  if (!overrides) {
+    return undefined;
+  }
+
+  return Object.fromEntries(Object.entries(overrides).map(([key, message]) => [
+    key,
+    typeof defaultDiagramMessages[key as keyof DiagramMessages] === "function"
+      ? () => message
+      : message,
+  ])) as DiagramMessageOverrides;
+}
+
 function normalizeBrowserLabMathMessages(
   overrides: BrowserLabMathMessages | undefined,
 ): MathMessageOverrides | undefined {
@@ -906,6 +1010,174 @@ function createBrowserLabMathOutput(request: MathRenderRequest, callId: number) 
   output.className = "browser-lab-math-rendered";
   output.textContent = `Rendered ${request.kind} math ${callId}: ${request.source}`;
   return output;
+}
+
+function createBrowserLabDiagramOutput(request: DiagramRenderRequest, callId: number) {
+  const svg = request.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 640 40");
+  const title = request.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "title");
+  title.textContent = `Rendered ${request.kind} diagram ${callId}`;
+  const text = request.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "text");
+  text.setAttribute("x", "8");
+  text.setAttribute("y", "24");
+  text.textContent = `${request.info}: ${request.source}`;
+  svg.append(title, text);
+  return svg;
+}
+
+function clearDiagramRendererArtifacts(mounted: MountedEditor) {
+  for (const artifact of mounted.diagramRendererArtifacts) {
+    artifact.parentNode?.removeChild(artifact);
+  }
+
+  mounted.diagramRendererArtifacts.clear();
+}
+
+function createBrowserLabDiagramRenderer(
+  mounted: MountedEditor,
+  mode: BrowserLabDiagramRendererMode | undefined,
+) {
+  if (!mode || mode === "missing") {
+    return undefined;
+  }
+
+  return (request: DiagramRenderRequest): Node | DocumentFragment | Promise<Node | DocumentFragment> => {
+    const call = {
+      aborted: request.signal.aborted,
+      id: mounted.diagramRendererCalls.length + 1,
+      info: request.info,
+      kind: request.kind,
+      settled: "pending" as "pending" | "rejected" | "resolved" | "threw",
+      source: request.source,
+    };
+    mounted.diagramRendererCalls.push(call);
+    request.signal.addEventListener("abort", () => {
+      call.aborted = true;
+    }, { once: true });
+
+    if (mode === "throw") {
+      call.settled = "threw";
+      throw new Error(`Browser lab ${request.kind} diagram renderer threw for call ${call.id}.`);
+    }
+
+    if (mode === "reject") {
+      call.settled = "rejected";
+      return Promise.reject(new Error(
+        `Browser lab ${request.kind} diagram renderer rejected call ${call.id}.`,
+      ));
+    }
+
+    if (mode === "deferred") {
+      return new Promise<Node | DocumentFragment>((resolve, reject) => {
+        mounted.diagramRendererDeferred.set(call.id, { reject, request, resolve });
+      });
+    }
+
+    call.settled = "resolved";
+
+    if (mode === "wrong-document") {
+      const foreignDocument = request.ownerDocument.implementation
+        .createHTMLDocument("Browser lab foreign diagram renderer");
+      const output = foreignDocument.createElement("div");
+      output.textContent = request.source;
+      return output;
+    }
+
+    if (mode === "string") {
+      return "<svg><text>renderer strings are forbidden</text></svg>" as unknown as Node;
+    }
+
+    if (mode === "unsafe") {
+      const wrapper = request.ownerDocument.createElement("div");
+      const script = request.ownerDocument.createElement("script");
+      script.textContent = "window.__markoraUnsafeDiagramRenderer = true";
+      const image = request.ownerDocument.createElement("img");
+      image.setAttribute("onerror", "window.__markoraUnsafeDiagramRenderer = true");
+      const frame = request.ownerDocument.createElement("iframe");
+      const sourceProbe = request.ownerDocument.createElement("div");
+      sourceProbe.setAttribute("src", "https://markora-diagrams.invalid/image.png");
+      const form = request.ownerDocument.createElement("form");
+      form.action = "https://markora-diagrams.invalid/submit";
+      form.append(request.ownerDocument.createElement("input"));
+      const custom = request.ownerDocument.createElement("markora-diagram-probe");
+      const svg = request.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("onload", "window.__markoraUnsafeDiagramRenderer = true");
+      const svgImage = request.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "image");
+      const use = request.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttribute("href", "#missing-local-reference");
+      const link = request.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "a");
+      link.setAttribute("href", "https://markora-diagrams.invalid/navigation");
+      const foreignObject = request.ownerDocument.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "foreignObject",
+      );
+      foreignObject.append(request.ownerDocument.createElement("button"));
+      const animate = request.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "animate");
+      animate.setAttribute("onbegin", "window.__markoraUnsafeDiagramRenderer = true");
+      const styled = request.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "rect");
+      styled.setAttribute("style", "fill:url(https://markora-diagrams.invalid/fill.svg#probe)");
+      svg.append(svgImage, use, link, foreignObject, animate, styled);
+      wrapper.append(script, image, frame, sourceProbe, form, custom, svg);
+      return wrapper;
+    }
+
+    if (mode === "unsafe-css-var") {
+      const svg = request.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "svg");
+      const rect = request.ownerDocument.createElementNS(svg.namespaceURI, "rect");
+      rect.setAttribute("style", "fill:var(--markora-diagram-network-probe)");
+      svg.append(rect);
+      return svg;
+    }
+
+    const output = createBrowserLabDiagramOutput(request, call.id);
+
+    if (mode === "connected") {
+      (output as SVGSVGElement).dataset.e2eDiagramRendererArtifact = mounted.id;
+      request.ownerDocument.body.append(output);
+      mounted.diagramRendererArtifacts.add(output);
+      request.signal.addEventListener("abort", () => {
+        output.remove();
+        mounted.diagramRendererArtifacts.delete(output);
+      }, { once: true });
+    }
+
+    return output;
+  };
+}
+
+function createBrowserLabDiagramRenderers(
+  mounted: MountedEditor,
+  modes: BrowserLabEditorSpec["diagramRendererModes"],
+) {
+  const renderers: Partial<Record<DiagramKind, DiagramRenderer>> = {};
+
+  for (const kind of BROWSER_LAB_DIAGRAM_KINDS) {
+    const renderer = createBrowserLabDiagramRenderer(mounted, modes?.[kind]);
+
+    if (renderer) {
+      renderers[kind] = renderer;
+    }
+  }
+
+  return renderers;
+}
+
+function runBrowserLabDiagramCommand(
+  mounted: MountedEditor,
+  request: BrowserLabDiagramCommandRequest,
+) {
+  const commands = requireDiagramsHandle(mounted).commands;
+
+  switch (request.type) {
+    case "convert": return commands.convert(request.target, request.kind);
+    case "convertCodeBlock": return commands.convertCodeBlock(request.kind);
+    case "insert": return commands.insert(request.options);
+    case "remove": return commands.remove(request.target);
+    case "restoreCodeBlock": return commands.restoreCodeBlock(request.target);
+    case "retryPreview": return commands.retryPreview(request.target);
+    case "togglePreview": return commands.togglePreview(request.target);
+    case "update": return commands.update(request.target, request.patch);
+  }
 }
 
 function createBrowserLabHtmlOutput(request: HtmlRenderRequest, callId: number) {
@@ -1320,7 +1592,13 @@ export function BrowserLabPage() {
     ) => {
       mounted.controlledEcho = spec.controlledEcho ?? false;
       const extensionMode = spec.extensionMode ?? mounted.extensionMode;
+      const allAdvanced = extensionMode === "all-advanced";
       mounted.extensionMode = extensionMode;
+      mounted.diagramEditRequest = null;
+      mounted.diagramRendererCalls.length = 0;
+      mounted.diagramRendererDeferred.clear();
+      clearDiagramRendererArtifacts(mounted);
+      delete mounted.section.dataset.pendingDiagramEdit;
       mounted.frontmatterEditRequest = null;
       delete mounted.section.dataset.pendingFrontmatterEdit;
       mounted.htmlEditRequest = null;
@@ -1333,12 +1611,25 @@ export function BrowserLabPage() {
       mounted.mathRendererDeferred.clear();
       clearMathRendererArtifacts(mounted);
       delete mounted.section.dataset.pendingMathEdit;
-      mounted.alertsExtension = extensionMode === "alerts"
+      mounted.alertsExtension = extensionMode === "alerts" || allAdvanced
         ? createAlertsExtension({
             messages: normalizeBrowserLabAlertsMessages(spec.alertsMessages),
           })
         : null;
-      mounted.frontmatterExtension = extensionMode === "frontmatter"
+      mounted.diagramExtension = extensionMode === "diagrams" || allAdvanced
+        ? createDiagramsExtension({
+            messages: normalizeBrowserLabDiagramMessages(spec.diagramMessages),
+            onEditSource(request) {
+              mounted.diagramEditRequest = request;
+              mounted.section.dataset.pendingDiagramEdit = "true";
+            },
+            renderers: createBrowserLabDiagramRenderers(
+              mounted,
+              spec.diagramRendererModes,
+            ),
+          })
+        : null;
+      mounted.frontmatterExtension = extensionMode === "frontmatter" || allAdvanced
         ? createFrontmatterExtension({
             messages: spec.frontmatterMessages,
             onEditSource(request) {
@@ -1347,7 +1638,7 @@ export function BrowserLabPage() {
             },
           })
         : null;
-      mounted.footnotesExtension = extensionMode === "footnotes"
+      mounted.footnotesExtension = extensionMode === "footnotes" || allAdvanced
         ? createFootnotesExtension({
             messages: spec.footnotesMessages
               ? Object.fromEntries(
@@ -1359,7 +1650,7 @@ export function BrowserLabPage() {
               : undefined,
           })
         : null;
-      mounted.htmlExtension = extensionMode === "html"
+      mounted.htmlExtension = extensionMode === "html" || allAdvanced
         ? createHtmlExtension({
             messages: normalizeBrowserLabHtmlMessages(spec.htmlMessages),
             onEditSource(request) {
@@ -1372,7 +1663,7 @@ export function BrowserLabPage() {
             ),
           })
         : null;
-      mounted.mathExtension = extensionMode === "math"
+      mounted.mathExtension = extensionMode === "math" || allAdvanced
         ? createMathExtension({
             messages: normalizeBrowserLabMathMessages(spec.mathMessages),
             onEditSource(request) {
@@ -1385,14 +1676,24 @@ export function BrowserLabPage() {
             ),
           })
         : null;
-      mounted.tocExtension = extensionMode === "toc"
+      mounted.tocExtension = extensionMode === "toc" || allAdvanced
         ? createTocExtension({
             messages: normalizeBrowserLabTocMessages(spec.tocMessages),
           })
         : null;
       const extensions = extensionMode === "public-example"
         ? publicExampleExtensions
-        : mounted.alertsExtension
+        : allAdvanced
+          ? [
+              mounted.frontmatterExtension!,
+              mounted.footnotesExtension!,
+              mounted.mathExtension!,
+              mounted.alertsExtension!,
+              mounted.tocExtension!,
+              mounted.htmlExtension!,
+              mounted.diagramExtension!,
+            ]
+          : mounted.alertsExtension
           ? [mounted.alertsExtension]
           : mounted.frontmatterExtension
             ? [mounted.frontmatterExtension]
@@ -1404,7 +1705,9 @@ export function BrowserLabPage() {
                   ? [mounted.mathExtension]
                   : mounted.tocExtension
                     ? [mounted.tocExtension]
-                    : undefined;
+                    : mounted.diagramExtension
+                      ? [mounted.diagramExtension]
+                      : undefined;
       const existingOverlays = new Set(
         mounted.portalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR),
       );
@@ -1480,6 +1783,7 @@ export function BrowserLabPage() {
 
         mounted.editor.destroy();
       } finally {
+        clearDiagramRendererArtifacts(mounted);
         clearHtmlRendererArtifacts(mounted);
         clearMathRendererArtifacts(mounted);
         for (const unsubscribe of mounted.eventUnsubscribes.values()) {
@@ -1524,6 +1828,112 @@ export function BrowserLabPage() {
       },
       alertsState(id, request) {
         return readBrowserLabAlertsState(requireEditor(editors, id), request);
+      },
+      diagramCommand(id, request) {
+        const mounted = requireEditor(editors, id);
+        const handled = runBrowserLabDiagramCommand(mounted, request);
+
+        if (handled) {
+          mounted.editor.flushChange();
+          mounted.output.textContent = mounted.editor.getMarkdown();
+        }
+
+        return handled;
+      },
+      diagramEditConvert(id, kind) {
+        const mounted = requireEditor(editors, id);
+        const request = mounted.diagramEditRequest;
+
+        if (!request || !request.convert(kind)) {
+          return false;
+        }
+
+        mounted.diagramEditRequest = null;
+        delete mounted.section.dataset.pendingDiagramEdit;
+        mounted.editor.flushChange();
+        mounted.output.textContent = mounted.editor.getMarkdown();
+        return true;
+      },
+      diagramEditRemove(id) {
+        const mounted = requireEditor(editors, id);
+        const request = mounted.diagramEditRequest;
+
+        if (!request || !request.remove()) {
+          return false;
+        }
+
+        mounted.diagramEditRequest = null;
+        delete mounted.section.dataset.pendingDiagramEdit;
+        mounted.editor.flushChange();
+        mounted.output.textContent = mounted.editor.getMarkdown();
+        return true;
+      },
+      diagramEditRestoreCodeBlock(id) {
+        const mounted = requireEditor(editors, id);
+        const request = mounted.diagramEditRequest;
+
+        if (!request || !request.restoreCodeBlock()) {
+          return false;
+        }
+
+        mounted.diagramEditRequest = null;
+        delete mounted.section.dataset.pendingDiagramEdit;
+        mounted.editor.flushChange();
+        mounted.output.textContent = mounted.editor.getMarkdown();
+        return true;
+      },
+      diagramEditUpdate(id, patch) {
+        const mounted = requireEditor(editors, id);
+        const request = mounted.diagramEditRequest;
+
+        if (!request || !request.update(patch)) {
+          return false;
+        }
+
+        mounted.diagramEditRequest = null;
+        delete mounted.section.dataset.pendingDiagramEdit;
+        mounted.editor.flushChange();
+        mounted.output.textContent = mounted.editor.getMarkdown();
+        return true;
+      },
+      diagramRendererCalls(id) {
+        return requireEditor(editors, id).diagramRendererCalls.map((call) => ({
+          ...call,
+        }));
+      },
+      diagramRendererSettle(id, settlement = {}) {
+        const mounted = requireEditor(editors, id);
+        const pendingCallIds = [...mounted.diagramRendererDeferred.keys()];
+        const callId = settlement.callId
+          ?? pendingCallIds[pendingCallIds.length - 1];
+
+        if (callId === undefined) {
+          return false;
+        }
+
+        const deferred = mounted.diagramRendererDeferred.get(callId);
+        const call = mounted.diagramRendererCalls.find(({ id: nextId }) => nextId === callId);
+
+        if (!deferred || !call || call.settled !== "pending") {
+          return false;
+        }
+
+        mounted.diagramRendererDeferred.delete(callId);
+
+        if (settlement.outcome === "reject") {
+          call.settled = "rejected";
+          deferred.reject(new Error(
+            `Browser lab deferred ${call.kind} diagram renderer rejected call ${callId}.`,
+          ));
+        } else {
+          call.settled = "resolved";
+          deferred.resolve(createBrowserLabDiagramOutput(deferred.request, callId));
+        }
+
+        return true;
+      },
+      diagramSnapshot(id) {
+        return requireDiagramsHandle(requireEditor(editors, id)).state.getSnapshot();
       },
       blur(id) {
         requireEditor(editors, id).editor.blur();
@@ -1628,6 +2038,11 @@ export function BrowserLabPage() {
           alertsExtension: null,
           changeCount: 0,
           controlledEcho: false,
+          diagramEditRequest: null,
+          diagramExtension: null,
+          diagramRendererArtifacts: new Set(),
+          diagramRendererCalls: [],
+          diagramRendererDeferred: new Map(),
           editor: null as unknown as MarkdownEditor,
           entry: spec.entry ?? "root",
           eventCounts: createEventCounts(),
@@ -1663,6 +2078,7 @@ export function BrowserLabPage() {
         try {
           mountEditorInHost(mounted, spec);
         } catch (error) {
+          clearDiagramRendererArtifacts(mounted);
           clearHtmlRendererArtifacts(mounted);
           activationObserver.disconnect();
           section.remove();
@@ -1710,6 +2126,7 @@ export function BrowserLabPage() {
         const mounted = requireEditor(editors, id);
         const wasDestroyed = mounted.editor.isDestroyed;
         mounted.editor.destroy();
+        clearDiagramRendererArtifacts(mounted);
         clearHtmlRendererArtifacts(mounted);
         clearMathRendererArtifacts(mounted);
 
@@ -2051,8 +2468,10 @@ export function BrowserLabPage() {
       },
       reset(id, markdown) {
         const mounted = requireEditor(editors, id);
+        mounted.diagramEditRequest = null;
         mounted.htmlEditRequest = null;
         mounted.opaqueEditRequest = null;
+        delete mounted.section.dataset.pendingDiagramEdit;
         delete mounted.section.dataset.pendingHtmlEdit;
         delete mounted.section.dataset.pendingOpaqueKind;
         mounted.editor.commands.resetMarkdown(markdown, { emitChange: true });
@@ -2071,8 +2490,10 @@ export function BrowserLabPage() {
       },
       reconcile(id, markdown, options) {
         const mounted = requireEditor(editors, id);
+        mounted.diagramEditRequest = null;
         mounted.htmlEditRequest = null;
         mounted.opaqueEditRequest = null;
+        delete mounted.section.dataset.pendingDiagramEdit;
         delete mounted.section.dataset.pendingHtmlEdit;
         delete mounted.section.dataset.pendingOpaqueKind;
         const changed = mounted.editor.commands.reconcileMarkdown(markdown, options);
@@ -2083,6 +2504,30 @@ export function BrowserLabPage() {
           changed,
           snapshot: readSnapshot(mounted),
         };
+      },
+      selectDiagram(id, target) {
+        const mounted = requireEditor(editors, id);
+        const snapshot = requireDiagramsHandle(mounted).state.getNode(target);
+
+        if (!snapshot) {
+          return false;
+        }
+
+        const view = mounted.editor.view;
+        const node = view.state.doc.nodeAt(snapshot.position);
+
+        if (!node || node.type.name !== "diagram" || view.composing) {
+          return false;
+        }
+
+        const selection = NodeSelection.create(view.state.doc, snapshot.position);
+
+        if (!selection.eq(view.state.selection)) {
+          view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
+        }
+
+        view.focus();
+        return true;
       },
       selectFootnote(id, request) {
         const mounted = requireEditor(editors, id);
@@ -2307,6 +2752,19 @@ export function BrowserLabPage() {
         const request = requireEditor(editors, id).frontmatterEditRequest;
         return request
           ? { diagnostics: request.diagnostics, source: request.source }
+          : null;
+      },
+      pendingDiagramEdit(id) {
+        const request = requireEditor(editors, id).diagramEditRequest;
+        return request
+          ? {
+              identity: request.identity,
+              info: request.info,
+              kind: request.kind,
+              position: request.position,
+              render: { ...request.render },
+              source: request.source,
+            }
           : null;
       },
       pendingHtmlEdit(id) {

@@ -1,6 +1,6 @@
 # Markdown dialect and fidelity contract
 
-Status: current `markora` `0.0.x` contract, updated through the `EE-021` sanitized-HTML package on 2026-07-19.
+Status: current `markora` `0.0.x` contract, updated through the `EE-021` diagram package on 2026-07-19.
 
 This contract applies to Markdown passed through `createEditor({ markdown })`, `editor.commands.reconcileMarkdown()`, or `editor.commands.resetMarkdown()` and returned by `editor.getMarkdown()` or `onChange`. Deprecated `setMarkdown()` uses the same parsing boundary as `resetMarkdown()`.
 
@@ -265,6 +265,46 @@ markup only. Import `markora-extension-html/styles.css` explicitly. Without the
 package, the root entry continues to use its exact opaque HTML atoms but exposes
 none of the package's typed state, identity, source-edit, or preview surface.
 
+`markora-extension-diagrams` works with both `markora` and `markora/minimal`
+and claims an existing fenced code block only when the first whitespace-delimited
+token in its normalized info string is exactly the case-sensitive `mermaid`,
+`geojson`, `topojson`, or `stl`. The complete normalized info string and code
+body remain model data. Uppercase, mixed-case, missing, and unknown first tokens
+remain ordinary code blocks; the package does not infer a diagram from its body.
+
+A diagram remains an editable code-like text block rather than renderer-owned
+content. Typed insert, update, remove, kind-conversion, ordinary-code conversion,
+preview-toggle, retry, and state APIs retain source selections and use stale-safe
+occurrence targets. Fence spelling is intentionally canonical: the serializer
+chooses backticks or tildes and a delimiter longer than every matching run in the
+body, so authored fence spelling can normalize but body text cannot terminate the
+output early. Removing the extension leaves these forms valid generic fenced code.
+
+Preview rendering is optional presentation supplied independently for each kind
+by trusted host code. The package bundles no Mermaid, mapping, 3D, worker, or
+remote renderer and grants no network or navigation capability. Each callback
+receives the normalized info string, body source, owner document, and a fresh
+abort signal. Markora accepts only detached owner-document DOM, rebuilds it
+through a bounded static HTML/SVG allowlist, and rejects active elements,
+scripts, forms, custom elements, event handlers, external references, unsafe
+URLs, indirect CSS `var()`/`env()`/`attr()` values, animation, and foreign SVG
+content. Renderer-specific and ancestor CSS is trusted host policy rather than
+an isolation boundary. Rendering is asynchronous,
+viewport-gated, concurrency-bounded, generation-safe, and cancelled on source
+changes, preview deactivation, removal, reset, reconciliation, and teardown.
+
+The permanent localized source shell remains the accessible, editable,
+persistent, and clipboard representation even when a preview is visible.
+Arrow and Shift+Arrow navigation into the block reveals that source before the
+caret or range enters it. Boundary direction follows the first or last
+plaintext line using Unicode bidi P3 semantics, defaults neutral lines to LTR,
+and preserves combining and ZWJ grapheme clusters across LTR, RTL, and mixed
+multiline editor scopes.
+Preview DOM is inert, hidden from assistive technology, and never enters model
+state, history, Markdown, or clipboard output. Import
+`markora-extension-diagrams/styles.css` explicitly; public custom properties use
+the `--mdw-diagram-*` prefix.
+
 ## Canonical output
 
 These transformations are intentional and happen on import/export even when the user makes no visual edit.
@@ -297,6 +337,7 @@ These transformations are intentional and happen on import/export even when the 
 | Marker-only alert, when `markora-extension-alerts` is installed | Canonical `> [!KIND]` with no terminal newline |
 | Non-paragraph first alert body block, when `markora-extension-alerts` is installed | One bare `>` separator line between the marker and body; nested table lines retain the quote prefix |
 | TOC marker, when `markora-extension-toc` is installed | Canonical standalone `[TOC]`; input case and accepted horizontal padding are discarded, and generated entries are never serialized |
+| Diagram fence, when `markora-extension-diagrams` is installed | Canonical safe backtick or tilde fence retaining the complete normalized info string and body; delimiter length always exceeds matching runs in the body |
 | Angle URL or email autolink | Inline link syntax |
 | Character entity such as `&copy;` | Decoded Unicode text |
 | Backslash escape | Re-emitted only where the serializer needs an escape |
@@ -340,6 +381,14 @@ text-backed source shell that reparses as the same package atom. It never
 contains host renderer DOM, preview/status UI, action controls, event listeners,
 or any sanitized visual output. Preview state therefore cannot change any
 clipboard representation.
+
+With `markora-extension-diagrams` installed, whole-node Markdown and plain-text
+copy contain only the canonical safe fence, complete info string, and body.
+Rich HTML contains the inert semantic source block that reparses as the same
+diagram node. Renderer DOM, preview/status UI, controls, callbacks, and generated
+preview descriptions never enter any clipboard representation; source
+accessibility metadata can remain on the inert rich source shell. A selection inside the
+editable body follows the ordinary nested-code source-selection behavior.
 
 A rectangular table-cell selection is exported as semantic table HTML, quoted TSV in `text/plain`, and a complete standalone pipe table in `text/markdown`. Tabs, line breaks, and double quotes inside TSV cells use CSV-style double-quote escaping. Because a standalone pipe table requires a header, the first row of a body-only selection becomes the clipboard Markdown header; this does not change the source table. Cut clears the selected cell contents without deleting rows or columns. When pasting a table or TSV matrix into a cell rectangle, a larger matrix is clipped and a smaller matrix is repeated to fill that rectangle. TSV parsing is limited to 1 MiB and 100 rows by 100 columns. Merged or over-limit table transfers are rejected atomically and emit the recoverable `"table-operation-rejected"` error event.
 
@@ -395,7 +444,7 @@ This table distinguishes the narrow shapes protected as opaque source from relat
 | Raw HTML and comments | Exact optional syntax in the root default runtime when `markora-extension-html` is installed; otherwise opaque for CommonMark-recognized block and inline shapes | The package owns exact source atoms, typed editing, and optional sanitized block previews. Without it, root stores and displays recognized HTML as inert opaque source. Minimal is outside the package contract, and syntax outside the tokenizer's recognized shapes remains unsupported. |
 | Directives and container syntax | Opaque for the balanced container, leaf, and inline shapes above; otherwise unsupported — unreported | Recognized shapes are preserved. Unbalanced or different directive dialects can still be treated as ordinary Markdown text. |
 | TOC markers such as `[TOC]` | Semantic optional syntax when `markora-extension-toc` is installed; otherwise unsupported — unreported | The package retains top-level markers and derives a live position-based heading outline in root and minimal. Without it, the marker is literal text and normally backslash-escaped on output. |
-| Mermaid and other diagrams | Diagram semantics unsupported; fenced code normalized | A fenced `mermaid` block survives only as a generic code block. Markora does not render or validate the diagram. |
+| Mermaid and GitHub diagrams | Semantic optional syntax when `markora-extension-diagrams` is installed; otherwise generic fenced code | The package retains exact supported kinds, the complete normalized info string, and editable body in root and minimal, with optional host-rendered bounded previews. Without it, the same source remains a generic code block with no diagram state or rendering. |
 | Other Markdown extensions | Unsupported — unreported | No preservation guarantee unless the construct is fully representable as a supported generic code block or plain text. |
 
 Opaque raw HTML is not executed by the editor because its source is rendered only as text. The serialized Markdown still contains the original HTML or script source. Downstream renderers must apply their own HTML and URL sanitization; editor display safety is not a publishing security boundary.
@@ -420,7 +469,7 @@ These limitations are outside the semantic round-trip promise. They are candidat
 2. Treat `getMarkdown()` as normalized output with exact source islands, not the original document string.
 3. Do not use raw string equality as the only dirty-state check across initial import.
 4. If syntax outside the documented supported and opaque shapes is possible, retain the original separately and provide a recovery or broader source-editing path.
-5. Use `onEditOpaqueMarkdown` when users must edit protected source, and handle a stale `update()` result explicitly. When `markora-extension-html` is installed, use its `onEditSource` callback for package-owned HTML atoms instead.
+5. Use `onEditOpaqueMarkdown` when users must edit protected source, and handle a stale `update()` result explicitly. When `markora-extension-html` is installed, use its `onEditSource` callback for package-owned HTML atoms instead. Diagram bodies remain directly editable; an optional `markora-extension-diagrams` host edit callback is a stale-safe product UI handoff, not the only editing path.
 6. Configure `resources` before import when stored URLs need a non-default scheme or data policy; use runtime resolution instead of rewriting stable Markdown for signed/display URLs.
 7. If `resources.assets` is enabled, persist upload results in the host service and provide accessible progress, failure, cancel, and retry UI around the headless event/API surface.
 8. Call `state.tableIssues()` before persistence when rich HTML, extensions, or advanced ProseMirror transactions can introduce non-GFM table shapes, and retain another representation when any reported construct must survive.

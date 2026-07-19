@@ -148,11 +148,63 @@ A retained 512-atom source-only workload covers exact parse/serialization, ident
 
 The HTML warning ceilings are 270,000 B raw / 85,500 B gzip JavaScript, 5,000 B / 1,300 B gzip CSS, and 105 modules; failure ceilings are 282,000 B / 89,600 B JavaScript, 5,225 B / 1,350 B CSS, and 110 modules. The measured graph is below every warning ceiling, zero lazy chunks is mandatory, and the failure leaves retain approximately 10% headroom.
 
+## Approved EE-021 diagrams and all-seven integration
+
+`markora-extension-diagrams` is independently packed and measured from its
+installed tarball. Its feature graph is one 140,346 B raw / 36,197 B gzip
+JavaScript chunk with no lazy chunks, one 3,698 B / 1,004 B gzip CSS file, and
+99 static modules. The graph contains no renderer engine or sibling extension
+and remains absent from the root and minimal baselines. Raw and gzip JavaScript
+cross their deliberately tight 135,000 B / 35,000 B warning ceilings but remain
+below the reviewed 145,000 B / 37,500 B failure ceilings; all CSS, lazy, and
+module warning leaves pass.
+
+The final installed all-seven root consumer measures 1,176,840 B / 315,639 B
+gzip initial JavaScript, 1,088,605 B / 340,993 B gzip lazy JavaScript,
+2,265,445 B / 656,632 B gzip total JavaScript, 54,546 B / 7,612 B gzip CSS,
+and 202 static modules. Every all-seven warning ceiling passes. Executable
+isolation checks require one deterministic definition from each optional
+package, all seven explicit styles, no renderer/YAML engine, no workspace-source
+fallback, and no optional package in either baseline graph.
+
+The `packed-all-seven-v2` runtime harness builds exact 102,400, 512,000, and
+1,048,576-byte documents containing every feature and all four diagram kinds.
+It runs one warmup plus five fresh-page timing samples per size, then three
+fresh-Chromium-process memory lifecycles per size. The values below are the
+maximum of the five timing samples from the approved 2026-07-19 local run.
+
+| Exact bytes | Mount | Ordinary edit | Structural footnote | TOC heading | Diagram removal | Destroy |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 102,400 | 107.7 ms | 5.2 ms | 7.1 ms | 2.1 ms | 6.7 ms | 3.8 ms |
+| 512,000 | 756.0 ms | 27.3 ms | 50.5 ms | 23.3 ms | 41.9 ms | 15.8 ms |
+| 1,048,576 | 1,312.4 ms | 46.6 ms | 80.4 ms | 43.1 ms | 71.1 ms | 20.8 ms |
+
+Mounted tracked memory is the median of three samples; retained tracked memory,
+mounted nodes, and mounted listeners are maxima. All nine lifecycles retain
+zero nodes, listeners, and documents.
+
+| Exact bytes | Mounted tracked memory | Retained tracked memory | Mounted nodes | Mounted listeners | Retained nodes/listeners/documents |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 102,400 | 11.09 MB | 192,073 B | 9,204 | 563 | 0 / 0 / 0 |
+| 512,000 | 52.79 MB | 203,889 B | 46,500 | 2,705 | 0 / 0 / 0 |
+| 1,048,576 | 107.01 MB | 242,117 B | 95,044 | 5,493 | 0 / 0 / 0 |
+
+The approved run keeps its advisory timing and variability warnings visible;
+every hard runtime, memory, cleanup, and functional gate passes.
+
+Functional evidence is a hard gate rather than a timing budget: ordinary edits
+must retain footnote and TOC identities with zero renderer calls; structural
+footnote and heading edits must update their indexes; the specifically last
+offscreen diagram must activate only after scrolling; eight pressured renders
+must observe a four-job maximum, seven successes, and one bounded-output error;
+and removal, reset, failed creation, and destroy must leave no observer, signal,
+promise, callback, preview, error, or late renderer work.
+
 ## Warning and failure policy
 
 Each enforced metric has an explicit warning ceiling and failure ceiling. A value above the warning ceiling emits a visible CI annotation without failing the job. A value above the failure ceiling emits an error and makes `pnpm perf:ci` fail. Missing required samples, non-finite results, fixture drift, packed-consumer provenance failure, or an incompatible report schema are measurement failures rather than performance passes. Both drivers retain phase-attributed partial evidence for operational failures and replace workspace, home, and temporary paths with stable tokens before CI uploads it.
 
-Budgets are fixed reviewed values in `performance/budgets.json`; the current run never rewrites or rebases them automatically. CI requires exactly one warmup, five timing pairs, three memory samples, every required document size, the pinned viewport/context/hot-path contract, and the declared isolation topology. Timing variability warns above a coefficient of variation of 0.25 and invalidates the run above 0.60. Historical latency ceilings remain unchanged. V2 additionally gates maximum default synchronous processing, default presentation, and final snapshot latency at every size, plus maximum default/immediate ratio for 500 KiB and 1 MiB. V3 rebases the initial/lazy bundle partition, tightens mounted memory/node/listener ceilings, and gates active-editor peak/final counts at eight. `EE-018` revises only its measured root byte failure ceilings; `EE-019` revises only its crossed root/minimal byte and module-count failure ceilings. `EE-021` adds isolated sanitized-HTML feature-graph leaves without changing any root or minimal ceiling. The older warnings and every passing lazy/minimal-CSS ceiling continue to expose the cost. Missing callbacks, invalid cadence, non-canonical output, final-state mismatch, invalid code-block state partitions, activation failures, or late delivery are hard measurement failures rather than budget leaves.
+Budgets are fixed reviewed values in `performance/budgets.json`; the current run never rewrites or rebases them automatically. CI requires exactly one warmup, five timing pairs, three memory samples, every required document size, the pinned viewport/context/hot-path contract, and the declared isolation topology. Timing variability warns above a coefficient of variation of 0.25 and invalidates the run above 0.60. Historical latency ceilings remain unchanged. V2 additionally gates maximum default synchronous processing, default presentation, and final snapshot latency at every size, plus maximum default/immediate ratio for 500 KiB and 1 MiB. V3 rebases the initial/lazy bundle partition, tightens mounted memory/node/listener ceilings, and gates active-editor peak/final counts at eight. `EE-018` revises only its measured root byte failure ceilings; `EE-019` revises only its crossed root/minimal byte and module-count failure ceilings. `EE-021` adds isolated sanitized-HTML, diagram, and all-seven feature-graph leaves plus the packed all-seven runtime contract without changing any root or minimal ceiling. The older warnings and every passing lazy/minimal-CSS ceiling continue to expose the cost. Missing callbacks, invalid cadence, non-canonical output, final-state mismatch, invalid code-block state partitions, activation failures, or late delivery are hard measurement failures rather than budget leaves.
 
 The approved record is:
 
@@ -173,6 +225,8 @@ The approved record is:
 | EE-018 compatibility candidate | 886,734 B / 243,163 B gzip initial JS; 1,965,736 B / 581,998 B gzip total JS; 18,479 B / 3,474 B gzip CSS; 151 static modules |
 | EE-018 minimal candidate | 700,726 B / 197,151 B gzip JS; 4,728 B / 1,218 B gzip CSS; no lazy chunks; 129 static modules; no table-editing runtime |
 | EE-021 sanitized-HTML feature graph | 258,459 B / 81,858 B gzip JS; no lazy chunks; 4,863 B / 1,227 B gzip CSS; 99 static modules; root-only, with no renderer engine or sibling extension |
+| EE-021 diagram feature graph | 140,346 B / 36,197 B gzip JS; no lazy chunks; 3,698 B / 1,004 B gzip CSS; 99 static modules; no renderer engine or sibling extension |
+| EE-021 all-seven consumer | 1,176,840 B / 315,639 B gzip initial JS; 1,088,605 B / 340,993 B gzip lazy JS; 2,265,445 B / 656,632 B gzip total JS; 54,546 B / 7,612 B gzip CSS; 202 modules |
 | Current compatibility failure ceilings | 945,000 B / 257,000 B gzip initial JS; 1,120,000 B / 355,000 B gzip lazy JS; 2,040,000 B / 600,000 B gzip total JS; 37,000 B / 5,600 B gzip CSS; 158 static modules |
 | EE-015 code-block pool | At most eight settled active editors; every shell in exactly one declared state; no settled loading or error shells |
 
@@ -197,8 +251,16 @@ Run the same CI entry point that evaluates warning and failure budgets:
 pnpm perf:ci
 ```
 
-Both commands write `performance-results/benchmark.json`. The directory is intentionally ignored because run evidence is environment-specific; CI uploads the JSON artifact. Reviewed historical and candidate records plus the active budgets are checked in separately through their focused iterations.
+`pnpm perf:benchmark` writes `performance-results/benchmark.json`. The CI entry
+also writes the packed `bundle.json` report and the all-seven
+`advanced-syntax.json` report. The directory is intentionally ignored because
+run evidence is environment-specific; CI uploads the JSON artifacts. Reviewed
+historical and candidate records plus the active budgets are checked in
+separately through their focused iterations.
 
-These package commands are the stable entry points around `scripts/performance-benchmark.mjs`; callers should not depend on its internal flags. The local entry selects the full baseline defaults, while the CI entry selects the CI profile and enables budget checking.
+These package commands are the stable entry points around the legacy and
+all-seven harnesses; callers should not depend on their internal flags. The
+local entry selects the full baseline defaults, while the CI entry packs the
+candidate, runs both runtime contracts, and enables every budget check.
 
 When investigating a regression, compare the raw series, variance, environment, fixture version, and tarball hashes before attributing a change to editor code. Reproduce on the same environment and profile before proposing a budget change.

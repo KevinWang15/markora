@@ -11,6 +11,7 @@
   "dependencies": {
     "markora": "workspace:*",
     "markora-extension-alerts": "workspace:*",
+    "markora-extension-diagrams": "workspace:*",
     "markora-extension-frontmatter": "workspace:*",
     "markora-extension-footnotes": "workspace:*",
     "markora-extension-html": "workspace:*",

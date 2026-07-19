@@ -115,6 +115,75 @@ type BrowserLabTocSnapshot = {
   tocs: ReadonlyArray<{ position: number }>;
 };
 
+type BrowserLabDiagramKind = "geojson" | "mermaid" | "stl" | "topojson";
+
+type BrowserLabDiagramNodeTarget = {
+  identity: number;
+  info: string;
+  kind: BrowserLabDiagramKind;
+  position: number;
+  source: string;
+};
+
+type BrowserLabDiagramRenderErrorCode =
+  | "connected-output"
+  | "invalid-output"
+  | "node-limit"
+  | "output-byte-limit"
+  | "renderer-failed"
+  | "renderer-missing"
+  | "unsafe-output"
+  | "wrong-document";
+
+type BrowserLabDiagramRenderSnapshot = {
+  enabled: boolean;
+  errorCode: BrowserLabDiagramRenderErrorCode | null;
+  status:
+    | "error"
+    | "offscreen"
+    | "queued"
+    | "rendered"
+    | "rendering"
+    | "source"
+    | "source-too-large";
+};
+
+type BrowserLabDiagramsSnapshot = {
+  diagnostics: ReadonlyArray<{
+    code: "source-too-large";
+    info: string;
+    kind: BrowserLabDiagramKind;
+    message: string;
+    position: number;
+  }>;
+  nodes: ReadonlyArray<BrowserLabDiagramNodeTarget & {
+    render: BrowserLabDiagramRenderSnapshot;
+  }>;
+};
+
+type BrowserLabDiagramCommandRequest =
+  | { options: { info: string; source: string }; type: "insert" }
+  | { kind: BrowserLabDiagramKind; target: BrowserLabDiagramNodeTarget; type: "convert" }
+  | { kind: BrowserLabDiagramKind; type: "convertCodeBlock" }
+  | {
+      patch: { info?: string; source?: string };
+      target: BrowserLabDiagramNodeTarget;
+      type: "update";
+    }
+  | {
+      target: BrowserLabDiagramNodeTarget;
+      type: "remove" | "restoreCodeBlock" | "retryPreview" | "togglePreview";
+    };
+
+type BrowserLabDiagramRendererCall = {
+  aborted: boolean;
+  id: number;
+  info: string;
+  kind: BrowserLabDiagramKind;
+  settled: "pending" | "rejected" | "resolved" | "threw";
+  source: string;
+};
+
 type BrowserLabUpdateOptions = {
   ariaLabel?: string | null;
   ariaLabelledBy?: string | null;
@@ -140,9 +209,42 @@ type BrowserLabTestSpec = {
   autofocus?: boolean;
   controlledEcho?: boolean;
   direction?: "auto" | "ltr" | "rtl";
+  diagramMessages?: Partial<Record<
+    | "editSource"
+    | "invalidDocumentDiagnostic"
+    | "invalidInfoDiagnostic"
+    | "invalidRendererOutputDiagnostic"
+    | "kindLabel"
+    | "previewFailed"
+    | "previewLabel"
+    | "previewLoading"
+    | "rendererFailedDiagnostic"
+    | "rendererUnavailable"
+    | "renderOutputLimitDiagnostic"
+    | "retryPreview"
+    | "showPreview"
+    | "showSource"
+    | "sourceLabel"
+    | "sourceTooLargeDiagnostic"
+    | "unsafeRendererOutputDiagnostic",
+    string
+  >>;
+  diagramRendererModes?: Partial<Record<
+    BrowserLabDiagramKind,
+    | "connected"
+    | "deferred"
+    | "missing"
+    | "reject"
+    | "string"
+    | "sync"
+    | "throw"
+    | "unsafe"
+    | "unsafe-css-var"
+    | "wrong-document"
+  >>;
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "html" | "math" | "public-example" | "toc";
+  extensionMode?: "alerts" | "all-advanced" | "diagrams" | "footnotes" | "frontmatter" | "html" | "math" | "public-example" | "toc";
   footnotesMessages?: Partial<Record<
     | "backReferenceLabel"
     | "backReferenceText"
@@ -568,6 +670,17 @@ interface Window {
       plain: string;
       types: string[];
     };
+    diagramCommand(id: string, request: BrowserLabDiagramCommandRequest): boolean;
+    diagramEditConvert(id: string, kind: BrowserLabDiagramKind): boolean;
+    diagramEditRemove(id: string): boolean;
+    diagramEditRestoreCodeBlock(id: string): boolean;
+    diagramEditUpdate(id: string, patch: { info?: string; source?: string }): boolean;
+    diagramRendererCalls(id: string): ReadonlyArray<BrowserLabDiagramRendererCall>;
+    diagramRendererSettle(
+      id: string,
+      settlement?: { callId?: number; outcome?: "reject" | "resolve" },
+    ): boolean;
+    diagramSnapshot(id: string): BrowserLabDiagramsSnapshot;
     destroy(id: string): boolean;
     destroyEditor(id: string): boolean;
     destroyAll(): void;
@@ -619,6 +732,9 @@ interface Window {
     openUi(id: string, kind: "code-language" | "image" | "link" | "table" | "table-create"): boolean;
     pendingOpaqueEdit(id: string): { kind: string; source: string } | null;
     pendingFrontmatterEdit(id: string): Pick<BrowserLabFrontmatterSnapshot, "diagnostics" | "source"> | null;
+    pendingDiagramEdit(id: string): (BrowserLabDiagramNodeTarget & {
+      render: BrowserLabDiagramRenderSnapshot;
+    }) | null;
     pendingHtmlEdit(id: string): (BrowserLabHtmlNodeTarget & {
       render: BrowserLabHtmlRenderSnapshot;
     }) | null;
@@ -641,6 +757,7 @@ interface Window {
     resourceLog(id: string): BrowserLabResourceLog;
     reset(id: string, markdown: string): string;
     selectFootnote(id: string, request: BrowserLabFootnoteSelectionRequest): boolean;
+    selectDiagram(id: string, target: BrowserLabDiagramNodeTarget): boolean;
     selectHtml(id: string, target: BrowserLabHtmlNodeTarget): boolean;
     selectMath(id: string, target: BrowserLabMathNodeTarget): boolean;
     selectToc(id: string, occurrence?: number): boolean;

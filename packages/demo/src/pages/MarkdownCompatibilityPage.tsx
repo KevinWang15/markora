@@ -17,12 +17,12 @@ const opaqueSyntax = [
   "Balanced directive containers, leaves, and inline directives",
 ] as const;
 
-const unsupportedSyntax = [
-  "Footnotes and inline math",
-  "GitHub alerts and callouts",
-  "Generated TOC markers",
-  "Diagram semantics or previews",
-  "Other unrecognized Markdown extensions",
+const optionalSyntax = [
+  "YAML front matter",
+  "Footnotes and inline/block math",
+  "GitHub alerts and generated TOCs",
+  "Exact raw HTML with bounded host previews",
+  "Mermaid, GeoJSON, TopoJSON, and STL diagram fences",
 ] as const;
 
 const normalizationExamples = [
@@ -46,7 +46,7 @@ export function MarkdownCompatibilityPage() {
         </p>
         <p>
           Conservatively recognized front matter, display math, HTML, comments, and directives are retained
-          {" "}as inert exact-source atoms. Other extensions remain unsupported and may be reinterpreted without an error.
+          {" "}as inert exact-source atoms. Optional extension definitions add documented semantic syntax without increasing the base bundle.
         </p>
         <a
           className="button button-secondary"
@@ -77,14 +77,16 @@ export function MarkdownCompatibilityPage() {
           </p>
         </article>
         <article className="doc-card">
-          <span className="card-kicker">No preservation guarantee</span>
-          <h3>Route these constructs elsewhere</h3>
+          <span className="card-kicker">Optional packages</span>
+          <h3>Install semantics deliberately</h3>
           <ul className="check-list compact">
-            {unsupportedSyntax.map((syntax) => <li key={syntax}>{syntax}</li>)}
+            {optionalSyntax.map((syntax) => <li key={syntax}>{syntax}</li>)}
           </ul>
           <p>
-            A fenced <code>mermaid</code> block remains generic code; Markora does not interpret or execute it.
+            Without <code>markora-extension-diagrams</code>, a fenced <code>mermaid</code> block remains generic code.
+            The package adds source semantics and bounded host-rendered previews; it bundles no rendering engine.
           </p>
+          <p>Other unrecognized extensions still have no preservation guarantee.</p>
         </article>
       </section>
 

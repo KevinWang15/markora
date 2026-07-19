@@ -1,0 +1,172 @@
+.mdw-host .mdw-diagram {
+  --mdw-diagram-border: color-mix(in srgb, currentColor 18%, transparent);
+  --mdw-diagram-muted: color-mix(in srgb, currentColor 68%, transparent);
+  --mdw-diagram-surface: color-mix(in srgb, currentColor 4%, transparent);
+  position: relative;
+  margin-block: var(--mdw-diagram-margin-block, 1em);
+  border: 1px solid var(--mdw-diagram-border);
+  border-radius: var(--mdw-diagram-radius, 0.65rem);
+  background: var(--mdw-diagram-background, var(--mdw-diagram-surface));
+  color: inherit;
+  overflow: clip;
+}
+
+.mdw-host .mdw-diagram__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-block-size: 2rem;
+  padding-block: 0.35rem;
+  padding-inline: 0.65rem;
+  border-block-end: 1px solid var(--mdw-diagram-border);
+  color: var(--mdw-diagram-header-color, var(--mdw-diagram-muted));
+  font-size: 0.82em;
+}
+
+.mdw-host .mdw-diagram__kind {
+  color: var(--mdw-diagram-kind-color, currentColor);
+  font-weight: 600;
+}
+
+.mdw-host .mdw-diagram__info {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mdw-host .mdw-diagram__actions {
+  display: inline-flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+}
+
+.mdw-host .mdw-diagram__action {
+  max-inline-size: 100%;
+  min-block-size: 1.75rem;
+  padding-block: 0.2rem;
+  padding-inline: 0.5rem;
+  border: 1px solid var(--mdw-diagram-border);
+  border-radius: 0.35rem;
+  background: var(--mdw-diagram-action-background, transparent);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.mdw-host .mdw-diagram__action:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.mdw-host .mdw-diagram__action:focus-visible {
+  outline: 2px solid var(--mdw-focus-ring, Highlight);
+  outline-offset: 2px;
+}
+
+.mdw-host .mdw-diagram__source-shell {
+  box-sizing: border-box;
+  max-inline-size: 100%;
+  margin: 0;
+  padding-block: var(--mdw-diagram-source-padding-block, 0.85rem);
+  padding-inline: var(--mdw-diagram-source-padding-inline, 1rem);
+  overflow: auto;
+  background: var(--mdw-diagram-source-background, transparent);
+  color: inherit;
+  white-space: pre;
+}
+
+.mdw-host .mdw-diagram__source {
+  display: block;
+  min-block-size: 1lh;
+  outline: none;
+  font: var(--mdw-diagram-source-font, inherit);
+  tab-size: var(--mdw-diagram-tab-size, 2);
+  unicode-bidi: plaintext;
+}
+
+.mdw-host .mdw-diagram__source-shell--visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.mdw-host .mdw-diagram__preview {
+  box-sizing: border-box;
+  max-inline-size: 100%;
+  padding-block: var(--mdw-diagram-preview-padding-block, 1rem);
+  padding-inline: var(--mdw-diagram-preview-padding-inline, 1rem);
+  overflow: auto;
+  text-align: center;
+}
+
+.mdw-host .mdw-diagram__preview[hidden],
+.mdw-host .mdw-diagram__status[hidden],
+.mdw-host .mdw-diagram__action[hidden] {
+  display: none;
+}
+
+.mdw-host .mdw-diagram__preview svg {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+  margin-inline: auto;
+}
+
+.mdw-host .mdw-diagram--selected {
+  outline: 2px solid var(--mdw-focus-ring, Highlight);
+  outline-offset: 2px;
+}
+
+.mdw-host .mdw-diagram__status {
+  margin: 0;
+  padding-block: 0.5rem;
+  padding-inline: 0.75rem;
+  border-block-start: 1px solid var(--mdw-diagram-border);
+  color: var(--mdw-diagram-status-color, var(--mdw-diagram-muted));
+  font-size: 0.82em;
+}
+
+.mdw-host .mdw-diagram__visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (forced-colors: active) {
+  .mdw-host .mdw-diagram,
+  .mdw-host .mdw-diagram__header,
+  .mdw-host .mdw-diagram__status,
+  .mdw-host .mdw-diagram__action {
+    border-color: CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mdw-host .mdw-diagram,
+  .mdw-host .mdw-diagram * {
+    scroll-behavior: auto;
+    transition: none !important;
+    animation: none !important;
+  }
+}

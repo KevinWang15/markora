@@ -56,6 +56,15 @@ const extensionBundleSpecs = Object.freeze([
   }),
   Object.freeze({
     cssSelectors: Object.freeze([
+      ".mdw-diagram",
+      ".mdw-diagram__preview",
+    ]),
+    graphName: "diagrams",
+    label: "Diagrams",
+    packageName: "markora-extension-diagrams",
+  }),
+  Object.freeze({
+    cssSelectors: Object.freeze([
       ".mdw-footnote-reference",
       ".mdw-footnote-definition",
     ]),
@@ -95,6 +104,19 @@ const bundleGraphNames = Object.freeze([
   "root",
   "minimal",
   ...extensionBundleSpecs.map(({ graphName }) => graphName),
+  "allSeven",
+]);
+const forbiddenRendererEngineFragments = Object.freeze([
+  "/node_modules/@mermaid-js/",
+  "/node_modules/@viz-js/",
+  "/node_modules/dompurify/",
+  "/node_modules/katex/",
+  "/node_modules/leaflet/",
+  "/node_modules/mapbox-gl/",
+  "/node_modules/mathjax",
+  "/node_modules/mermaid/",
+  "/node_modules/three/",
+  "/node_modules/topojson-client/",
 ]);
 
 function readValueArgument(args, index, name) {
@@ -792,11 +814,9 @@ function assertExtensionBundleIsolation(report, spec) {
     "/node_modules/markora-ui/",
     "/node_modules/@codemirror/",
     "/node_modules/@lezer/",
-    "/node_modules/katex/",
-    "/node_modules/mathjax",
-    "/node_modules/mermaid/",
     "/node_modules/js-yaml/",
     "/node_modules/yaml/",
+    ...forbiddenRendererEngineFragments,
   ];
   const moduleIds = [...report.staticModuleIds, ...report.emittedModuleIds];
   const leaks = forbiddenFragments.flatMap((fragment) => moduleIds
@@ -807,6 +827,19 @@ function assertExtensionBundleIsolation(report, spec) {
     throw new Error(`${spec.label} feature bundle reached forbidden modules:\n${leaks
       .map(({ fragment, moduleId }) => `- ${fragment}: ${moduleId}`)
       .join("\n")}`);
+  }
+
+  const workspacePackagePrefixes = [
+    resolve(rootDir, "packages"),
+    realpathSync(resolve(rootDir, "packages")),
+  ].map((path) => `${normalizeModuleId(path)}/`);
+  const workspaceSourceLeaks = moduleIds.filter((moduleId) => (
+    workspacePackagePrefixes.some((prefix) => normalizeModuleId(moduleId).startsWith(prefix))
+  ));
+  if (workspaceSourceLeaks.length > 0) {
+    throw new Error(
+      `${spec.label} feature bundle reached workspace package source:\n${workspaceSourceLeaks.join("\n")}`,
+    );
   }
 
   const siblingExtensions = moduleIds.filter((moduleId) => (
@@ -828,6 +861,79 @@ function assertExtensionBundleIsolation(report, spec) {
     "/node_modules/markora/dist/extension-api.js",
   ))) {
     throw new Error(`${spec.label} feature bundle omitted the packed extension API entry.`);
+  }
+}
+
+function assertAllSevenBundle(report, measurement) {
+  const moduleIds = [...report.staticModuleIds, ...report.emittedModuleIds];
+  const forbiddenFragments = [
+    "/node_modules/markora/dist/minimal.js",
+    "/node_modules/markora-ui/",
+    "/node_modules/js-yaml/",
+    "/node_modules/yaml/",
+    ...forbiddenRendererEngineFragments,
+  ];
+  const leaks = forbiddenFragments.flatMap((fragment) => moduleIds
+    .filter((moduleId) => moduleIdIncludes(moduleId, fragment))
+    .map((moduleId) => ({ fragment, moduleId })));
+
+  if (leaks.length > 0) {
+    throw new Error(`All-seven feature bundle reached forbidden modules:\n${leaks
+      .map(({ fragment, moduleId }) => `- ${fragment}: ${moduleId}`)
+      .join("\n")}`);
+  }
+
+  const workspacePackagePrefixes = [
+    resolve(rootDir, "packages"),
+    realpathSync(resolve(rootDir, "packages")),
+  ].map((path) => `${normalizeModuleId(path)}/`);
+  const workspaceSourceLeaks = moduleIds.filter((moduleId) => (
+    workspacePackagePrefixes.some((prefix) => normalizeModuleId(moduleId).startsWith(prefix))
+  ));
+  if (workspaceSourceLeaks.length > 0) {
+    throw new Error(
+      `All-seven feature bundle reached workspace package source:\n${workspaceSourceLeaks.join("\n")}`,
+    );
+  }
+
+  if (
+    measurement.css.fileCount !== 1
+    || measurement.initialJs.chunkCount < 1
+    || measurement.totalJs.chunkCount < measurement.initialJs.chunkCount
+  ) {
+    throw new Error(
+      "The all-seven root consumer must emit one production stylesheet and a valid JavaScript graph.",
+    );
+  }
+
+  assertPackedModule(
+    report,
+    "/node_modules/markora/dist/index.js",
+    "Packed root entry in the all-seven consumer",
+  );
+  assertPackedModule(
+    report,
+    "/node_modules/markora/dist/styles.css",
+    "Packed root stylesheet in the all-seven consumer",
+  );
+  for (const spec of extensionBundleSpecs) {
+    assertPackedModule(
+      report,
+      `/node_modules/${spec.packageName}/dist/index.js`,
+      `Packed ${spec.label.toLowerCase()} entry in the all-seven root consumer`,
+    );
+    assertPackedModule(
+      report,
+      `/node_modules/${spec.packageName}/dist/styles.css`,
+      `Packed ${spec.label.toLowerCase()} stylesheet in the all-seven root consumer`,
+    );
+    for (const selector of spec.cssSelectors) {
+      if (!report.cssSource.includes(selector)) {
+        throw new Error(
+          `The all-seven root stylesheet omitted public selector ${selector}.`,
+        );
+      }
+    }
   }
 }
 
@@ -853,6 +959,7 @@ function printBundleMeasurements(measurements) {
   for (const spec of extensionBundleSpecs) {
     printBundleMeasurement(spec.packageName, measurements[spec.graphName]);
   }
+  printBundleMeasurement("root + all seven advanced-syntax packages", measurements.allSeven);
 }
 
 const bundleBudgetMetrics = Object.freeze([
@@ -1078,6 +1185,8 @@ function writeMeasurementReport({
       optionalExtensionsAbsentFromBaseline: true,
       frontmatterHasNoLazyChunks: measurements.frontmatter.lazyJs.chunkCount === 0,
       frontmatterHasNoRendererEngine: true,
+      diagramsHasNoLazyChunks: measurements.diagrams.lazyJs.chunkCount === 0,
+      diagramsHasNoRendererEngine: true,
       footnotesHasNoLazyChunks: measurements.footnotes.lazyJs.chunkCount === 0,
       footnotesHasNoRendererEngine: true,
       htmlHasNoLazyChunks: measurements.html.lazyJs.chunkCount === 0,
@@ -1088,6 +1197,9 @@ function writeMeasurementReport({
       alertsHasNoRendererEngine: true,
       tocHasNoLazyChunks: measurements.toc.lazyJs.chunkCount === 0,
       tocHasNoRendererEngine: true,
+      allSevenUsesRootEntry: true,
+      allSevenContainsEveryOptionalPackage: true,
+      allSevenHasNoRendererEngine: true,
       packedEntriesAndStylesResolved: true,
       packedPackageVersionsMatched: true,
       rootAndMinimalGraphsIndependent: true,
@@ -1139,6 +1251,12 @@ const footnotesPackage = packPackage(join(
   "packages/extension-footnotes",
 ));
 rememberPackage(footnotesPackage);
+currentPhase = "diagrams-package";
+const diagramsPackage = packPackage(join(
+  rootDir,
+  "packages/extension-diagrams",
+));
+rememberPackage(diagramsPackage);
 currentPhase = "html-package";
 const htmlPackage = packPackage(join(
   rootDir,
@@ -1170,6 +1288,7 @@ unpackPackage(corePackage.name, corePackage.tarballPath);
 unpackPackage(uiPackage.name, uiPackage.tarballPath);
 unpackPackage(frontmatterPackage.name, frontmatterPackage.tarballPath);
 unpackPackage(footnotesPackage.name, footnotesPackage.tarballPath);
+unpackPackage(diagramsPackage.name, diagramsPackage.tarballPath);
 unpackPackage(htmlPackage.name, htmlPackage.tarballPath);
 unpackPackage(mathPackage.name, mathPackage.tarballPath);
 unpackPackage(alertsPackage.name, alertsPackage.tarballPath);
@@ -1183,6 +1302,10 @@ assertPackedPackage(frontmatterPackage, {
 assertPackedPackage(footnotesPackage, {
   rootSelector: ".mdw-footnote-reference",
   tokenPrefix: "--mdw-footnotes-",
+});
+assertPackedPackage(diagramsPackage, {
+  rootSelector: ".mdw-diagram",
+  tokenPrefix: "--mdw-diagram-",
 });
 assertPackedPackage(htmlPackage, {
   rootSelector: ".mdw-html",
@@ -1451,6 +1574,50 @@ export const packedFrontmatterSurface = [
 ].join(":");
 `);
 
+writeFileSync(join(smokeAppDir, "src/diagrams.js"), `import {
+  DIAGRAM_MAX_ATTRIBUTES_PER_ELEMENT,
+  DIAGRAM_MAX_CONCURRENT_RENDERS,
+  DIAGRAM_MAX_RENDERED_DEPTH,
+  DIAGRAM_MAX_RENDERED_NODES,
+  DIAGRAM_MAX_RENDERED_OUTPUT_BYTES,
+  DIAGRAM_MAX_SOURCE_BYTES,
+  DIAGRAM_VIEWPORT_MARGIN,
+  createDiagramsExtension,
+  defaultDiagramMessages,
+  diagramDiagnosticCodes,
+  diagramKinds,
+  diagramRenderErrorCodes,
+} from "markora-extension-diagrams";
+import "markora-extension-diagrams/styles.css";
+
+export const packedDiagramDefinitions = [
+  createDiagramsExtension(),
+  createDiagramsExtension({
+    messages: {
+      kindLabel: (kind) => kind.toUpperCase(),
+      showPreview: "Preview packed diagram",
+    },
+    renderers: {},
+  }),
+];
+
+export const packedDiagramSurface = [
+  DIAGRAM_MAX_SOURCE_BYTES,
+  DIAGRAM_MAX_ATTRIBUTES_PER_ELEMENT,
+  DIAGRAM_MAX_RENDERED_NODES,
+  DIAGRAM_MAX_RENDERED_DEPTH,
+  DIAGRAM_MAX_RENDERED_OUTPUT_BYTES,
+  DIAGRAM_MAX_CONCURRENT_RENDERS,
+  DIAGRAM_VIEWPORT_MARGIN,
+  diagramKinds.join(","),
+  diagramDiagnosticCodes.join(","),
+  diagramRenderErrorCodes.join(","),
+  defaultDiagramMessages.sourceLabel("mermaid", "mermaid theme=neutral"),
+  Object.keys(defaultDiagramMessages).sort().join(","),
+  ...packedDiagramDefinitions.map(({ name, version }) => name + "@" + version),
+].join(":");
+`);
+
 writeFileSync(join(smokeAppDir, "src/footnotes.js"), `import {
   createFootnotesExtension,
   defaultFootnotesMessages,
@@ -1587,6 +1754,53 @@ export const packedTocSurface = [
 ].join(":");
 `);
 
+writeFileSync(join(smokeAppDir, "src/allSeven.js"), `import {
+  createEditor,
+} from "markora";
+import "markora/styles.css";
+import {
+  packedAlertsDefinitions,
+} from "./alerts.js";
+import {
+  packedDiagramDefinitions,
+} from "./diagrams.js";
+import {
+  packedFootnotesDefinitions,
+} from "./footnotes.js";
+import {
+  packedFrontmatterDefinitions,
+} from "./frontmatter.js";
+import {
+  packedHtmlDefinitions,
+} from "./html.js";
+import {
+  packedMathDefinitions,
+} from "./math.js";
+import {
+  packedTocDefinitions,
+} from "./toc.js";
+
+export const packedAllSevenDefinitions = Object.freeze([
+  packedFrontmatterDefinitions[0],
+  packedFootnotesDefinitions[0],
+  packedMathDefinitions[0],
+  packedAlertsDefinitions[0],
+  packedTocDefinitions[0],
+  packedHtmlDefinitions[0],
+  packedDiagramDefinitions[0],
+]);
+
+export const packedAllSevenNames = packedAllSevenDefinitions.map(({ name }) => name);
+
+export function mountPackedAllSevenEditor(element, markdown) {
+  return createEditor({
+    element,
+    extensions: packedAllSevenDefinitions,
+    markdown,
+  });
+}
+`);
+
 writeFileSync(join(smokeAppDir, "src/api.ts"), `import {
   MarkdownEditorDestroyedError,
   createEditor,
@@ -1651,6 +1865,40 @@ import {
   type FrontmatterMessages,
   type FrontmatterSnapshot,
 } from "markora-extension-frontmatter";
+import {
+  DIAGRAM_MAX_ATTRIBUTES_PER_ELEMENT,
+  DIAGRAM_MAX_CONCURRENT_RENDERS,
+  DIAGRAM_MAX_RENDERED_DEPTH,
+  DIAGRAM_MAX_RENDERED_NODES,
+  DIAGRAM_MAX_RENDERED_OUTPUT_BYTES,
+  DIAGRAM_MAX_SOURCE_BYTES,
+  DIAGRAM_VIEWPORT_MARGIN,
+  createDiagramsExtension,
+  defaultDiagramMessages,
+  diagramDiagnosticCodes,
+  diagramKinds,
+  diagramRenderErrorCodes,
+  type DiagramCommands,
+  type DiagramDiagnostic,
+  type DiagramDiagnosticCode,
+  type DiagramEditRequest,
+  type DiagramExtensionOptions,
+  type DiagramInsert,
+  type DiagramKind,
+  type DiagramMessageOverrides,
+  type DiagramMessages,
+  type DiagramNodeSnapshot,
+  type DiagramNodeTarget,
+  type DiagramRenderErrorCode,
+  type DiagramRenderer,
+  type DiagramRenderRequest,
+  type DiagramRenderSnapshot,
+  type DiagramRenderStatus,
+  type DiagramState,
+  type DiagramUpdate,
+  type DiagramsExtension,
+  type DiagramsSnapshot,
+} from "markora-extension-diagrams";
 import {
   createFootnotesExtension,
   defaultFootnotesMessages,
@@ -1770,6 +2018,39 @@ const rootFrontmatterExtension: FrontmatterExtension =
   createFrontmatterExtension(frontmatterOptions);
 const minimalFrontmatterExtension: FrontmatterExtension =
   createFrontmatterExtension();
+const diagramMessages: DiagramMessageOverrides = {
+  kindLabel: (kind) => kind.toUpperCase(),
+  showPreview: "Preview packed diagram",
+};
+const diagramRenderer: DiagramRenderer = ({
+  info,
+  kind,
+  ownerDocument,
+  signal,
+  source,
+}: DiagramRenderRequest) => {
+  const output = ownerDocument.createElement("div");
+  output.textContent = kind + ":" + info + ":" + source;
+  signal.addEventListener("abort", () => undefined, { once: true });
+  return output;
+};
+const diagramOptions: DiagramExtensionOptions = {
+  messages: diagramMessages,
+  onEditSource(request: DiagramEditRequest) {
+    const info: string = request.info;
+    const kind: DiagramKind = request.kind;
+    const render: DiagramRenderSnapshot = request.render;
+    const unchanged: boolean = request.update({ info, source: request.source });
+    void kind;
+    void render;
+    void unchanged;
+  },
+  renderers: { mermaid: diagramRenderer },
+};
+const rootDiagramsExtension: DiagramsExtension =
+  createDiagramsExtension(diagramOptions);
+const minimalDiagramsExtension: DiagramsExtension =
+  createDiagramsExtension();
 const footnotesMessageOverrides: FootnotesMessageOverrides = {
   referenceText: (number) => "F" + number,
 };
@@ -1858,6 +2139,7 @@ const editor = createEditor({
   extensions: [
     rootAlertsExtension,
     rootFrontmatterExtension,
+    rootDiagramsExtension,
     rootFootnotesExtension,
     rootHtmlExtension,
     rootMathExtension,
@@ -1898,6 +2180,7 @@ const externalExtensions: readonly AnyMarkdownEditorExtension[] = [
   packedHighlightExtension,
   minimalAlertsExtension,
   minimalFrontmatterExtension,
+  minimalDiagramsExtension,
   minimalFootnotesExtension,
   minimalMathExtension,
   minimalTocExtension,
@@ -1929,6 +2212,8 @@ const rootAlertsHandle = editor.extensions.get(rootAlertsExtension);
 const minimalAlertsHandle = minimalEditor.extensions.get(minimalAlertsExtension);
 const rootFrontmatterHandle = editor.extensions.get(rootFrontmatterExtension);
 const minimalFrontmatterHandle = minimalEditor.extensions.get(minimalFrontmatterExtension);
+const rootDiagramsHandle = editor.extensions.get(rootDiagramsExtension);
+const minimalDiagramsHandle = minimalEditor.extensions.get(minimalDiagramsExtension);
 const rootFootnotesHandle = editor.extensions.get(rootFootnotesExtension);
 const minimalFootnotesHandle = minimalEditor.extensions.get(minimalFootnotesExtension);
 const rootHtmlHandle = editor.extensions.get(rootHtmlExtension);
@@ -1966,6 +2251,57 @@ const insertedFrontmatter: boolean = rootFrontmatterHandle.commands.insert(
 const updatedFrontmatter: boolean = minimalFrontmatterHandle.commands.update(
   "---\\ntitle: Minimal\\n---",
 );
+const diagramTarget: DiagramNodeTarget = {
+  identity: 1,
+  info: "mermaid theme=neutral",
+  kind: "mermaid",
+  position: 0,
+  source: "graph TD\\nA --> B",
+};
+const diagramCommands: DiagramCommands = rootDiagramsHandle.commands;
+const diagramState: DiagramState = minimalDiagramsHandle.state;
+const diagramSnapshot: DiagramsSnapshot = rootDiagramsHandle.state.getSnapshot();
+const diagramNode: DiagramNodeSnapshot | null =
+  diagramState.getNode(diagramTarget);
+const diagramNodes: readonly DiagramNodeSnapshot[] =
+  rootDiagramsHandle.state.getNodes("mermaid");
+const diagramKind: DiagramKind | null = diagramState.getKind(diagramTarget);
+const diagramDiagnostics: readonly DiagramDiagnostic[] =
+  rootDiagramsHandle.state.getDiagnostics();
+const diagramRender: DiagramRenderSnapshot | null =
+  diagramState.getRenderState(diagramTarget);
+const diagramInsert: DiagramInsert = {
+  info: "geojson preview=packed",
+  source: '{"type":"Point","coordinates":[0,0]}',
+};
+const insertedDiagram: boolean = rootDiagramsHandle.commands.insert(diagramInsert);
+const convertedDiagram: boolean =
+  minimalDiagramsHandle.commands.convert(diagramTarget, "stl");
+const convertedCodeBlock: boolean =
+  rootDiagramsHandle.commands.convertCodeBlock("topojson");
+const restoredCodeBlock: boolean =
+  minimalDiagramsHandle.commands.restoreCodeBlock(diagramTarget);
+const diagramUpdate: DiagramUpdate = {
+  info: "mermaid theme=dark",
+  source: "graph LR\\nA --> B",
+};
+const updatedDiagram: boolean = diagramCommands.update(diagramTarget, diagramUpdate);
+const removedDiagram: boolean = diagramCommands.remove(diagramTarget);
+const toggledDiagram: boolean = diagramCommands.togglePreview(diagramTarget);
+const retriedDiagram: boolean = diagramCommands.retryPreview(diagramTarget);
+const publicDiagramMessages: DiagramMessages = defaultDiagramMessages;
+const diagramDiagnosticCode: DiagramDiagnosticCode = diagramDiagnosticCodes[0];
+const diagramRenderErrorCode: DiagramRenderErrorCode = diagramRenderErrorCodes[0];
+const diagramRenderStatus: DiagramRenderStatus = "rendering";
+const diagramLimits: readonly number[] = [
+  DIAGRAM_MAX_SOURCE_BYTES,
+  DIAGRAM_MAX_ATTRIBUTES_PER_ELEMENT,
+  DIAGRAM_MAX_RENDERED_DEPTH,
+  DIAGRAM_MAX_RENDERED_NODES,
+  DIAGRAM_MAX_RENDERED_OUTPUT_BYTES,
+  DIAGRAM_MAX_CONCURRENT_RENDERS,
+];
+const diagramViewportMargin: string = DIAGRAM_VIEWPORT_MARGIN;
 const footnoteTarget: FootnoteDefinitionTarget = { label: "note", occurrence: 1 };
 const footnoteRenameOptions: FootnoteRenameOptions = { references: "rename" };
 const footnoteRemoveOptions: FootnoteRemoveOptions = { references: "preserve" };
@@ -2101,6 +2437,30 @@ void frontmatterMessages;
 void frontmatterMaximum;
 void insertedFrontmatter;
 void updatedFrontmatter;
+void diagramCommands;
+void diagramState;
+void diagramSnapshot;
+void diagramNode;
+void diagramNodes;
+void diagramKind;
+void diagramDiagnostics;
+void diagramRender;
+void diagramInsert;
+void insertedDiagram;
+void convertedDiagram;
+void convertedCodeBlock;
+void restoredCodeBlock;
+void diagramUpdate;
+void updatedDiagram;
+void removedDiagram;
+void toggledDiagram;
+void retriedDiagram;
+void publicDiagramMessages;
+void diagramDiagnosticCode;
+void diagramRenderErrorCode;
+void diagramRenderStatus;
+void diagramLimits;
+void diagramViewportMargin;
 void footnotesSnapshot;
 void footnoteDefinition;
 void footnoteReferences;
@@ -2356,6 +2716,24 @@ alerts.push({ kind: "note", position: 0 });
 rootFrontmatterHandle.commands.update(42);
 // @ts-expect-error Front matter messages reject undeclared keys.
 createFrontmatterExtension({ messages: { unknownLabel: "Unknown" } });
+// @ts-expect-error Diagram kinds are a closed public union.
+const invalidDiagramKind: DiagramKind = "plantuml";
+// @ts-expect-error Diagram insert source must be a string.
+rootDiagramsHandle.commands.insert({ info: "mermaid", source: 42 });
+// @ts-expect-error Diagram targets require their stale-safe occurrence identity.
+rootDiagramsHandle.commands.remove({
+  info: "mermaid",
+  kind: "mermaid",
+  position: 0,
+  source: "graph TD",
+});
+// @ts-expect-error Diagram renderers return owner-document DOM, never strings.
+createDiagramsExtension({ renderers: { mermaid: () => "<svg></svg>" } });
+// @ts-expect-error Diagram messages reject undeclared keys.
+createDiagramsExtension({ messages: { unknownLabel: "Unknown" } });
+// @ts-expect-error Public diagram snapshot arrays are immutable.
+diagramSnapshot.nodes.push(diagramTarget);
+void invalidDiagramKind;
 // @ts-expect-error Footnote labels must be strings.
 rootFootnotesHandle.commands.insertReference(42);
 // @ts-expect-error Footnote rename requires an explicit reference policy.
@@ -2474,6 +2852,7 @@ const [
   { createEditor: createMinimalEditor },
   alerts,
   frontmatter,
+  diagrams,
   footnotes,
   html,
   math,
@@ -2483,6 +2862,7 @@ const [
   import("markora/minimal"),
   import("markora-extension-alerts"),
   import("markora-extension-frontmatter"),
+  import("markora-extension-diagrams"),
   import("markora-extension-footnotes"),
   import("markora-extension-html"),
   import("markora-extension-math"),
@@ -2492,6 +2872,7 @@ const SOURCE = "\\uFEFF---\\r\\ntitle: Packed\\r\\nanchor: &base value\\r\\ncopy
 const OPTIONAL_EXTENSION_NAMES = new Set([
   "markora-extension-alerts",
   "markora-extension-frontmatter",
+  "markora-extension-diagrams",
   "markora-extension-footnotes",
   "markora-extension-html",
   "markora-extension-math",
@@ -2574,6 +2955,60 @@ for (const [label, create] of [["root", createEditor], ["minimal", createMinimal
     throw new Error("Packed front matter " + label + " consumer history failed.");
   }
   editor.destroy();
+  element.replaceChildren();
+
+  let diagramRendererCalls = 0;
+  const diagramsDefinition = diagrams.createDiagramsExtension({
+    renderers: {
+      mermaid({ kind, ownerDocument, source }) {
+        diagramRendererCalls += 1;
+        const output = ownerDocument.createElement("div");
+        const label = ownerDocument.createElement("span");
+        label.textContent = kind + ":" + source;
+        output.append(label);
+        return output;
+      },
+    },
+  });
+  const diagramsEditor = create({
+    element,
+    extensions: [diagramsDefinition],
+    markdown: "\`\`\`mermaid theme=neutral\\nflowchart LR\\nA --> B\\n\`\`\`",
+  });
+  const diagramsHandle = diagramsEditor.extensions.get(diagramsDefinition);
+  const diagramsSnapshot = diagramsHandle.state.getSnapshot();
+  const diagram = diagramsSnapshot.nodes[0];
+  await new Promise((resolve) => ownerWindow.setTimeout(resolve, 10));
+  const renderedDiagram = diagramsHandle.state.getNode(diagram);
+  if (
+    diagramsSnapshot.nodes.length !== 1
+    || diagram?.kind !== "mermaid"
+    || diagram.info !== "mermaid theme=neutral"
+    || diagram.source !== "flowchart LR\\nA --> B"
+    || diagramsHandle.state.getKind(diagram) !== "mermaid"
+    || diagramRendererCalls !== 1
+    || renderedDiagram?.render.status !== "rendered"
+    || diagramsEditor.view.dom.querySelector(".mdw-diagram__preview")?.textContent
+      !== "mermaid:flowchart LR\\nA --> B"
+    || diagramsEditor.getMarkdown()
+      !== "\`\`\`mermaid theme=neutral\\nflowchart LR\\nA --> B\\n\`\`\`"
+    || !diagramsEditor.extensions.manifest.extensions.some(({ name }) => (
+      name === "markora-extension-diagrams"
+    ))
+  ) {
+    throw new Error("Packed diagrams " + label + " consumer lost semantic or manifest state.");
+  }
+  if (
+    !diagramsHandle.commands.update(diagram, { source: "flowchart TD\\nA --> C" })
+    || diagramsEditor.getMarkdown()
+      !== "\`\`\`mermaid theme=neutral\\nflowchart TD\\nA --> C\\n\`\`\`"
+    || !diagramsEditor.commands.undo()
+    || diagramsEditor.getMarkdown()
+      !== "\`\`\`mermaid theme=neutral\\nflowchart LR\\nA --> B\\n\`\`\`"
+  ) {
+    throw new Error("Packed diagrams " + label + " command, source, or history smoke failed.");
+  }
+  diagramsEditor.destroy();
   element.replaceChildren();
 
   const footnotesDefinition = footnotes.createFootnotesExtension({
@@ -2844,6 +3279,157 @@ minimalHtmlElement.remove();
 ownerWindow.close();
 `);
 
+writeFileSync(join(smokeAppDir, "src/all-seven-runtime.mjs"), `import { JSDOM } from ${JSON.stringify(
+  pathToFileURL(resolve(rootDir, "node_modules/jsdom/lib/api.js")).href,
+)};
+
+const entrySpecifier = process.argv[2];
+if (!entrySpecifier) {
+  throw new Error("The all-seven runtime smoke requires a bundled entry specifier.");
+}
+const dom = new JSDOM("<!doctype html><html><body></body></html>", {
+  pretendToBeVisual: true,
+  url: "https://pack-smoke.invalid/",
+});
+const ownerWindow = dom.window;
+for (const name of [
+  "CompositionEvent",
+  "CustomEvent",
+  "DOMParser",
+  "Element",
+  "Event",
+  "HTMLElement",
+  "KeyboardEvent",
+  "MutationObserver",
+  "Node",
+  "Range",
+  "Selection",
+  "Text",
+]) {
+  Object.defineProperty(globalThis, name, {
+    configurable: true,
+    value: ownerWindow[name],
+  });
+}
+Object.defineProperties(globalThis, {
+  document: { configurable: true, value: ownerWindow.document },
+  getComputedStyle: { configurable: true, value: ownerWindow.getComputedStyle.bind(ownerWindow) },
+  navigator: { configurable: true, value: ownerWindow.navigator },
+  window: { configurable: true, value: ownerWindow },
+});
+ownerWindow.requestAnimationFrame ??= (callback) => ownerWindow.setTimeout(
+  () => callback(ownerWindow.performance.now()),
+  0,
+);
+ownerWindow.cancelAnimationFrame ??= (handle) => ownerWindow.clearTimeout(handle);
+globalThis.requestAnimationFrame = ownerWindow.requestAnimationFrame.bind(ownerWindow);
+globalThis.cancelAnimationFrame = ownerWindow.cancelAnimationFrame.bind(ownerWindow);
+if (!ownerWindow.Range.prototype.getClientRects) {
+  ownerWindow.Range.prototype.getClientRects = () => [];
+}
+if (!ownerWindow.Range.prototype.getBoundingClientRect) {
+  ownerWindow.Range.prototype.getBoundingClientRect = () => new ownerWindow.DOMRect();
+}
+
+const consumer = await import(entrySpecifier);
+const expectedNames = [
+  "markora-extension-frontmatter",
+  "markora-extension-footnotes",
+  "markora-extension-math",
+  "markora-extension-alerts",
+  "markora-extension-toc",
+  "markora-extension-html",
+  "markora-extension-diagrams",
+];
+if (consumer.packedAllSevenNames?.join(":") !== expectedNames.join(":")) {
+  throw new Error("The packed all-seven consumer exported the wrong definition order.");
+}
+
+const markdown = [
+  "\\uFEFF---",
+  "title: Packed all-seven consumer",
+  "---",
+  "",
+  "[TOC]",
+  "",
+  "# Combined heading",
+  "",
+  "> [!NOTE]",
+  "> Combined alert.",
+  "",
+  "Math $x$ and note[^packed] with <span>inline HTML</span>.",
+  "",
+  "\`\`\`mermaid theme=neutral",
+  "graph TD",
+  'A["$inside-diagram$"] --> B',
+  "\`\`\`",
+  "",
+  "<div>Combined block HTML</div>",
+  "",
+  "[^packed]: Combined footnote.",
+].join("\\n");
+const host = ownerWindow.document.createElement("div");
+ownerWindow.document.body.append(host);
+const editor = consumer.mountPackedAllSevenEditor(host, markdown);
+const manifestNames = editor.extensions.manifest.extensions
+  .map(({ name }) => name)
+  .filter((name) => expectedNames.includes(name));
+if (
+  manifestNames.length !== expectedNames.length
+  || new Set(manifestNames).size !== expectedNames.length
+  || manifestNames.join(":") !== expectedNames.join(":")
+) {
+  throw new Error("The packed all-seven root editor manifest order is not deterministic.");
+}
+const definitions = Object.fromEntries(
+  consumer.packedAllSevenDefinitions.map((definition) => [definition.name, definition]),
+);
+const frontmatter = editor.extensions.get(definitions["markora-extension-frontmatter"]);
+const footnotes = editor.extensions.get(definitions["markora-extension-footnotes"]);
+const math = editor.extensions.get(definitions["markora-extension-math"]);
+const alerts = editor.extensions.get(definitions["markora-extension-alerts"]);
+const toc = editor.extensions.get(definitions["markora-extension-toc"]);
+const html = editor.extensions.get(definitions["markora-extension-html"]);
+const diagrams = editor.extensions.get(definitions["markora-extension-diagrams"]);
+const diagram = diagrams.state.getNodes()[0];
+if (
+  !frontmatter.state.getSource()?.startsWith("\\uFEFF---")
+  || footnotes.state.getSnapshot().references.length !== 1
+  || footnotes.state.getSnapshot().definitions.length !== 1
+  || math.state.getNodes().length !== 1
+  || alerts.state.getAlerts().length !== 1
+  || toc.state.getSnapshot().tocs.length !== 1
+  || toc.state.getSnapshot().headings.length !== 1
+  || html.state.getNodes().length !== 3
+  || !diagram
+  || diagram.kind !== "mermaid"
+  || diagram.info !== "mermaid theme=neutral"
+  || diagram.source !== 'graph TD\\nA["$inside-diagram$"] --> B'
+) {
+  throw new Error("The packed all-seven root editor lost combined syntax ownership.");
+}
+const canonical = editor.getMarkdown();
+if (
+  !diagrams.commands.update(diagram, { source: "graph LR\\nA --> C" })
+  || !editor.getMarkdown().includes("graph LR\\nA --> C")
+  || !editor.commands.undo()
+  || editor.getMarkdown() !== canonical
+) {
+  throw new Error("The packed all-seven root editor command or history smoke failed.");
+}
+editor.commands.resetMarkdown(canonical);
+if (editor.getMarkdown() !== canonical) {
+  throw new Error("The packed all-seven root editor failed its canonical reset round trip.");
+}
+editor.destroy();
+await new Promise((resolve) => ownerWindow.setTimeout(resolve, 0));
+if (host.childNodes.length !== 0 || host.classList.contains("mdw-host")) {
+  throw new Error("The packed all-seven root editor did not clean up its host.");
+}
+host.remove();
+ownerWindow.close();
+`);
+
 currentPhase = "consumer-typecheck";
 run("node", [tscCliPath, "-p", "tsconfig.json"], { cwd: smokeAppDir });
 currentPhase = "node-import-smoke";
@@ -2851,6 +3437,7 @@ run("node", ["--input-type=module", "-e", `
   const extensionApi = await import("markora/extension-api");
   const alerts = await import("markora-extension-alerts");
   const frontmatter = await import("markora-extension-frontmatter");
+  const diagrams = await import("markora-extension-diagrams");
   const footnotes = await import("markora-extension-footnotes");
   const html = await import("markora-extension-html");
   const math = await import("markora-extension-math");
@@ -2892,6 +3479,35 @@ run("node", ["--input-type=module", "-e", `
   const frontmatterDefinition = frontmatter.createFrontmatterExtension();
   if (frontmatterDefinition.name !== "markora-extension-frontmatter") {
     throw new Error("front matter package factory returned the wrong identity");
+  }
+  if (
+    typeof diagrams.createDiagramsExtension !== "function"
+    || !Object.isFrozen(diagrams.defaultDiagramMessages)
+    || !Object.isFrozen(diagrams.diagramDiagnosticCodes)
+    || !Object.isFrozen(diagrams.diagramKinds)
+    || !Object.isFrozen(diagrams.diagramRenderErrorCodes)
+    || diagrams.DIAGRAM_MAX_CONCURRENT_RENDERS !== 4
+    || diagrams.DIAGRAM_MAX_ATTRIBUTES_PER_ELEMENT !== 64
+    || diagrams.DIAGRAM_MAX_RENDERED_DEPTH !== 128
+    || diagrams.DIAGRAM_MAX_RENDERED_NODES !== 4096
+    || diagrams.DIAGRAM_MAX_RENDERED_OUTPUT_BYTES !== 1048576
+    || diagrams.DIAGRAM_MAX_SOURCE_BYTES !== 262144
+    || diagrams.DIAGRAM_VIEWPORT_MARGIN !== "800px"
+  ) {
+    throw new Error("diagrams package Node ESM surface is incomplete");
+  }
+  const diagramsDefinition = diagrams.createDiagramsExtension({
+    messages: { showPreview: "Preview packed diagram" },
+  });
+  if (
+    diagramsDefinition.name !== "markora-extension-diagrams"
+    || diagrams.diagramKinds.join(":") !== "mermaid:geojson:topojson:stl"
+    || typeof diagrams.defaultDiagramMessages.sourceLabel(
+      "mermaid",
+      "mermaid theme=neutral",
+    ) !== "string"
+  ) {
+    throw new Error("diagrams package factory returned the wrong identity, kinds, or messages");
   }
   if (
     typeof footnotes.createFootnotesExtension !== "function"
@@ -2976,6 +3592,7 @@ writeBundleConfig("minimal", "./src/minimal.js");
 for (const spec of extensionBundleSpecs) {
   writeBundleConfig(spec.graphName, `./src/${spec.graphName}.js`);
 }
+writeBundleConfig("allSeven", "./src/allSeven.js");
 currentPhase = "root-bundle-build";
 run("node", [viteCliPath, "build", "--config", "vite.root.config.mjs"], { cwd: smokeAppDir });
 currentPhase = "minimal-bundle-build";
@@ -2988,6 +3605,12 @@ for (const spec of extensionBundleSpecs) {
     { cwd: smokeAppDir },
   );
 }
+currentPhase = "all-seven-bundle-build";
+run(
+  "node",
+  [viteCliPath, "build", "--config", "vite.allSeven.config.mjs"],
+  { cwd: smokeAppDir },
+);
 
 currentPhase = "bundle-validation";
 const rootBundleReport = readBundleReport("root");
@@ -2996,11 +3619,13 @@ const extensionBundleReports = Object.freeze(Object.fromEntries(
   extensionBundleSpecs.map((spec) => [spec.graphName, readBundleReport(spec.graphName)]),
 ));
 const alertsBundleReport = extensionBundleReports.alerts;
+const diagramsBundleReport = extensionBundleReports.diagrams;
 const frontmatterBundleReport = extensionBundleReports.frontmatter;
 const footnotesBundleReport = extensionBundleReports.footnotes;
 const htmlBundleReport = extensionBundleReports.html;
 const mathBundleReport = extensionBundleReports.math;
 const tocBundleReport = extensionBundleReports.toc;
+const allSevenBundleReport = readBundleReport("allSeven");
 const rootBundleMeasurement = measureBundleGraph(rootBundleReport);
 const minimalBundleMeasurement = measureBundleGraph(minimalBundleReport);
 const extensionBundleMeasurements = Object.freeze(Object.fromEntries(
@@ -3010,11 +3635,13 @@ const extensionBundleMeasurements = Object.freeze(Object.fromEntries(
   ]),
 ));
 const alertsBundleMeasurement = extensionBundleMeasurements.alerts;
+const diagramsBundleMeasurement = extensionBundleMeasurements.diagrams;
 const frontmatterBundleMeasurement = extensionBundleMeasurements.frontmatter;
 const footnotesBundleMeasurement = extensionBundleMeasurements.footnotes;
 const htmlBundleMeasurement = extensionBundleMeasurements.html;
 const mathBundleMeasurement = extensionBundleMeasurements.math;
 const tocBundleMeasurement = extensionBundleMeasurements.toc;
+const allSevenBundleMeasurement = measureBundleGraph(allSevenBundleReport);
 const extensionBundles = extensionBundleSpecs.map((spec) => ({
   measurement: extensionBundleMeasurements[spec.graphName],
   report: extensionBundleReports[spec.graphName],
@@ -3024,6 +3651,7 @@ assertBundleIsolation(rootBundleReport, minimalBundleReport);
 for (const { report, spec } of extensionBundles) {
   assertExtensionBundleIsolation(report, spec);
 }
+assertAllSevenBundle(allSevenBundleReport, allSevenBundleMeasurement);
 assertPackedProvenance(
   rootBundleReport,
   minimalBundleReport,
@@ -3072,6 +3700,23 @@ run("node", ["--input-type=module", "-e", `
   const names = consumer.packedFrontmatterDefinitions?.map((extension) => extension.name);
   if (names?.join(":") !== "markora-extension-frontmatter:markora-extension-frontmatter") {
     throw new Error("Packed front matter feature bundle did not execute");
+  }
+`], { cwd: smokeAppDir });
+
+const diagramsEntryChunk = diagramsBundleReport.chunks.find((chunk) => chunk.isEntry);
+if (!diagramsEntryChunk) {
+  throw new Error("The diagrams feature bundle did not emit an entry chunk.");
+}
+const diagramsEntrySpecifier = `./dist/diagrams/${diagramsEntryChunk.fileName}`;
+currentPhase = "diagrams-feature-runtime-smoke";
+run("node", ["--input-type=module", "-e", `
+  const consumer = await import(${JSON.stringify(diagramsEntrySpecifier)});
+  const names = consumer.packedDiagramDefinitions?.map((extension) => extension.name);
+  if (names?.join(":") !== "markora-extension-diagrams:markora-extension-diagrams") {
+    throw new Error("Packed diagrams feature bundle did not execute");
+  }
+  if (!consumer.packedDiagramSurface?.includes("mermaid,geojson,topojson,stl")) {
+    throw new Error("Packed diagrams feature bundle omitted its public kind surface");
   }
 `], { cwd: smokeAppDir });
 
@@ -3137,8 +3782,27 @@ run("node", ["--input-type=module", "-e", `
   }
 `], { cwd: smokeAppDir });
 
+const allSevenEntryChunk = allSevenBundleReport.chunks.find((chunk) => chunk.isEntry);
+if (!allSevenEntryChunk) {
+  throw new Error("The all-seven root consumer did not emit an entry chunk.");
+}
+const allSevenEntrySpecifier = pathToFileURL(join(
+  smokeAppDir,
+  "dist",
+  "allSeven",
+  allSevenEntryChunk.fileName,
+)).href;
+currentPhase = "all-seven-root-runtime-smoke";
+run(
+  "node",
+  ["src/all-seven-runtime.mjs", allSevenEntrySpecifier],
+  { cwd: smokeAppDir },
+);
+
 const measurements = Object.freeze({
   alerts: alertsBundleMeasurement,
+  allSeven: allSevenBundleMeasurement,
+  diagrams: diagramsBundleMeasurement,
   footnotes: footnotesBundleMeasurement,
   frontmatter: frontmatterBundleMeasurement,
   html: htmlBundleMeasurement,

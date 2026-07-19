@@ -1,7 +1,7 @@
 # Markora Embedded Editor Production Plan
 
-- Status: Active
-- Last updated: 2026-07-18
+- Status: Complete
+- Last updated: 2026-07-19
 - Scope: Embeddable Markdown editor packages (`markora` and `markora-ui`) only
 
 ## Purpose
@@ -103,7 +103,7 @@ Required items: `EE-016` through `EE-021`, selected according to product needs.
 | EE-018 | DONE | L | Add mature table resize, reorder, selection, and keyboard operations |
 | EE-019 | DONE | M | Add configurable auto-pairing, shortcuts, and code-language editing |
 | EE-020 | DONE | M | Tokenize styling and add dark, high-contrast, reduced-motion, RTL, and i18n support |
-| EE-021 | IN PROGRESS | L | Ship optional front matter, footnote, math, callout, TOC, HTML, and diagram extensions |
+| EE-021 | DONE | L | Ship optional front matter, footnote, math, callout, TOC, HTML, and diagram extensions |
 
 Sizes are relative planning aids: `S` is a focused change, `M` spans several related surfaces, and `L` requires an architectural or multi-stage implementation.
 
@@ -672,7 +672,7 @@ Let Markora fit production design systems and international products.
 
 ### EE-021 — Ship advanced syntax as optional extensions
 
-Status: `IN PROGRESS` (2026-07-18)
+Status: `DONE` (2026-07-19)
 
 #### Goal
 
@@ -693,7 +693,7 @@ and verification decisions are frozen in the
 | GitHub-style alerts | DONE | `markora-extension-alerts` |
 | Generated TOC | DONE | `markora-extension-toc` |
 | Sanitized raw HTML | DONE | `markora-extension-html` |
-| Mermaid and GitHub diagrams | NEXT | `markora-extension-diagrams` |
+| Mermaid and GitHub diagrams | DONE | `markora-extension-diagrams` |
 
 #### Progress notes
 
@@ -1002,6 +1002,70 @@ and verification decisions are frozen in the
   browser reviews found and closed the transaction-invariant, stale-generation,
   composition, link-nesting, accessibility, hostile-output, retry, and package
   isolation gaps; no remaining sub-item blocker was found.
+- `markora-extension-diagrams` claims exactly the case-sensitive `mermaid`,
+  `geojson`, `topojson`, and `stl` fence kinds in both root and minimal
+  runtimes. Complete normalized info and body source remain editable model data;
+  unsupported or mixed-case kinds remain ordinary code. Typed insert, update,
+  remove, retry, preview, kind-conversion, generic-code conversion, snapshot,
+  diagnostic, and stale-safe host-edit APIs preserve selection and history.
+  Serialization and whole-node clipboard output use a canonical collision-safe
+  fence, while partial source selections remain ordinary text.
+- Rendering remains optional host presentation: the package includes no
+  Mermaid, map, 3D, worker, or network engine. Per-editor work activates within
+  an 800-pixel viewport margin, caps at four concurrent callbacks, rejects
+  source above 256 KiB and output above 1 MiB/4,096 nodes/depth 128/64
+  attributes, and aborts stale jobs across edits, toggles, removal, reset,
+  reconciliation, and teardown. A fresh HTML/SVG clamp permits only inert
+  detached owner-document DOM, scopes every local ID/reference, rejects active
+  or external content and indirect CSS values, and leaves source authoritative
+  after every failure.
+- The permanent localized source is exposed to assistive technology and becomes
+  visually available whenever a caret or range enters or spans it. Physical
+  Arrow and Shift+Arrow boundaries resolve the first or last plaintext line
+  with Unicode bidi P3 semantics, default neutral lines to LTR, and preserve
+  combining and ZWJ grapheme clusters across LTR, RTL, and mixed multiline
+  blocks; previews remain inert and `aria-hidden`. Retained browser coverage exercises document and
+  Shadow roots, all four renderers, viewport/concurrency pressure, hostile and
+  stale output, commands, host edits, native source editing, canonical
+  clipboard, read-only/composition behavior, localized RTL/reflow, Axe, and
+  cleanup across Chromium, Firefox, and WebKit. Chromium CDP independently
+  performs a real contenteditable edit and native source-only copy.
+- A retained all-seven composition case mounts front matter, footnotes, math,
+  alerts, TOC, sanitized HTML, and all four diagram kinds together, then proves
+  deterministic manifests, claim isolation, canonical clipboard output,
+  reset/reconciliation, and zero cleanup collisions. The packed performance
+  workload uses the same seven independently installed tarballs at exact
+  100 KiB, 500 KiB, and 1 MiB sizes, with five timing samples and three
+  fresh-browser memory lifecycles per size; it separately gates ordinary,
+  structural-footnote, TOC-heading, diagram-removal, renderer-pressure, and
+  destroy paths.
+- Packed diagrams measure 140,346 raw / 36,197 gzip JavaScript with no lazy
+  chunks, 3,698 raw / 1,004 gzip CSS, and 99 static modules. The two deliberately
+  tight JavaScript warning bands remain visible while every failure ceiling
+  passes. The installed all-seven graph measures 1,176,840 / 315,639 gzip
+  initial JavaScript, 1,088,605 / 340,993 gzip lazy JavaScript, 2,265,445 /
+  656,632 gzip total JavaScript, 54,546 / 7,612 gzip CSS, and 202 modules, all
+  below warning ceilings. Neither graph contains a renderer engine or
+  workspace-source fallback, and neither changes a root or minimal baseline
+  budget.
+- The approved all-seven local run records maximum mount times of 107.7, 756.0,
+  and 1,312.4 ms and maximum ordinary-edit times of 5.2, 27.3, and 46.6 ms at
+  100 KiB, 500 KiB, and 1 MiB. Mounted tracked-memory medians are 11.09, 52.79,
+  and 107.01 MB; maximum retained tracked memory is 192,073, 203,889, and
+  242,117 bytes. All nine fresh-process memory lifecycles retain zero nodes,
+  listeners, and documents, while exact offscreen activation, four-job
+  concurrency, bounded output failure, and removal/reset/failed-create/destroy
+  cleanup evidence pass. The run keeps advisory timing and variability warnings
+  visible while clearing every hard budget.
+- Final verification for diagrams and the all-seven integration: the package's
+  44 tests pass; `pnpm check` passes 1,362 tests plus every build, declaration,
+  API, ESM, and browser-type gate; and the required browser matrix records 320
+  passes with 34 intentional engine/capability skips out of 354 cases. Focused
+  diagram boundary and hostile-renderer coverage passes across Chromium,
+  Firefox, and WebKit. `pnpm perf:ci`, the frozen package-consumer checks, the
+  core release dry-run, syntax/JSON checks, and `git diff --check` pass.
+  Independent contract, security, bidi-boundary, packaging, and performance
+  audits found no remaining blocker.
 
 #### Recommended order
 
@@ -1039,21 +1103,16 @@ An item is `DONE` only when all applicable requirements below are met:
 
 ## Completed iterations
 
-`EE-001` through `EE-020` are complete. The `EE-021` extension foundation,
-YAML front-matter, footnotes, math, alerts, generated-TOC, and sanitized-HTML
-packages are also complete. Gate A's content-safety requirements and Gate B's
-production-embed requirements are satisfied, and Gate C now has keyboard/screen-reader,
+`EE-001` through `EE-021` are complete. Gate A's content-safety requirements,
+Gate B's production-embed requirements, and Gate C's Typora-quality supported
+experience requirements are satisfied. Gate C includes keyboard/screen-reader,
 deliberate clipboard, mature table, configurable typing, theme, localization,
-bidirectional-text, and independently packaged advanced-syntax foundations.
+bidirectional-text, and independently packaged advanced-syntax behavior.
 Completed work includes the browser, complex-input, accessibility,
 host-lifecycle, external-update, extension-kernel, headless command/state,
 host-controlled resource, performance-budget, responsive-snapshot, lazy
 code-editor, semantic embedded-control, rich/Markdown/plain clipboard,
 production table-editing, host-configurable typing/keymap,
 design-system/internationalization, exact-source extension, front-matter,
-footnote, math, alert, generated-TOC, and sanitized-HTML foundations.
-
-The current iteration is `EE-021 — Ship advanced syntax as optional extensions`.
-Its foundation, YAML front-matter, footnotes, inline/block math, GitHub-style
-alerts, generated-TOC, and sanitized-raw-HTML packages are complete. Mermaid and
-GitHub diagrams are `NEXT` and are the only remaining `EE-021` package.
+footnote, math, alert, generated-TOC, sanitized-HTML, diagram, and all-seven
+integration foundations. No planned iteration remains in this document.

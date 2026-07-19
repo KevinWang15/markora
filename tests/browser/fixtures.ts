@@ -36,6 +36,20 @@ export type LabEventRecord = {
 };
 
 type BrowserLabWindowApi = NonNullable<Window["__MARKORA_BROWSER_LAB__"]>;
+export type LabDiagramSnapshot = ReturnType<BrowserLabWindowApi["diagramSnapshot"]>;
+export type LabDiagramNodeTarget = Omit<LabDiagramSnapshot["nodes"][number], "render">;
+export type LabDiagramKind = LabDiagramNodeTarget["kind"];
+export type LabDiagramRenderSnapshot = LabDiagramSnapshot["nodes"][number]["render"];
+export type LabDiagramCommandRequest = Parameters<BrowserLabWindowApi["diagramCommand"]>[1];
+export type LabDiagramEditSnapshot = NonNullable<
+  ReturnType<BrowserLabWindowApi["pendingDiagramEdit"]>
+>;
+export type LabDiagramRendererCall = ReturnType<
+  BrowserLabWindowApi["diagramRendererCalls"]
+>[number];
+export type LabDiagramRendererSettlement = NonNullable<
+  Parameters<BrowserLabWindowApi["diagramRendererSettle"]>[1]
+>;
 export type LabHtmlSnapshot = ReturnType<BrowserLabWindowApi["htmlSnapshot"]>;
 export type LabHtmlNodeTarget = Omit<LabHtmlSnapshot["nodes"][number], "render">;
 export type LabHtmlDisplay = LabHtmlNodeTarget["display"];
@@ -94,9 +108,42 @@ export type LabEditorSpec = {
   autofocus?: boolean;
   controlledEcho?: boolean;
   direction?: "auto" | "ltr" | "rtl";
+  diagramMessages?: Partial<Record<
+    | "editSource"
+    | "invalidDocumentDiagnostic"
+    | "invalidInfoDiagnostic"
+    | "invalidRendererOutputDiagnostic"
+    | "kindLabel"
+    | "previewFailed"
+    | "previewLabel"
+    | "previewLoading"
+    | "rendererFailedDiagnostic"
+    | "rendererUnavailable"
+    | "renderOutputLimitDiagnostic"
+    | "retryPreview"
+    | "showPreview"
+    | "showSource"
+    | "sourceLabel"
+    | "sourceTooLargeDiagnostic"
+    | "unsafeRendererOutputDiagnostic",
+    string
+  >>;
+  diagramRendererModes?: Partial<Record<
+    LabDiagramKind,
+    | "connected"
+    | "deferred"
+    | "missing"
+    | "reject"
+    | "string"
+    | "sync"
+    | "throw"
+    | "unsafe"
+    | "unsafe-css-var"
+    | "wrong-document"
+  >>;
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "html" | "math" | "public-example" | "toc";
+  extensionMode?: "alerts" | "all-advanced" | "diagrams" | "footnotes" | "frontmatter" | "html" | "math" | "public-example" | "toc";
   footnotesMessages?: Partial<Record<
     | "backReferenceLabel"
     | "backReferenceText"
@@ -589,6 +636,116 @@ export async function runHtmlCommand(
       window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
     ).htmlCommand(editorId, nextRequest),
     { editorId: id, nextRequest: request },
+  );
+}
+
+export async function runDiagramCommand(
+  page: Page,
+  id: string,
+  request: LabDiagramCommandRequest,
+) {
+  return page.evaluate(
+    ({ editorId, nextRequest }) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).diagramCommand(editorId, nextRequest),
+    { editorId: id, nextRequest: request },
+  );
+}
+
+export async function getDiagramSnapshot(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).diagramSnapshot(editorId),
+    id,
+  ) as Promise<LabDiagramSnapshot>;
+}
+
+export async function getDiagramRendererCalls(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).diagramRendererCalls(editorId),
+    id,
+  ) as Promise<readonly LabDiagramRendererCall[]>;
+}
+
+export async function settleDiagramRenderer(
+  page: Page,
+  id: string,
+  settlement?: LabDiagramRendererSettlement,
+) {
+  return page.evaluate(
+    ({ editorId, nextSettlement }) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).diagramRendererSettle(editorId, nextSettlement),
+    { editorId: id, nextSettlement: settlement },
+  );
+}
+
+export async function getPendingDiagramEdit(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).pendingDiagramEdit(editorId),
+    id,
+  ) as Promise<LabDiagramEditSnapshot | null>;
+}
+
+export async function updatePendingDiagramEdit(
+  page: Page,
+  id: string,
+  patch: Readonly<{ info?: string; source?: string }>,
+) {
+  return page.evaluate(
+    ({ editorId, nextPatch }) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).diagramEditUpdate(editorId, nextPatch),
+    { editorId: id, nextPatch: patch },
+  );
+}
+
+export async function convertPendingDiagramEdit(
+  page: Page,
+  id: string,
+  kind: LabDiagramKind,
+) {
+  return page.evaluate(
+    ({ editorId, nextKind }) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).diagramEditConvert(editorId, nextKind),
+    { editorId: id, nextKind: kind },
+  );
+}
+
+export async function restorePendingDiagramEdit(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).diagramEditRestoreCodeBlock(editorId),
+    id,
+  );
+}
+
+export async function removePendingDiagramEdit(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).diagramEditRemove(editorId),
+    id,
+  );
+}
+
+export async function selectDiagram(
+  page: Page,
+  id: string,
+  target: LabDiagramNodeTarget,
+) {
+  return page.evaluate(
+    ({ editorId, nextTarget }) => (
+      window.__MARKORA_BROWSER_LAB__ as BrowserLabWindowApi
+    ).selectDiagram(editorId, nextTarget),
+    { editorId: id, nextTarget: target },
   );
 }
 
