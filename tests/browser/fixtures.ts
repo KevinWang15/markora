@@ -50,6 +50,9 @@ export type LabMathRendererCall = ReturnType<BrowserLabWindowApi["mathRendererCa
 export type LabMathRendererSettlement = Parameters<BrowserLabWindowApi["mathRendererSettle"]>[1];
 export type LabMathSnapshot = ReturnType<BrowserLabWindowApi["mathSnapshot"]>;
 export type LabTableIssue = ReturnType<BrowserLabWindowApi["tableIssues"]>[number];
+export type LabTocCommandRequest = Parameters<BrowserLabWindowApi["tocCommand"]>[1];
+export type LabTocStateRequest = Parameters<BrowserLabWindowApi["tocState"]>[1];
+export type LabTocSnapshot = ReturnType<BrowserLabWindowApi["tocSnapshot"]>;
 
 export type LabUpdateOptions = {
   ariaLabel?: string | null;
@@ -78,7 +81,7 @@ export type LabEditorSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example";
+  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example" | "toc";
   footnotesMessages?: Partial<Record<
     | "backReferenceLabel"
     | "backReferenceText"
@@ -183,6 +186,16 @@ export type LabEditorSpec = {
     wrapSelection?: boolean;
   };
   theme?: "auto" | "contrast" | "dark" | "light";
+  tocMessages?: Partial<Record<
+    | "emptyState"
+    | "goToHeadingLabel"
+    | "insertToc"
+    | "invalidPlacementDiagnostic"
+    | "navigationLabel"
+    | "removeToc"
+    | "untitledHeadingLabel",
+    string
+  >>;
   uiMessages?: {
     cancelButtonLabel?: string;
     codeBlockLanguageDialogLabel?: string;
@@ -534,6 +547,39 @@ export async function getMathSnapshot(page: Page, id: string) {
   ) as Promise<LabMathSnapshot>;
 }
 
+export async function runTocCommand(
+  page: Page,
+  id: string,
+  request: LabTocCommandRequest,
+) {
+  return page.evaluate(
+    ({ editorId, nextRequest }) => (
+      window.__MARKORA_BROWSER_LAB__!.tocCommand(editorId, nextRequest)
+    ),
+    { editorId: id, nextRequest: request },
+  );
+}
+
+export async function getTocState(
+  page: Page,
+  id: string,
+  request: LabTocStateRequest,
+) {
+  return page.evaluate(
+    ({ editorId, nextRequest }) => (
+      window.__MARKORA_BROWSER_LAB__!.tocState(editorId, nextRequest)
+    ),
+    { editorId: id, nextRequest: request },
+  );
+}
+
+export async function getTocSnapshot(page: Page, id: string) {
+  return page.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.tocSnapshot(editorId),
+    id,
+  ) as Promise<LabTocSnapshot>;
+}
+
 export async function getMathRendererCalls(page: Page, id: string) {
   return page.evaluate(
     (editorId) => window.__MARKORA_BROWSER_LAB__!.mathRendererCalls(editorId),
@@ -603,6 +649,15 @@ export async function selectMath(
       window.__MARKORA_BROWSER_LAB__!.selectMath(editorId, nextTarget)
     ),
     { editorId: id, nextTarget: target },
+  );
+}
+
+export async function selectToc(page: Page, id: string, occurrence?: number) {
+  return page.evaluate(
+    ({ editorId, nextOccurrence }) => (
+      window.__MARKORA_BROWSER_LAB__!.selectToc(editorId, nextOccurrence)
+    ),
+    { editorId: id, nextOccurrence: occurrence },
   );
 }
 

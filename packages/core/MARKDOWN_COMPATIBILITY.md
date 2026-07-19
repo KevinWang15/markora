@@ -1,6 +1,6 @@
 # Markdown dialect and fidelity contract
 
-Status: current `markora` `0.0.x` contract, updated through the `EE-021` alerts package on 2026-07-18.
+Status: current `markora` `0.0.x` contract, updated through the `EE-021` generated-TOC package on 2026-07-19.
 
 This contract applies to Markdown passed through `createEditor({ markdown })`, `editor.commands.reconcileMarkdown()`, or `editor.commands.resetMarkdown()` and returned by `editor.getMarkdown()` or `onChange`. Deprecated `setMarkdown()` uses the same parsing boundary as `resetMarkdown()`.
 
@@ -179,6 +179,47 @@ not rely on color alone. The package has no renderer or network surface. Import
 `markora-extension-alerts/styles.css` explicitly; public custom properties use
 the `--mdw-alert-*` prefix.
 
+`markora-extension-toc` works with both `markora` and `markora/minimal` and
+claims a standalone top-level `[toc]` line case-insensitively. Up to three
+columns of CommonMark indentation and trailing ASCII spaces or tabs are
+accepted; every semantic marker serializes as `[TOC]`. Four-column or tab code
+indentation, escaped markers, code spans or blocks, embedded prose, list or
+blockquote content, internal marker whitespace, and non-ASCII padding remain
+ordinary Markdown. The marker is one selectable atomic block with no stored
+heading labels, nesting, IDs, or renderer output. Multiple markers are allowed
+and share the same current outline.
+
+The live outline derives every semantic level-one through level-six heading in
+document order, including headings in supported nested block containers. Labels
+use model text, image alternative text, and contributed inline-leaf text; a
+localized untitled label covers an empty result. Nesting follows the nearest
+preceding lower-level heading and never manufactures placeholder entries for
+skipped levels. One per-editor index maps positions without repainting retained
+entry DOM for unrelated edits and rebuilds after heading text, level, order,
+insertion, or deletion changes. Undo, redo, reconciliation, and reset update all
+mounted TOCs; an empty document outline retains the marker and shows localized
+empty-state text.
+
+Typed insert/remove commands, active/capability queries, and a frozen heading
+and marker snapshot expose the semantic state. Multiple top-level markers are
+the explicit duplicate policy; selecting an existing marker and inserting again
+is a no-op. Raw transactions that would nest a marker are rejected at every
+intermediate step, and serialization defensively rejects invalid placement.
+Live entries are native buttons inside a labelled navigation list. Enter, Space,
+or pointer activation resolves the current heading position and moves the model
+selection without adding a slug, mutating a heading ID, changing the page URL,
+or entering history. Navigation remains available in read-only presentation but
+is suppressed during composition.
+
+Generated entries are presentation only. Markdown and plain-text copy contain
+`[TOC]`; rich copy contains inert marker-only DOM that reparses as the same node.
+No generated label, list, position, or control enters Markdown, any clipboard
+representation, or history. The package bundles no renderer, performs no
+network work, and uses owner-document text/DOM construction. Import
+`markora-extension-toc/styles.css` explicitly; public logical-property custom
+properties use the `--mdw-toc-*` prefix and include RTL, forced-color, and
+reduced-motion treatment.
+
 ## Canonical output
 
 These transformations are intentional and happen on import/export even when the user makes no visual edit.
@@ -210,6 +251,7 @@ These transformations are intentional and happen on import/export even when the 
 | Alert marker, when `markora-extension-alerts` is installed | First quoted line with an uppercase kind and canonical `> ` prefixes; marker padding and input case are discarded |
 | Marker-only alert, when `markora-extension-alerts` is installed | Canonical `> [!KIND]` with no terminal newline |
 | Non-paragraph first alert body block, when `markora-extension-alerts` is installed | One bare `>` separator line between the marker and body; nested table lines retain the quote prefix |
+| TOC marker, when `markora-extension-toc` is installed | Canonical standalone `[TOC]`; input case and accepted horizontal padding are discarded, and generated entries are never serialized |
 | Angle URL or email autolink | Inline link syntax |
 | Character entity such as `&copy;` | Decoded Unicode text |
 | Backslash escape | Re-emitted only where the serializer needs an escape |
@@ -238,6 +280,14 @@ semantic inert `aside`, lowercase kind attribute, visible localized label, and
 editable body structure rather than NodeView-only controls. A selection wholly
 inside the body remains body-only. Markdown and rich paste recreate semantics;
 plain-text paste keeps marker punctuation literal.
+
+With `markora-extension-toc` installed, selecting a semantic marker copies
+exactly `[TOC]` in Markdown and plain text. Rich HTML contains only a safe inert
+marker shell, never the live navigation region, generated heading labels,
+nested lists, entry buttons, positions, or IDs. Markdown and rich paste recreate
+the marker at a valid top-level insertion point; plain-text paste deliberately
+keeps `[TOC]` literal and it normally serializes with backslash escapes. Copying
+a larger document does not duplicate heading text through the generated outline.
 
 A rectangular table-cell selection is exported as semantic table HTML, quoted TSV in `text/plain`, and a complete standalone pipe table in `text/markdown`. Tabs, line breaks, and double quotes inside TSV cells use CSV-style double-quote escaping. Because a standalone pipe table requires a header, the first row of a body-only selection becomes the clipboard Markdown header; this does not change the source table. Cut clears the selected cell contents without deleting rows or columns. When pasting a table or TSV matrix into a cell rectangle, a larger matrix is clipped and a smaller matrix is repeated to fill that rectangle. TSV parsing is limited to 1 MiB and 100 rows by 100 columns. Merged or over-limit table transfers are rejected atomically and emit the recoverable `"table-operation-rejected"` error event.
 
@@ -292,7 +342,7 @@ This table distinguishes the narrow shapes protected as opaque source from relat
 | GitHub alerts/callouts | Semantic optional syntax when `markora-extension-alerts` is installed; otherwise unsupported — unreported | The package retains one of five kinds plus supported editable body blocks and writes canonical uppercase markers in root and minimal. Without it, the source is an ordinary blockquote whose marker can escape and whose soft lines can fold. |
 | Raw HTML and comments | Opaque for CommonMark-recognized block and inline shapes | Stored and displayed as inert source atoms, not rendered HTML. Syntax outside the tokenizer's recognized HTML shapes remains unsupported. |
 | Directives and container syntax | Opaque for the balanced container, leaf, and inline shapes above; otherwise unsupported — unreported | Recognized shapes are preserved. Unbalanced or different directive dialects can still be treated as ordinary Markdown text. |
-| TOC markers such as `[TOC]` | Unsupported — unreported | Treated as literal text and normally backslash-escaped on output. |
+| TOC markers such as `[TOC]` | Semantic optional syntax when `markora-extension-toc` is installed; otherwise unsupported — unreported | The package retains top-level markers and derives a live position-based heading outline in root and minimal. Without it, the marker is literal text and normally backslash-escaped on output. |
 | Mermaid and other diagrams | Diagram semantics unsupported; fenced code normalized | A fenced `mermaid` block survives only as a generic code block. Markora does not render or validate the diagram. |
 | Other Markdown extensions | Unsupported — unreported | No preservation guarantee unless the construct is fully representable as a supported generic code block or plain text. |
 

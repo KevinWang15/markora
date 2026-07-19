@@ -1,0 +1,59 @@
+{
+  "name": "markora-extension-toc",
+  "version": "0.0.1",
+  "description": "Optional generated table-of-contents support for embedded Markora editors.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Kevin Wang",
+  "homepage": "https://github.com/KevinWang15/markora#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KevinWang15/markora.git",
+    "directory": "packages/extension-toc"
+  },
+  "bugs": {
+    "url": "https://github.com/KevinWang15/markora/issues"
+  },
+  "keywords": [
+    "markora",
+    "markdown",
+    "table of contents",
+    "toc",
+    "prosemirror"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "sideEffects": [
+    "./dist/styles.css"
+  ],
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "build": "node ./scripts/cleanDist.mjs && tsc -p tsconfig.json && node ./scripts/copyStyles.mjs && node ../../scripts/fix-node-esm-specifiers.mjs dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.api.json --noEmit",
+    "prepack": "pnpm run build && pnpm run typecheck && pnpm run test && pnpm run smoke:node-esm",
+    "smoke:node-esm": "node --input-type=module -e \"const mod = await import('./dist/index.js'); if (typeof mod.createTocExtension !== 'function') throw new Error('createTocExtension export missing'); if (!Object.isFrozen(mod.defaultTocMessages)) throw new Error('frozen defaultTocMessages export missing');\"",
+    "test": "vitest run --root ../.. packages/extension-toc/test"
+  },
+  "peerDependencies": {
+    "markora": "^0.0.1"
+  },
+  "devDependencies": {
+    "markora": "workspace:*"
+  }
+}

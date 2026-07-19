@@ -691,8 +691,8 @@ and verification decisions are frozen in the
 | Footnotes | DONE | `markora-extension-footnotes` |
 | Inline and block math | DONE | `markora-extension-math` |
 | GitHub-style alerts | DONE | `markora-extension-alerts` |
-| Generated TOC | NEXT | `markora-extension-toc` |
-| Sanitized raw HTML | QUEUED | `markora-extension-html` |
+| Generated TOC | DONE | `markora-extension-toc` |
+| Sanitized raw HTML | NEXT | `markora-extension-html` |
 | Mermaid and GitHub diagrams | QUEUED | `markora-extension-diagrams` |
 
 #### Progress notes
@@ -888,6 +888,51 @@ and verification decisions are frozen in the
   Independent review found and closed thematic-break, Setext-heading, nested
   table, footnote-boundary, and partial-copy defects; its 95-case supported-body
   scan found no fixed-point failures and no release blockers remain.
+- `markora-extension-toc` owns a case-insensitive standalone top-level `[TOC]`
+  marker in root and minimal, with canonical `[TOC]` persistence and explicit
+  fallback for escaped, embedded, code, over-indented, list, blockquote,
+  internally spaced, and non-ASCII-padded forms. Multiple markers are allowed;
+  nested semantic markers are rejected in every intermediate raw transaction
+  document and again at serialization.
+- One immutable per-editor index derives level-one through level-six headings
+  from model text, image alternatives, and contributed leaf text. It maps
+  positions without repainting retained entry DOM for ordinary edits and
+  rebuilds only when heading semantics or TOC count/order may change. All live
+  TOCs refresh after heading text, level, order, insertion, deletion, history,
+  reconciliation, and hard reset. The retained source-only workload creates 16
+  TOCs over 128 headings (2,048 entry buttons), preserves every entry node on a
+  pre-heading text edit, updates all copies on a heading edit, reconciles,
+  resets, and tears down within a broad 20-second CI ceiling; the current local
+  test completes its measured body in roughly 0.3 seconds.
+- The stable live NodeView exposes unique occurrence-aware navigation landmark
+  names, native nested lists and buttons, localized empty and untitled states,
+  logical RTL styling, forced-color and reduced-motion treatment, and
+  position-based pointer/Enter/Space activation. It adds no slugs or heading
+  IDs, never changes the embedding URL, remains navigable in read-only mode,
+  and suppresses activation during composition. Generated labels, lists,
+  controls, and positions remain derived presentation and never enter Markdown,
+  clipboard data, history, or the semantic marker node.
+- Typed insert/remove commands, capability and active queries, frozen heading
+  and marker snapshots, validated frozen messages, explicit CSS, root/minimal
+  declaration coverage, Node ESM smoke, and packed-consumer runtime coverage
+  ship independently of every sibling extension. The packed feature graph is
+  one 93,257 raw / 24,448 gzip JavaScript chunk with no lazy chunks, plus one
+  3,401 raw / 1,018 gzip CSS file and 98 static modules. It contains no renderer
+  engine and remains absent from the root and minimal baseline graphs.
+- Final verification for generated TOC: package tests pass 45 cases; `pnpm check`
+  passes every build, declaration/API check, Node ESM smoke, browser
+  typecheck, and 1,251 unit/integration tests. The focused production-browser
+  matrix passes 13 cases across Chromium, Firefox, and WebKit with two expected
+  non-Chromium CDP skips; the complete required matrix passes 252 cases with 30
+  intentional engine/capability skips. Coverage includes real Chromium CDP
+  activation/copy, whole-document clipboard isolation, composition-suppressed
+  navigation, forced-color presentation, reduced motion, Shadow DOM, RTL, and
+  Axe. `pnpm pack:smoke`, `pnpm perf:ci`, frozen offline installation,
+  release-harness syntax/JSON checks, and `git diff --check` pass. Every 100 KiB,
+  500 KiB, and 1 MiB latency, memory, teardown, and zero-retention failure gate
+  passes. Independent source review found no lifecycle, codec, command,
+  accessibility, security, or embedded-mode blocker; adversarial review found
+  and closed the three browser-coverage gaps above.
 
 #### Recommended order
 
@@ -926,19 +971,20 @@ An item is `DONE` only when all applicable requirements below are met:
 ## Completed iterations
 
 `EE-001` through `EE-020` are complete. The `EE-021` extension foundation,
-YAML front-matter, footnotes, math, and alerts packages are also complete. Gate A's
-content-safety requirements and Gate B's production-embed requirements are
-satisfied, and Gate C now has keyboard/screen-reader, deliberate clipboard,
-mature table, configurable typing, theme, localization, bidirectional-text, and
-independently packaged advanced-syntax foundations. Completed work includes the
-browser, complex-input, accessibility, host-lifecycle, external-update,
-extension-kernel, headless command/state, host-controlled resource,
-performance-budget, responsive-snapshot, lazy code-editor, semantic
-embedded-control, rich/Markdown/plain clipboard, production table-editing,
-host-configurable typing/keymap, design-system/internationalization,
-exact-source extension, front-matter, footnote, math, and alert foundations.
+YAML front-matter, footnotes, math, alerts, and generated-TOC packages are also
+complete. Gate A's content-safety requirements and Gate B's production-embed
+requirements are satisfied, and Gate C now has keyboard/screen-reader,
+deliberate clipboard, mature table, configurable typing, theme, localization,
+bidirectional-text, and independently packaged advanced-syntax foundations.
+Completed work includes the browser, complex-input, accessibility,
+host-lifecycle, external-update, extension-kernel, headless command/state,
+host-controlled resource, performance-budget, responsive-snapshot, lazy
+code-editor, semantic embedded-control, rich/Markdown/plain clipboard,
+production table-editing, host-configurable typing/keymap,
+design-system/internationalization, exact-source extension, front-matter,
+footnote, math, alert, and generated-TOC foundations.
 
 The current iteration is `EE-021 — Ship advanced syntax as optional extensions`.
 Its foundation, YAML front-matter, footnotes, inline/block math, and GitHub-style
-alerts packages are complete; generated TOC is next, and the remaining three
-feature packages are queued.
+alerts and generated-TOC packages are complete; sanitized raw HTML is next, and
+the remaining two feature packages are queued.

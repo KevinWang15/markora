@@ -72,6 +72,15 @@ const extensionBundleSpecs = Object.freeze([
     label: "Math",
     packageName: "markora-extension-math",
   }),
+  Object.freeze({
+    cssSelectors: Object.freeze([
+      ".mdw-toc",
+      ".mdw-toc__entry",
+    ]),
+    graphName: "toc",
+    label: "TOC",
+    packageName: "markora-extension-toc",
+  }),
 ]);
 const bundleGraphNames = Object.freeze([
   "root",
@@ -1066,6 +1075,8 @@ function writeMeasurementReport({
       mathHasNoBundledRendererEngine: true,
       alertsHasNoLazyChunks: measurements.alerts.lazyJs.chunkCount === 0,
       alertsHasNoRendererEngine: true,
+      tocHasNoLazyChunks: measurements.toc.lazyJs.chunkCount === 0,
+      tocHasNoRendererEngine: true,
       packedEntriesAndStylesResolved: true,
       packedPackageVersionsMatched: true,
       rootAndMinimalGraphsIndependent: true,
@@ -1129,6 +1140,12 @@ const alertsPackage = packPackage(join(
   "packages/extension-alerts",
 ));
 rememberPackage(alertsPackage);
+currentPhase = "toc-package";
+const tocPackage = packPackage(join(
+  rootDir,
+  "packages/extension-toc",
+));
+rememberPackage(tocPackage);
 
 currentPhase = "packed-dependency-isolation";
 copyWorkspaceDependencies();
@@ -1138,6 +1155,7 @@ unpackPackage(frontmatterPackage.name, frontmatterPackage.tarballPath);
 unpackPackage(footnotesPackage.name, footnotesPackage.tarballPath);
 unpackPackage(mathPackage.name, mathPackage.tarballPath);
 unpackPackage(alertsPackage.name, alertsPackage.tarballPath);
+unpackPackage(tocPackage.name, tocPackage.tarballPath);
 assertPackedPackage(corePackage);
 assertPackedPackage(uiPackage);
 assertPackedPackage(frontmatterPackage, {
@@ -1155,6 +1173,10 @@ assertPackedPackage(mathPackage, {
 assertPackedPackage(alertsPackage, {
   rootSelector: ".mdw-alert",
   tokenPrefix: "--mdw-alert-",
+});
+assertPackedPackage(tocPackage, {
+  rootSelector: ".mdw-toc",
+  tokenPrefix: "--mdw-toc-",
 });
 
 currentPhase = "consumer-generation";
@@ -1479,6 +1501,31 @@ export const packedMathSurface = [
 ].join(":");
 `);
 
+writeFileSync(join(smokeAppDir, "src/toc.js"), `import {
+  createTocExtension,
+  defaultTocMessages,
+} from "markora-extension-toc";
+import "markora-extension-toc/styles.css";
+
+export const packedTocDefinitions = [
+  createTocExtension(),
+  createTocExtension({
+    messages: {
+      navigationLabel: (occurrence, total) =>
+        "Packed contents " + occurrence + " of " + total,
+      untitledHeadingLabel: (level, index) =>
+        "Packed untitled " + index + " at level " + level,
+    },
+  }),
+];
+
+export const packedTocSurface = [
+  defaultTocMessages.navigationLabel(1, 2),
+  defaultTocMessages.goToHeadingLabel("Packed", 1, 1),
+  ...packedTocDefinitions.map(({ name, version }) => name + "@" + version),
+].join(":");
+`);
+
 writeFileSync(join(smokeAppDir, "src/api.ts"), `import {
   MarkdownEditorDestroyedError,
   createEditor,
@@ -1584,6 +1631,20 @@ import {
   type MathSnapshot,
 } from "markora-extension-math";
 import {
+  createTocExtension,
+  defaultTocMessages,
+  type TocCommands,
+  type TocExtension,
+  type TocExtensionOptions,
+  type TocHeadingLevel,
+  type TocHeadingSnapshot,
+  type TocMessageOverrides,
+  type TocMessages,
+  type TocNodeSnapshot,
+  type TocSnapshot,
+  type TocState,
+} from "markora-extension-toc";
+import {
   packedCalloutExtension,
   packedHighlightExtension,
 } from "./extensions";
@@ -1652,6 +1713,18 @@ const mathOptions: MathExtensionOptions = {
 };
 const rootMathExtension: MathExtension = createMathExtension(mathOptions);
 const minimalMathExtension: MathExtension = createMathExtension();
+const tocMessages: TocMessageOverrides = {
+  emptyState: "No packed headings",
+  goToHeadingLabel: (label, level, index) =>
+    "Packed heading " + index + ", level " + level + ": " + label,
+  navigationLabel: (occurrence, total) =>
+    "Packed contents " + occurrence + " of " + total,
+  untitledHeadingLabel: (level, index) =>
+    "Packed untitled " + index + " at level " + level,
+};
+const tocOptions: TocExtensionOptions = { messages: tocMessages };
+const rootTocExtension: TocExtension = createTocExtension(tocOptions);
+const minimalTocExtension: TocExtension = createTocExtension();
 
 const editor = createEditor({
   ariaLabel: "Packed editor",
@@ -1663,6 +1736,7 @@ const editor = createEditor({
     rootFrontmatterExtension,
     rootFootnotesExtension,
     rootMathExtension,
+    rootTocExtension,
   ],
   initialSelection: "end",
   onChange(markdown, context) {
@@ -1701,6 +1775,7 @@ const externalExtensions: readonly AnyMarkdownEditorExtension[] = [
   minimalFrontmatterExtension,
   minimalFootnotesExtension,
   minimalMathExtension,
+  minimalTocExtension,
 ];
 const minimalEditor = createMinimalEditor({
   element,
@@ -1733,6 +1808,8 @@ const rootFootnotesHandle = editor.extensions.get(rootFootnotesExtension);
 const minimalFootnotesHandle = minimalEditor.extensions.get(minimalFootnotesExtension);
 const rootMathHandle = editor.extensions.get(rootMathExtension);
 const minimalMathHandle = minimalEditor.extensions.get(minimalMathExtension);
+const rootTocHandle = editor.extensions.get(rootTocExtension);
+const minimalTocHandle = minimalEditor.extensions.get(minimalTocExtension);
 const alertsCommands: AlertsCommands = rootAlertsHandle.commands;
 const alertsState: AlertsState = minimalAlertsHandle.state;
 const alertsMessages: AlertsMessages = defaultAlertsMessages;
@@ -1819,6 +1896,30 @@ const mathLimits: readonly number[] = [
 const mathKind = mathKinds[0];
 const mathDiagnosticCode = mathDiagnosticCodes[0];
 const mathRenderErrorCode = mathRenderErrorCodes[0];
+const tocCommands: TocCommands = rootTocHandle.commands;
+const tocState: TocState = minimalTocHandle.state;
+const tocSnapshot: TocSnapshot = rootTocHandle.state.getSnapshot();
+const tocHeadings: readonly TocHeadingSnapshot[] = tocSnapshot.headings;
+const tocNodes: readonly TocNodeSnapshot[] = tocSnapshot.tocs;
+const tocHeading: TocHeadingSnapshot = {
+  label: "Packed heading",
+  level: 2,
+  position: 1,
+};
+const tocNode: TocNodeSnapshot = { position: 0 };
+const tocHeadingLevel: TocHeadingLevel = tocHeading.level;
+const tocPublicMessages: TocMessages = defaultTocMessages;
+const tocNavigationLabel: string = tocPublicMessages.navigationLabel(1, 2);
+const tocEntryLabel: string = tocPublicMessages.goToHeadingLabel(
+  tocHeading.label,
+  tocHeading.level,
+  1,
+);
+const insertedToc: boolean = rootTocHandle.commands.insert();
+const removedToc: boolean = minimalTocHandle.commands.remove();
+const canInsertToc: boolean = rootTocHandle.state.canInsert();
+const canRemoveToc: boolean = minimalTocHandle.state.canRemove();
+const tocIsActive: boolean = rootTocHandle.state.isActive();
 const closedTransaction: Transaction = closeHistory(transaction);
 void alertsCommands;
 void alertsState;
@@ -1870,6 +1971,22 @@ void mathLimits;
 void mathKind;
 void mathDiagnosticCode;
 void mathRenderErrorCode;
+void tocCommands;
+void tocState;
+void tocSnapshot;
+void tocHeadings;
+void tocNodes;
+void tocHeading;
+void tocNode;
+void tocHeadingLevel;
+void tocPublicMessages;
+void tocNavigationLabel;
+void tocEntryLabel;
+void insertedToc;
+void removedToc;
+void canInsertToc;
+void canRemoveToc;
+void tocIsActive;
 void closedTransaction;
 
 function exerciseStructuralSurface(
@@ -2079,6 +2196,23 @@ rootMathHandle.commands.remove({ kind: "inline", position: 1 });
 createMathExtension({ renderer: () => "<span>x</span>" });
 // @ts-expect-error Math messages reject undeclared keys.
 createMathExtension({ messages: { unknownLabel: "Unknown" } });
+// @ts-expect-error TOC commands accept no marker or position arguments.
+rootTocHandle.commands.insert("[TOC]");
+// @ts-expect-error TOC remove targets are selected through editor state.
+minimalTocHandle.commands.remove({ position: 0 });
+// @ts-expect-error TOC factory options reject undeclared keys.
+createTocExtension({ unknownOption: true });
+// @ts-expect-error TOC messages reject undeclared keys.
+createTocExtension({ messages: { unknownLabel: "Unknown" } });
+// @ts-expect-error TOC navigation formatter arguments are numeric.
+defaultTocMessages.navigationLabel("first", 2);
+// @ts-expect-error TOC heading levels are closed to one through six.
+const invalidTocHeadingLevel: TocHeadingLevel = 7;
+// @ts-expect-error Public TOC heading arrays are immutable.
+tocSnapshot.headings.push(tocHeading);
+// @ts-expect-error Public TOC node snapshots are immutable.
+tocNode.position = 2;
+void invalidTocHeadingLevel;
 `);
 
 writeFileSync(join(smokeAppDir, "tsconfig.json"), `${JSON.stringify({
@@ -2148,6 +2282,7 @@ const [
   frontmatter,
   footnotes,
   math,
+  toc,
 ] = await Promise.all([
   import("markora"),
   import("markora/minimal"),
@@ -2155,6 +2290,7 @@ const [
   import("markora-extension-frontmatter"),
   import("markora-extension-footnotes"),
   import("markora-extension-math"),
+  import("markora-extension-toc"),
 ]);
 const SOURCE = "\\uFEFF---\\r\\ntitle: Packed\\r\\nanchor: &base value\\r\\ncopy: *base\\r\\n...";
 const OPTIONAL_EXTENSION_NAMES = new Set([
@@ -2162,6 +2298,7 @@ const OPTIONAL_EXTENSION_NAMES = new Set([
   "markora-extension-frontmatter",
   "markora-extension-footnotes",
   "markora-extension-math",
+  "markora-extension-toc",
 ]);
 
 for (const [label, create] of [["root", createEditor], ["minimal", createMinimalEditor]]) {
@@ -2322,6 +2459,72 @@ for (const [label, create] of [["root", createEditor], ["minimal", createMinimal
     throw new Error("Packed math " + label + " command or history smoke failed.");
   }
   mathEditor.destroy();
+
+  element.replaceChildren();
+  const tocDefinition = toc.createTocExtension({
+    messages: {
+      goToHeadingLabel: (headingLabel, level, index) =>
+        "Go to packed heading " + index + ", level " + level + ": " + headingLabel,
+      navigationLabel: (occurrence, total) =>
+        "Packed contents " + occurrence + " of " + total,
+    },
+  });
+  const tocEditor = create({
+    element,
+    extensions: [tocDefinition],
+    markdown: "[toc]\\n\\n# Packed heading\\n\\n## Packed child\\n\\n[TOC]",
+  });
+  const tocHandle = tocEditor.extensions.get(tocDefinition);
+  const tocSnapshot = tocHandle.state.getSnapshot();
+  const tocNavs = [...tocEditor.view.dom.querySelectorAll("nav[data-mdw-toc]")];
+  const secondEntry = tocNavs[0]?.querySelector('[data-mdw-toc-entry="2"]');
+  if (
+    tocSnapshot.headings.length !== 2
+    || tocSnapshot.headings[0]?.label !== "Packed heading"
+    || tocSnapshot.headings[0]?.level !== 1
+    || tocSnapshot.headings[1]?.label !== "Packed child"
+    || tocSnapshot.headings[1]?.level !== 2
+    || tocSnapshot.tocs.length !== 2
+    || tocEditor.getMarkdown()
+      !== "[TOC]\\n\\n# Packed heading\\n\\n## Packed child\\n\\n[TOC]"
+    || tocNavs.length !== 2
+    || tocNavs[0]?.getAttribute("aria-label") !== "Packed contents 1 of 2"
+    || tocNavs[1]?.getAttribute("aria-label") !== "Packed contents 2 of 2"
+    || tocNavs.some((nav) => nav.querySelectorAll("[data-mdw-toc-entry]").length !== 2)
+    || secondEntry === null
+    || !Object.isFrozen(tocSnapshot)
+    || !Object.isFrozen(tocSnapshot.headings)
+    || !tocEditor.extensions.manifest.extensions.some(({ name }) => (
+      name === "markora-extension-toc"
+    ))
+  ) {
+    throw new Error("Packed TOC " + label + " consumer lost semantic, DOM, or manifest state.");
+  }
+  secondEntry.click();
+  if (
+    tocEditor.view.state.selection.from !== tocSnapshot.headings[1].position + 1
+    || tocEditor.view.dom.querySelector("h1[id], h2[id]") !== null
+  ) {
+    throw new Error("Packed TOC " + label + " model-position navigation failed.");
+  }
+  if (
+    !tocHandle.state.canInsert()
+    || !tocHandle.commands.insert()
+    || tocHandle.state.getSnapshot().tocs.length !== 3
+    || !tocHandle.state.isActive()
+    || !tocHandle.state.canRemove()
+    || !tocEditor.commands.undo()
+    || tocHandle.state.getSnapshot().tocs.length !== 2
+    || !tocEditor.commands.redo()
+    || tocHandle.state.getSnapshot().tocs.length !== 3
+    || !tocHandle.commands.remove()
+    || tocHandle.state.getSnapshot().tocs.length !== 2
+    || !tocEditor.commands.undo()
+    || tocHandle.state.getSnapshot().tocs.length !== 3
+  ) {
+    throw new Error("Packed TOC " + label + " command, state, or history smoke failed.");
+  }
+  tocEditor.destroy();
   element.remove();
 }
 
@@ -2337,6 +2540,7 @@ run("node", ["--input-type=module", "-e", `
   const frontmatter = await import("markora-extension-frontmatter");
   const footnotes = await import("markora-extension-footnotes");
   const math = await import("markora-extension-math");
+  const toc = await import("markora-extension-toc");
   const minimal = await import("markora/minimal");
   if (typeof extensionApi.defineMarkdownEditorExtension !== "function") {
     throw new Error("defineMarkdownEditorExtension export missing");
@@ -2403,6 +2607,24 @@ run("node", ["--input-type=module", "-e", `
   if (mathDefinition.name !== "markora-extension-math") {
     throw new Error("math package factory returned the wrong identity");
   }
+  if (
+    typeof toc.createTocExtension !== "function"
+    || !Object.isFrozen(toc.defaultTocMessages)
+  ) {
+    throw new Error("TOC package Node ESM surface is incomplete");
+  }
+  const tocDefinition = toc.createTocExtension({
+    messages: {
+      navigationLabel: (occurrence, total) => "Packed " + occurrence + "/" + total,
+    },
+  });
+  if (
+    tocDefinition.name !== "markora-extension-toc"
+    || toc.defaultTocMessages.navigationLabel(1, 2) !== "Table of contents 1 of 2"
+    || typeof toc.defaultTocMessages.goToHeadingLabel("Packed", 1, 1) !== "string"
+  ) {
+    throw new Error("TOC package factory returned the wrong identity or messages");
+  }
   if (typeof minimal.createEditor !== "function") {
     throw new Error("markora/minimal createEditor export missing");
   }
@@ -2439,6 +2661,7 @@ const alertsBundleReport = extensionBundleReports.alerts;
 const frontmatterBundleReport = extensionBundleReports.frontmatter;
 const footnotesBundleReport = extensionBundleReports.footnotes;
 const mathBundleReport = extensionBundleReports.math;
+const tocBundleReport = extensionBundleReports.toc;
 const rootBundleMeasurement = measureBundleGraph(rootBundleReport);
 const minimalBundleMeasurement = measureBundleGraph(minimalBundleReport);
 const extensionBundleMeasurements = Object.freeze(Object.fromEntries(
@@ -2451,6 +2674,7 @@ const alertsBundleMeasurement = extensionBundleMeasurements.alerts;
 const frontmatterBundleMeasurement = extensionBundleMeasurements.frontmatter;
 const footnotesBundleMeasurement = extensionBundleMeasurements.footnotes;
 const mathBundleMeasurement = extensionBundleMeasurements.math;
+const tocBundleMeasurement = extensionBundleMeasurements.toc;
 const extensionBundles = extensionBundleSpecs.map((spec) => ({
   measurement: extensionBundleMeasurements[spec.graphName],
   report: extensionBundleReports[spec.graphName],
@@ -2539,6 +2763,23 @@ run("node", ["--input-type=module", "-e", `
   }
 `], { cwd: smokeAppDir });
 
+const tocEntryChunk = tocBundleReport.chunks.find((chunk) => chunk.isEntry);
+if (!tocEntryChunk) {
+  throw new Error("The TOC feature bundle did not emit an entry chunk.");
+}
+const tocEntrySpecifier = `./dist/toc/${tocEntryChunk.fileName}`;
+currentPhase = "toc-feature-runtime-smoke";
+run("node", ["--input-type=module", "-e", `
+  const consumer = await import(${JSON.stringify(tocEntrySpecifier)});
+  const names = consumer.packedTocDefinitions?.map((extension) => extension.name);
+  if (names?.join(":") !== "markora-extension-toc:markora-extension-toc") {
+    throw new Error("Packed TOC feature bundle did not execute");
+  }
+  if (!consumer.packedTocSurface?.includes("Table of contents 1 of 2")) {
+    throw new Error("Packed TOC feature bundle omitted its public message surface");
+  }
+`], { cwd: smokeAppDir });
+
 const measurements = Object.freeze({
   alerts: alertsBundleMeasurement,
   footnotes: footnotesBundleMeasurement,
@@ -2546,6 +2787,7 @@ const measurements = Object.freeze({
   math: mathBundleMeasurement,
   minimal: minimalBundleMeasurement,
   root: rootBundleMeasurement,
+  toc: tocBundleMeasurement,
 });
 availableMeasurements = measurements;
 printBundleMeasurements(measurements);

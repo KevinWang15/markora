@@ -96,6 +96,25 @@ type BrowserLabAlertsSnapshot = {
   alerts: ReadonlyArray<BrowserLabAlertSnapshot>;
 };
 
+type BrowserLabTocCommandRequest = {
+  type: "insert" | "remove";
+};
+
+type BrowserLabTocStateRequest = {
+  type: "canInsert" | "canRemove" | "isActive";
+};
+
+type BrowserLabTocHeadingSnapshot = {
+  label: string;
+  level: 1 | 2 | 3 | 4 | 5 | 6;
+  position: number;
+};
+
+type BrowserLabTocSnapshot = {
+  headings: ReadonlyArray<BrowserLabTocHeadingSnapshot>;
+  tocs: ReadonlyArray<{ position: number }>;
+};
+
 type BrowserLabUpdateOptions = {
   ariaLabel?: string | null;
   ariaLabelledBy?: string | null;
@@ -123,7 +142,7 @@ type BrowserLabTestSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example";
+  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example" | "toc";
   footnotesMessages?: Partial<Record<
     | "backReferenceLabel"
     | "backReferenceText"
@@ -228,6 +247,16 @@ type BrowserLabTestSpec = {
     wrapSelection?: boolean;
   };
   theme?: "auto" | "contrast" | "dark" | "light";
+  tocMessages?: Partial<Record<
+    | "emptyState"
+    | "goToHeadingLabel"
+    | "insertToc"
+    | "invalidPlacementDiagnostic"
+    | "navigationLabel"
+    | "removeToc"
+    | "untitledHeadingLabel",
+    string
+  >>;
   uiMessages?: {
     cancelButtonLabel?: string;
     codeBlockLanguageDialogLabel?: string;
@@ -507,6 +536,7 @@ interface Window {
     reset(id: string, markdown: string): string;
     selectFootnote(id: string, request: BrowserLabFootnoteSelectionRequest): boolean;
     selectMath(id: string, target: BrowserLabMathNodeTarget): boolean;
+    selectToc(id: string, occurrence?: number): boolean;
     selectText(id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number): boolean;
     settle(id?: string): Promise<void>;
     snapshot(id: string): BrowserLabTestSnapshot;
@@ -517,6 +547,9 @@ interface Window {
       row: number;
       tablePos: number;
     }>;
+    tocCommand(id: string, request: BrowserLabTocCommandRequest): boolean;
+    tocSnapshot(id: string): BrowserLabTocSnapshot;
+    tocState(id: string, request: BrowserLabTocStateRequest): boolean;
     unsubscribe(id: string, type: BrowserLabEventName): boolean;
     updateOpaque(id: string, source: string): boolean;
     updateOptions(id: string, options: BrowserLabUpdateOptions): {

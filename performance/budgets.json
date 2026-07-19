@@ -183,6 +183,25 @@
       },
       "staticModuleCount": { "warning": 96, "failure": 106 }
     },
+    "toc": {
+      "initialJs": {
+        "rawBytes": { "warning": 93000, "failure": 103000 },
+        "gzipBytes": { "warning": 24000, "failure": 27000 }
+      },
+      "lazyJs": {
+        "rawBytes": { "warning": 0, "failure": 0 },
+        "gzipBytes": { "warning": 0, "failure": 0 }
+      },
+      "totalJs": {
+        "rawBytes": { "warning": 93000, "failure": 103000 },
+        "gzipBytes": { "warning": 24000, "failure": 27000 }
+      },
+      "css": {
+        "rawBytes": { "warning": 3300, "failure": 3750 },
+        "gzipBytes": { "warning": 1000, "failure": 1125 }
+      },
+      "staticModuleCount": { "warning": 98, "failure": 108 }
+    },
     "frontmatter": {
       "initialJs": {
         "rawBytes": { "warning": 92000, "failure": 100000 },

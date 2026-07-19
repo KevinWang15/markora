@@ -61,6 +61,15 @@ import {
   type MathSnapshot,
 } from "markora-extension-math";
 import "markora-extension-math/styles.css";
+import {
+  createTocExtension,
+  defaultTocMessages,
+  type TocExtension,
+  type TocMessageOverrides,
+  type TocMessages,
+  type TocSnapshot,
+} from "markora-extension-toc";
+import "markora-extension-toc/styles.css";
 import { createDefaultUi, type DefaultUiMessageOverrides } from "markora-ui";
 import { useEffect, useRef } from "react";
 import { createGlobalListenerLedger, type ListenerSnapshot } from "../browser-lab/listenerLedger";
@@ -76,6 +85,7 @@ export type BrowserLabFootnotesMessages = Partial<
 >;
 export type BrowserLabAlertsMessages = Partial<Record<keyof AlertsMessages, string>>;
 export type BrowserLabMathMessages = Partial<Record<keyof MathMessages, string>>;
+export type BrowserLabTocMessages = Partial<Record<keyof TocMessages, string>>;
 export type BrowserLabMathRendererMode =
   | "connected"
   | "deferred"
@@ -101,6 +111,14 @@ export type BrowserLabAlertsSnapshot = Readonly<{
   alerts: readonly AlertSnapshot[];
 }>;
 
+export type BrowserLabTocCommandRequest = Readonly<{
+  type: "insert" | "remove";
+}>;
+
+export type BrowserLabTocStateRequest = Readonly<{
+  type: "canInsert" | "canRemove" | "isActive";
+}>;
+
 export type BrowserLabEditorSpec = {
   ariaLabel?: string;
   ariaLabelledBy?: string;
@@ -110,7 +128,7 @@ export type BrowserLabEditorSpec = {
   direction?: "auto" | "ltr" | "rtl";
   editable?: boolean;
   entry?: "minimal" | "root";
-  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example";
+  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example" | "toc";
   alertsMessages?: BrowserLabAlertsMessages;
   footnotesMessages?: BrowserLabFootnotesMessages;
   frontmatterMessages?: FrontmatterMessageOverrides;
@@ -130,6 +148,7 @@ export type BrowserLabEditorSpec = {
   shortcuts?: MarkdownEditorShortcutMap;
   typing?: MarkdownEditorTypingOptions;
   theme?: "auto" | "contrast" | "dark" | "light";
+  tocMessages?: BrowserLabTocMessages;
   uiMessages?: DefaultUiMessageOverrides;
 };
 
@@ -397,10 +416,14 @@ export type BrowserLabApi = {
   reset: (id: string, markdown: string) => string;
   selectFootnote: (id: string, request: BrowserLabFootnoteSelectionRequest) => boolean;
   selectMath: (id: string, target: MathNodeTarget) => boolean;
+  selectToc: (id: string, occurrence?: number) => boolean;
   selectText: (id: string, text: string, mode?: "all" | "end" | "start", occurrence?: number) => boolean;
   settle: (id?: string) => Promise<void>;
   snapshot: (id: string) => BrowserLabSnapshot;
   tableIssues: (id: string) => readonly MarkdownEditorTableIssue[];
+  tocCommand: (id: string, request: BrowserLabTocCommandRequest) => boolean;
+  tocSnapshot: (id: string) => TocSnapshot;
+  tocState: (id: string, request: BrowserLabTocStateRequest) => boolean;
   unsubscribe: (id: string, type: MarkdownEditorEventName) => boolean;
   updateOpaque: (id: string, source: string) => boolean;
   updateOptions: (id: string, options: BrowserLabUpdateOptions) => BrowserLabUpdateResult;
@@ -423,7 +446,7 @@ type MountedEditor = {
   eventLog: BrowserLabEventRecord[];
   eventUnsubscribes: Map<MarkdownEditorEventName, () => void>;
   extensionActions?: HTMLElement;
-  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example";
+  extensionMode?: "alerts" | "footnotes" | "frontmatter" | "math" | "public-example" | "toc";
   footnotesExtension: FootnotesExtension | null;
   frontmatterEditRequest: FrontmatterEditRequest | null;
   frontmatterExtension: FrontmatterExtension | null;
@@ -451,6 +474,7 @@ type MountedEditor = {
   root: Document | ShadowRoot;
   resourceLog: BrowserLabResourceLog;
   section: HTMLElement;
+  tocExtension: TocExtension | null;
   transactionCount: number;
 };
 
@@ -728,6 +752,14 @@ function requireMathHandle(mounted: MountedEditor) {
   return mounted.editor.extensions.get(mounted.mathExtension);
 }
 
+function requireTocHandle(mounted: MountedEditor) {
+  if (!mounted.tocExtension) {
+    throw new Error(`Browser lab editor "${mounted.id}" has no TOC extension.`);
+  }
+
+  return mounted.editor.extensions.get(mounted.tocExtension);
+}
+
 function normalizeBrowserLabAlertsMessages(
   overrides: BrowserLabAlertsMessages | undefined,
 ): AlertsMessageOverrides | undefined {
@@ -756,6 +788,21 @@ function normalizeBrowserLabMathMessages(
       ? () => message
       : message,
   ])) as MathMessageOverrides;
+}
+
+function normalizeBrowserLabTocMessages(
+  overrides: BrowserLabTocMessages | undefined,
+): TocMessageOverrides | undefined {
+  if (!overrides) {
+    return undefined;
+  }
+
+  return Object.fromEntries(Object.entries(overrides).map(([key, message]) => [
+    key,
+    typeof defaultTocMessages[key as keyof TocMessages] === "function"
+      ? () => message
+      : message,
+  ])) as TocMessageOverrides;
 }
 
 function createBrowserLabMathOutput(request: MathRenderRequest, callId: number) {
@@ -885,6 +932,27 @@ function readBrowserLabAlertsState(
     case "canToggle": return state.canToggle(request.kind);
     case "canUnwrap": return state.canUnwrap();
     case "canWrap": return state.canWrap(request.kind);
+    case "isActive": return state.isActive();
+  }
+}
+
+function runBrowserLabTocCommand(
+  mounted: MountedEditor,
+  request: BrowserLabTocCommandRequest,
+) {
+  const commands = requireTocHandle(mounted).commands;
+  return request.type === "insert" ? commands.insert() : commands.remove();
+}
+
+function readBrowserLabTocState(
+  mounted: MountedEditor,
+  request: BrowserLabTocStateRequest,
+) {
+  const state = requireTocHandle(mounted).state;
+
+  switch (request.type) {
+    case "canInsert": return state.canInsert();
+    case "canRemove": return state.canRemove();
     case "isActive": return state.isActive();
   }
 }
@@ -1085,6 +1153,11 @@ export function BrowserLabPage() {
             ),
           })
         : null;
+      mounted.tocExtension = extensionMode === "toc"
+        ? createTocExtension({
+            messages: normalizeBrowserLabTocMessages(spec.tocMessages),
+          })
+        : null;
       const extensions = extensionMode === "public-example"
         ? publicExampleExtensions
         : mounted.alertsExtension
@@ -1095,7 +1168,9 @@ export function BrowserLabPage() {
               ? [mounted.footnotesExtension]
               : mounted.mathExtension
                 ? [mounted.mathExtension]
-                : undefined;
+                : mounted.tocExtension
+                  ? [mounted.tocExtension]
+                  : undefined;
       const existingOverlays = new Set(
         mounted.portalRoot.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR),
       );
@@ -1341,6 +1416,7 @@ export function BrowserLabPage() {
           root: editorRoot,
           resourceLog: createResourceLog(),
           section,
+          tocExtension: null,
           transactionCount: 0,
         };
 
@@ -1612,6 +1688,24 @@ export function BrowserLabPage() {
       mathSnapshot(id) {
         return requireMathHandle(requireEditor(editors, id)).state.getSnapshot();
       },
+      tocCommand(id, request) {
+        const mounted = requireEditor(editors, id);
+        const handled = runBrowserLabTocCommand(mounted, request);
+
+        if (handled) {
+          mounted.editor.flushChange();
+          mounted.output.textContent = mounted.editor.getMarkdown();
+          renderExtensionActions(mounted);
+        }
+
+        return handled;
+      },
+      tocSnapshot(id) {
+        return requireTocHandle(requireEditor(editors, id)).state.getSnapshot();
+      },
+      tocState(id, request) {
+        return readBrowserLabTocState(requireEditor(editors, id), request);
+      },
       remount(id, options = {}) {
         const mounted = requireEditor(editors, id);
 
@@ -1756,6 +1850,36 @@ export function BrowserLabPage() {
         }
 
         view.focus();
+        return true;
+      },
+      selectToc(id, occurrence = 1) {
+        if (!Number.isInteger(occurrence) || occurrence < 1) {
+          return false;
+        }
+
+        const mounted = requireEditor(editors, id);
+        const snapshot = requireTocHandle(mounted).state.getSnapshot()
+          .tocs[occurrence - 1];
+
+        if (!snapshot) {
+          return false;
+        }
+
+        const view = mounted.editor.view;
+        const node = view.state.doc.nodeAt(snapshot.position);
+
+        if (!node || node.type.name !== "toc" || view.composing) {
+          return false;
+        }
+
+        const selection = NodeSelection.create(view.state.doc, snapshot.position);
+
+        if (!selection.eq(view.state.selection)) {
+          view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
+        }
+
+        view.focus();
+        renderExtensionActions(mounted);
         return true;
       },
       selectText(id, text, mode = "all", occurrence = 0) {
