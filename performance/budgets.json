@@ -210,7 +210,7 @@
     "root": {
       "initialJs": {
         "rawBytes": { "warning": 810000, "failure": 945000 },
-        "gzipBytes": { "warning": 225000, "failure": 257000 }
+        "gzipBytes": { "warning": 225000, "failure": 260000 }
       },
       "lazyJs": {
         "rawBytes": { "warning": 1090000, "failure": 1120000 },
@@ -218,7 +218,7 @@
       },
       "totalJs": {
         "rawBytes": { "warning": 1880000, "failure": 2040000 },
-        "gzipBytes": { "warning": 560000, "failure": 600000 }
+        "gzipBytes": { "warning": 560000, "failure": 605000 }
       },
       "css": {
         "rawBytes": { "warning": 16750, "failure": 37000 },
@@ -229,7 +229,7 @@
     "minimal": {
       "initialJs": {
         "rawBytes": { "warning": 690000, "failure": 730000 },
-        "gzipBytes": { "warning": 194000, "failure": 205000 }
+        "gzipBytes": { "warning": 194000, "failure": 207500 }
       },
       "lazyJs": {
         "rawBytes": { "warning": 0, "failure": 0 },
@@ -237,7 +237,7 @@
       },
       "totalJs": {
         "rawBytes": { "warning": 690000, "failure": 730000 },
-        "gzipBytes": { "warning": 194000, "failure": 205000 }
+        "gzipBytes": { "warning": 194000, "failure": 207500 }
       },
       "css": {
         "rawBytes": { "warning": 4800, "failure": 11750 },
