@@ -14,7 +14,9 @@ Only use serialized Markora output as the sole stored copy when input is constra
 
 - no byte-for-byte lexical round-trip guarantee;
 - exact source preservation for the conservative opaque shapes documented below;
-- no preflight validator or structured unsupported-syntax error.
+- no general preflight validator or structured unsupported-syntax error; input
+  that exceeds the bounded structural-nesting limit throws `RangeError` before
+  an editor is created or an existing document is changed.
 
 Syntax outside both the supported dialect and the recognized opaque shapes can still be reinterpreted, flattened, escaped, or dropped without an exception. Hosts accepting arbitrary Markdown should retain the original source, validate it before import, or offer a broader raw-source path.
 
@@ -26,7 +28,7 @@ Syntax outside both the supported dialect and the recognized opaque shapes can s
 | Lexical round-trip | Original bytes, markers, escapes, whitespace, and reference definitions survive. | None. |
 | Normalized output | The construct is supported semantically and exported in Markora's canonical spelling. | This is the normal guarantee for supported syntax. |
 | Opaque preservation | Recognized source is retained as an inert atom rather than interpreted as editable structure. | Available only for the conservative block and inline shapes below. |
-| Unsupported / rejected | The construct is outside the dialect and import reports an error instead of changing it. | No runtime error path exists yet. |
+| Unsupported / rejected | The construct is outside the dialect and import reports an error instead of changing it. | Excessive structural nesting is rejected atomically; there is not yet a general unsupported-syntax error path. |
 | Unsupported — unreported | The construct is outside the dialect, but the current permissive parser accepts or reinterprets it without a fidelity guarantee. | Transitional behavior documented below. |
 
 ## Supported dialect
@@ -37,7 +39,7 @@ Syntax outside both the supported dialect and the recognized opaque shapes can s
 | Headings | ATX levels 1–6 and Setext headings | Normalized to ATX `#` markers without optional closing hashes. |
 | Blockquotes | CommonMark `>` blocks with supported child blocks | Normalized marker layout. Soft line breaks inside a paragraph become spaces. |
 | Thematic breaks | CommonMark asterisk, hyphen, or underscore forms | Normalized to `---`. |
-| Bullet lists | Ordinary lists using one marker style, including supported nested blocks | Normalized to `*` markers. Adjacent lists separated only by a different marker are a known limitation. |
+| Bullet lists | Ordinary lists using one marker style, including supported nested blocks | Normalized to `*` markers. A pure list chain supports up to 127 recursively nested items; combined block containers share the same bounded structural-depth budget. Deeper input throws `RangeError` instead of returning partial content. Adjacent lists separated only by a different marker are a known limitation. |
 | Ordered lists | Period or parenthesis delimiters with a start of 1 or greater | Normalized to period delimiters and explicit sequential numbering. A start of `0` is not supported reliably. |
 | Task lists | Flat `[ ]`, `[x]`, or `[X]` items directly inside a bullet list | Normalized to `* [ ]` and `* [x]`. Nested lists or additional blocks inside task items are not supported reliably. |
 | Code blocks | Indented blocks and backtick or tilde fences, with an optional info string | Code text and the complete normalized info string are semantic content. Surrounding info whitespace is trimmed on import and command input. Output uses a fence longer than delimiter runs in the body, choosing tildes when the info contains a backtick; the original fence character and length are otherwise not retained. NUL/CR/LF cannot occur in info, and raw NUL/CR code text injected through advanced transactions cannot be serialized exactly. |

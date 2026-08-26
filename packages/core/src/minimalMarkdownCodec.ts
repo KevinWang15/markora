@@ -27,6 +27,7 @@ import type { MarkdownEditorCodec } from "./markdownCodec";
 import {
   combineMarkdownSerializerEscapePatterns,
   compileMarkdownEditorParserTokens,
+  configureMarkdownTokenizerNesting,
   registerMarkdownEditorTokenizerRules,
   wrapMarkdownEditorExtensionRuntimeCallback,
 } from "./markdownContributionCompiler";
@@ -296,6 +297,7 @@ export function createMinimalMarkdownCodec(
     extensions,
     minimalTokenizerFoundationAnchors,
   );
+  configureMarkdownTokenizerNesting(tokenizer);
   const parserTokens = compileMarkdownEditorParserTokens({
     foundationTokens: {
       ...defaultMarkdownParser.tokens,

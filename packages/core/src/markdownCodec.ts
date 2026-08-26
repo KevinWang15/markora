@@ -20,6 +20,7 @@ import type { ResolvedMarkdownEditorExtension } from "./extensionResolver";
 import {
   combineMarkdownSerializerEscapePatterns,
   compileMarkdownEditorParserTokens,
+  configureMarkdownTokenizerNesting,
   registerMarkdownEditorTokenizerRules,
   wrapMarkdownEditorExtensionRuntimeCallback,
 } from "./markdownContributionCompiler";
@@ -645,7 +646,9 @@ export function createCompatibilityMarkdownCodec(
     }
   }
 
-const markdownTokenizer = new MarkdownIt("commonmark", { html: true }).enable("strikethrough").enable("table");
+const markdownTokenizer = new MarkdownIt("commonmark", { html: true })
+  .enable("strikethrough")
+  .enable("table");
 // Markdown-it's built-in allowlist would discard host-approved custom schemes
 // before the editor policy can inspect them. Preserve candidate destinations
 // here, then enforce the per-editor policy on the parsed ProseMirror document.
@@ -688,6 +691,7 @@ registerMarkdownEditorTokenizerRules(
   resolvedExtensions,
   compatibilityTokenizerFoundationAnchors,
 );
+configureMarkdownTokenizerNesting(markdownTokenizer);
 
 const foundationMarkdownTokens: Record<string, ParseSpec> = {
   ...defaultMarkdownParser.tokens,

@@ -838,10 +838,16 @@ and verification decisions are frozen in the
   green. Independent review found and closed stale-target, multi-step invariant,
   serializer escaping, accessibility-role, error-style, repaint, and scheduler
   scaling defects before release.
-- A separate pre-existing core follow-up remains: Markdown-it's default
-  `maxNesting: 20` can drop content at roughly ten nested list items in both
-  codecs. It is unrelated to the footnote scanner and must be resolved as a
-  core Markdown fidelity issue rather than hidden inside this package milestone.
+- The pre-existing core Markdown-it nesting defect is closed independently of
+  the footnote package. Root and minimal now round-trip 127 recursively nested
+  list items under a shared structural budget, retain a higher parser safety
+  ceiling, and reject deeper input atomically before either codec can return a
+  partially truncated document. A production-built three-engine regression
+  edits the deepest item of a 100-level list, using raw Chromium CDP input in
+  Chromium; focused tests cover the exact boundary, parser-ceiling overflow,
+  construction cleanup, external-update atomicity, and continued editor use.
+  Packed bundle/module isolation and the core plus all-seven 100 KiB–1 MiB
+  Chromium performance and zero-retention budgets remain green.
 - `markora-extension-alerts` provides semantic GitHub blockquote alerts in root
   and minimal for note, tip, important, warning, and caution. A lightweight
   authored-marker claim runs before the foundation blockquote rule, while a

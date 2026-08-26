@@ -34,6 +34,27 @@ type TokenizerAnchorNode = MarkdownEditorTokenizerFoundationAnchor & Readonly<{
 type TokenizerGraphNode = OwnedTokenizerRule | TokenizerAnchorNode;
 
 const tokenizerPhases = ["block", "inline", "inline-post", "core"] as const;
+const MARKDOWN_SUPPORTED_TOKEN_NESTING = 256;
+const MARKDOWN_TOKENIZER_MAX_NESTING = 512;
+
+// Markdown-it counts both list and list-item containers, so this admits 127
+// recursively nested list items. Keep a separate parser ceiling above the
+// product limit: if hostile input reaches Markdown-it's recursion guard, the
+// retained high-level tokens still trip our deterministic error instead of
+// letting either editor codec return a silently truncated document.
+export function configureMarkdownTokenizerNesting(tokenizer: MarkdownIt) {
+  // markdown-it supports this runtime option even though its public Definitely
+  // Typed Options declaration omits it.
+  (tokenizer.options as typeof tokenizer.options & { maxNesting: number }).maxNesting =
+    MARKDOWN_TOKENIZER_MAX_NESTING;
+  tokenizer.core.ruler.push("markora_nesting_limit", (state) => {
+    if (state.tokens.some(token => token.level >= MARKDOWN_SUPPORTED_TOKEN_NESTING)) {
+      throw new RangeError(
+        "Markdown nesting exceeds Markora's supported structural depth.",
+      );
+    }
+  });
+}
 
 /** @internal Merge foundation patterns and validated extension delimiter sets. */
 export function combineMarkdownSerializerEscapePatterns(
