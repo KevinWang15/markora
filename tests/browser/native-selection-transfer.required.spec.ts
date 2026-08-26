@@ -75,8 +75,12 @@ async function textPoint(
   needle: string,
   offset: number,
   side: "after" | "before",
+  selector?: string,
 ) {
-  return editorLocator(page, id).evaluate((element, options) => {
+  const target = selector
+    ? editorLocator(page, id).locator(selector)
+    : editorLocator(page, id);
+  return target.evaluate((element, options) => {
     const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
       const text = walker.currentNode as Text;
@@ -93,6 +97,18 @@ async function textPoint(
     }
     throw new Error(`Missing ${JSON.stringify(options.needle)} drag target.`);
   }, { needle, offset, side });
+}
+
+async function reloadWithoutIntersectionObserver(page: Page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "IntersectionObserver", {
+      configurable: true,
+      value: undefined,
+      writable: true,
+    });
+  });
+  await page.reload();
+  await expect(page.locator("[data-e2e-browser-lab]")).toHaveAttribute("data-ready", "true");
 }
 
 async function armNativeDragCapture(page: Page, id: string) {
@@ -414,6 +430,139 @@ test("@required native cross-editor drag copies one closed multi-block slice", a
   await settleEditor(labPage, destinationId);
   expect(await getMarkdown(labPage, destinationId)).toBe(expectedDestination);
   expect(await getMarkdown(labPage, sourceId)).toBe(sourceMarkdown);
+
+  await cdp?.detach();
+});
+
+test("@required native rich-text drag copies literal text into active nested code", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "native-active-code-destination";
+  const original = [
+    "source **beta** end",
+    "",
+    "```text",
+    "code omega",
+    "```",
+  ].join("\n");
+  const expected = [
+    "source **beta** end",
+    "",
+    "```text",
+    "code betaomega",
+    "```",
+  ].join("\n");
+  await mountEditor(labPage, { id, markdown: original, root: "shadow" });
+  await editorLocator(labPage, id).locator(".cm-content").click();
+  await settleEditor(labPage, id);
+  expect((await snapshotEditor(labPage, id)).codeBlocks.active).toBe(1);
+  expect(await labPage.evaluate((editorId) => (
+    window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "all")
+  ), id)).toBe(true);
+  await settleEditor(labPage, id);
+  await armNativeDragCapture(labPage, id);
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, id, "beta", 1, "before"),
+    await textPoint(labPage, id, "omega", 0, "before", ".cm-content"),
+  );
+  await settleEditor(labPage, id);
+
+  const dragEvents = await readNativeDragCapture(labPage);
+  expect(await getMarkdown(labPage, id), JSON.stringify(dragEvents)).toBe(expected);
+  const dragstart = dragEvents.filter(({ type }) => type === "dragstart");
+  expect(dragstart).toHaveLength(1);
+  expect(new Set(dragstart[0]?.types)).toEqual(new Set(["text/html", "text/plain"]));
+  const drop = dragEvents.filter(({ type }) => type === "drop");
+  expect(drop).toHaveLength(1);
+  expect(drop[0]?.defaultPrevented).toBe(true);
+  expect(dragEvents.every(({ isTrusted }) => isTrusted)).toBe(true);
+  const inserted = await snapshotEditor(labPage, id);
+  expect(inserted.codeBlocks.active).toBe(1);
+  expect(inserted.codeMirrorFocused).toBe(true);
+  expect(inserted.selection.to - inserted.selection.from).toBe("beta".length);
+
+  await labPage.keyboard.press("ControlOrMeta+Z");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(original);
+  await labPage.keyboard.press("ControlOrMeta+Shift+Z");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(expected);
+
+  await cdp?.detach();
+});
+
+test("@required native rich-text drag copies literal text into passive nested code", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  await reloadWithoutIntersectionObserver(labPage);
+  const id = "native-passive-code-destination";
+  const original = [
+    "source **beta** end",
+    "",
+    "```text",
+    "code omega",
+    "```",
+  ].join("\n");
+  const expected = [
+    "source **beta** end",
+    "",
+    "```text",
+    "code betaomega",
+    "```",
+  ].join("\n");
+  await mountEditor(labPage, { id, markdown: original, root: "shadow" });
+  const initial = await snapshotEditor(labPage, id);
+  expect(initial.codeBlocks.active).toBe(0);
+  expect(initial.codeBlocks.staticViews).toBe(1);
+  expect(await labPage.evaluate((editorId) => (
+    window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "all")
+  ), id)).toBe(true);
+  await settleEditor(labPage, id);
+  await armNativeDragCapture(labPage, id);
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, id, "beta", 1, "before"),
+    await textPoint(labPage, id, "omega", 0, "before", ".mdw-code-block-static-code"),
+  );
+  await settleEditor(labPage, id);
+
+  const dragEvents = await readNativeDragCapture(labPage);
+  expect(await getMarkdown(labPage, id), JSON.stringify(dragEvents)).toBe(expected);
+  const dragstart = dragEvents.filter(({ type }) => type === "dragstart");
+  expect(dragstart).toHaveLength(1);
+  expect(new Set(dragstart[0]?.types)).toEqual(new Set(["text/html", "text/plain"]));
+  const drop = dragEvents.filter(({ type }) => type === "drop");
+  expect(drop).toHaveLength(1);
+  expect(drop[0]?.defaultPrevented).toBe(true);
+  expect(dragEvents.every(({ isTrusted }) => isTrusted)).toBe(true);
+  const inserted = await snapshotEditor(labPage, id);
+  expect(inserted.selection.from).toBe(inserted.selection.to);
+
+  expect(await labPage.evaluate((editorId) => (
+    window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" })
+  ), id)).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(original);
+  expect(await labPage.evaluate((editorId) => (
+    window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "redo" })
+  ), id)).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(expected);
 
   await cdp?.detach();
 });
