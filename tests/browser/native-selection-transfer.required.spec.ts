@@ -1,3 +1,4 @@
+import type { CDPSession, Page } from "@playwright/test";
 import {
   editorLocator,
   expect,
@@ -7,6 +8,85 @@ import {
   snapshotEditor,
   test,
 } from "./fixtures";
+
+type PointerPoint = { x: number; y: number };
+
+const PIXEL_GIF = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+
+async function dragPointer(
+  page: Page,
+  cdp: CDPSession | null,
+  start: PointerPoint,
+  target: PointerPoint,
+) {
+  if (cdp) {
+    await cdp.send("Input.dispatchMouseEvent", {
+      button: "none",
+      buttons: 0,
+      type: "mouseMoved",
+      x: start.x,
+      y: start.y,
+    });
+    await cdp.send("Input.dispatchMouseEvent", {
+      button: "left",
+      buttons: 1,
+      clickCount: 1,
+      type: "mousePressed",
+      x: start.x,
+      y: start.y,
+    });
+    for (let step = 1; step <= 30; step += 1) {
+      const progress = step / 30;
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "left",
+        buttons: 1,
+        type: "mouseMoved",
+        x: start.x + (target.x - start.x) * progress,
+        y: start.y + (target.y - start.y) * progress,
+      });
+    }
+    await cdp.send("Input.dispatchMouseEvent", {
+      button: "left",
+      buttons: 0,
+      clickCount: 1,
+      type: "mouseReleased",
+      x: target.x,
+      y: target.y,
+    });
+    return;
+  }
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(target.x, target.y, { steps: 30 });
+  await page.mouse.up();
+}
+
+async function textPoint(
+  page: Page,
+  id: string,
+  needle: string,
+  offset: number,
+  side: "after" | "before",
+) {
+  return editorLocator(page, id).evaluate((element, options) => {
+    const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const text = walker.currentNode as Text;
+      const index = text.data.indexOf(options.needle);
+      if (index < 0) continue;
+      const range = element.ownerDocument.createRange();
+      range.setStart(text, index + options.offset);
+      range.setEnd(text, index + options.offset + 1);
+      const rect = range.getBoundingClientRect();
+      return {
+        x: options.side === "after" ? rect.right - 1 : rect.left + 1,
+        y: rect.top + rect.height / 2,
+      };
+    }
+    throw new Error(`Missing ${JSON.stringify(options.needle)} drag target.`);
+  }, { needle, offset, side });
+}
 
 test("@required native select-all replacement respects the active editing surface", async ({
   browserName,
@@ -110,97 +190,93 @@ test("@required native select-all replacement respects the active editing surfac
   await cdp?.detach();
 });
 
-test("@required native rich-text drag moves one undoable semantic slice", async ({
+test("@required native rich-inline drags move one undoable semantic slice", async ({
   browserName,
   context,
   labPage,
 }) => {
-  const id = "native-rich-text-drag";
-  const markdown = "alpha **beta** gamma delta";
-  await mountEditor(labPage, { id, markdown, root: "shadow" });
-  expect(await labPage.evaluate((editorId) => (
-    window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "all")
-  ), id)).toBe(true);
-  await settleEditor(labPage, id);
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
 
-  const points = await editorLocator(labPage, id).evaluate((element) => {
-    const textPoint = (needle: string, offset: number, side: "after" | "before") => {
-      const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-      while (walker.nextNode()) {
-        const text = walker.currentNode as Text;
-        const index = text.data.indexOf(needle);
-        if (index < 0) continue;
-        const range = element.ownerDocument.createRange();
-        range.setStart(text, index + offset);
-        range.setEnd(text, index + offset + 1);
-        const rect = range.getBoundingClientRect();
-        return {
-          x: side === "after" ? rect.right - 1 : rect.left + 1,
-          y: rect.top + rect.height / 2,
-        };
-      }
-      throw new Error(`Missing ${JSON.stringify(needle)} drag target.`);
-    };
-    return {
-      start: textPoint("beta", 1, "before"),
-      target: textPoint("delta", 4, "after"),
-    };
+  for (const testCase of [
+    {
+      expected: "alpha  gamma delta**beta**",
+      id: "native-strong-text-drag",
+      markdown: "alpha **beta** gamma delta",
+    },
+    {
+      expected: "alpha  gamma delta[beta](/target)",
+      id: "native-link-text-drag",
+      markdown: "alpha [beta](/target) gamma delta",
+    },
+  ]) {
+    await mountEditor(labPage, {
+      id: testCase.id,
+      markdown: testCase.markdown,
+      root: "shadow",
+    });
+    expect(await labPage.evaluate((editorId) => (
+      window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "all")
+    ), testCase.id)).toBe(true);
+    await settleEditor(labPage, testCase.id);
+    await dragPointer(
+      labPage,
+      cdp,
+      await textPoint(labPage, testCase.id, "beta", 1, "before"),
+      await textPoint(labPage, testCase.id, "delta", 4, "after"),
+    );
+    await settleEditor(labPage, testCase.id);
+
+    expect(await getMarkdown(labPage, testCase.id)).toBe(testCase.expected);
+    const moved = (await snapshotEditor(labPage, testCase.id)).selection;
+    expect(moved.to - moved.from).toBe("beta".length);
+    await labPage.keyboard.press("ControlOrMeta+Z");
+    await settleEditor(labPage, testCase.id);
+    expect(await getMarkdown(labPage, testCase.id)).toBe(testCase.markdown);
+    await labPage.keyboard.press("ControlOrMeta+Shift+Z");
+    await settleEditor(labPage, testCase.id);
+    expect(await getMarkdown(labPage, testCase.id)).toBe(testCase.expected);
+  }
+
+  await cdp?.detach();
+});
+
+test("@required direct image drag moves one undoable image atom", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "native-image-drag";
+  const markdown = `alpha ![alt](${PIXEL_GIF}) delta`;
+  const expected = `alpha  delta![alt](${PIXEL_GIF})`;
+  await mountEditor(labPage, { id, markdown, root: "shadow" });
+  const image = editorLocator(labPage, id).locator(".mdw-image");
+  const start = await image.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   });
   const cdp = browserName === "chromium"
     ? await context.newCDPSession(labPage)
     : null;
 
-  if (cdp) {
-    await cdp.send("Input.dispatchMouseEvent", {
-      button: "none",
-      buttons: 0,
-      type: "mouseMoved",
-      x: points.start.x,
-      y: points.start.y,
-    });
-    await cdp.send("Input.dispatchMouseEvent", {
-      button: "left",
-      buttons: 1,
-      clickCount: 1,
-      type: "mousePressed",
-      x: points.start.x,
-      y: points.start.y,
-    });
-    for (let step = 1; step <= 30; step += 1) {
-      const progress = step / 30;
-      await cdp.send("Input.dispatchMouseEvent", {
-        button: "left",
-        buttons: 1,
-        type: "mouseMoved",
-        x: points.start.x + (points.target.x - points.start.x) * progress,
-        y: points.start.y + (points.target.y - points.start.y) * progress,
-      });
-    }
-    await cdp.send("Input.dispatchMouseEvent", {
-      button: "left",
-      buttons: 0,
-      clickCount: 1,
-      type: "mouseReleased",
-      x: points.target.x,
-      y: points.target.y,
-    });
-  } else {
-    await labPage.mouse.move(points.start.x, points.start.y);
-    await labPage.mouse.down();
-    await labPage.mouse.move(points.target.x, points.target.y, { steps: 30 });
-    await labPage.mouse.up();
-  }
+  await dragPointer(
+    labPage,
+    cdp,
+    start,
+    await textPoint(labPage, id, "delta", 4, "after"),
+  );
   await settleEditor(labPage, id);
-
-  expect(await getMarkdown(labPage, id)).toBe("alpha  gamma delta**beta**");
+  expect(await getMarkdown(labPage, id)).toBe(expected);
+  await expect(image).toHaveCount(1);
   const moved = (await snapshotEditor(labPage, id)).selection;
-  expect(moved.to - moved.from).toBe("beta".length);
+  expect(moved.to - moved.from).toBe(1);
   await labPage.keyboard.press("ControlOrMeta+Z");
   await settleEditor(labPage, id);
   expect(await getMarkdown(labPage, id)).toBe(markdown);
   await labPage.keyboard.press("ControlOrMeta+Shift+Z");
   await settleEditor(labPage, id);
-  expect(await getMarkdown(labPage, id)).toBe("alpha  gamma delta**beta**");
+  expect(await getMarkdown(labPage, id)).toBe(expected);
 
   await cdp?.detach();
 });
