@@ -10,6 +10,12 @@ import {
 } from "./fixtures";
 
 type PointerPoint = { x: number; y: number };
+type NativeDragRecord = {
+  defaultPrevented: boolean;
+  isTrusted: boolean;
+  type: string;
+  types: string[];
+};
 
 const PIXEL_GIF = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 
@@ -86,6 +92,30 @@ async function textPoint(
     }
     throw new Error(`Missing ${JSON.stringify(options.needle)} drag target.`);
   }, { needle, offset, side });
+}
+
+async function armNativeDragCapture(page: Page, id: string) {
+  await page.evaluate((editorId) => {
+    const section = document.querySelector(`[data-e2e-editor="${editorId}"]`)!;
+    (window as typeof window & { __markoraNativeDrag?: unknown }).__markoraNativeDrag = [];
+    for (const type of ["dragstart", "dragover", "drop", "dragend"] as const) {
+      section.addEventListener(type, (rawEvent) => {
+        const event = rawEvent as DragEvent;
+        (window as typeof window & { __markoraNativeDrag: NativeDragRecord[] }).__markoraNativeDrag.push({
+          defaultPrevented: event.defaultPrevented,
+          isTrusted: event.isTrusted,
+          type: event.type,
+          types: Array.from(event.dataTransfer?.types ?? []),
+        });
+      });
+    }
+  }, id);
+}
+
+async function readNativeDragCapture(page: Page) {
+  return page.evaluate(() => (
+    window as typeof window & { __markoraNativeDrag?: NativeDragRecord[] }
+  ).__markoraNativeDrag ?? []);
 }
 
 test("@required native select-all replacement respects the active editing surface", async ({
@@ -238,6 +268,198 @@ test("@required native rich-inline drags move one undoable semantic slice", asyn
     await settleEditor(labPage, testCase.id);
     expect(await getMarkdown(labPage, testCase.id)).toBe(testCase.expected);
   }
+
+  await cdp?.detach();
+});
+
+test("@required native multi-block drag moves one open semantic slice", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+
+  for (const testCase of [
+    {
+      expected: ["left  right", "", "target ZAAA", "", "BBB"].join("\n"),
+      id: "native-multi-block-drag-forward",
+      markdown: ["left AAA", "", "BBB right", "", "target Z"].join("\n"),
+      selection: { anchor: 6, head: 14 },
+    },
+    {
+      expected: ["target ZAAA", "", "BBB", "", "left  right"].join("\n"),
+      id: "native-multi-block-drag-backward",
+      markdown: ["target Z", "", "left AAA", "", "BBB right"].join("\n"),
+      selection: { anchor: 16, head: 24 },
+    },
+  ]) {
+    await mountEditor(labPage, {
+      autofocus: true,
+      id: testCase.id,
+      initialSelection: testCase.selection,
+      markdown: testCase.markdown,
+      root: "shadow",
+    });
+    const initial = (await snapshotEditor(labPage, testCase.id)).selection;
+    expect(initial).toMatchObject({
+      ...testCase.selection,
+      from: testCase.selection.anchor,
+      to: testCase.selection.head,
+    });
+    await armNativeDragCapture(labPage, testCase.id);
+
+    await dragPointer(
+      labPage,
+      cdp,
+      await textPoint(labPage, testCase.id, "left AAA", 6, "before"),
+      await textPoint(labPage, testCase.id, "target Z", 7, "after"),
+    );
+    await settleEditor(labPage, testCase.id);
+
+    const dragEvents = await readNativeDragCapture(labPage);
+    expect(await getMarkdown(labPage, testCase.id), JSON.stringify(dragEvents)).toBe(testCase.expected);
+    const dragstart = dragEvents.filter(({ type }) => type === "dragstart");
+    expect(dragstart).toHaveLength(1);
+    expect(new Set(dragstart[0]?.types)).toEqual(new Set(["text/html", "text/plain"]));
+    const drop = dragEvents.filter(({ type }) => type === "drop");
+    expect(drop).toHaveLength(1);
+    expect(drop[0]?.defaultPrevented).toBe(true);
+    expect(dragEvents.every(({ isTrusted }) => isTrusted)).toBe(true);
+    const moved = (await snapshotEditor(labPage, testCase.id)).selection;
+    expect(moved.to - moved.from).toBe(8);
+    await labPage.keyboard.press("ControlOrMeta+Z");
+    await settleEditor(labPage, testCase.id);
+    expect(await getMarkdown(labPage, testCase.id)).toBe(testCase.markdown);
+    await labPage.keyboard.press("ControlOrMeta+Shift+Z");
+    await settleEditor(labPage, testCase.id);
+    expect(await getMarkdown(labPage, testCase.id)).toBe(testCase.expected);
+  }
+
+  await cdp?.detach();
+});
+
+test("@required native multi-block drag preserves nested list-item structure", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "native-list-multi-block-drag";
+  const markdown = ["* target Z", "* left AAA", "* BBB right"].join("\n");
+  const expected = ["* target ZAAA", "* BBB", "* left  right"].join("\n");
+  await mountEditor(labPage, {
+    autofocus: true,
+    id,
+    initialSelection: { anchor: 20, head: 30 },
+    markdown,
+    root: "shadow",
+  });
+  expect((await snapshotEditor(labPage, id)).selection).toMatchObject({
+    anchor: 20,
+    from: 20,
+    head: 30,
+    to: 30,
+  });
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+  await armNativeDragCapture(labPage, id);
+
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, id, "left AAA", 6, "before"),
+    await textPoint(labPage, id, "target Z", 7, "after"),
+  );
+  await settleEditor(labPage, id);
+
+  const dragEvents = await readNativeDragCapture(labPage);
+  expect(await getMarkdown(labPage, id), JSON.stringify(dragEvents)).toBe(expected);
+  expect(dragEvents.filter(({ type }) => type === "dragstart")).toHaveLength(1);
+  expect(dragEvents.filter(({ type }) => type === "drop")).toHaveLength(1);
+  expect(dragEvents.every(({ isTrusted }) => isTrusted)).toBe(true);
+  await expect(editorLocator(labPage, id).locator("li")).toHaveCount(3);
+  const moved = (await snapshotEditor(labPage, id)).selection;
+  expect(moved.to - moved.from).toBe(10);
+  await labPage.keyboard.press("ControlOrMeta+Z");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(markdown);
+  await labPage.keyboard.press("ControlOrMeta+Shift+Z");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(expected);
+
+  await cdp?.detach();
+});
+
+test("@required native multi-block drag preserves an enclosed managed code block", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "native-managed-multi-block-drag";
+  const markdown = [
+    "left AAA",
+    "",
+    "```text",
+    "code",
+    "```",
+    "",
+    "BBB right",
+    "",
+    "target Z",
+  ].join("\n");
+  const expected = [
+    "left  right",
+    "",
+    "target ZAAA",
+    "",
+    "```text",
+    "code",
+    "```",
+    "",
+    "BBB",
+  ].join("\n");
+  await mountEditor(labPage, {
+    autofocus: true,
+    id,
+    initialSelection: { anchor: 6, head: 20 },
+    markdown,
+    root: "shadow",
+  });
+  expect((await snapshotEditor(labPage, id)).selection).toMatchObject({
+    anchor: 6,
+    from: 6,
+    head: 20,
+    to: 20,
+  });
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, id, "left AAA", 6, "before"),
+    await textPoint(labPage, id, "target Z", 7, "after"),
+  );
+  await settleEditor(labPage, id);
+
+  expect(await getMarkdown(labPage, id)).toBe(expected);
+  const moved = await snapshotEditor(labPage, id);
+  expect(moved.selection.to - moved.selection.from).toBe(14);
+  expect(moved.codeBlocks).toMatchObject({
+    active: 1,
+    codeMirrorEditors: 1,
+    staticViews: 1,
+    total: 1,
+  });
+  await labPage.keyboard.press("ControlOrMeta+Z");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(markdown);
+  await labPage.keyboard.press("ControlOrMeta+Shift+Z");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(expected);
 
   await cdp?.detach();
 });
