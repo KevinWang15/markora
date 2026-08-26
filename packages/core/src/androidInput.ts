@@ -83,7 +83,7 @@ type NativeWordRangeProbe = {
   toOffset: number | null;
 };
 
-type PointerWordIntent = {
+type PointerTextIntent = {
   doc: ProseMirrorNode;
   position: number;
   timeStamp: number;
@@ -97,6 +97,11 @@ type ModelWordRange = {
 };
 
 type PointerWordDrag = ModelWordRange & {
+  doc: ProseMirrorNode;
+  lastPosition: number | null;
+};
+
+type PointerBlockDrag = ModelWordRange & {
   doc: ProseMirrorNode;
   lastPosition: number | null;
 };
@@ -781,11 +786,22 @@ function readTextBlockAtPosition(
     : null;
 }
 
-function readSplitTextBlockAtPosition(
+function measurePointerTextBlockRange(
   state: EditorState,
   position: number,
-) {
-  return readTextBlockAtPosition(state, position, true);
+): ModelWordRange | null {
+  if (!Number.isInteger(position) || position < 0 || position > state.doc.content.size) {
+    return null;
+  }
+
+  const $position = state.doc.resolve(position);
+
+  return $position.parent.inlineContent
+    ? {
+        from: $position.start(),
+        to: $position.start() + $position.parent.content.size,
+      }
+    : null;
 }
 
 function measurePointerWordRange(
@@ -846,6 +862,7 @@ function handleNativeDoubleClickWordSelection(
   pointerPosition: number | null,
   ownBeforeNativeSelection = false,
   onOwnedRange?: (range: ModelWordRange) => void,
+  requireSplit = true,
 ) {
   if (!isOwnedUnmodifiedPrimaryPointerEvent(view, event, pointerPosition !== null)) {
     return false;
@@ -869,7 +886,7 @@ function handleNativeDoubleClickWordSelection(
     return false;
   }
 
-  const range = measurePointerWordRange(view, state, position, true);
+  const range = measurePointerWordRange(view, state, position, requireSplit);
 
   if (range === consumePointerWordSelection) {
     event.preventDefault();
@@ -1048,15 +1065,54 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
   const pendingFallbacks = new Set<number>();
   let lastFallbackState: FallbackState | null = null;
   let ownedPointerWordSelection: OwnedPointerWordSelection | null = null;
-  let pointerWordIntent: PointerWordIntent | null = null;
-  const matchesPointerWordIntent = (view: EditorView, mouseEvent: MouseEvent) => Boolean(
-    pointerWordIntent
-    && pointerWordIntent.doc === view.state.doc
-    && mouseEvent.timeStamp - pointerWordIntent.timeStamp >= 0
-    && mouseEvent.timeStamp - pointerWordIntent.timeStamp <= 1_000
-    && Math.abs(mouseEvent.clientX - pointerWordIntent.x) <= 4
-    && Math.abs(mouseEvent.clientY - pointerWordIntent.y) <= 4
+  let pointerBlockIntent: PointerTextIntent | null = null;
+  let pointerWordIntent: PointerTextIntent | null = null;
+  const matchesPointerIntent = (
+    intent: PointerTextIntent | null,
+    view: EditorView,
+    mouseEvent: MouseEvent,
+  ) => Boolean(
+    intent
+    && intent.doc === view.state.doc
+    && mouseEvent.timeStamp - intent.timeStamp >= 0
+    && mouseEvent.timeStamp - intent.timeStamp <= 1_000
+    && Math.abs(mouseEvent.clientX - intent.x) <= 4
+    && Math.abs(mouseEvent.clientY - intent.y) <= 4
   );
+  const matchesPointerWordIntent = (view: EditorView, mouseEvent: MouseEvent) => (
+    matchesPointerIntent(pointerWordIntent, view, mouseEvent)
+  );
+  const rememberPointerBlockIntent = (view: EditorView, mouseEvent: MouseEvent) => {
+    if (mouseEvent.detail !== 1) {
+      return;
+    }
+
+    pointerBlockIntent = null;
+
+    if (!isOwnedUnmodifiedPrimaryPointerEvent(view, mouseEvent)) {
+      return;
+    }
+
+    const coordinates = view.posAtCoords({
+      left: mouseEvent.clientX,
+      top: mouseEvent.clientY,
+    });
+
+    if (
+      !coordinates
+      || !measurePointerTextBlockRange(view.state, coordinates.pos)
+    ) {
+      return;
+    }
+
+    pointerBlockIntent = {
+      doc: view.state.doc,
+      position: coordinates.pos,
+      timeStamp: mouseEvent.timeStamp,
+      x: mouseEvent.clientX,
+      y: mouseEvent.clientY,
+    };
+  };
   const rememberPointerWordIntent = (view: EditorView, mouseEvent: MouseEvent) => {
     if (mouseEvent.detail !== 1) {
       return;
@@ -1075,7 +1131,7 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
 
     if (
       !coordinates
-      || !readSplitTextBlockAtPosition(view.state, coordinates.pos)
+      || !readTextBlockAtPosition(view.state, coordinates.pos, false)
     ) {
       pointerWordIntent = null;
       return;
@@ -1358,7 +1414,117 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
     view(view) {
       const pointerDocument = view.dom.ownerDocument;
       const pointerWindow = pointerDocument.defaultView;
+      let pointerBlockDrag: PointerBlockDrag | null = null;
       let pointerWordDrag: PointerWordDrag | null = null;
+
+      function stopPointerBlockDrag() {
+        pointerBlockDrag = null;
+        pointerDocument.removeEventListener("mousemove", handlePointerBlockDrag, true);
+        pointerDocument.removeEventListener("mouseup", stopPointerBlockDrag, true);
+        pointerWindow?.removeEventListener("blur", stopPointerBlockDrag);
+      }
+
+      function handlePointerBlockDrag(event: MouseEvent) {
+        const drag = pointerBlockDrag;
+
+        if (!drag) {
+          return;
+        }
+
+        if (
+          view.isDestroyed
+          || view.state.doc !== drag.doc
+          || !view.editable
+          || view.composing
+          || (event.buttons & 1) === 0
+        ) {
+          stopPointerBlockDrag();
+          return;
+        }
+
+        const bounds = view.dom.getBoundingClientRect();
+
+        if (
+          event.clientX < bounds.left
+          || event.clientX > bounds.right
+          || event.clientY < bounds.top
+          || event.clientY > bounds.bottom
+        ) {
+          return;
+        }
+
+        const coordinates = view.posAtCoords({
+          left: event.clientX,
+          top: event.clientY,
+        });
+
+        if (!coordinates) {
+          return;
+        }
+
+        event.preventDefault();
+
+        if (coordinates.pos === drag.lastPosition) {
+          return;
+        }
+
+        const state = view.state;
+        const range = measurePointerTextBlockRange(state, coordinates.pos);
+
+        if (!range) {
+          return;
+        }
+
+        drag.lastPosition = coordinates.pos;
+        const anchor = range.to <= drag.from ? drag.to : drag.from;
+        const head = range.to <= drag.from
+          ? range.from
+          : range.from >= drag.to
+            ? range.to
+            : drag.to;
+        const selection = state.selection;
+
+        if (
+          !(selection instanceof TextSelection)
+          || selection.anchor !== anchor
+          || selection.head !== head
+        ) {
+          view.dispatch(
+            state.tr.setSelection(TextSelection.create(state.doc, anchor, head)),
+          );
+        }
+      }
+
+      function startPointerBlockDrag(event: MouseEvent, position: number) {
+        if (!isOwnedUnmodifiedPrimaryPointerEvent(view, event, true)) {
+          return false;
+        }
+
+        const state = view.state;
+        const range = measurePointerTextBlockRange(state, position);
+
+        if (!range) {
+          return false;
+        }
+
+        event.preventDefault();
+        cancelPointerWordDrag();
+        stopPointerBlockDrag();
+        pointerBlockDrag = {
+          ...range,
+          doc: state.doc,
+          lastPosition: null,
+        };
+        view.dispatch(
+          state.tr
+            .setSelection(TextSelection.create(state.doc, range.from, range.to))
+            .scrollIntoView(),
+        );
+        pointerDocument.addEventListener("mousemove", handlePointerBlockDrag, true);
+        pointerDocument.addEventListener("mouseup", stopPointerBlockDrag, true);
+        pointerWindow?.addEventListener("blur", stopPointerBlockDrag);
+        return true;
+      }
 
       function stopPointerWordDrag() {
         pointerWordDrag = null;
@@ -1480,6 +1646,17 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
           ownedPointerWordSelection = null;
         }
 
+        if (event.detail === 3) {
+          const intent = pointerBlockIntent;
+          const matchesIntent = matchesPointerIntent(intent, view, event);
+          pointerBlockIntent = null;
+          pointerWordIntent = null;
+
+          if (matchesIntent && startPointerBlockDrag(event, intent!.position)) {
+            return;
+          }
+        }
+
         if (event.detail === 2 && matchesPointerWordIntent(view, event)) {
           const intent = pointerWordIntent!;
           pointerWordIntent = null;
@@ -1489,11 +1666,14 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
             intent.position,
             true,
             startPointerWordDrag,
+            false,
           );
           return;
         }
 
+        stopPointerBlockDrag();
         stopPointerWordDrag();
+        rememberPointerBlockIntent(view, event);
         rememberPointerWordIntent(view, event);
       };
       view.dom.addEventListener("mousedown", handleMouseDown, true);
@@ -1501,7 +1681,9 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
       return {
         destroy() {
           ownedPointerWordSelection = null;
+          pointerBlockIntent = null;
           pointerWordIntent = null;
+          stopPointerBlockDrag();
           stopPointerWordDrag();
           view.dom.removeEventListener("mousedown", handleMouseDown, true);
           for (const timeoutId of pendingFallbacks) {

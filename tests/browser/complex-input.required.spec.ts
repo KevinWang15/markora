@@ -1753,6 +1753,169 @@ test("@required native triple click selects marked text blocks", async ({
   await cdp?.detach();
 });
 
+test("@required triple-click block drag crosses Markdown mark boundaries", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "pointer-block-drag";
+  await mountEditor(labPage, { id, markdown: "", root: "shadow" });
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+  const selectBlocks = async (
+    markdown: string,
+    startNeedle: string,
+    startOffset: number,
+    endNeedle: string,
+    endOffset: number,
+  ) => {
+    await labPage.mouse.click(1, 1);
+    await resetEditor(labPage, id, markdown);
+    await settleEditor(labPage, id);
+    const point = async (needle: string, offset: number) => editorLocator(labPage, id).evaluate(
+      (element, target) => {
+        const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+          const text = walker.currentNode as Text;
+          if (text.data !== target.needle) continue;
+          const range = element.ownerDocument.createRange();
+          range.setStart(text, target.offset);
+          range.setEnd(text, target.offset + 1);
+          const rect = range.getBoundingClientRect();
+          return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        }
+        throw new Error(`Missing ${JSON.stringify(target.needle)} block-drag text.`);
+      },
+      { needle, offset },
+    );
+    const start = await point(startNeedle, startOffset);
+    for (const clickCount of [1, 2]) {
+      if (cdp) {
+        await cdp.send("Input.dispatchMouseEvent", {
+          button: "left",
+          buttons: 1,
+          clickCount,
+          type: "mousePressed",
+          x: start.x,
+          y: start.y,
+        });
+        await cdp.send("Input.dispatchMouseEvent", {
+          button: "left",
+          buttons: 0,
+          clickCount,
+          type: "mouseReleased",
+          x: start.x,
+          y: start.y,
+        });
+      } else {
+        await labPage.mouse.move(start.x, start.y);
+        await labPage.mouse.down({ clickCount });
+        await labPage.mouse.up({ clickCount });
+      }
+    }
+    if (cdp) {
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "left",
+        buttons: 1,
+        clickCount: 3,
+        type: "mousePressed",
+        x: start.x,
+        y: start.y,
+      });
+    } else {
+      await labPage.mouse.down({ clickCount: 3 });
+    }
+    const end = await point(endNeedle, endOffset);
+    if (cdp) {
+      for (let step = 1; step <= 20; step += 1) {
+        const progress = step / 20;
+        await cdp.send("Input.dispatchMouseEvent", {
+          button: "left",
+          buttons: 1,
+          clickCount: 3,
+          type: "mouseMoved",
+          x: start.x + (end.x - start.x) * progress,
+          y: start.y + (end.y - start.y) * progress,
+        });
+      }
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "left",
+        buttons: 0,
+        clickCount: 3,
+        type: "mouseReleased",
+        x: end.x,
+        y: end.y,
+      });
+    } else {
+      await labPage.mouse.move(end.x, end.y, { steps: 20 });
+      await labPage.mouse.up({ clickCount: 3 });
+    }
+    await settleEditor(labPage, id);
+    return {
+      model: await labPage.evaluate(
+        (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+        id,
+      ),
+      text: await labPage.evaluate(() => document.getSelection()?.toString()),
+    };
+  };
+
+  for (const testCase of [
+    {
+      endNeedle: "four five",
+      endOffset: 7,
+      marked: "one pre**fix** three\n\nfour five",
+      markedStartNeedle: "fix",
+      markedStartOffset: 1,
+      plain: "one prefix three\n\nfour five",
+      plainStartNeedle: "one prefix three",
+      plainStartOffset: 6,
+      replace: true,
+    },
+    {
+      endNeedle: "one two",
+      endOffset: 1,
+      marked: "one two\n\nfour pre**fix** five",
+      markedStartNeedle: "fix",
+      markedStartOffset: 1,
+      plain: "one two\n\nfour prefix five",
+      plainStartNeedle: "four prefix five",
+      plainStartOffset: 7,
+      replace: false,
+    },
+  ]) {
+    const plain = await selectBlocks(
+      testCase.plain,
+      testCase.plainStartNeedle,
+      testCase.plainStartOffset,
+      testCase.endNeedle,
+      testCase.endOffset,
+    );
+    const marked = await selectBlocks(
+      testCase.marked,
+      testCase.markedStartNeedle,
+      testCase.markedStartOffset,
+      testCase.endNeedle,
+      testCase.endOffset,
+    );
+    expect(marked).toEqual(plain);
+    expect(marked.text?.replace(/\s/gu, "")).toContain(
+      testCase.plain.replace(/\s/gu, ""),
+    );
+    if (testCase.replace) {
+      if (cdp) {
+        await cdp.send("Input.insertText", { text: "X" });
+      } else {
+        await labPage.keyboard.insertText("X");
+      }
+      await settleEditor(labPage, id);
+      expect(await getMarkdown(labPage, id)).toBe("X");
+    }
+  }
+  await cdp?.detach();
+});
+
 test("@required double-click word drag crosses Markdown mark boundaries", async ({
   browserName,
   context,
@@ -1764,9 +1927,15 @@ test("@required double-click word drag crosses Markdown mark boundaries", async 
     ? await context.newCDPSession(labPage)
     : null;
 
-  const wordDrag = async (markdown: string, marked: boolean) => {
+  const wordDrag = async (options: {
+    endNeedle: string;
+    endOffset: number;
+    markdown: string;
+    startNeedle: string;
+    startOffset: number;
+  }) => {
     await labPage.mouse.click(1, 1);
-    await resetEditor(labPage, id, markdown);
+    await resetEditor(labPage, id, options.markdown);
     await settleEditor(labPage, id);
     const point = async (needle: string, offset: number) => editorLocator(labPage, id).evaluate(
       (element, target) => {
@@ -1788,7 +1957,7 @@ test("@required double-click word drag crosses Markdown mark boundaries", async 
       },
       { needle, offset },
     );
-    const start = await point(marked ? "fix" : "prefix alpha beta", marked ? 1 : 4);
+    const start = await point(options.startNeedle, options.startOffset);
     if (cdp) {
       await cdp.send("Input.dispatchMouseEvent", {
         button: "left",
@@ -1821,7 +1990,7 @@ test("@required double-click word drag crosses Markdown mark boundaries", async 
       await labPage.mouse.down({ clickCount: 2 });
     }
 
-    const end = await point(marked ? " alpha beta" : "prefix alpha beta", marked ? 9 : 15);
+    const end = await point(options.endNeedle, options.endOffset);
     if (cdp) {
       for (let step = 1; step <= 20; step += 1) {
         const progress = step / 20;
@@ -1855,10 +2024,81 @@ test("@required double-click word drag crosses Markdown mark boundaries", async 
     };
   };
 
-  const plain = await wordDrag("prefix alpha beta", false);
-  const marked = await wordDrag("pre**fix** alpha beta", true);
-  expect(marked).toEqual(plain);
-  expect(marked.text).toContain("prefix alpha beta");
+  for (const testCase of [
+    {
+      expectedText: "prefix alpha beta",
+      marked: {
+        endNeedle: " alpha beta",
+        endOffset: 9,
+        markdown: "pre**fix** alpha beta",
+        startNeedle: "fix",
+        startOffset: 1,
+      },
+      plain: {
+        endNeedle: "prefix alpha beta",
+        endOffset: 15,
+        markdown: "prefix alpha beta",
+        startNeedle: "prefix alpha beta",
+        startOffset: 4,
+      },
+    },
+    {
+      expectedText: "alpha beta prefix",
+      marked: {
+        endNeedle: "alpha beta pre",
+        endOffset: 2,
+        markdown: "alpha beta pre**fix**",
+        startNeedle: "fix",
+        startOffset: 1,
+      },
+      plain: {
+        endNeedle: "alpha beta prefix",
+        endOffset: 2,
+        markdown: "alpha beta prefix",
+        startNeedle: "alpha beta prefix",
+        startOffset: 15,
+      },
+    },
+    {
+      expectedText: "prefix alpha\nbeta gamma",
+      marked: {
+        endNeedle: " gamma",
+        endOffset: 4,
+        markdown: "pre**fix** alpha\n\nbe**ta** gamma",
+        startNeedle: "fix",
+        startOffset: 1,
+      },
+      plain: {
+        endNeedle: "beta gamma",
+        endOffset: 8,
+        markdown: "prefix alpha\n\nbeta gamma",
+        startNeedle: "prefix alpha",
+        startOffset: 4,
+      },
+    },
+    {
+      expectedText: "alpha beta\ngamma prefix",
+      marked: {
+        endNeedle: "alpha be",
+        endOffset: 2,
+        markdown: "alpha be**ta**\n\ngamma pre**fix**",
+        startNeedle: "fix",
+        startOffset: 1,
+      },
+      plain: {
+        endNeedle: "alpha beta",
+        endOffset: 2,
+        markdown: "alpha beta\n\ngamma prefix",
+        startNeedle: "gamma prefix",
+        startOffset: 9,
+      },
+    },
+  ]) {
+    const plain = await wordDrag(testCase.plain);
+    const marked = await wordDrag(testCase.marked);
+    expect(marked).toEqual(plain);
+    expect(marked.text?.replace(/\n+/gu, "\n")).toContain(testCase.expectedText);
+  }
   await cdp?.detach();
 });
 

@@ -1016,6 +1016,102 @@ describe("public command and state surface", () => {
     }
   });
 
+  it("owns triple-click block dragging at stable model boundaries", () => {
+    for (const editor of [
+      createEditor({ element: createHost(), markdown: "one **two** three\n\nfour five" }),
+      createMinimalEditor({ element: createHost(), markdown: "one **two** three\n\nfour five" }),
+    ]) {
+      let pointerPosition = 6;
+      editor.view.posAtCoords = () => ({ inside: -1, pos: pointerPosition });
+      editor.view.dom.getBoundingClientRect = () => ({
+        bottom: 100,
+        height: 100,
+        left: 0,
+        right: 100,
+        toJSON: () => ({}),
+        top: 0,
+        width: 100,
+        x: 0,
+        y: 0,
+      });
+      const target = editor.view.dom.querySelector("strong")!;
+      const firstMouseDown = new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+        clientX: 20,
+        clientY: 20,
+        detail: 1,
+      });
+      expect(target.dispatchEvent(firstMouseDown)).toBe(true);
+
+      const thirdMouseDown = new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+        clientX: 20,
+        clientY: 20,
+        detail: 3,
+      });
+      expect(target.dispatchEvent(thirdMouseDown)).toBe(false);
+      expect(thirdMouseDown.defaultPrevented).toBe(true);
+      expect(editor.view.state.selection).toMatchObject({
+        anchor: 1,
+        from: 1,
+        head: 14,
+        to: 14,
+      });
+
+      pointerPosition = 20;
+      const move = new MouseEvent("mousemove", {
+        bubbles: true,
+        buttons: 1,
+        cancelable: true,
+        clientX: 20,
+        clientY: 40,
+      });
+      editor.view.dom.ownerDocument.dispatchEvent(move);
+      expect(move.defaultPrevented).toBe(true);
+      expect(editor.view.state.selection).toMatchObject({
+        anchor: 1,
+        from: 1,
+        head: 25,
+        to: 25,
+      });
+
+      editor.view.dom.ownerDocument.dispatchEvent(new MouseEvent("mouseup", {
+        bubbles: true,
+        button: 0,
+        buttons: 0,
+      }));
+
+      selectText(editor, "two", "end");
+      pointerPosition = 7;
+      const currentTarget = editor.view.dom.querySelector("strong")!;
+      expect(currentTarget.dispatchEvent(new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+        clientX: 20,
+        clientY: 20,
+        detail: 1,
+      }))).toBe(true);
+      const modifiedThirdMouseDown = new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+        clientX: 20,
+        clientY: 20,
+        ctrlKey: true,
+        detail: 3,
+      });
+      expect(currentTarget.dispatchEvent(modifiedThirdMouseDown)).toBe(true);
+      expect(modifiedThirdMouseDown.defaultPrevented).toBe(false);
+      expect(editor.view.state.selection).toMatchObject({ from: 8, to: 8 });
+      editor.destroy();
+    }
+  });
+
   it("validates table arguments and preserves destroyed-editor errors", () => {
     const editor = createEditor({ element: createHost(), markdown: "alpha" });
 
