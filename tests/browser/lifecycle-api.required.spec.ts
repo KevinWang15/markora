@@ -286,6 +286,12 @@ test("@required reconciled external updates preserve caret, focus, history, and 
 
   await editor.locator("p").first().click();
   await labPage.keyboard.press("End");
+  await expect.poll(async () => (await snapshotEditor(labPage, id)).selection).toEqual({
+    anchor: 6,
+    from: 6,
+    head: 6,
+    to: 6,
+  });
   const beforeTyping = await snapshotEditor(labPage, id);
   await labPage.keyboard.insertText("!");
   await settleEditor(labPage, id);

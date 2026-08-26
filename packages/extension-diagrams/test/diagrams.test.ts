@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEditor as createRootEditor, type MarkdownEditor } from "markora";
 import { createEditor as createMinimalEditor } from "markora/minimal";
 import { AllSelection, NodeSelection, TextSelection } from "markora/extension-api";
@@ -201,11 +201,11 @@ it.each(entries)("%s reveals rendered source whenever a text selection enters th
   const source = sourceShell.querySelector<HTMLElement>(
     ".mdw-diagram__source",
   )!;
-  await new Promise((resolve) => setTimeout(resolve, 20));
-
   expect(source.dir).toBe("auto");
-  expect(editor.extensions.get(extension).state.getNode(node)?.render.status)
-    .toBe("rendered");
+  await vi.waitFor(() => {
+    expect(editor.extensions.get(extension).state.getNode(node)?.render.status)
+      .toBe("rendered");
+  });
   expect(sourceShell.classList.contains("mdw-diagram__source-shell--visually-hidden"))
     .toBe(true);
 
