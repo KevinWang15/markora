@@ -843,6 +843,173 @@ function readTextBlockAtPosition(
     : null;
 }
 
+function isPointerGraphemeBoundary(
+  text: string,
+  offset: number,
+  intl: SegmentingIntl,
+) {
+  if (offset <= 0 || offset >= text.length) {
+    return true;
+  }
+
+  if (intl.Segmenter) {
+    const segments = new intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text);
+    const containingSegment = segments.containing?.(offset);
+
+    if (containingSegment) {
+      return containingSegment.index === offset;
+    }
+
+    for (const segment of segments) {
+      if (segment.index >= offset) {
+        return segment.index === offset;
+      }
+    }
+
+    return false;
+  }
+
+  const previousCodeUnit = text.charCodeAt(offset - 1);
+  const nextCodeUnit = text.charCodeAt(offset);
+  return !(
+    previousCodeUnit >= 0xd800
+    && previousCodeUnit <= 0xdbff
+    && nextCodeUnit >= 0xdc00
+    && nextCodeUnit <= 0xdfff
+  );
+}
+
+function readAdjacentPointerGraphemeBoundaries(
+  text: string,
+  offset: number,
+  intl: SegmentingIntl,
+) {
+  const boundaries = new Set<number>();
+  const clampedOffset = Math.max(0, Math.min(text.length, offset));
+
+  if (!intl.Segmenter || text.length === 0) {
+    boundaries.add(findPreviousGraphemeStart(text.slice(0, clampedOffset), intl));
+    boundaries.add(clampedOffset + findNextGraphemeEnd(text.slice(clampedOffset), intl));
+    return boundaries;
+  }
+
+  const segments = new intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text);
+
+  if (segments.containing) {
+    for (const probeOffset of new Set([
+      Math.max(0, clampedOffset - 1),
+      Math.min(text.length - 1, clampedOffset),
+    ])) {
+      const segment = segments.containing(probeOffset);
+
+      if (!segment) {
+        continue;
+      }
+
+      boundaries.add(segment.index);
+      if (typeof segment.segment === "string") {
+        boundaries.add(segment.index + segment.segment.length);
+      }
+    }
+
+    return boundaries;
+  }
+
+  let previousStart = 0;
+
+  for (const segment of segments) {
+    if (segment.index > clampedOffset) {
+      boundaries.add(previousStart);
+      boundaries.add(segment.index);
+      return boundaries;
+    }
+
+    previousStart = segment.index;
+  }
+
+  boundaries.add(previousStart);
+  boundaries.add(text.length);
+  return boundaries;
+}
+
+function pointerDistanceToRect(
+  rect: Pick<DOMRect, "bottom" | "left" | "right" | "top">,
+  x: number,
+  y: number,
+) {
+  const left = Math.min(rect.left, rect.right);
+  const right = Math.max(rect.left, rect.right);
+  const top = Math.min(rect.top, rect.bottom);
+  const bottom = Math.max(rect.top, rect.bottom);
+  const horizontal = x < left ? left - x : x > right ? x - right : 0;
+  const vertical = y < top ? top - y : y > bottom ? y - bottom : 0;
+  return horizontal * horizontal + vertical * vertical;
+}
+
+function refinePointerCaretPosition(
+  view: EditorView,
+  position: number,
+  x: number,
+  y: number,
+) {
+  const block = readTextBlockAtPosition(view.state, position, false);
+
+  if (!block) {
+    return position;
+  }
+
+  const { parent, parentStart } = block;
+  const intl = (view.dom.ownerDocument.defaultView?.Intl ?? Intl) as SegmentingIntl;
+  const candidates = new Set([position]);
+
+  for (let distance = 1; distance <= 2; distance += 1) {
+    candidates.add(position - distance);
+    candidates.add(position + distance);
+  }
+
+  for (const boundary of readAdjacentPointerGraphemeBoundaries(
+    parent.textContent,
+    position - parentStart,
+    intl,
+  )) {
+    candidates.add(parentStart + boundary);
+  }
+
+  let bestPosition = position;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const candidate of candidates) {
+    const offset = candidate - parentStart;
+
+    if (
+      offset < 0
+      || offset > parent.content.size
+      || !isPointerGraphemeBoundary(parent.textContent, offset, intl)
+    ) {
+      continue;
+    }
+
+    for (const side of [-1, 1]) {
+      let rect: ReturnType<EditorView["coordsAtPos"]>;
+
+      try {
+        rect = view.coordsAtPos(candidate, side);
+      } catch {
+        continue;
+      }
+
+      const distance = pointerDistanceToRect(rect, x, y);
+
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestPosition = candidate;
+      }
+    }
+  }
+
+  return bestPosition;
+}
+
 function measurePointerTextBlockRange(
   state: EditorState,
   position: number,
@@ -1346,6 +1513,12 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
 
     pointerCaretIntent = {
       ...intent,
+      position: refinePointerCaretPosition(
+        view,
+        intent.position,
+        mouseEvent.clientX,
+        mouseEvent.clientY,
+      ),
       selection: view.state.selection,
     };
   };
