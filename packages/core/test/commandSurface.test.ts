@@ -676,6 +676,119 @@ describe("public command and state surface", () => {
     }
   });
 
+  it("navigates words independently of marks and leaves composition and inline atoms native", () => {
+    const modifyDescriptor = Object.getOwnPropertyDescriptor(Selection.prototype, "modify");
+
+    Object.defineProperty(Selection.prototype, "modify", {
+      configurable: true,
+      value(
+        this: Selection,
+        alter: "extend" | "move",
+        direction: "backward" | "forward" | "left" | "right",
+      ) {
+        const textNode = this.focusNode;
+
+        if (!(textNode instanceof Text)) {
+          throw new Error("The word-motion probe must use a text node.");
+        }
+
+        const separator = textNode.data.indexOf(" ");
+        const target = direction === "backward" || direction === "left"
+          ? 0
+          : separator < 0
+            ? textNode.data.length
+            : separator;
+
+        if (alter === "move") {
+          this.collapse(textNode, target);
+        } else {
+          this.extend(textNode, target);
+        }
+      },
+    });
+
+    try {
+      for (const editor of [
+        createEditor({ element: createHost(), markdown: "alpha**beta** gamma" }),
+        createMinimalEditor({ element: createHost(), markdown: "alpha**beta** gamma" }),
+      ]) {
+        selectText(editor, "beta", "end");
+        const extendBackward = new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: true,
+          key: "ArrowLeft",
+          shiftKey: true,
+        });
+
+        expect(editor.view.dom.dispatchEvent(extendBackward)).toBe(false);
+        expect(extendBackward.defaultPrevented).toBe(true);
+        expect(editor.view.state.selection).toMatchObject({
+          anchor: 10,
+          from: 1,
+          head: 1,
+          to: 10,
+        });
+        expect(editor.getMarkdown()).toBe("alpha**beta** gamma");
+
+        editor.commands.resetMarkdown("alpha**beta** gamma");
+        selectText(editor, "alpha", "start");
+        const moveForward = new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: true,
+          key: "ArrowRight",
+        });
+
+        expect(editor.view.dom.dispatchEvent(moveForward)).toBe(false);
+        expect(moveForward.defaultPrevented).toBe(true);
+        expect(editor.view.state.selection).toMatchObject({
+          anchor: 10,
+          from: 10,
+          head: 10,
+          to: 10,
+        });
+
+        editor.commands.resetMarkdown("alpha**beta** gamma");
+        selectText(editor, "beta", "end");
+        const composingNavigation = new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: true,
+          isComposing: true,
+          key: "ArrowLeft",
+          shiftKey: true,
+        });
+
+        expect(editor.view.dom.dispatchEvent(composingNavigation)).toBe(true);
+        expect(composingNavigation.defaultPrevented).toBe(false);
+        expect(editor.view.state.selection.from).toBe(10);
+
+        editor.commands.resetMarkdown("alpha  \nbeta");
+        selectText(editor, "alpha", "end");
+        const hardBreakMarkdown = editor.getMarkdown();
+        const atomAdjacentNavigation = new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: true,
+          key: "ArrowRight",
+        });
+
+        expect(editor.view.dom.dispatchEvent(atomAdjacentNavigation)).toBe(true);
+        expect(atomAdjacentNavigation.defaultPrevented).toBe(false);
+        expect(editor.getMarkdown()).toBe(hardBreakMarkdown);
+
+        editor.destroy();
+      }
+    } finally {
+      if (modifyDescriptor) {
+        Object.defineProperty(Selection.prototype, "modify", modifyDescriptor);
+      } else {
+        Reflect.deleteProperty(Selection.prototype, "modify");
+      }
+    }
+  });
+
   it("validates table arguments and preserves destroyed-editor errors", () => {
     const editor = createEditor({ element: createHost(), markdown: "alpha" });
 

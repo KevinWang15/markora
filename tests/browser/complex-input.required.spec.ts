@@ -718,6 +718,254 @@ test("@required word deletion ignores Markdown mark boundaries across engines", 
     await expect(labPage.locator("#word-probe-focus-handoff")).toBeFocused();
     expect(await getMarkdown(labPage, id)).toBe(handoffMarkdown);
     await labPage.locator("#word-probe-focus-handoff").evaluate((button) => button.remove());
+
+    await resetEditor(labPage, id, handoffMarkdown);
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "end"),
+      id,
+    )).toBe(true);
+    await settleEditor(labPage, id);
+    await labPage.evaluate((editorId) => {
+      document.addEventListener("focusin", (event) => {
+        const target = event.target;
+
+        if (
+          target instanceof HTMLElement
+          && target.isContentEditable
+          && target.getAttribute("aria-hidden") === "true"
+        ) {
+          window.__MARKORA_BROWSER_LAB__!.reset(editorId, "host replacement");
+        }
+      }, { capture: true, once: true });
+    }, id);
+    await pressWordDeletion("Backspace");
+    await settleEditor(labPage, id);
+    expect(await getMarkdown(labPage, id)).toBe("host replacement");
+  }
+});
+
+test("@required word navigation ignores Markdown mark boundaries across engines", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "marked-word-navigation";
+  await mountEditor(labPage, { id, markdown: "" });
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+  const pressWordNavigation = async (
+    key: "ArrowLeft" | "ArrowRight",
+    extend: boolean,
+  ) => {
+    if (!cdp) {
+      await labPage.keyboard.press(`${extend ? "Control+Shift" : "Control"}+${key}`);
+      return;
+    }
+
+    const keyCode = key === "ArrowLeft" ? 37 : 39;
+
+    for (const type of ["rawKeyDown", "keyUp"] as const) {
+      await cdp.send("Input.dispatchKeyEvent", {
+        code: key,
+        key,
+        modifiers: extend ? 10 : 2,
+        nativeVirtualKeyCode: keyCode,
+        type,
+        windowsVirtualKeyCode: keyCode,
+      });
+    }
+  };
+  const navigateFrom = async (
+    markdown: string,
+    needle: string,
+    mode: "end" | "start",
+    key: "ArrowLeft" | "ArrowRight",
+    extend: boolean,
+    editorId = id,
+  ) => {
+    await resetEditor(labPage, editorId, markdown);
+    expect(await labPage.evaluate(
+      ({ editorId, nextNeedle, nextMode }) => (
+        window.__MARKORA_BROWSER_LAB__!.selectText(editorId, nextNeedle, nextMode)
+      ),
+      { editorId, nextMode: mode, nextNeedle: needle },
+    )).toBe(true);
+    await settleEditor(labPage, editorId);
+    await clearEditorEvents(labPage, editorId);
+    await pressWordNavigation(key, extend);
+    await settleEditor(labPage, editorId);
+    await expect(editorLocator(labPage, editorId)).toBeFocused();
+    const events = await getEditorEvents(labPage, editorId);
+    expect(events.counts.focus).toBe(0);
+    expect(events.counts.blur).toBe(0);
+    expect(await getMarkdown(labPage, editorId)).toBe(markdown);
+    return labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+      editorId,
+    );
+  };
+
+  for (const testCase of [
+    {
+      backwardNeedle: "beta",
+      forwardNeedle: "alpha",
+      marked: "alpha**beta** gamma",
+      plain: "alphabeta gamma",
+      plainNeedle: "alphabeta",
+    },
+    {
+      backwardNeedle: "beta",
+      forwardNeedle: "alpha",
+      marked: "alpha[beta](/word-navigation) gamma",
+      plain: "alphabeta gamma",
+      plainNeedle: "alphabeta",
+    },
+    {
+      backwardNeedle: "пожаловать",
+      forwardNeedle: "добро",
+      marked: "добро**пожаловать** мир",
+      plain: "добропожаловать мир",
+      plainNeedle: "добропожаловать",
+    },
+  ] as const) {
+    for (const extend of [false, true]) {
+      const plainBackward = await navigateFrom(
+        testCase.plain,
+        testCase.plainNeedle,
+        "end",
+        "ArrowLeft",
+        extend,
+      );
+      const markedBackward = await navigateFrom(
+        testCase.marked,
+        testCase.backwardNeedle,
+        "end",
+        "ArrowLeft",
+        extend,
+      );
+      const wordStart = 1;
+      const wordEnd = wordStart + testCase.plainNeedle.length;
+      expect(plainBackward).toEqual(extend
+        ? { anchor: wordEnd, from: wordStart, head: wordStart, to: wordEnd }
+        : { anchor: wordStart, from: wordStart, head: wordStart, to: wordStart });
+      expect(markedBackward).toEqual(plainBackward);
+
+      const plainForward = await navigateFrom(
+        testCase.plain,
+        testCase.plainNeedle,
+        "start",
+        "ArrowRight",
+        extend,
+      );
+      const markedForward = await navigateFrom(
+        testCase.marked,
+        testCase.forwardNeedle,
+        "start",
+        "ArrowRight",
+        extend,
+      );
+      expect(plainForward).toEqual(extend
+        ? { anchor: wordStart, from: wordStart, head: wordEnd, to: wordEnd }
+        : { anchor: wordEnd, from: wordEnd, head: wordEnd, to: wordEnd });
+      expect(markedForward).toEqual(plainForward);
+    }
+  }
+
+  const rtlId = "rtl-marked-word-navigation";
+  await mountEditor(labPage, { direction: "rtl", id: rtlId, markdown: "" });
+
+  for (const extend of [false, true]) {
+    const plainLeft = await navigateFrom(
+      "אבגדהו זחט",
+      "אבגדהו",
+      "start",
+      "ArrowLeft",
+      extend,
+      rtlId,
+    );
+    const markedLeft = await navigateFrom(
+      "אבג**דהו** זחט",
+      "אבג",
+      "start",
+      "ArrowLeft",
+      extend,
+      rtlId,
+    );
+    expect(markedLeft).toEqual(plainLeft);
+
+    const plainRight = await navigateFrom(
+      "אבגדהו זחט",
+      "אבגדהו",
+      "end",
+      "ArrowRight",
+      extend,
+      rtlId,
+    );
+    const markedRight = await navigateFrom(
+      "אבג**דהו** זחט",
+      "דהו",
+      "end",
+      "ArrowRight",
+      extend,
+      rtlId,
+    );
+    expect(markedRight).toEqual(plainRight);
+  }
+
+  if (browserName === "firefox") {
+    const handoffMarkdown = "alpha**beta** gamma";
+    await resetEditor(labPage, id, handoffMarkdown);
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "end"),
+      id,
+    )).toBe(true);
+    await settleEditor(labPage, id);
+    await labPage.evaluate(() => {
+      const button = document.createElement("button");
+      button.id = "word-navigation-probe-focus-handoff";
+      button.textContent = "Host focus target";
+      document.body.append(button);
+      document.addEventListener("focusin", (event) => {
+        const target = event.target;
+
+        if (
+          target instanceof HTMLElement
+          && target.isContentEditable
+          && target.getAttribute("aria-hidden") === "true"
+        ) {
+          button.focus();
+        }
+      }, { capture: true, once: true });
+    });
+    await pressWordNavigation("ArrowLeft", true);
+    await settleEditor(labPage, id);
+    await expect(labPage.locator("#word-navigation-probe-focus-handoff")).toBeFocused();
+    expect(await getMarkdown(labPage, id)).toBe(handoffMarkdown);
+    await labPage.locator("#word-navigation-probe-focus-handoff").evaluate((button) => button.remove());
+
+    await resetEditor(labPage, id, handoffMarkdown);
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "end"),
+      id,
+    )).toBe(true);
+    await settleEditor(labPage, id);
+    await labPage.evaluate((editorId) => {
+      document.addEventListener("focusin", (event) => {
+        const target = event.target;
+
+        if (
+          target instanceof HTMLElement
+          && target.isContentEditable
+          && target.getAttribute("aria-hidden") === "true"
+        ) {
+          window.__MARKORA_BROWSER_LAB__!.reset(editorId, "host replacement");
+        }
+      }, { capture: true, once: true });
+    }, id);
+    await pressWordNavigation("ArrowLeft", true);
+    await settleEditor(labPage, id);
+    expect(await getMarkdown(labPage, id)).toBe("host replacement");
   }
 });
 

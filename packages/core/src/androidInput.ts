@@ -36,6 +36,8 @@ type DeletionRange = {
   to: number;
 };
 
+const consumeDeletion = Symbol("consume-deletion");
+
 type InlineBoundaryDeletionContext = {
   immediateText: string;
   parent: ProseMirrorNode;
@@ -57,10 +59,16 @@ type EditorViewWithDomSelection = EditorView & {
 
 type SelectionWithWordMotion = Selection & {
   modify?: (
-    alter: "extend",
-    direction: DeletionDirection,
+    alter: "extend" | "move",
+    direction: DeletionDirection | "left" | "right",
     granularity: "word",
   ) => void;
+};
+
+type NativeTextMotionProbe = {
+  anchorOffset: number | null;
+  focusHandedOff: boolean;
+  focusOffset: number | null;
 };
 
 type NativeWordDeletionProbe = {
@@ -269,11 +277,33 @@ function focusElement(element: Element | null) {
   }
 }
 
-function probeNativeWordDeletionLength(
+function readProbeOffset(
+  probe: HTMLElement,
+  node: Node | null,
+  offset: number,
+) {
+  if (!node || (node !== probe && !probe.contains(node))) {
+    return null;
+  }
+
+  try {
+    const range = probe.ownerDocument.createRange();
+    range.setStart(probe, 0);
+    range.setEnd(node, offset);
+    return range.toString().length;
+  } catch {
+    return null;
+  }
+}
+
+function probeNativeTextMotion(
   view: EditorView,
   text: string,
-  direction: DeletionDirection,
-): NativeWordDeletionProbe | null {
+  anchorOffset: number,
+  focusOffset: number,
+  alter: "extend" | "move",
+  direction: DeletionDirection | "left" | "right",
+): NativeTextMotionProbe | null {
   // Mark elements split the editable DOM into text nodes, so native word
   // motion can stop at a mark boundary. Measure the engine's own word motion
   // against equivalent unmarked text to preserve platform-specific behavior.
@@ -290,6 +320,13 @@ function probeNativeWordDeletionLength(
     || !original?.anchorNode
     || !original.focusNode
     || !parent
+    || !Number.isInteger(anchorOffset)
+    || !Number.isInteger(focusOffset)
+    || anchorOffset < 0
+    || anchorOffset > text.length
+    || focusOffset < 0
+    || focusOffset > text.length
+    || (anchorOffset !== focusOffset && typeof selection.extend !== "function")
   ) {
     return null;
   }
@@ -317,23 +354,23 @@ function probeNativeWordDeletionLength(
     return null;
   }
 
-  let deletionLength: number | null = null;
+  let nextAnchorOffset: number | null = null;
+  let nextFocusOffset: number | null = null;
   let focusHandedOff = false;
 
   try {
-    selection.collapse(textNode, direction === "backward" ? text.length : 0);
-    selection.modify("extend", direction, "word");
+    selection.collapse(textNode, anchorOffset);
 
-    if (
-      selection.anchorNode
-      && selection.focusNode
-      && probe.contains(selection.anchorNode)
-      && probe.contains(selection.focusNode)
-    ) {
-      deletionLength = selection.toString().length;
+    if (focusOffset !== anchorOffset) {
+      selection.extend(textNode, focusOffset);
     }
+
+    selection.modify(alter, direction, "word");
+    nextAnchorOffset = readProbeOffset(probe, selection.anchorNode, selection.anchorOffset);
+    nextFocusOffset = readProbeOffset(probe, selection.focusNode, selection.focusOffset);
   } catch {
-    deletionLength = null;
+    nextAnchorOffset = null;
+    nextFocusOffset = null;
   } finally {
     const activeAfterProbe = getActiveElement(view);
     probe.remove();
@@ -349,7 +386,40 @@ function probeNativeWordDeletionLength(
     }
   }
 
-  return { deletionLength, focusHandedOff };
+  return {
+    anchorOffset: nextAnchorOffset,
+    focusHandedOff,
+    focusOffset: nextFocusOffset,
+  };
+}
+
+function probeNativeWordDeletionLength(
+  view: EditorView,
+  text: string,
+  direction: DeletionDirection,
+): NativeWordDeletionProbe | null {
+  const initialOffset = direction === "backward" ? text.length : 0;
+  const motion = probeNativeTextMotion(
+    view,
+    text,
+    initialOffset,
+    initialOffset,
+    "extend",
+    direction,
+  );
+
+  if (!motion) {
+    return null;
+  }
+
+  const deletionLength = motion.anchorOffset !== null && motion.focusOffset !== null
+    ? Math.abs(motion.anchorOffset - motion.focusOffset)
+    : null;
+
+  return {
+    deletionLength,
+    focusHandedOff: motion.focusHandedOff,
+  };
 }
 
 function readInlineBoundaryDeletionContext(
@@ -458,7 +528,7 @@ function findCrossInlineBoundaryGraphemeDeletionRange(
 function findCrossInlineBoundaryWordDeletionRange(
   view: EditorView,
   direction: DeletionDirection,
-): DeletionRange | null {
+): DeletionRange | typeof consumeDeletion | null {
   const { state } = view;
   const context = readInlineBoundaryDeletionContext(state, direction);
 
@@ -483,8 +553,15 @@ function findCrossInlineBoundaryWordDeletionRange(
 
   const nativeProbe = probeNativeWordDeletionLength(view, adjacentText, direction);
 
-  if (nativeProbe?.focusHandedOff) {
-    return null;
+  if (
+    nativeProbe
+    && (
+      nativeProbe.focusHandedOff
+      || view.isDestroyed
+      || view.state !== state
+    )
+  ) {
+    return consumeDeletion;
   }
 
   // Once the selection has moved through the probe, handle the deletion here;
@@ -494,14 +571,135 @@ function findCrossInlineBoundaryWordDeletionRange(
   return createDeletionRange(state, selection, direction, wordLength);
 }
 
+function isMacPlatform(ownerWindow: BrowserWindow) {
+  return /Mac|iP(?:hone|ad|od)/u.test(ownerWindow.navigator.platform);
+}
+
+function isTextOnlyInlineContent(parent: ProseMirrorNode) {
+  if (!parent.inlineContent || parent.childCount === 0) {
+    return false;
+  }
+
+  for (let index = 0; index < parent.childCount; index += 1) {
+    if (!parent.child(index).isText) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function isWordNavigationShortcut(
+  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey">,
+  macPlatform: boolean,
+) {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+    return false;
+  }
+
+  return macPlatform
+    ? event.altKey && !event.ctrlKey && !event.metaKey
+    : event.ctrlKey && !event.altKey && !event.metaKey;
+}
+
+function handleNativeWordNavigation(
+  view: EditorView,
+  event: KeyboardEvent,
+  macPlatform: boolean,
+) {
+  if (
+    !view.editable
+    || view.composing
+    || event.defaultPrevented
+    || event.isComposing
+    || event.keyCode === 229
+    || event.target !== view.dom
+    || !isWordNavigationShortcut(event, macPlatform)
+  ) {
+    return false;
+  }
+
+  const state = view.state;
+  const { selection } = state;
+
+  if (
+    !(selection instanceof TextSelection)
+    || selection.$anchor.parent !== selection.$head.parent
+    || !isTextOnlyInlineContent(selection.$head.parent)
+  ) {
+    return false;
+  }
+
+  const parentStart = selection.$head.start();
+  const parentText = selection.$head.parent.textContent;
+  const motion = probeNativeTextMotion(
+    view,
+    parentText,
+    selection.anchor - parentStart,
+    selection.head - parentStart,
+    event.shiftKey ? "extend" : "move",
+    event.key === "ArrowLeft" ? "left" : "right",
+  );
+
+  if (!motion) {
+    return false;
+  }
+
+  // The key originated in this editor, but a focus callback triggered by the
+  // probe owns any synchronous handoff or lifecycle/state change.
+  if (
+    motion.focusHandedOff
+    || view.isDestroyed
+    || view.state !== state
+  ) {
+    event.preventDefault();
+    return true;
+  }
+
+  const { anchorOffset, focusOffset } = motion;
+
+  if (
+    anchorOffset === null
+    || focusOffset === null
+    || anchorOffset < 0
+    || focusOffset < 0
+    || anchorOffset > parentText.length
+    || focusOffset > parentText.length
+  ) {
+    return false;
+  }
+
+  event.preventDefault();
+  const anchor = parentStart + anchorOffset;
+  const head = parentStart + focusOffset;
+
+  if (anchor !== selection.anchor || head !== selection.head) {
+    view.dispatch(
+      state.tr
+        .setSelection(TextSelection.create(state.doc, anchor, head))
+        .scrollIntoView(),
+    );
+  }
+
+  return true;
+}
+
 export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
   const androidChrome = isAndroidChrome(ownerWindow);
+  const macPlatform = isMacPlatform(ownerWindow);
   const pendingFallbacks = new Set<number>();
   let lastFallbackState: FallbackState | null = null;
 
   return new Plugin({
     props: {
       handleDOMEvents: {
+        keydown(view, event) {
+          return handleNativeWordNavigation(
+            view,
+            event as KeyboardEvent,
+            macPlatform,
+          );
+        },
         beforeinput(view, event) {
           if (
             !view.editable
@@ -545,6 +743,11 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
                   deletion.direction,
                 )
             : null;
+
+          if (crossBoundaryRange === consumeDeletion) {
+            inputEvent.preventDefault();
+            return true;
+          }
 
           if (crossBoundaryRange) {
             inputEvent.preventDefault();

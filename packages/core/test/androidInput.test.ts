@@ -3,9 +3,10 @@ import {
   findNextGraphemeEnd,
   findPreviousGraphemeStart,
   findWordDeletionLength,
+  isWordNavigationShortcut,
 } from "../src/androidInput";
 
-describe("input deletion robustness", () => {
+describe("input robustness", () => {
   it.each([
     ["A😀", 1],
     ["A👩‍💻", 1],
@@ -85,4 +86,22 @@ describe("input deletion robustness", () => {
 
     expect(findWordDeletionLength(text, "backward", intl)).toBe(1_000);
   });
+
+  it.each([
+    [false, { altKey: false, ctrlKey: true, key: "ArrowLeft", metaKey: false }, true],
+    [false, { altKey: false, ctrlKey: true, key: "ArrowRight", metaKey: false }, true],
+    [false, { altKey: true, ctrlKey: false, key: "ArrowLeft", metaKey: false }, false],
+    [false, { altKey: false, ctrlKey: true, key: "ArrowUp", metaKey: false }, false],
+    [false, { altKey: false, ctrlKey: true, key: "ArrowLeft", metaKey: true }, false],
+    [true, { altKey: true, ctrlKey: false, key: "ArrowLeft", metaKey: false }, true],
+    [true, { altKey: true, ctrlKey: false, key: "ArrowRight", metaKey: false }, true],
+    [true, { altKey: false, ctrlKey: true, key: "ArrowLeft", metaKey: false }, false],
+    [true, { altKey: true, ctrlKey: false, key: "ArrowDown", metaKey: false }, false],
+    [true, { altKey: true, ctrlKey: false, key: "ArrowLeft", metaKey: true }, false],
+  ] as const)(
+    "recognizes platform word navigation (mac=%s, event=%o)",
+    (macPlatform, event, expected) => {
+      expect(isWordNavigationShortcut(event, macPlatform)).toBe(expected);
+    },
+  );
 });
