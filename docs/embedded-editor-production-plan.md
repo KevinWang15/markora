@@ -864,6 +864,13 @@ and verification decisions are frozen in the
   checked state. A production-built three-engine regression edits the mixed
   structure through Chromium CDP and native Firefox/WebKit input, then resets
   and verifies the same text, task controls, nesting, blocks, and Markdown.
+- Strikethrough tokenization now claims only exact double-tilde runs, so GFM
+  runs of three or more remain literal instead of silently gaining a strike
+  mark. The serializer retains those long runs without noisy escapes in safe
+  inline positions and keeps block-leading runs escaped when raw tildes could
+  become a code fence. The former reviewed GFM limitation is now a supported,
+  semantically idempotent case, with production Chromium CDP editing plus
+  Firefox/WebKit edit-and-reset coverage alongside codec boundary tests.
 - `markora-extension-alerts` provides semantic GitHub blockquote alerts in root
   and minimal for note, tip, important, warning, and caution. A lightweight
   authored-marker claim runs before the foundation blockquote rule, while a

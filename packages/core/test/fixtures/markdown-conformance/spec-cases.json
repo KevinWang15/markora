@@ -393,11 +393,9 @@
       "source": "gfm-0.29",
       "section": "Strikethrough",
       "url": "https://github.github.com/gfm/#example-493",
-      "classification": "known-limitation",
-      "semanticStability": "required",
+      "classification": "supported-normalized",
       "input": "This will ~~~not~~~ strike.\n",
-      "expected": "This will \\~~~not~~\\~ strike.",
-      "note": "Triple-tilde delimiter behavior differs from GFM and is retained as a visible characterization, not a supported guarantee."
+      "expected": "This will ~~~not~~~ strike."
     },
     {
       "id": "gfm-622",

@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import type StateInline from "markdown-it/lib/rules_inline/state_inline.mjs";
 import type Token from "markdown-it/lib/token.mjs";
 import { Fragment, Schema, Slice, type Mark, type MarkSpec, type Node as ProseMirrorNode, type NodeSpec } from "prosemirror-model";
 import {
@@ -57,6 +58,84 @@ type MarkdownSerializerStateWithInternals = MarkdownSerializerState & {
   flushClose: (size: number) => void;
   inTightList: boolean;
 };
+
+function exactDoubleTildeStrikethroughRule(state: StateInline, silent: boolean) {
+  const start = state.pos;
+
+  if (silent || state.src.charCodeAt(start) !== 0x7e) {
+    return false;
+  }
+
+  const scanned = state.scanDelims(start, true);
+
+  // Markdown-it decomposes longer runs into double-tilde pairs. Markora's
+  // exact-double dialect follows GFM's rule that three or more stay literal.
+  if (scanned.length !== 2) {
+    if (scanned.length < 3) {
+      return false;
+    }
+
+    const token = state.push("text", "", 0);
+    token.content = "~".repeat(scanned.length);
+    state.pos += scanned.length;
+    return true;
+  }
+
+  const token = state.push("text", "", 0);
+  token.content = "~~";
+  state.delimiters.push({
+    marker: 0x7e,
+    length: 0,
+    token: state.tokens.length - 1,
+    end: -1,
+    open: scanned.can_open,
+    close: scanned.can_close,
+  });
+  state.pos += 2;
+  return true;
+}
+
+type MarkdownSerializerStateRuntime = MarkdownSerializerState & { out: string };
+type MarkdownSerializerStateConstructor = new (
+  nodes: MarkdownSerializer["nodes"],
+  marks: MarkdownSerializer["marks"],
+  options: MarkdownSerializer["options"] & { tightLists?: boolean },
+) => MarkdownSerializerStateRuntime;
+
+const MarkdownSerializerStateRuntimeConstructor = MarkdownSerializerState as unknown as MarkdownSerializerStateConstructor;
+
+function createCompatibilityMarkdownSerializerState(
+  nodes: MarkdownSerializer["nodes"],
+  marks: MarkdownSerializer["marks"],
+  options: MarkdownSerializer["options"] & { tightLists?: boolean },
+) {
+  const state = new MarkdownSerializerStateRuntimeConstructor(nodes, marks, options);
+  const baseEscape = state.esc.bind(state);
+
+  // ProseMirror escapes every tilde. Long runs are safe after ordinary inline
+  // text, but a leading run must stay escaped so it cannot become a code fence.
+  state.esc = (str: string, startOfLine = false) => baseEscape(str, startOfLine).replace(
+    /(?:\\~){3,}/g,
+    (escapedRun, offset, escapedText) => (
+      /\S/.test(escapedText.slice(0, offset))
+        ? "~".repeat(escapedRun.length / 2)
+        : escapedRun
+    ),
+  );
+  return state;
+}
+
+class CompatibilityMarkdownSerializer extends MarkdownSerializer {
+  override serialize(content: ProseMirrorNode, options: { tightLists?: boolean } = {}) {
+    const state = createCompatibilityMarkdownSerializerState(
+      this.nodes,
+      this.marks,
+      { ...this.options, ...options },
+    );
+    state.renderContent(content);
+    return state.out;
+  }
+}
 
 const listItemSpec = baseSchema.spec.nodes.get("list_item");
 const codeBlockSpec = baseSchema.spec.nodes.get("code_block");
@@ -652,6 +731,7 @@ export function createCompatibilityMarkdownCodec(
 const markdownTokenizer = new MarkdownIt("commonmark", { html: true })
   .enable("strikethrough")
   .enable("table");
+markdownTokenizer.inline.ruler.at("strikethrough", exactDoubleTildeStrikethroughRule);
 const taskCheckedTokenAttribute = "data-markora-task-checked";
 // Markdown-it's built-in allowlist would discard host-approved custom schemes
 // before the editor policy can inspect them. Preserve candidate destinations
@@ -978,7 +1058,7 @@ for (const { definition } of resolvedExtensions) {
   }
 }
 
-const markdownSerializer = new MarkdownSerializer(serializerNodes, serializerMarks, {
+const markdownSerializer = new CompatibilityMarkdownSerializer(serializerNodes, serializerMarks, {
   escapeExtraCharacters: combineMarkdownSerializerEscapePatterns([
     /<(?=\/?[A-Za-z]|[!?])/g,
   ], resolvedExtensions.map(({ definition }) => (
