@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { CDPSession, Page } from "@playwright/test";
 import {
   dispatchTransfer,
   editorLocator,
@@ -7,9 +7,59 @@ import {
   mountEditor,
   ownedOverlay,
   resetEditor,
+  runEditorCommand,
   settleEditor,
+  snapshotEditor,
   test,
 } from "./fixtures";
+
+type DropItem = { data: string; mimeType: string };
+type Point = { x: number; y: number };
+
+async function reloadWithoutIntersectionObserver(page: Page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "IntersectionObserver", {
+      configurable: true,
+      value: undefined,
+      writable: true,
+    });
+  });
+  await page.reload();
+  await expect(page.locator("[data-e2e-browser-lab]")).toHaveAttribute("data-ready", "true");
+}
+
+async function dispatchExternalDrop(cdp: CDPSession, point: Point, items: DropItem[]) {
+  const data = { dragOperationsMask: 1, items };
+  for (const type of ["dragEnter", "dragOver", "drop"] as const) {
+    await cdp.send("Input.dispatchDragEvent", {
+      data,
+      type,
+      x: point.x,
+      y: point.y,
+    });
+  }
+}
+
+async function textPoint(page: Page, id: string, needle: string, selector?: string) {
+  const target = selector
+    ? editorLocator(page, id).locator(selector)
+    : editorLocator(page, id);
+  await target.scrollIntoViewIfNeeded();
+  return target.evaluate((element, value) => {
+    const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const text = walker.currentNode as Text;
+      const index = text.data.indexOf(value);
+      if (index < 0) continue;
+      const range = element.ownerDocument.createRange();
+      range.setStart(text, index);
+      range.setEnd(text, index + 1);
+      const rect = range.getBoundingClientRect();
+      return { x: rect.left + 1, y: rect.top + rect.height / 2 };
+    }
+    throw new Error(`Missing ${JSON.stringify(value)} drop target.`);
+  }, needle);
+}
 
 async function focusParagraphEnd(page: Page, id: string) {
   const paragraph = editorLocator(page, id).locator("p").last();
@@ -193,6 +243,110 @@ test("external rich and plain drops insert undoable content", async ({ labPage }
   expect(plainDrop.defaultPrevented).toBe(true);
   await settleEditor(labPage, id);
   expect(await getMarkdown(labPage, id)).toBe("Dropped plain");
+});
+
+test("@required Chromium CDP external drops honor exact outer and active-code coordinates", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP drag commands.");
+  const cdp = await context.newCDPSession(labPage);
+
+  const outerId = "native-drop-outer";
+  await mountEditor(labPage, { id: outerId, markdown: "alpha omega", root: "shadow" });
+  await labPage.evaluate((id) => {
+    const section = document.querySelector(`[data-e2e-editor="${id}"]`)!;
+    (window as typeof window & { __markoraNativeDrop?: unknown }).__markoraNativeDrop = undefined;
+    section.addEventListener("drop", (rawEvent) => {
+      const event = rawEvent as DragEvent;
+      (window as typeof window & { __markoraNativeDrop?: unknown }).__markoraNativeDrop = {
+        isTrusted: event.isTrusted,
+        types: Array.from(event.dataTransfer?.types ?? []),
+      };
+    }, { once: true });
+  }, outerId);
+  await dispatchExternalDrop(cdp, await textPoint(labPage, outerId, "omega"), [
+    { data: "<strong>DROP</strong> ", mimeType: "text/html" },
+    { data: "plain fallback", mimeType: "text/plain" },
+  ]);
+  await settleEditor(labPage, outerId);
+  const captured = await labPage.evaluate(() => (
+    window as typeof window & { __markoraNativeDrop?: unknown }
+  ).__markoraNativeDrop) as { isTrusted: boolean; types: string[] };
+  expect(captured.isTrusted).toBe(true);
+  expect(new Set(captured.types)).toEqual(new Set(["text/html", "text/plain"]));
+  const serializedOuter = await getMarkdown(labPage, outerId);
+  expect(serializedOuter).toBe("alpha **DROP**omega");
+  await expect(editorLocator(labPage, outerId).locator("strong")).toHaveText("DROP");
+  const roundTripId = "native-drop-outer-roundtrip";
+  await mountEditor(labPage, { id: roundTripId, markdown: serializedOuter, root: "shadow" });
+  await expect(editorLocator(labPage, roundTripId).locator("strong")).toHaveText("DROP");
+  const outerSelection = (await snapshotEditor(labPage, outerId)).selection;
+  expect(outerSelection.to - outerSelection.from).toBe("DROP".length);
+  expect(await runEditorCommand(labPage, outerId, { type: "undo" })).toBe(true);
+  await settleEditor(labPage, outerId);
+  expect(await getMarkdown(labPage, outerId)).toBe("alpha omega");
+  expect(await runEditorCommand(labPage, outerId, { type: "redo" })).toBe(true);
+  await settleEditor(labPage, outerId);
+  expect(await getMarkdown(labPage, outerId)).toBe("alpha **DROP**omega");
+
+  const activeId = "native-drop-active-code";
+  const originalCode = "```text\nalpha omega\n```";
+  await mountEditor(labPage, { id: activeId, markdown: originalCode, root: "shadow" });
+  await editorLocator(labPage, activeId).locator(".cm-content").click();
+  await settleEditor(labPage, activeId);
+  await dispatchExternalDrop(
+    cdp,
+    await textPoint(labPage, activeId, "omega", ".cm-content"),
+    [
+      { data: "<strong>WRONG</strong>", mimeType: "text/html" },
+      { data: "DROP ", mimeType: "text/plain" },
+    ],
+  );
+  await settleEditor(labPage, activeId);
+  expect(await getMarkdown(labPage, activeId)).toBe("```text\nalpha DROP omega\n```");
+  expect((await snapshotEditor(labPage, activeId)).codeBlocks.active).toBe(1);
+  expect(await runEditorCommand(labPage, activeId, { type: "undo" })).toBe(true);
+  await settleEditor(labPage, activeId);
+  expect(await getMarkdown(labPage, activeId)).toBe(originalCode);
+  await cdp.detach();
+});
+
+test("@required Chromium CDP external drop enters exact passive-code coordinates", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP drag commands.");
+  await reloadWithoutIntersectionObserver(labPage);
+  const id = "native-drop-passive-code";
+  const original = "```text\nalpha omega\n```";
+  await mountEditor(labPage, { id, markdown: original, root: "shadow" });
+  const initial = await snapshotEditor(labPage, id);
+  expect(initial.codeBlocks.active).toBe(0);
+  expect(initial.codeBlocks.staticViews).toBe(1);
+  const passiveCode = editorLocator(labPage, id).locator(".mdw-code-block-static-code");
+  await expect(passiveCode).toBeVisible();
+  const point = await textPoint(labPage, id, "omega", ".mdw-code-block-static-code");
+  expect(await passiveCode.evaluate((element, target) => {
+    const root = element.getRootNode();
+    const hit = root instanceof ShadowRoot
+      ? root.elementFromPoint(target.x, target.y)
+      : element.ownerDocument.elementFromPoint(target.x, target.y);
+    return Boolean(hit && element.closest(".mdw-code-block-static")?.contains(hit));
+  }, point)).toBe(true);
+
+  const cdp = await context.newCDPSession(labPage);
+  await dispatchExternalDrop(cdp, point, [
+    { data: "DROP ", mimeType: "text/plain" },
+  ]);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe("```text\nalpha DROP omega\n```");
+  expect(await runEditorCommand(labPage, id, { type: "undo" })).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(original);
+  await cdp.detach();
 });
 
 test("CodeMirror accepts ordinary multiline text paste while rejecting files", async ({ labPage }) => {
