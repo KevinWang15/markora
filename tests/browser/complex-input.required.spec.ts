@@ -1063,6 +1063,244 @@ test("@required word navigation ignores Markdown mark boundaries across engines"
   }
 });
 
+test("@required Home and End synchronize single-line marked text across engines", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "marked-line-edge-navigation";
+  await mountEditor(labPage, { id, markdown: "" });
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+  const pressLineEdge = async (key: "End" | "Home", extend: boolean) => {
+    if (!cdp) {
+      await labPage.keyboard.press(`${extend ? "Shift+" : ""}${key}`);
+      return;
+    }
+
+    const keyCode = key === "Home" ? 36 : 35;
+
+    for (const type of ["keyDown", "keyUp"] as const) {
+      await cdp.send("Input.dispatchKeyEvent", {
+        code: key,
+        key,
+        modifiers: extend ? 8 : 0,
+        nativeVirtualKeyCode: keyCode,
+        type,
+        windowsVirtualKeyCode: keyCode,
+      });
+    }
+  };
+  const armLineEdgeKeyCapture = async (editorId: string) => {
+    await editorLocator(labPage, editorId).evaluate((element) => {
+      const targetWindow = window as Window & {
+        __markoraLineEdgeKey?: {
+          defaultPrevented: boolean;
+          isTrusted: boolean;
+          key: string;
+        };
+      };
+      delete targetWindow.__markoraLineEdgeKey;
+      const onKeyDown = (rawEvent: Event) => {
+        const event = rawEvent as KeyboardEvent;
+        if (event.key !== "Home" && event.key !== "End") {
+          return;
+        }
+
+        element.removeEventListener("keydown", onKeyDown);
+        queueMicrotask(() => {
+          targetWindow.__markoraLineEdgeKey = {
+            defaultPrevented: event.defaultPrevented,
+            isTrusted: event.isTrusted,
+            key: event.key,
+          };
+        });
+      };
+      element.addEventListener("keydown", onKeyDown);
+    });
+  };
+  const readLineEdgeKeyCapture = () => labPage.evaluate(() => {
+    const targetWindow = window as Window & {
+      __markoraLineEdgeKey?: {
+        defaultPrevented: boolean;
+        isTrusted: boolean;
+        key: string;
+      };
+    };
+    const record = targetWindow.__markoraLineEdgeKey ?? null;
+    delete targetWindow.__markoraLineEdgeKey;
+    return record;
+  });
+  const navigateFrom = async (
+    markdown: string,
+    needle: string,
+    mode: "end" | "start",
+    key: "End" | "Home",
+    extend: boolean,
+    editorId = id,
+  ) => {
+    await resetEditor(labPage, editorId, markdown);
+    expect(await labPage.evaluate(
+      ({ editorId, nextMode, nextNeedle }) => (
+        window.__MARKORA_BROWSER_LAB__!.selectText(editorId, nextNeedle, nextMode)
+      ),
+      { editorId, nextMode: mode, nextNeedle: needle },
+    )).toBe(true);
+    await settleEditor(labPage, editorId);
+    const normalizedMarkdown = await getMarkdown(labPage, editorId);
+    await clearEditorEvents(labPage, editorId);
+    await armLineEdgeKeyCapture(editorId);
+    await pressLineEdge(key, extend);
+    await settleEditor(labPage, editorId);
+    await expect(editorLocator(labPage, editorId)).toBeFocused();
+    const events = await getEditorEvents(labPage, editorId);
+    expect(events.counts.focus).toBe(0);
+    expect(events.counts.blur).toBe(0);
+    expect(await getMarkdown(labPage, editorId)).toBe(normalizedMarkdown);
+    expect(await readLineEdgeKeyCapture()).toEqual({
+      defaultPrevented: true,
+      isTrusted: true,
+      key,
+    });
+    return labPage.evaluate((nextEditorId) => ({
+      model: window.__MARKORA_BROWSER_LAB__!.snapshot(nextEditorId).selection,
+      text: document.getSelection()?.toString() ?? "",
+    }), editorId);
+  };
+
+  for (const testCase of [
+    {
+      key: "Home",
+      mode: "start",
+      needle: "beta",
+    },
+    {
+      key: "End",
+      mode: "end",
+      needle: "beta",
+    },
+  ] as const) {
+    for (const extend of [false, true]) {
+      const plain = await navigateFrom(
+        "alphabeta gamma",
+        testCase.needle,
+        testCase.mode,
+        testCase.key,
+        extend,
+      );
+      expect(plain).toEqual(testCase.key === "Home"
+        ? extend
+          ? {
+              model: { anchor: 6, from: 1, head: 1, to: 6 },
+              text: "alpha",
+            }
+          : {
+              model: { anchor: 1, from: 1, head: 1, to: 1 },
+              text: "",
+            }
+        : extend
+          ? {
+              model: { anchor: 10, from: 10, head: 16, to: 16 },
+              text: " gamma",
+            }
+          : {
+              model: { anchor: 16, from: 16, head: 16, to: 16 },
+              text: "",
+            });
+
+      for (const marked of [
+        "alpha**beta** gamma",
+        "alpha[beta](/line-edge-navigation) gamma",
+        "alpha[**beta**](/nested-line-edge-navigation) gamma",
+      ]) {
+        expect(await navigateFrom(
+          marked,
+          testCase.needle,
+          testCase.mode,
+          testCase.key,
+          extend,
+        )).toEqual(plain);
+      }
+    }
+  }
+
+  const wrappedMarkdown = "aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj";
+  const editor = editorLocator(labPage, id);
+  await editor.evaluate((element) => {
+    const htmlElement = element as HTMLElement;
+    htmlElement.style.boxSizing = "border-box";
+    htmlElement.style.fontFamily = "monospace";
+    htmlElement.style.width = "170px";
+  });
+  await resetEditor(labPage, id, wrappedMarkdown);
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "ffff", "start"),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  await armLineEdgeKeyCapture(id);
+  await pressLineEdge("Home", false);
+  await settleEditor(labPage, id);
+  expect(await readLineEdgeKeyCapture()).toEqual({
+    defaultPrevented: false,
+    isTrusted: true,
+    key: "Home",
+  });
+  expect(await getMarkdown(labPage, id)).toBe(wrappedMarkdown);
+  await expect(editor).toBeFocused();
+
+  await editor.evaluate((element) => {
+    (element as HTMLElement).style.width = "";
+  });
+  await resetEditor(labPage, id, "alphabeta gamma");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "start"),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  await armLineEdgeKeyCapture(id);
+  await labPage.keyboard.press("Control+Home");
+  await settleEditor(labPage, id);
+  expect(await readLineEdgeKeyCapture()).toEqual({
+    defaultPrevented: false,
+    isTrusted: true,
+    key: "Home",
+  });
+  expect(await getMarkdown(labPage, id)).toBe("alphabeta gamma");
+  await expect(editor).toBeFocused();
+
+  const rtlId = "rtl-marked-line-edge-navigation";
+  await mountEditor(labPage, { direction: "rtl", id: rtlId, markdown: "" });
+
+  for (const testCase of [
+    { key: "Home", mode: "end", needle: "דהו" },
+    { key: "End", mode: "start", needle: "אבג" },
+  ] as const) {
+    for (const extend of [false, true]) {
+      const plain = await navigateFrom(
+        "אבגדהו זחט",
+        "אבגדהו",
+        testCase.mode,
+        testCase.key,
+        extend,
+        rtlId,
+      );
+      const marked = await navigateFrom(
+        "אבג**דהו** זחט",
+        testCase.needle,
+        testCase.mode,
+        testCase.key,
+        extend,
+        rtlId,
+      );
+      expect(marked).toEqual(plain);
+    }
+  }
+
+  await cdp?.detach();
+});
+
 test("@required character selection ignores Markdown mark boundaries across engines", async ({
   browserName,
   context,

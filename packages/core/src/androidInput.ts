@@ -974,6 +974,98 @@ export function isWordNavigationShortcut(
     : event.ctrlKey && !event.altKey && !event.metaKey;
 }
 
+function isSingleVisualTextLine(
+  view: EditorView,
+  selection: TextSelection,
+): boolean {
+  const ownerDocument = view.dom.ownerDocument;
+  const parentPos = selection.$head.before();
+  const parentDOM = view.nodeDOM(parentPos);
+
+  if (!parentDOM) {
+    return false;
+  }
+
+  const contentRange = ownerDocument.createRange();
+
+  try {
+    contentRange.selectNodeContents(parentDOM);
+  } catch {
+    return false;
+  }
+
+  const contentRects = Array.from(contentRange.getClientRects()).filter((rect) => (
+    rect.bottom > rect.top
+  ));
+
+  if (!contentRects.length) {
+    return false;
+  }
+
+  const top = Math.min(...contentRects.map((rect) => rect.top));
+  const bottom = Math.max(...contentRects.map((rect) => rect.bottom));
+  const maxHeight = Math.max(...contentRects.map((rect) => rect.height));
+
+  // A wrapped boundary has caret affinity that TextSelection cannot encode:
+  // one model position can mean either the previous line's end or the next
+  // line's start. Keep those events native; own only the unambiguous case.
+  return bottom - top <= maxHeight + 2;
+}
+
+function handleNativeLineEdgeNavigation(
+  view: EditorView,
+  event: KeyboardEvent,
+) {
+  const lineEdge = event.key === "Home" || event.key === "End";
+
+  if (
+    !lineEdge
+    || event.altKey
+    || event.ctrlKey
+    || event.metaKey
+    || !view.editable
+    || view.composing
+    || event.defaultPrevented
+    || event.isComposing
+    || event.keyCode === 229
+    || event.target !== view.dom
+  ) {
+    return false;
+  }
+
+  const state = view.state;
+  const { selection } = state;
+
+  if (
+    !(selection instanceof TextSelection)
+    || selection.$anchor.parent !== selection.$head.parent
+    || !isTextOnlyInlineContent(selection.$head.parent)
+  ) {
+    return false;
+  }
+
+  const parentStart = selection.$head.start();
+  const parentEnd = parentStart + selection.$head.parent.content.size;
+  if (!isSingleVisualTextLine(view, selection)) {
+    return false;
+  }
+
+  const head = event.key === "Home" ? parentStart : parentEnd;
+  const anchor = event.shiftKey ? selection.anchor : head;
+
+  event.preventDefault();
+
+  if (anchor !== selection.anchor || head !== selection.head) {
+    view.dispatch(
+      state.tr
+        .setSelection(TextSelection.create(state.doc, anchor, head))
+        .scrollIntoView(),
+    );
+  }
+
+  return true;
+}
+
 function handleNativeHorizontalNavigation(
   view: EditorView,
   event: KeyboardEvent,
@@ -1233,11 +1325,13 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
           );
         },
         keydown(view, event) {
-          return handleNativeHorizontalNavigation(
-            view,
-            event as KeyboardEvent,
-            macPlatform,
-          );
+          const keyboardEvent = event as KeyboardEvent;
+          return handleNativeLineEdgeNavigation(view, keyboardEvent)
+            || handleNativeHorizontalNavigation(
+              view,
+              keyboardEvent,
+              macPlatform,
+            );
         },
         beforeinput(view, event) {
           if (
