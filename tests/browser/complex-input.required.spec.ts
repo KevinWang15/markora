@@ -8,6 +8,7 @@ import {
   mountEditor,
   resetEditor,
   settleEditor,
+  snapshotEditor,
   test,
 } from "./fixtures";
 
@@ -2098,6 +2099,145 @@ test("@required double-click word drag crosses Markdown mark boundaries", async 
     const marked = await wordDrag(testCase.marked);
     expect(marked).toEqual(plain);
     expect(marked.text?.replace(/\n+/gu, "\n")).toContain(testCase.expectedText);
+  }
+  await cdp?.detach();
+});
+
+test("@required owned word and block drags reach vertical editor edges", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "pointer-drag-edges";
+  const markdown = "one alpha word\n\ntwo pre**fix** word\n\nthree omega word";
+  await mountEditor(labPage, { id, markdown: "", root: "shadow" });
+  const editor = editorLocator(labPage, id);
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+
+  const dispatchMouse = async (options: {
+    buttons: number;
+    clickCount: number;
+    type: "mouseMoved" | "mousePressed" | "mouseReleased";
+    x: number;
+    y: number;
+  }) => {
+    if (cdp) {
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "left",
+        ...options,
+      });
+      return;
+    }
+
+    await labPage.mouse.move(options.x, options.y);
+    if (options.type === "mousePressed") {
+      await labPage.mouse.down({ button: "left", clickCount: options.clickCount });
+    } else if (options.type === "mouseReleased") {
+      await labPage.mouse.up({ button: "left", clickCount: options.clickCount });
+    }
+  };
+
+  for (const kind of ["word", "block"] as const) {
+    for (const direction of ["above", "below"] as const) {
+      await labPage.mouse.click(1, 1);
+      await resetEditor(labPage, id, markdown);
+      await settleEditor(labPage, id);
+      expect(await labPage.evaluate(
+        (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "one", "start"),
+        id,
+      )).toBe(true);
+      const documentStart = (await snapshotEditor(labPage, id)).selection.head;
+      expect(await labPage.evaluate(
+        (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "omega word", "end"),
+        id,
+      )).toBe(true);
+      const documentEnd = (await snapshotEditor(labPage, id)).selection.head;
+      const start = await editor.evaluate((element) => {
+        const text = element.querySelector("strong")?.firstChild;
+        if (!text || text.nodeType !== Node.TEXT_NODE) {
+          throw new Error("Missing marked pointer-edge target.");
+        }
+        const range = element.ownerDocument.createRange();
+        range.setStart(text, 1);
+        range.setEnd(text, 2);
+        const rect = range.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      });
+
+      const completedClicks = kind === "word" ? [1] : [1, 2];
+      for (const clickCount of completedClicks) {
+        await dispatchMouse({
+          buttons: 1,
+          clickCount,
+          type: "mousePressed",
+          ...start,
+        });
+        await dispatchMouse({
+          buttons: 0,
+          clickCount,
+          type: "mouseReleased",
+          ...start,
+        });
+      }
+      const activeClickCount = kind === "word" ? 2 : 3;
+      await dispatchMouse({
+        buttons: 1,
+        clickCount: activeClickCount,
+        type: "mousePressed",
+        ...start,
+      });
+      const initial = (await snapshotEditor(labPage, id)).selection;
+      const bounds = await editor.boundingBox();
+      if (!bounds) throw new Error("Missing pointer-edge editor bounds.");
+      const edge = {
+        x: bounds.x + bounds.width / 2,
+        y: direction === "above"
+          ? bounds.y - 30
+          : bounds.y + bounds.height + 30,
+      };
+      await dispatchMouse({
+        buttons: 1,
+        clickCount: activeClickCount,
+        type: "mouseMoved",
+        ...edge,
+      });
+      await dispatchMouse({
+        buttons: 0,
+        clickCount: activeClickCount,
+        type: "mouseReleased",
+        ...edge,
+      });
+      await settleEditor(labPage, id);
+
+      const selection = (await snapshotEditor(labPage, id)).selection;
+      expect(selection).toMatchObject(direction === "above"
+        ? {
+            anchor: initial.to,
+            from: documentStart,
+            head: documentStart,
+            to: initial.to,
+          }
+        : {
+            anchor: initial.from,
+            from: initial.from,
+            head: documentEnd,
+            to: documentEnd,
+          });
+
+      if (cdp) {
+        await cdp.send("Input.insertText", { text: "X" });
+      } else {
+        await labPage.keyboard.insertText("X");
+      }
+      await settleEditor(labPage, id);
+      expect(await getMarkdown(labPage, id)).toBe(
+        direction === "above"
+          ? `X${kind === "word" ? " word" : ""}\n\nthree omega word`
+          : `one alpha word\n\n${kind === "word" ? "two " : ""}X`,
+      );
+    }
   }
   await cdp?.detach();
 });

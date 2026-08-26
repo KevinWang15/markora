@@ -1,5 +1,10 @@
 import type { Node as ProseMirrorNode } from "prosemirror-model";
-import { Plugin, TextSelection, type EditorState } from "prosemirror-state";
+import {
+  Plugin,
+  Selection as ProseMirrorSelection,
+  TextSelection,
+  type EditorState,
+} from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 
 type TextSegment = {
@@ -111,6 +116,39 @@ type OwnedPointerWordSelection = {
   doc: ProseMirrorNode;
   head: number;
 };
+
+function clampPointerCoordinate(value: number, start: number, end: number) {
+  if (end <= start) {
+    return start;
+  }
+
+  const inset = Math.min(1, (end - start) / 2);
+  return Math.max(start + inset, Math.min(end - inset, value));
+}
+
+function resolveOwnedPointerDragPosition(
+  view: EditorView,
+  event: Pick<MouseEvent, "clientX" | "clientY">,
+) {
+  const bounds = view.dom.getBoundingClientRect();
+
+  // Preventing the initiating double/triple click also prevents the browser
+  // from extending the range after the pointer leaves this surface. Resolve
+  // vertical exits to the document edge and keep horizontal exits on their
+  // current row by probing just inside the editor instead.
+  if (event.clientY < bounds.top) {
+    return ProseMirrorSelection.atStart(view.state.doc).head;
+  }
+
+  if (event.clientY > bounds.bottom) {
+    return ProseMirrorSelection.atEnd(view.state.doc).head;
+  }
+
+  return view.posAtCoords({
+    left: clampPointerCoordinate(event.clientX, bounds.left, bounds.right),
+    top: clampPointerCoordinate(event.clientY, bounds.top, bounds.bottom),
+  })?.pos ?? null;
+}
 
 function captureFallbackState(state: EditorState): FallbackState {
   return {
@@ -1442,40 +1480,21 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
           return;
         }
 
-        const bounds = view.dom.getBoundingClientRect();
-
-        if (
-          event.clientX < bounds.left
-          || event.clientX > bounds.right
-          || event.clientY < bounds.top
-          || event.clientY > bounds.bottom
-        ) {
-          return;
-        }
-
-        const coordinates = view.posAtCoords({
-          left: event.clientX,
-          top: event.clientY,
-        });
-
-        if (!coordinates) {
-          return;
-        }
-
         event.preventDefault();
+        const position = resolveOwnedPointerDragPosition(view, event);
 
-        if (coordinates.pos === drag.lastPosition) {
+        if (position === null || position === drag.lastPosition) {
           return;
         }
 
         const state = view.state;
-        const range = measurePointerTextBlockRange(state, coordinates.pos);
+        const range = measurePointerTextBlockRange(state, position);
 
         if (!range) {
           return;
         }
 
-        drag.lastPosition = coordinates.pos;
+        drag.lastPosition = position;
         const anchor = range.to <= drag.from ? drag.to : drag.from;
         const head = range.to <= drag.from
           ? range.from
@@ -1556,29 +1575,10 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
           return;
         }
 
-        const bounds = view.dom.getBoundingClientRect();
-
-        if (
-          event.clientX < bounds.left
-          || event.clientX > bounds.right
-          || event.clientY < bounds.top
-          || event.clientY > bounds.bottom
-        ) {
-          return;
-        }
-
-        const coordinates = view.posAtCoords({
-          left: event.clientX,
-          top: event.clientY,
-        });
-
-        if (!coordinates) {
-          return;
-        }
-
         event.preventDefault();
+        const position = resolveOwnedPointerDragPosition(view, event);
 
-        if (coordinates.pos === drag.lastPosition) {
+        if (position === null || position === drag.lastPosition) {
           return;
         }
 
@@ -1586,7 +1586,7 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
         const range = measurePointerWordRange(
           view,
           state,
-          coordinates.pos,
+          position,
           false,
         );
 
@@ -1599,7 +1599,7 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
           return;
         }
 
-        drag.lastPosition = coordinates.pos;
+        drag.lastPosition = position;
         const anchor = range.to <= drag.from ? drag.to : drag.from;
         const head = range.to <= drag.from
           ? range.from

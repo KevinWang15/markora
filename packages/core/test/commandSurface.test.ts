@@ -1022,7 +1022,11 @@ describe("public command and state surface", () => {
       createMinimalEditor({ element: createHost(), markdown: "one **two** three\n\nfour five" }),
     ]) {
       let pointerPosition = 6;
-      editor.view.posAtCoords = () => ({ inside: -1, pos: pointerPosition });
+      let pointerCoordinates: { left: number; top: number } | null = null;
+      editor.view.posAtCoords = (coordinates) => {
+        pointerCoordinates = coordinates;
+        return { inside: -1, pos: pointerPosition };
+      };
       editor.view.dom.getBoundingClientRect = () => ({
         bottom: 100,
         height: 100,
@@ -1062,16 +1066,15 @@ describe("public command and state surface", () => {
         to: 14,
       });
 
-      pointerPosition = 20;
-      const move = new MouseEvent("mousemove", {
+      const outsideBelow = new MouseEvent("mousemove", {
         bubbles: true,
         buttons: 1,
         cancelable: true,
         clientX: 20,
-        clientY: 40,
+        clientY: 120,
       });
-      editor.view.dom.ownerDocument.dispatchEvent(move);
-      expect(move.defaultPrevented).toBe(true);
+      editor.view.dom.ownerDocument.dispatchEvent(outsideBelow);
+      expect(outsideBelow.defaultPrevented).toBe(true);
       expect(editor.view.state.selection).toMatchObject({
         anchor: 1,
         from: 1,
@@ -1079,6 +1082,87 @@ describe("public command and state surface", () => {
         to: 25,
       });
 
+      pointerPosition = 6;
+      editor.view.dom.ownerDocument.dispatchEvent(new MouseEvent("mousemove", {
+        bubbles: true,
+        buttons: 1,
+        cancelable: true,
+        clientX: 20,
+        clientY: 20,
+      }));
+      expect(editor.view.state.selection).toMatchObject({
+        anchor: 1,
+        from: 1,
+        head: 14,
+        to: 14,
+      });
+
+      pointerPosition = 20;
+      const move = new MouseEvent("mousemove", {
+        bubbles: true,
+        buttons: 1,
+        cancelable: true,
+        clientX: 120,
+        clientY: 40,
+      });
+      editor.view.dom.ownerDocument.dispatchEvent(move);
+      expect(move.defaultPrevented).toBe(true);
+      expect(pointerCoordinates).toEqual({ left: 99, top: 40 });
+      expect(editor.view.state.selection).toMatchObject({
+        anchor: 1,
+        from: 1,
+        head: 25,
+        to: 25,
+      });
+
+      editor.view.dom.ownerDocument.dispatchEvent(new MouseEvent("mouseup", {
+        bubbles: true,
+        button: 0,
+        buttons: 0,
+      }));
+
+      const secondBlock = editor.view.dom.querySelectorAll("p")[1]!;
+      pointerPosition = 20;
+      expect(secondBlock.dispatchEvent(new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+        clientX: 20,
+        clientY: 40,
+        detail: 1,
+      }))).toBe(true);
+      const secondBlockTripleMouseDown = new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+        clientX: 20,
+        clientY: 40,
+        detail: 3,
+      });
+      expect(secondBlock.dispatchEvent(secondBlockTripleMouseDown)).toBe(false);
+      expect(secondBlockTripleMouseDown.defaultPrevented).toBe(true);
+      expect(editor.view.state.selection).toMatchObject({
+        anchor: 16,
+        from: 16,
+        head: 25,
+        to: 25,
+      });
+
+      const outsideAbove = new MouseEvent("mousemove", {
+        bubbles: true,
+        buttons: 1,
+        cancelable: true,
+        clientX: 20,
+        clientY: -20,
+      });
+      editor.view.dom.ownerDocument.dispatchEvent(outsideAbove);
+      expect(outsideAbove.defaultPrevented).toBe(true);
+      expect(editor.view.state.selection).toMatchObject({
+        anchor: 25,
+        from: 1,
+        head: 1,
+        to: 25,
+      });
       editor.view.dom.ownerDocument.dispatchEvent(new MouseEvent("mouseup", {
         bubbles: true,
         button: 0,
