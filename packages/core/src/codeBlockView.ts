@@ -657,6 +657,11 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
       this.staticView = ownerDocument.createElement("div");
       this.staticView.className = "mdw-code-block-static";
+      // Passive code blocks retain exact, selectable source without eagerly
+      // mounting CodeMirror. Keep their overflow region keyboard reachable as
+      // well: long lines otherwise create a scroll area that Safari and other
+      // keyboard users cannot enter.
+      this.staticView.tabIndex = 0;
 
       this.staticGutter = ownerDocument.createElement("div");
       this.staticGutter.className = "mdw-code-block-static-gutter";

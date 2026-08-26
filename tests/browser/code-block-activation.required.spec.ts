@@ -52,7 +52,11 @@ test("@required passive code shells preserve exact text, ranges, copy, and DOM s
 }) => {
   await reloadWithoutIntersectionObserver(labPage);
   const id = "passive-code";
-  const code = "alpha  \n\tbeta 😀\nunique-passive-cdp-token <tag> & value";
+  const code = [
+    "alpha  ",
+    "\tbeta 😀",
+    `unique-passive-cdp-token <tag> & value ${"long-line-".repeat(80)}`,
+  ].join("\n");
   const mounted = await mountEditor(labPage, {
     editable: false,
     id,
@@ -78,6 +82,9 @@ test("@required passive code shells preserve exact text, ranges, copy, and DOM s
   expect(await staticCode.evaluate((element) => element.tagName)).toBe("CODE");
   expect(await staticCode.textContent()).toBe(code);
   expect(await shell.locator(".mdw-code-block-static-gutter").textContent()).toBe("1\n2\n3");
+  const staticView = shell.locator(".mdw-code-block-static");
+  await expect(staticView).toHaveAttribute("tabindex", "0");
+  expect(await staticView.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
 
   const rangeText = await staticCode.evaluate((element) => {
     const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);

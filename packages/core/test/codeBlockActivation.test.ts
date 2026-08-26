@@ -132,6 +132,7 @@ describe("lazy code-block activation", () => {
     expect(code.hasAttribute("aria-label")).toBe(false);
     expect(code.hasAttribute("aria-readonly")).toBe(false);
     expect(code.getAttribute("spellcheck")).toBe("false");
+    expect(staticView.tabIndex).toBe(0);
     expect(staticView.querySelector(".mdw-code-block-static-gutter")?.textContent).toBe("1\n2");
     expect(shell.querySelector(".mdw-code-block-language")?.textContent).toBe("custom");
     expect(loader).not.toHaveBeenCalled();
