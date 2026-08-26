@@ -4,6 +4,7 @@ import {
   getMarkdown,
   mountEditor,
   settleEditor,
+  snapshotEditor,
   test,
 } from "./fixtures";
 
@@ -97,6 +98,74 @@ test("@required bidi mark boundaries follow physical browser caret motion", asyn
     // text assertion proves the inserted character escaped the mark.
     expect(testCase.expected).toContain(await getMarkdown(labPage, testCase.id));
     await expect(editorLocator(labPage, testCase.id).locator("strong")).toHaveText(testCase.text);
+  }
+});
+
+test("@required bidi mark exits preserve the following native physical-arrow step", async ({ labPage }) => {
+  const cases = [
+    {
+      arrow: "ArrowLeft",
+      direction: "ltr" as const,
+      markedMarkdown: "abc **אבג** def",
+      mode: "start" as const,
+      text: "אבג",
+      visibleText: "abc אבג def",
+    },
+    {
+      arrow: "ArrowRight",
+      direction: "ltr" as const,
+      markedMarkdown: "abc **אבג** def",
+      mode: "end" as const,
+      text: "אבג",
+      visibleText: "abc אבג def",
+    },
+    {
+      arrow: "ArrowRight",
+      direction: "rtl" as const,
+      markedMarkdown: "אבג **abc** דהו",
+      mode: "start" as const,
+      text: "abc",
+      visibleText: "אבג abc דהו",
+    },
+    {
+      arrow: "ArrowLeft",
+      direction: "rtl" as const,
+      markedMarkdown: "אבג **abc** דהו",
+      mode: "end" as const,
+      text: "abc",
+      visibleText: "אבג abc דהו",
+    },
+  ];
+
+  for (const [index, testCase] of cases.entries()) {
+    const markedId = `bidi-sequence-marked-${index}`;
+    const plainId = `bidi-sequence-plain-${index}`;
+    await mountEditor(labPage, {
+      direction: testCase.direction,
+      id: plainId,
+      markdown: testCase.visibleText,
+    });
+    await mountEditor(labPage, {
+      direction: testCase.direction,
+      id: markedId,
+      markdown: testCase.markedMarkdown,
+    });
+
+    await selectTextBoundary(labPage, plainId, testCase.text, testCase.mode);
+    await labPage.keyboard.press(testCase.arrow);
+    await settleEditor(labPage, plainId);
+    const plainHead = (await snapshotEditor(labPage, plainId)).selection.head;
+
+    await selectTextBoundary(labPage, markedId, testCase.text, testCase.mode);
+    const boundaryHead = (await snapshotEditor(labPage, markedId)).selection.head;
+    await labPage.keyboard.press(testCase.arrow);
+    await settleEditor(labPage, markedId);
+    expect((await snapshotEditor(labPage, markedId)).selection.head).toBe(boundaryHead);
+    await expect(editorLocator(labPage, markedId).locator(".mdw-marker-strong")).toHaveCount(0);
+
+    await labPage.keyboard.press(testCase.arrow);
+    await settleEditor(labPage, markedId);
+    expect((await snapshotEditor(labPage, markedId)).selection.head).toBe(plainHead);
   }
 });
 
