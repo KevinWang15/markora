@@ -21,7 +21,10 @@ import {
   combineMarkdownSerializerEscapePatterns,
   compileMarkdownEditorParserTokens,
   configureMarkdownTokenizerNesting,
+  orderedMarkdownListTokenAttrs,
   registerMarkdownEditorTokenizerRules,
+  renderCanonicalMarkdownList,
+  selectCanonicalMarkdownListMarker,
   wrapMarkdownEditorExtensionRuntimeCallback,
 } from "./markdownContributionCompiler";
 import { createReadonlySet } from "./readonlySet";
@@ -695,6 +698,10 @@ configureMarkdownTokenizerNesting(markdownTokenizer);
 
 const foundationMarkdownTokens: Record<string, ParseSpec> = {
   ...defaultMarkdownParser.tokens,
+  ordered_list: {
+    ...defaultMarkdownParser.tokens.ordered_list,
+    getAttrs: orderedMarkdownListTokenAttrs,
+  },
   fence: {
     ...defaultMarkdownParser.tokens.fence,
     getAttrs: codeBlockFenceTokenAttrs,
@@ -796,9 +803,10 @@ const serializerNodes: Record<
     bullet_list(state: MarkdownSerializerState, node: ProseMirrorNode) {
       const listState = state as MarkdownSerializerStateWithInternals;
       const wasClosed = listState.closed && listState.closed.type === node.type;
+      const bullet = selectCanonicalMarkdownListMarker(state, node, "*", "-");
 
       if (wasClosed) {
-        listState.flushClose(3);
+        listState.flushClose(1);
       } else if (listState.inTightList) {
         listState.flushClose(1);
       }
@@ -815,13 +823,24 @@ const serializerNodes: Record<
         const checked = child.attrs.checked;
         const firstDelim =
           typeof checked === "boolean"
-            ? `${node.attrs.bullet || "*"} [${checked ? "x" : " "}] `
-            : `${node.attrs.bullet || "*"} `;
+            ? `${bullet} [${checked ? "x" : " "}] `
+            : `${bullet} `;
         const delim = " ".repeat(firstDelim.length);
         state.wrapBlock(delim, firstDelim, node, () => state.render(child, node, index));
       });
 
       listState.inTightList = previousTight;
+    },
+    ordered_list(state: MarkdownSerializerState, node: ProseMirrorNode) {
+      const delimiter = selectCanonicalMarkdownListMarker(state, node, ".", ")");
+      const start = Number.isSafeInteger(node.attrs.order) ? node.attrs.order : 1;
+      const maxWidth = String(start + node.childCount - 1).length;
+      const continuation = " ".repeat(maxWidth + 2);
+
+      renderCanonicalMarkdownList(state, node, continuation, (index) => {
+        const number = String(start + index);
+        return `${" ".repeat(maxWidth - number.length)}${number}${delimiter} `;
+      });
     },
 };
 const serializerMarks: Record<

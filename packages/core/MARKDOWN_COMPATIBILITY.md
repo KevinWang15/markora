@@ -39,8 +39,8 @@ Syntax outside both the supported dialect and the recognized opaque shapes can s
 | Headings | ATX levels 1–6 and Setext headings | Normalized to ATX `#` markers without optional closing hashes. |
 | Blockquotes | CommonMark `>` blocks with supported child blocks | Normalized marker layout. Soft line breaks inside a paragraph become spaces. |
 | Thematic breaks | CommonMark asterisk, hyphen, or underscore forms | Normalized to `---`. |
-| Bullet lists | Ordinary lists using one marker style, including supported nested blocks | Normalized to `*` markers. A pure list chain supports up to 127 recursively nested items; combined block containers share the same bounded structural-depth budget. Deeper input throws `RangeError` instead of returning partial content. Adjacent lists separated only by a different marker are a known limitation. |
-| Ordered lists | Period or parenthesis delimiters with a start of 1 or greater | Normalized to period delimiters and explicit sequential numbering. A start of `0` is not supported reliably. |
+| Bullet lists | Ordinary lists using CommonMark bullet markers, including supported nested blocks | Normalized to `*` markers, alternating with `-` only where needed to retain a boundary between adjacent list nodes. A pure list chain supports up to 127 recursively nested items; combined block containers share the same bounded structural-depth budget. Deeper input throws `RangeError` instead of returning partial content. |
+| Ordered lists | Period or parenthesis delimiters with a start of 0 or greater | Normalized to period delimiters and explicit sequential numbering, alternating with parenthesis delimiters only where needed to retain a boundary between adjacent list nodes. |
 | Task lists | Flat `[ ]`, `[x]`, or `[X]` items directly inside a bullet list | Normalized to `* [ ]` and `* [x]`. Nested lists or additional blocks inside task items are not supported reliably. |
 | Code blocks | Indented blocks and backtick or tilde fences, with an optional info string | Code text and the complete normalized info string are semantic content. Surrounding info whitespace is trimmed on import and command input. Output uses a fence longer than delimiter runs in the body, choosing tildes when the info contains a backtick; the original fence character and length are otherwise not retained. NUL/CR/LF cannot occur in info, and raw NUL/CR code text injected through advanced transactions cannot be serialized exactly. |
 | Emphasis and strong | CommonMark `*`/`_` and `**`/`__` forms | Normalized to `*emphasis*` and `**strong**`. |
@@ -457,8 +457,6 @@ Even a supported construct must stay within the shapes listed above:
 
 - task items must be flat; nested lists, extra paragraphs, and code blocks inside a task item can drift on reparse;
 - escaping an `[x]`-like prefix at the start of a bullet item does not reliably opt out of task conversion;
-- adjacent lists distinguished only by bullet marker or ordered delimiter can merge after normalization;
-- ordered lists starting at zero normalize incorrectly to one;
 - pipe-table rows must match the header width; permissive imports can pad missing cells or discard extras, while live ragged rows created through trusted escape hatches are reported by `state.tableIssues()`;
 - table cells must remain unmerged and contain supported inline content in one paragraph; merged, multi-block, and HTML row-header structures are reported but do not round-trip as pipe-table structure;
 - bare URLs, `www.` addresses, and bare email addresses remain plain text unless written as CommonMark angle autolinks.

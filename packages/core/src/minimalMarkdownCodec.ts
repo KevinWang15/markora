@@ -5,6 +5,7 @@ import {
   defaultMarkdownParser,
   defaultMarkdownSerializer,
   schema as commonMarkSchema,
+  type MarkdownSerializerState,
   type ParseSpec,
 } from "prosemirror-markdown";
 import {
@@ -28,7 +29,10 @@ import {
   combineMarkdownSerializerEscapePatterns,
   compileMarkdownEditorParserTokens,
   configureMarkdownTokenizerNesting,
+  orderedMarkdownListTokenAttrs,
   registerMarkdownEditorTokenizerRules,
+  renderCanonicalMarkdownList,
+  selectCanonicalMarkdownListMarker,
   wrapMarkdownEditorExtensionRuntimeCallback,
 } from "./markdownContributionCompiler";
 import {
@@ -301,6 +305,10 @@ export function createMinimalMarkdownCodec(
   const parserTokens = compileMarkdownEditorParserTokens({
     foundationTokens: {
       ...defaultMarkdownParser.tokens,
+      ordered_list: {
+        ...defaultMarkdownParser.tokens.ordered_list,
+        getAttrs: orderedMarkdownListTokenAttrs,
+      },
       fence: {
         ...defaultMarkdownParser.tokens.fence,
         getAttrs: codeBlockFenceTokenAttrs,
@@ -312,7 +320,22 @@ export function createMinimalMarkdownCodec(
   });
   const serializerNodes: Record<string, (typeof defaultMarkdownSerializer.nodes)[string]> = {
     ...defaultMarkdownSerializer.nodes,
+    bullet_list(state: MarkdownSerializerState, node: ProseMirrorNode) {
+      const bullet = selectCanonicalMarkdownListMarker(state, node, "*", "-");
+      renderCanonicalMarkdownList(state, node, "  ", () => `${bullet} `);
+    },
     code_block: serializeCodeBlock,
+    ordered_list(state: MarkdownSerializerState, node: ProseMirrorNode) {
+      const delimiter = selectCanonicalMarkdownListMarker(state, node, ".", ")");
+      const start = Number.isSafeInteger(node.attrs.order) ? node.attrs.order : 1;
+      const maxWidth = String(start + node.childCount - 1).length;
+      const continuation = " ".repeat(maxWidth + 2);
+
+      renderCanonicalMarkdownList(state, node, continuation, (index) => {
+        const number = String(start + index);
+        return `${" ".repeat(maxWidth - number.length)}${number}${delimiter} `;
+      });
+    },
   };
   const serializerMarks: Record<string, (typeof defaultMarkdownSerializer.marks)[string]> = {
     ...defaultMarkdownSerializer.marks,

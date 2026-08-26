@@ -848,6 +848,13 @@ and verification decisions are frozen in the
   construction cleanup, external-update atomicity, and continued editor use.
   Packed bundle/module isolation and the core plus all-seven 100 KiB–1 MiB
   Chromium performance and zero-retention budgets remain green.
+- Root and minimal preserve distinct adjacent bullet and ordered list nodes by
+  alternating canonical markers only at their shared boundary, and retain an
+  ordered-list start of zero. Focused semantic-idempotence cases cover nested
+  tight lists and task-looking input; a production-built three-engine check
+  edits through Chromium CDP and native Firefox/WebKit input, resets from the
+  serialized Markdown, and verifies that list counts, starts, and output remain
+  stable.
 - `markora-extension-alerts` provides semantic GitHub blockquote alerts in root
   and minimal for note, tip, important, warning, and caution. A lightweight
   authored-marker claim runs before the foundation blockquote rule, while a

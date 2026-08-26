@@ -1,6 +1,7 @@
 import type MarkdownIt from "markdown-it";
-import type { ParseSpec } from "prosemirror-markdown";
-import type { Schema } from "prosemirror-model";
+import type Token from "markdown-it/lib/token.mjs";
+import type { MarkdownSerializerState, ParseSpec } from "prosemirror-markdown";
+import type { Node as ProseMirrorNode, Schema } from "prosemirror-model";
 import {
   MarkdownEditorExtensionError,
   isValidMarkdownEditorLocalId,
@@ -36,6 +37,90 @@ type TokenizerGraphNode = OwnedTokenizerRule | TokenizerAnchorNode;
 const tokenizerPhases = ["block", "inline", "inline-post", "core"] as const;
 const MARKDOWN_SUPPORTED_TOKEN_NESTING = 256;
 const MARKDOWN_TOKENIZER_MAX_NESTING = 512;
+const canonicalListMarkers = Symbol("markora-canonical-list-markers");
+
+type MarkdownListSerializerState = MarkdownSerializerState & {
+  closed: { type: ProseMirrorNode["type"] } | null;
+  flushClose: (size: number) => void;
+  inTightList: boolean;
+  [canonicalListMarkers]?: Record<string, string>;
+};
+
+function markdownListIsTight(tokens: readonly Token[], index: number) {
+  while (++index < tokens.length) {
+    if (tokens[index]?.type !== "list_item_open") {
+      return Boolean(tokens[index]?.hidden);
+    }
+  }
+
+  return false;
+}
+
+/** @internal Preserve zero while retaining ProseMirror's tight-list metadata. */
+export function orderedMarkdownListTokenAttrs(
+  token: Token,
+  tokens: readonly Token[],
+  index: number,
+) {
+  const authoredStart = token.attrGet("start");
+  const order = authoredStart == null ? 1 : Number(authoredStart);
+
+  return {
+    order: Number.isSafeInteger(order) ? order : 1,
+    tight: markdownListIsTight(tokens, index),
+  };
+}
+
+/** @internal Alternate only when equal list nodes are actual adjacent blocks. */
+export function selectCanonicalMarkdownListMarker(
+  state: MarkdownSerializerState,
+  node: ProseMirrorNode,
+  primary: string,
+  alternate: string,
+) {
+  const listState = state as MarkdownListSerializerState;
+  const markers = listState[canonicalListMarkers] ??= {};
+  const adjacent = listState.closed?.type === node.type;
+  const marker = adjacent && markers[node.type.name] === primary
+    ? alternate
+    : primary;
+  markers[node.type.name] = marker;
+  return marker;
+}
+
+/** @internal Render distinct adjacent lists without loosening their parent. */
+export function renderCanonicalMarkdownList(
+  state: MarkdownSerializerState,
+  node: ProseMirrorNode,
+  continuation: string,
+  firstDelimiter: (index: number) => string,
+) {
+  const listState = state as MarkdownListSerializerState;
+
+  if (listState.closed?.type === node.type || listState.inTightList) {
+    listState.flushClose(1);
+  }
+
+  const isTight = typeof node.attrs.tight !== "undefined"
+    ? node.attrs.tight
+    : state.options.tightLists;
+  const previousTight = listState.inTightList;
+  listState.inTightList = isTight;
+
+  node.forEach((child, _offset, index) => {
+    if (index && isTight) {
+      listState.flushClose(1);
+    }
+
+    state.wrapBlock(
+      continuation,
+      firstDelimiter(index),
+      node,
+      () => state.render(child, node, index),
+    );
+  });
+  listState.inTightList = previousTight;
+}
 
 // Markdown-it counts both list and list-item containers, so this admits 127
 // recursively nested list items. Keep a separate parser ceiling above the
