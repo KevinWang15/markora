@@ -48,6 +48,7 @@ import {
   type NormalizedMarkdownEditorResources,
 } from "./resourcePolicy";
 import type { TableAlignment } from "./tableNavigation";
+import { widestRowTableRule } from "./raggedTableMarkdown";
 import {
   defaultMarkdownEditorMessages,
   type MarkdownEditorMessages,
@@ -807,6 +808,7 @@ const markdownTokenizer = new MarkdownIt("commonmark", { html: true, linkify: tr
   .enable("strikethrough")
   .enable("table")
   .enable("linkify");
+markdownTokenizer.block.ruler.at("table", widestRowTableRule);
 markdownTokenizer.inline.ruler.at("strikethrough", exactDoubleTildeStrikethroughRule);
 const taskCheckedTokenAttribute = "data-markora-task-checked";
 // Markdown-it's built-in allowlist would discard host-approved custom schemes

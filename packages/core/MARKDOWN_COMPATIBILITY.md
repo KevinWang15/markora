@@ -1,6 +1,6 @@
 # Markdown dialect and fidelity contract
 
-Status: current `markora` `0.0.x` contract, updated through the `EE-021` diagram package on 2026-07-19.
+Status: current `markora` `0.0.x` contract, updated through the post-`EE-021` editor-robustness passes on 2026-08-26.
 
 This contract applies to Markdown passed through `createEditor({ markdown })`, `editor.commands.reconcileMarkdown()`, or `editor.commands.resetMarkdown()` and returned by `editor.getMarkdown()` or `onChange`. Deprecated `setMarkdown()` uses the same parsing boundary as `resetMarkdown()`.
 
@@ -49,7 +49,7 @@ Syntax outside both the supported dialect and the recognized opaque shapes can s
 | Hard breaks | Backslash or two-space line breaks | Normalized to a backslash followed by LF. A soft line break is not a hard break. |
 | Links | Inline links, CommonMark angle autolinks, full/collapsed reference links, and bare `http://`, `https://`, `www.`, recognized-domain, or email forms | Explicit and reference links normalize to inline syntax. CommonMark angle forms retain their existing canonical angle/inline behavior. Extended autolinks retain bare spelling while their visible text still resolves to the sanitized stored destination. Completing a recognized bare form with whitespace while typing creates the same semantic mark. A later label edit that no longer matches its destination serializes as an explicit link rather than silently retargeting. `ftp:` and every other unlisted scheme remain subject to the per-editor URL policy. |
 | Images | Inline and reference images with alt text and optional titles | Normalized to inline image syntax after the per-editor URL policy. The default `data:` subset and limits are described below. |
-| Pipe tables | Rectangular header/delimiter/body tables, optional outer pipes, alignment colons, and supported inline cell content | Normalized to outer pipes and `---` dividers. Default, left, center, and right alignment are retained. Literal pipes, including pipes in code spans, must be escaped. The semantic round-trip promise requires one unmerged cell with one paragraph per grid position and column headers in the first row. |
+| Pipe tables | Header/delimiter tables with rectangular or ragged body rows, optional outer pipes, alignment colons, and supported inline cell content | Normalized to outer pipes and `---` dividers. Import expands every row to the widest authored row, adding blank header, divider, and short-row cells so extra body cells are never discarded. Expansion is limited to 65,536 synthesized cells; an over-limit candidate remains ordinary Markdown instead of becoming a partial table. Default, left, center, and right alignment are retained. Literal pipes, including pipes in code spans, must be escaped. The semantic round-trip promise requires one unmerged cell with one paragraph per grid position and column headers in the first row. |
 
 Code-block language loading affects only the embedded CodeMirror experience. Registry lookup does not constrain a syntactically valid normalized info string, so metadata remains generic even when no language package or renderer exists. Serialization rejects non-normalized surrounding info whitespace or NUL/line-break characters injected through advanced transactions instead of silently changing them.
 
@@ -399,7 +399,7 @@ A rectangular table-cell selection is exported as semantic table HTML, quoted TS
 
 Table creation, before/after insertion, row/column movement, rectangular deletion/alignment, and exact row/column-count resizing preserve the simple rectangular GFM shape. The first row is always the pinned column-header row. “Resize” means changing logical row or column counts; Markora does not persist pixel column widths in Markdown. Shrinking refuses to discard non-empty cells unless the caller explicitly passes `discardContent: true`.
 
-Rich HTML and trusted extensions or `editor.view` transactions can represent table structures outside the pipe-table dialect. `editor.state.tableIssues()` reports the current live occurrences of:
+Markdown import normalizes ragged pipe-table source to the widest authored row before it enters the document. Rich HTML and trusted extensions or `editor.view` transactions can still represent table structures outside the pipe-table dialect. `editor.state.tableIssues()` reports the current live occurrences of:
 
 | Code | GFM fidelity problem |
 | --- | --- |
@@ -456,7 +456,6 @@ Opaque raw HTML is not executed by the editor because its source is rendered onl
 
 Even a supported construct must stay within the shapes listed above:
 
-- pipe-table rows must match the header width; permissive imports can pad missing cells or discard extras, while live ragged rows created through trusted escape hatches are reported by `state.tableIssues()`;
 - table cells must remain unmerged and contain supported inline content in one paragraph; merged, multi-block, and HTML row-header structures are reported but do not round-trip as pipe-table structure;
 
 These limitations are outside the semantic round-trip promise. They are candidates for conformance coverage and later editor work, not implicit extensions of the dialect.

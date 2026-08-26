@@ -346,10 +346,10 @@
       "source": "gfm-0.29",
       "section": "Tables",
       "url": "https://github.github.com/gfm/#example-204",
-      "classification": "boundary-characterized",
+      "classification": "supported-normalized",
       "input": "| abc | def |\n| --- | --- |\n| bar |\n| bar | baz | boo |\n",
-      "expected": "| abc | def |\n| --- | --- |\n| bar |  |\n| bar | baz |",
-      "note": "Ragged rows are normalized to the header width; surplus cells are outside the supported rectangular-table shape."
+      "expected": "| abc | def |  |\n| --- | --- | --- |\n| bar |  |  |\n| bar | baz | boo |",
+      "note": "Ragged rows are normalized to the widest authored row so surplus body cells remain editable."
     },
     {
       "id": "gfm-205",
