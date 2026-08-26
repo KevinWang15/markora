@@ -178,6 +178,8 @@ describe('table markdown fidelity', () => {
       'strike',
       'bold and italic',
     ]);
+    expect(table?.child(1).child(2).firstChild?.firstChild?.marks.map((mark) => mark.type.name))
+      .toEqual(['code']);
   });
 
   it('serializes inline markdown marks inside table cells', () => {

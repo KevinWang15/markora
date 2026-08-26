@@ -14,6 +14,21 @@ metadata for all 652 examples from the attributed CommonMark 0.31.2
 exception list. This is a robustness boundary, not a claim that every stable
 example belongs to Markora's supported dialect.
 
+`gfm-0.29.json` retains the Markdown input, section, and enabled-extension
+metadata for all 672 examples in the official GFM 0.29 `spec.txt`. Its source
+URL is pinned to the last commit that changed that file, and the fixture records
+the input SHA-256. Regenerate it with:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/github/cmark-gfm/828322d1ee4facdab56f0d3edccb13e9af90dcd2/test/spec.txt -o /tmp/gfm-spec.txt
+node scripts/import-gfm-spec.mjs /tmp/gfm-spec.txt packages/core/test/fixtures/markdown-conformance/gfm-0.29.json
+```
+
+The full GFM audit requires semantic and serializer stability for all 672 root
+results and for every non-extension result in the minimal codec, again without
+an exception list. Stability does not imply that every GFM extension is part of
+the published dialect or that Markora's normalized output matches GFM's HTML.
+
 This is a representative characterization suite for Markora's published dialect, not a claim of complete CommonMark or GFM compliance. `supported-normalized`, `security-normalized`, `boundary-characterized`, and `unsupported-characterized` cases must retain both their reviewed output and semantic stability. Each `known-limitation` explicitly declares whether semantic stability remains required or is already known to fail, so an interoperability mismatch does not hide an unrelated regression.
 
 `lexicalGuarantees` mirrors the public fidelity contract. It lists only the

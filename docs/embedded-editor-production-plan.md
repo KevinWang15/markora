@@ -1183,3 +1183,13 @@ intentional capability skips across Chromium, Firefox, and WebKit. Package
 smoke and the core plus all-seven performance/memory budgets through 1 MiB pass
 with zero retained nodes, listeners, or documents; advisory timing warnings
 remain visible below their hard failure ceilings.
+
+The continuing post-plan audit also pins the complete attributed 672-example
+GFM 0.29 corpus, including each example's enabled-extension metadata and a
+SHA-256 of the official source. Root compatibility is now required to remain
+semantically stable and serialization-idempotent across that entire corpus;
+minimal is held to the same standard for every non-extension example. An
+official escaped-pipe table code-span case additionally has production Shadow
+DOM coverage: Chromium DevTools Protocol input edits a sibling cell, then all
+three engines verify that the inline-code mark and canonical table survive a
+reset.

@@ -91,3 +91,49 @@ test("@required widest pipe-table rows survive trusted edit and reset", async ({
   expect(copied.html).toContain("<table");
   expect(copied.plain).toContain("C!");
 });
+
+test("@required escaped pipes inside GFM table code spans survive CDP edit and reset", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "gfm-table-code-pipe";
+  const input = [
+    "| f\\|oo |",
+    "| ------ |",
+    "| b `\\|` az |",
+    "| b **\\|** im |",
+  ].join("\n");
+  const canonical = [
+    "| f\\|oo |",
+    "| --- |",
+    "| b `\\|` az |",
+    "| b **\\|** im |",
+  ].join("\n");
+
+  await mountEditor(labPage, { entry: "root", id, markdown: input, root: "shadow" });
+  const editor = editorLocator(labPage, id);
+  await expect(editor.locator("td code")).toHaveCount(1);
+  await expect(editor.locator("td code")).toHaveText("|");
+  expect(await getMarkdown(labPage, id)).toBe(canonical);
+
+  expect(await labPage.evaluate((editorId) => (
+    window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "az", "end")
+  ), id)).toBe(true);
+  if (browserName === "chromium") {
+    const cdp = await context.newCDPSession(labPage);
+    await cdp.send("Input.insertText", { text: "!" });
+    await cdp.detach();
+  } else {
+    await labPage.keyboard.insertText("!");
+  }
+  await settleEditor(labPage, id);
+
+  const edited = canonical.replace("`\\|` az", "`\\|` az!");
+  expect(await getMarkdown(labPage, id)).toBe(edited);
+  await resetEditor(labPage, id, edited);
+  await settleEditor(labPage, id);
+  await expect(editor.locator("td code")).toHaveCount(1);
+  await expect(editor.locator("td code")).toHaveText("|");
+  expect(await getMarkdown(labPage, id)).toBe(edited);
+});
