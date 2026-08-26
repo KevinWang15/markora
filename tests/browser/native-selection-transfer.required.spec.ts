@@ -12,6 +12,7 @@ import {
 type PointerPoint = { x: number; y: number };
 type NativeDragRecord = {
   defaultPrevented: boolean;
+  editorId: string;
   isTrusted: boolean;
   type: string;
   types: string[];
@@ -103,6 +104,7 @@ async function armNativeDragCapture(page: Page, id: string) {
         const event = rawEvent as DragEvent;
         (window as typeof window & { __markoraNativeDrag: NativeDragRecord[] }).__markoraNativeDrag.push({
           defaultPrevented: event.defaultPrevented,
+          editorId,
           isTrusted: event.isTrusted,
           type: event.type,
           types: Array.from(event.dataTransfer?.types ?? []),
@@ -268,6 +270,150 @@ test("@required native rich-inline drags move one undoable semantic slice", asyn
     await settleEditor(labPage, testCase.id);
     expect(await getMarkdown(labPage, testCase.id)).toBe(testCase.expected);
   }
+
+  await cdp?.detach();
+});
+
+test("@required native cross-editor drag copies one semantic slice with isolated history", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const sourceId = "native-cross-editor-source";
+  const destinationId = "native-cross-editor-destination";
+  const sourceMarkdown = "alpha **beta** omega";
+  const destinationMarkdown = "left right";
+  const expectedDestination = "left **beta**right";
+  await mountEditor(labPage, {
+    id: sourceId,
+    markdown: sourceMarkdown,
+    root: "shadow",
+  });
+  await mountEditor(labPage, {
+    entry: "minimal",
+    id: destinationId,
+    markdown: destinationMarkdown,
+    root: "document",
+  });
+  expect(await labPage.evaluate((editorId) => (
+    window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "all")
+  ), sourceId)).toBe(true);
+  await settleEditor(labPage, sourceId);
+  await armNativeDragCapture(labPage, sourceId);
+  await armNativeDragCapture(labPage, destinationId);
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, sourceId, "beta", 1, "before"),
+    await textPoint(labPage, destinationId, "right", 0, "before"),
+  );
+  await settleEditor(labPage, sourceId);
+  await settleEditor(labPage, destinationId);
+
+  expect(await getMarkdown(labPage, sourceId)).toBe(sourceMarkdown);
+  expect(await getMarkdown(labPage, destinationId)).toBe(expectedDestination);
+  await expect(editorLocator(labPage, destinationId).locator("strong")).toHaveText("beta");
+  const sourceSelection = (await snapshotEditor(labPage, sourceId)).selection;
+  expect(sourceSelection.to - sourceSelection.from).toBe("beta".length);
+  const destination = await snapshotEditor(labPage, destinationId);
+  expect(destination.prosemirrorFocused).toBe(true);
+  expect(destination.selection.to - destination.selection.from).toBe("beta".length);
+  const dragEvents = await readNativeDragCapture(labPage);
+  const dragstart = dragEvents.filter(({ editorId, type }) => (
+    editorId === sourceId && type === "dragstart"
+  ));
+  expect(dragstart).toHaveLength(1);
+  expect(new Set(dragstart[0]?.types)).toEqual(new Set(["text/html", "text/plain"]));
+  expect(dragEvents.filter(({ editorId, type }) => (
+    editorId === destinationId && type === "drop"
+  ))).toHaveLength(1);
+  expect(dragEvents.every(({ isTrusted }) => isTrusted)).toBe(true);
+
+  await labPage.keyboard.press("ControlOrMeta+Z");
+  await settleEditor(labPage, destinationId);
+  expect(await getMarkdown(labPage, destinationId)).toBe(destinationMarkdown);
+  expect(await getMarkdown(labPage, sourceId)).toBe(sourceMarkdown);
+  await labPage.keyboard.press("ControlOrMeta+Shift+Z");
+  await settleEditor(labPage, destinationId);
+  expect(await getMarkdown(labPage, destinationId)).toBe(expectedDestination);
+  expect(await getMarkdown(labPage, sourceId)).toBe(sourceMarkdown);
+
+  await cdp?.detach();
+});
+
+test("@required native cross-editor drag copies one closed multi-block slice", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const sourceId = "native-cross-editor-block-source";
+  const destinationId = "native-cross-editor-block-destination";
+  const sourceMarkdown = ["* one", "* two"].join("\n");
+  const destinationMarkdown = "dest X";
+  const expectedDestination = ["dest X", "", "* one", "* two"].join("\n");
+  await mountEditor(labPage, {
+    autofocus: true,
+    entry: "minimal",
+    id: sourceId,
+    initialSelection: "all",
+    markdown: sourceMarkdown,
+    root: "document",
+  });
+  await mountEditor(labPage, {
+    id: destinationId,
+    markdown: destinationMarkdown,
+    root: "shadow",
+  });
+  expect((await snapshotEditor(labPage, sourceId)).selection).toMatchObject({
+    anchor: 0,
+    from: 0,
+    head: 16,
+    to: 16,
+  });
+  await armNativeDragCapture(labPage, sourceId);
+  await armNativeDragCapture(labPage, destinationId);
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, sourceId, "one", 1, "before"),
+    await textPoint(labPage, destinationId, "dest X", 5, "after"),
+  );
+  await settleEditor(labPage, sourceId);
+  await settleEditor(labPage, destinationId);
+
+  expect(await getMarkdown(labPage, sourceId)).toBe(sourceMarkdown);
+  expect(await getMarkdown(labPage, destinationId)).toBe(expectedDestination);
+  await expect(editorLocator(labPage, destinationId).locator("li")).toHaveCount(2);
+  const destination = await snapshotEditor(labPage, destinationId);
+  expect(destination.prosemirrorFocused).toBe(true);
+  expect(destination.selection.to - destination.selection.from).toBe(16);
+  const dragEvents = await readNativeDragCapture(labPage);
+  const dragstart = dragEvents.filter(({ editorId, type }) => (
+    editorId === sourceId && type === "dragstart"
+  ));
+  expect(dragstart).toHaveLength(1);
+  expect(new Set(dragstart[0]?.types)).toEqual(new Set(["text/html", "text/plain"]));
+  expect(dragEvents.filter(({ editorId, type }) => (
+    editorId === destinationId && type === "drop"
+  ))).toHaveLength(1);
+  expect(dragEvents.every(({ isTrusted }) => isTrusted)).toBe(true);
+
+  await labPage.keyboard.press("ControlOrMeta+Z");
+  await settleEditor(labPage, destinationId);
+  expect(await getMarkdown(labPage, destinationId)).toBe(destinationMarkdown);
+  expect(await getMarkdown(labPage, sourceId)).toBe(sourceMarkdown);
+  await labPage.keyboard.press("ControlOrMeta+Shift+Z");
+  await settleEditor(labPage, destinationId);
+  expect(await getMarkdown(labPage, destinationId)).toBe(expectedDestination);
+  expect(await getMarkdown(labPage, sourceId)).toBe(sourceMarkdown);
 
   await cdp?.detach();
 });
