@@ -57,11 +57,11 @@ type EditorViewWithDomSelection = EditorView & {
   domSelectionRange(): DomSelectionRange;
 };
 
-type SelectionWithWordMotion = Selection & {
+type SelectionWithTextMotion = Selection & {
   modify?: (
     alter: "extend" | "move",
     direction: DeletionDirection | "left" | "right",
-    granularity: "word",
+    granularity: "character" | "word",
   ) => void;
 };
 
@@ -243,7 +243,7 @@ export function findWordDeletionLength(
 }
 
 function restoreDomSelection(
-  selection: SelectionWithWordMotion,
+  selection: SelectionWithTextMotion,
   original: DomSelectionRange,
 ) {
   if (!original.anchorNode || !original.focusNode) {
@@ -303,12 +303,13 @@ function probeNativeTextMotion(
   focusOffset: number,
   alter: "extend" | "move",
   direction: DeletionDirection | "left" | "right",
+  granularity: "character" | "word",
 ): NativeTextMotionProbe | null {
-  // Mark elements split the editable DOM into text nodes, so native word
-  // motion can stop at a mark boundary. Measure the engine's own word motion
-  // against equivalent unmarked text to preserve platform-specific behavior.
+  // Mark elements split the editable DOM into text nodes, so native grapheme
+  // and word motion can stop at a mark boundary. Measure the engine's own text
+  // motion against equivalent unmarked text to preserve platform behavior.
   const internalView = view as EditorViewWithDomSelection;
-  const selection = internalView.domSelection?.() as SelectionWithWordMotion | null;
+  const selection = internalView.domSelection?.() as SelectionWithTextMotion | null;
   const original = internalView.domSelectionRange?.();
   const originalActiveElement = getActiveElement(view);
   const parent = view.dom.parentNode;
@@ -365,7 +366,7 @@ function probeNativeTextMotion(
       selection.extend(textNode, focusOffset);
     }
 
-    selection.modify(alter, direction, "word");
+    selection.modify(alter, direction, granularity);
     nextAnchorOffset = readProbeOffset(probe, selection.anchorNode, selection.anchorOffset);
     nextFocusOffset = readProbeOffset(probe, selection.focusNode, selection.focusOffset);
   } catch {
@@ -406,6 +407,7 @@ function probeNativeWordDeletionLength(
     initialOffset,
     "extend",
     direction,
+    "word",
   );
 
   if (!motion) {
@@ -602,11 +604,21 @@ export function isWordNavigationShortcut(
     : event.ctrlKey && !event.altKey && !event.metaKey;
 }
 
-function handleNativeWordNavigation(
+function handleNativeHorizontalNavigation(
   view: EditorView,
   event: KeyboardEvent,
   macPlatform: boolean,
 ) {
+  const horizontalArrow = event.key === "ArrowLeft" || event.key === "ArrowRight";
+  const wordNavigation = isWordNavigationShortcut(event, macPlatform);
+  const characterSelection = (
+    horizontalArrow
+    && event.shiftKey
+    && !event.altKey
+    && !event.ctrlKey
+    && !event.metaKey
+  );
+
   if (
     !view.editable
     || view.composing
@@ -614,7 +626,7 @@ function handleNativeWordNavigation(
     || event.isComposing
     || event.keyCode === 229
     || event.target !== view.dom
-    || !isWordNavigationShortcut(event, macPlatform)
+    || (!wordNavigation && !characterSelection)
   ) {
     return false;
   }
@@ -637,8 +649,9 @@ function handleNativeWordNavigation(
     parentText,
     selection.anchor - parentStart,
     selection.head - parentStart,
-    event.shiftKey ? "extend" : "move",
+    wordNavigation && !event.shiftKey ? "move" : "extend",
     event.key === "ArrowLeft" ? "left" : "right",
+    wordNavigation ? "word" : "character",
   );
 
   if (!motion) {
@@ -669,6 +682,16 @@ function handleNativeWordNavigation(
     return false;
   }
 
+  if (
+    anchorOffset === selection.anchor - parentStart
+    && focusOffset === selection.head - parentStart
+    && (focusOffset === 0 || focusOffset === parentText.length)
+  ) {
+    // The flattened text has reached a real text-block edge. Leave the event
+    // native so browser motion can continue into the neighboring block.
+    return false;
+  }
+
   event.preventDefault();
   const anchor = parentStart + anchorOffset;
   const head = parentStart + focusOffset;
@@ -694,7 +717,7 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
     props: {
       handleDOMEvents: {
         keydown(view, event) {
-          return handleNativeWordNavigation(
+          return handleNativeHorizontalNavigation(
             view,
             event as KeyboardEvent,
             macPlatform,

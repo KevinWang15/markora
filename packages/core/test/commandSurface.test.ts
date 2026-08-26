@@ -676,7 +676,7 @@ describe("public command and state surface", () => {
     }
   });
 
-  it("navigates words independently of marks and leaves composition and inline atoms native", () => {
+  it("navigates and extends independently of marks while preserving native boundaries", () => {
     const modifyDescriptor = Object.getOwnPropertyDescriptor(Selection.prototype, "modify");
 
     Object.defineProperty(Selection.prototype, "modify", {
@@ -685,6 +685,7 @@ describe("public command and state surface", () => {
         this: Selection,
         alter: "extend" | "move",
         direction: "backward" | "forward" | "left" | "right",
+        granularity: "character" | "word",
       ) {
         const textNode = this.focusNode;
 
@@ -692,12 +693,18 @@ describe("public command and state surface", () => {
           throw new Error("The word-motion probe must use a text node.");
         }
 
+        const backward = direction === "backward" || direction === "left";
         const separator = textNode.data.indexOf(" ");
-        const target = direction === "backward" || direction === "left"
-          ? 0
-          : separator < 0
-            ? textNode.data.length
-            : separator;
+        const target = granularity === "character"
+          ? Math.max(0, Math.min(
+              textNode.data.length,
+              this.focusOffset + (backward ? -1 : 1),
+            ))
+          : backward
+            ? 0
+            : separator < 0
+              ? textNode.data.length
+              : separator;
 
         if (alter === "move") {
           this.collapse(textNode, target);
@@ -730,6 +737,24 @@ describe("public command and state surface", () => {
           to: 10,
         });
         expect(editor.getMarkdown()).toBe("alpha**beta** gamma");
+
+        editor.commands.resetMarkdown("alpha**beta** gamma");
+        selectText(editor, "beta", "start");
+        const extendCharacterBackward = new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          key: "ArrowLeft",
+          shiftKey: true,
+        });
+
+        expect(editor.view.dom.dispatchEvent(extendCharacterBackward)).toBe(false);
+        expect(extendCharacterBackward.defaultPrevented).toBe(true);
+        expect(editor.view.state.selection).toMatchObject({
+          anchor: 6,
+          from: 5,
+          head: 5,
+          to: 6,
+        });
 
         editor.commands.resetMarkdown("alpha**beta** gamma");
         selectText(editor, "alpha", "start");
@@ -777,6 +802,28 @@ describe("public command and state surface", () => {
         expect(editor.view.dom.dispatchEvent(atomAdjacentNavigation)).toBe(true);
         expect(atomAdjacentNavigation.defaultPrevented).toBe(false);
         expect(editor.getMarkdown()).toBe(hardBreakMarkdown);
+
+        editor.commands.resetMarkdown("**alpha**\n\nbeta");
+        selectText(editor, "alpha", "end");
+
+        for (const blockEdgeNavigation of [
+          new KeyboardEvent("keydown", {
+            bubbles: true,
+            cancelable: true,
+            ctrlKey: true,
+            key: "ArrowRight",
+          }),
+          new KeyboardEvent("keydown", {
+            bubbles: true,
+            cancelable: true,
+            key: "ArrowRight",
+            shiftKey: true,
+          }),
+        ]) {
+          expect(editor.view.dom.dispatchEvent(blockEdgeNavigation)).toBe(true);
+          expect(blockEdgeNavigation.defaultPrevented).toBe(false);
+          expect(editor.view.state.selection.from).toBe(6);
+        }
 
         editor.destroy();
       }

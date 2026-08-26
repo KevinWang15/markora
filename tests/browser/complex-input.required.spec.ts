@@ -872,6 +872,49 @@ test("@required word navigation ignores Markdown mark boundaries across engines"
     }
   }
 
+  for (const extend of [false, true]) {
+    const blockMarkdown = "**alpha**\n\nbeta";
+    await resetEditor(labPage, id, blockMarkdown);
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
+      id,
+    )).toBe(true);
+    await settleEditor(labPage, id);
+    const edge = (await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection.head,
+      id,
+    ));
+    await editorLocator(labPage, id).evaluate((element) => {
+      const targetWindow = window as Window & {
+        __markoraWordBlockEdgePrevented?: boolean;
+      };
+      delete targetWindow.__markoraWordBlockEdgePrevented;
+      element.addEventListener("keydown", (event) => {
+        queueMicrotask(() => {
+          targetWindow.__markoraWordBlockEdgePrevented = event.defaultPrevented;
+        });
+      }, { once: true });
+    });
+    await pressWordNavigation("ArrowRight", extend);
+    await settleEditor(labPage, id);
+    const selection = await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+      id,
+    );
+    expect(await labPage.evaluate(() => {
+      const targetWindow = window as Window & {
+        __markoraWordBlockEdgePrevented?: boolean;
+      };
+      const prevented = targetWindow.__markoraWordBlockEdgePrevented;
+      delete targetWindow.__markoraWordBlockEdgePrevented;
+      return prevented;
+    })).toBe(false);
+    expect(selection.anchor).toBeLessThanOrEqual(selection.to);
+    expect(selection.head).toBeGreaterThanOrEqual(selection.from);
+    expect(edge).toBe(6);
+    expect(await getMarkdown(labPage, id)).toBe(blockMarkdown);
+  }
+
   const rtlId = "rtl-marked-word-navigation";
   await mountEditor(labPage, { direction: "rtl", id: rtlId, markdown: "" });
 
@@ -967,6 +1010,183 @@ test("@required word navigation ignores Markdown mark boundaries across engines"
     await settleEditor(labPage, id);
     expect(await getMarkdown(labPage, id)).toBe("host replacement");
   }
+});
+
+test("@required character selection ignores Markdown mark boundaries across engines", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "marked-character-selection";
+  await mountEditor(labPage, { id, markdown: "" });
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+  const pressSelectionArrow = async (key: "ArrowLeft" | "ArrowRight") => {
+    if (!cdp) {
+      await labPage.keyboard.press(`Shift+${key}`);
+      return;
+    }
+
+    const keyCode = key === "ArrowLeft" ? 37 : 39;
+
+    for (const type of ["rawKeyDown", "keyUp"] as const) {
+      await cdp.send("Input.dispatchKeyEvent", {
+        code: key,
+        key,
+        modifiers: 8,
+        nativeVirtualKeyCode: keyCode,
+        type,
+        windowsVirtualKeyCode: keyCode,
+      });
+    }
+  };
+  const selectFrom = async (
+    markdown: string,
+    needle: string,
+    mode: "end" | "start",
+    key: "ArrowLeft" | "ArrowRight",
+  ) => {
+    await resetEditor(labPage, id, markdown);
+    expect(await labPage.evaluate(
+      ({ editorId, nextNeedle, nextMode }) => (
+        window.__MARKORA_BROWSER_LAB__!.selectText(editorId, nextNeedle, nextMode)
+      ),
+      { editorId: id, nextMode: mode, nextNeedle: needle },
+    )).toBe(true);
+    await settleEditor(labPage, id);
+    await clearEditorEvents(labPage, id);
+    await pressSelectionArrow(key);
+    await settleEditor(labPage, id);
+    await expect(editorLocator(labPage, id)).toBeFocused();
+    const events = await getEditorEvents(labPage, id);
+    expect(events.counts.focus).toBe(0);
+    expect(events.counts.blur).toBe(0);
+    expect(await getMarkdown(labPage, id)).toBe(markdown);
+    return labPage.evaluate((editorId) => ({
+      model: window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+      text: document.getSelection()?.toString() ?? "",
+    }), id);
+  };
+
+  for (const testCase of [
+    {
+      key: "ArrowLeft",
+      marked: "alpha**beta** gamma",
+      markedNeedle: "beta",
+      mode: "start",
+      plain: "alphabeta gamma",
+      plainNeedle: "beta",
+      expected: {
+        model: { anchor: 6, from: 5, head: 5, to: 6 },
+        text: "a",
+      },
+    },
+    {
+      key: "ArrowRight",
+      marked: "alpha**beta** gamma",
+      markedNeedle: "beta",
+      mode: "end",
+      plain: "alphabeta gamma",
+      plainNeedle: "beta",
+      expected: {
+        model: { anchor: 10, from: 10, head: 11, to: 11 },
+        text: " ",
+      },
+    },
+    {
+      key: "ArrowLeft",
+      marked: "alpha[beta](/character-selection) gamma",
+      markedNeedle: "beta",
+      mode: "start",
+      plain: "alphabeta gamma",
+      plainNeedle: "beta",
+      expected: {
+        model: { anchor: 6, from: 5, head: 5, to: 6 },
+        text: "a",
+      },
+    },
+    {
+      key: "ArrowLeft",
+      marked: "Ae**́**Z",
+      markedNeedle: "Z",
+      mode: "start",
+      plain: "AéZ",
+      plainNeedle: "Z",
+      expected: {
+        model: { anchor: 4, from: 2, head: 2, to: 4 },
+        text: "é",
+      },
+    },
+    {
+      key: "ArrowRight",
+      marked: "A👩**‍**💻Z",
+      markedNeedle: "A",
+      mode: "end",
+      plain: "A👩‍💻Z",
+      plainNeedle: "A",
+      expected: {
+        model: { anchor: 2, from: 2, head: 7, to: 7 },
+        text: "👩‍💻",
+      },
+    },
+  ] as const) {
+    const plain = await selectFrom(
+      testCase.plain,
+      testCase.plainNeedle,
+      testCase.mode,
+      testCase.key,
+    );
+    expect(plain).toEqual(testCase.expected);
+    const marked = await selectFrom(
+      testCase.marked,
+      testCase.markedNeedle,
+      testCase.mode,
+      testCase.key,
+    );
+    expect(marked).toEqual(plain);
+  }
+
+  const blockMarkdown = "**alpha**\n\nbeta";
+  await resetEditor(labPage, id, blockMarkdown);
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  const edge = await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection.head,
+    id,
+  );
+  await editorLocator(labPage, id).evaluate((element) => {
+    const targetWindow = window as Window & {
+      __markoraCharacterBlockEdgePrevented?: boolean;
+    };
+    delete targetWindow.__markoraCharacterBlockEdgePrevented;
+    element.addEventListener("keydown", (event) => {
+      queueMicrotask(() => {
+        targetWindow.__markoraCharacterBlockEdgePrevented = event.defaultPrevented;
+      });
+    }, { once: true });
+  });
+  await pressSelectionArrow("ArrowRight");
+  await settleEditor(labPage, id);
+  const blockSelection = await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+    id,
+  );
+  expect(await labPage.evaluate(() => {
+    const targetWindow = window as Window & {
+      __markoraCharacterBlockEdgePrevented?: boolean;
+    };
+    const prevented = targetWindow.__markoraCharacterBlockEdgePrevented;
+    delete targetWindow.__markoraCharacterBlockEdgePrevented;
+    return prevented;
+  })).toBe(false);
+  expect(blockSelection.anchor).toBeLessThanOrEqual(blockSelection.to);
+  expect(blockSelection.head).toBeGreaterThanOrEqual(blockSelection.from);
+  expect(edge).toBe(6);
+  expect(await getMarkdown(labPage, id)).toBe(blockMarkdown);
 });
 
 test("@required mixed bidirectional text can be selected and replaced logically", async ({ labPage }) => {

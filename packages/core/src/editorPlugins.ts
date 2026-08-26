@@ -384,11 +384,18 @@ export function createMarkBoundaryPlugin(options: {
           return true;
         }
 
-        if (event.key === "ArrowLeft") {
+        const plainHorizontalArrow = (
+          !event.altKey
+          && !event.ctrlKey
+          && !event.metaKey
+          && !event.shiftKey
+        );
+
+        if (plainHorizontalArrow && event.key === "ArrowLeft") {
           return escapeBoundaryMark(view, "left");
         }
 
-        if (event.key === "ArrowRight") {
+        if (plainHorizontalArrow && event.key === "ArrowRight") {
           return escapeBoundaryMark(view, "right");
         }
 
