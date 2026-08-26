@@ -95,7 +95,13 @@ function exactDoubleTildeStrikethroughRule(state: StateInline, silent: boolean) 
   return true;
 }
 
-type MarkdownSerializerStateRuntime = MarkdownSerializerState & { out: string };
+type MarkdownSerializerStateRuntime = MarkdownSerializerState & {
+  bareAutolink?: boolean;
+  escapeBareAutolinks?: boolean;
+  inAutolink?: boolean;
+  inMarkdownLink?: boolean;
+  out: string;
+};
 type MarkdownSerializerStateConstructor = new (
   nodes: MarkdownSerializer["nodes"],
   marks: MarkdownSerializer["marks"],
@@ -108,13 +114,12 @@ function createCompatibilityMarkdownSerializerState(
   nodes: MarkdownSerializer["nodes"],
   marks: MarkdownSerializer["marks"],
   options: MarkdownSerializer["options"] & { tightLists?: boolean },
+  linkify: MarkdownIt["linkify"],
 ) {
   const state = new MarkdownSerializerStateRuntimeConstructor(nodes, marks, options);
   const baseEscape = state.esc.bind(state);
 
-  // ProseMirror escapes every tilde. Long runs are safe after ordinary inline
-  // text, but a leading run must stay escaped so it cannot become a code fence.
-  state.esc = (str: string, startOfLine = false) => baseEscape(str, startOfLine).replace(
+  const escapeFoundationText = (str: string, startOfLine = false) => baseEscape(str, startOfLine).replace(
     /(?:\\~){3,}/g,
     (escapedRun, offset, escapedText) => (
       /\S/.test(escapedText.slice(0, offset))
@@ -122,15 +127,59 @@ function createCompatibilityMarkdownSerializerState(
         : escapedRun
     ),
   );
+
+  // ProseMirror escapes every tilde. Long runs are safe after ordinary inline
+  // text, but a leading run must stay escaped so it cannot become a code fence.
+  state.esc = (str: string, startOfLine = false) => {
+    if (!state.escapeBareAutolinks) {
+      return escapeFoundationText(str, startOfLine);
+    }
+
+    const matches = linkify.match(str);
+    if (!matches) {
+      return escapeFoundationText(str, startOfLine);
+    }
+
+    let cursor = 0;
+    let result = "";
+    for (const match of matches) {
+      const punctuationOffset = match.raw.includes("@")
+        ? match.raw.indexOf("@")
+        : match.raw.includes("://")
+          ? match.raw.indexOf(":")
+          : match.raw.indexOf(".");
+
+      if (punctuationOffset < 0) {
+        continue;
+      }
+
+      const escapeAt = match.index + punctuationOffset;
+      result += escapeFoundationText(str.slice(cursor, escapeAt), startOfLine && cursor === 0);
+      result += `\\${str[escapeAt]}`;
+      cursor = escapeAt + 1;
+    }
+    result += escapeFoundationText(str.slice(cursor), startOfLine && cursor === 0);
+    return result;
+  };
   return state;
 }
 
 class CompatibilityMarkdownSerializer extends MarkdownSerializer {
+  constructor(
+    nodes: MarkdownSerializer["nodes"],
+    marks: MarkdownSerializer["marks"],
+    options: MarkdownSerializer["options"] & { tightLists?: boolean },
+    private readonly linkify: MarkdownIt["linkify"],
+  ) {
+    super(nodes, marks, options);
+  }
+
   override serialize(content: ProseMirrorNode, options: { tightLists?: boolean } = {}) {
     const state = createCompatibilityMarkdownSerializerState(
       this.nodes,
       this.marks,
       { ...this.options, ...options },
+      this.linkify,
     );
     state.renderContent(content);
     return state.out;
@@ -139,6 +188,7 @@ class CompatibilityMarkdownSerializer extends MarkdownSerializer {
 
 const listItemSpec = baseSchema.spec.nodes.get("list_item");
 const codeBlockSpec = baseSchema.spec.nodes.get("code_block");
+const linkMarkSpec = baseSchema.spec.marks.get("link");
 
 function firstMeaningfulChild(node: Node) {
   let child = node.firstChild;
@@ -640,7 +690,32 @@ export function createCompatibilityMarkdownCodec(
   messages: MarkdownEditorMessages = defaultMarkdownEditorMessages,
 ): MarkdownEditorCodec {
   const foundationNodes = createSchemaNodes(messages) as MarkdownEditorOrderedSchemaMap<NodeSpec>;
-  const foundationMarks = baseSchema.spec.marks.addToEnd(
+  const foundationMarks = baseSchema.spec.marks.update("link", {
+    ...linkMarkSpec,
+    attrs: {
+      ...(linkMarkSpec?.attrs ?? {}),
+      autolink: { default: false },
+    },
+    parseDOM: [{
+      tag: "a[href]",
+      getAttrs(dom: Node | string) {
+        return isHTMLElementNode(dom)
+          ? {
+              autolink: dom.getAttribute("data-markora-autolink") === "true",
+              href: dom.getAttribute("href"),
+              title: dom.getAttribute("title"),
+            }
+          : false;
+      },
+    }],
+    toDOM(mark: Mark) {
+      return ["a", {
+        ...(mark.attrs.autolink === true ? { "data-markora-autolink": "true" } : {}),
+        href: mark.attrs.href,
+        ...(mark.attrs.title ? { title: mark.attrs.title } : {}),
+      }];
+    },
+  }).addToEnd(
     "strike",
     strikeMarkSpec,
   ) as MarkdownEditorOrderedSchemaMap<MarkSpec>;
@@ -728,9 +803,10 @@ export function createCompatibilityMarkdownCodec(
     }
   }
 
-const markdownTokenizer = new MarkdownIt("commonmark", { html: true })
+const markdownTokenizer = new MarkdownIt("commonmark", { html: true, linkify: true })
   .enable("strikethrough")
-  .enable("table");
+  .enable("table")
+  .enable("linkify");
 markdownTokenizer.inline.ruler.at("strikethrough", exactDoubleTildeStrikethroughRule);
 const taskCheckedTokenAttribute = "data-markora-task-checked";
 // Markdown-it's built-in allowlist would discard host-approved custom schemes
@@ -814,6 +890,16 @@ configureMarkdownTokenizerNesting(markdownTokenizer);
 
 const foundationMarkdownTokens: Record<string, ParseSpec> = {
   ...defaultMarkdownParser.tokens,
+  link: {
+    ...defaultMarkdownParser.tokens.link,
+    getAttrs(token: Token) {
+      return {
+        autolink: token.markup === "linkify",
+        href: token.attrGet("href"),
+        title: token.attrGet("title") || null,
+      };
+    },
+  },
   list_item: {
     ...defaultMarkdownParser.tokens.list_item,
     getAttrs(token: Token) {
@@ -896,6 +982,12 @@ const serializerNodes: Record<
   (typeof defaultMarkdownSerializer.nodes)[string]
 > = {
     ...defaultMarkdownSerializer.nodes,
+    text(state: MarkdownSerializerState, node: ProseMirrorNode) {
+      const runtime = state as MarkdownSerializerStateRuntime;
+      runtime.escapeBareAutolinks = !runtime.inAutolink && !runtime.inMarkdownLink;
+      defaultMarkdownSerializer.nodes.text(state, node, node, 0);
+      runtime.escapeBareAutolinks = false;
+    },
     code_block: serializeCodeBlock,
     raw_block(state: MarkdownSerializerState, node: ProseMirrorNode) {
       const source = typeof node.attrs.source === "string" ? node.attrs.source : "";
@@ -977,6 +1069,49 @@ const serializerMarks: Record<
   (typeof defaultMarkdownSerializer.marks)[string]
 > = {
   ...defaultMarkdownSerializer.marks,
+  link: {
+    open(state, mark, parent, index) {
+      const runtime = state as MarkdownSerializerStateRuntime;
+      let label = "";
+
+      for (let childIndex = index; childIndex < parent.childCount; childIndex += 1) {
+        const child = parent.child(childIndex);
+        if (!child.isText || !mark.isInSet(child.marks)) break;
+        label += child.text ?? "";
+      }
+
+      const match = markdownTokenizer.linkify.match(label)?.[0] ?? null;
+      const safeHref = match && match.index === 0 && match.lastIndex === label.length
+        ? sanitizeResourceUrl(resources, "link", match.url)
+        : null;
+      const isBareAutolink = mark.attrs.autolink === true
+        && !mark.attrs.title
+        && safeHref === mark.attrs.href;
+
+      if (isBareAutolink) {
+        runtime.bareAutolink = true;
+        runtime.inAutolink = true;
+        return "";
+      }
+
+      runtime.inMarkdownLink = true;
+      const open = defaultMarkdownSerializer.marks.link.open;
+      return typeof open === "function" ? open(state, mark, parent, index) : open;
+    },
+    close(state, mark, parent, index) {
+      const runtime = state as MarkdownSerializerStateRuntime;
+      if (runtime.bareAutolink) {
+        runtime.bareAutolink = false;
+        runtime.inAutolink = undefined;
+        return "";
+      }
+
+      runtime.inMarkdownLink = false;
+      const close = defaultMarkdownSerializer.marks.link.close;
+      return typeof close === "function" ? close(state, mark, parent, index) : close;
+    },
+    mixable: true,
+  },
   strike: { open: "~~", close: "~~", mixable: true, expelEnclosingWhitespace: true },
 };
 
@@ -1064,7 +1199,7 @@ const markdownSerializer = new CompatibilityMarkdownSerializer(serializerNodes, 
   ], resolvedExtensions.map(({ definition }) => (
     definition.markdown?.serializer?.escapeExtraCharacters
   ))),
-});
+}, markdownTokenizer.linkify);
 
 function stripTaskPrefixFromInline(fragment: Fragment, count: number) {
   let remaining = count;

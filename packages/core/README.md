@@ -119,7 +119,7 @@ The omitted `onChangeMode` uses the production default, `"idle"`: rapid document
 The outer editor chooses one inbound representation in this order:
 
 1. A transfer containing any file is wholly owned by `resources.assets`; accompanying HTML, Markdown, and plain text are never inserted.
-2. Explicit plain paste, including Ctrl/Cmd-Shift-V, uses `text/plain` literally.
+2. Explicit plain paste, including Ctrl/Cmd-Shift-V, uses `text/plain` literally. URL- and email-shaped text receives a minimal canonical backslash escape so reset cannot silently promote it into an autolink.
 3. Otherwise `text/html` wins. This retains internal ProseMirror slice context and HTML-only semantics such as table row-header scope.
 4. Without HTML, `text/markdown` is parsed with this editor's finalized codec and extension syntax.
 5. Otherwise `text/plain` remains literal.

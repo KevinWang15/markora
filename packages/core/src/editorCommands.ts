@@ -5,6 +5,7 @@ import {
   wrappingInputRule,
 } from "prosemirror-inputrules";
 import type { EditorView } from "prosemirror-view";
+import type MarkdownIt from "markdown-it";
 import { TextSelection, type EditorState } from "prosemirror-state";
 import type { Mark, MarkType, Node as ProseMirrorNode, NodeType, Schema } from "prosemirror-model";
 import {
@@ -103,6 +104,45 @@ function createLinkInputRule(schema: Schema, resources: NormalizedMarkdownEditor
   });
 }
 
+function createBareAutolinkInputRule(
+  schema: Schema,
+  resources: NormalizedMarkdownEditorResources,
+  linkify: MarkdownIt["linkify"],
+) {
+  return new InputRule(/(?:^|\s)(\S+)\s$/, (state, match, start, end) => {
+    const candidate = match[1];
+    if (typeof candidate !== "string") return null;
+
+    const linked = linkify.match(candidate)?.[0] ?? null;
+    if (
+      !linked
+      || linked.lastIndex > candidate.length
+      || (linked.index > 0 && !/[*_~(]/.test(candidate[linked.index - 1] ?? ""))
+    ) {
+      return null;
+    }
+
+    const href = sanitizeResourceUrl(resources, "link", linked.url);
+    if (!href) return null;
+
+    if (start < end && state.doc.rangeHasMark(start, end, schema.marks.link)) {
+      return null;
+    }
+
+    const candidateOffset = start + match[0].indexOf(candidate);
+    const candidateStart = candidateOffset + linked.index;
+    const linkEnd = candidateOffset + linked.lastIndex;
+    const tr = state.tr.insertText(match[0], start, end);
+    tr.addMark(candidateStart, linkEnd, schema.marks.link.create({
+      autolink: true,
+      href,
+      title: null,
+    }));
+    tr.removeStoredMark(schema.marks.link);
+    return tr;
+  });
+}
+
 function getFenceMatch(text: string) {
   return text.match(/^```([A-Za-z0-9_-]+)?$/);
 }
@@ -154,10 +194,12 @@ function createHeadingInputRule(level: number, nodeType: NodeType) {
 export function createTypingShortcuts(options: {
   schema: Schema;
   getAncestorInfo: (state: EditorState, nodeType: NodeType) => { node: ProseMirrorNode; pos: number } | null;
+  linkify: MarkdownIt["linkify"];
   resources?: NormalizedMarkdownEditorResources;
 }) {
   const {
     getAncestorInfo,
+    linkify,
     resources = normalizeMarkdownEditorResources(undefined),
     schema,
   } = options;
@@ -212,6 +254,7 @@ export function createTypingShortcuts(options: {
       ),
       createImageInputRule(schema, resources),
       createLinkInputRule(schema, resources),
+      createBareAutolinkInputRule(schema, resources, linkify),
       createMarkInputRule(/(?<!`)`([^`]+)`$/, schema.marks.code),
       createMarkInputRule(/(?<!~)~~([^~]+)~~$/, schema.marks.strike),
       createMarkInputRule(/(?<!\*)\*\*([^*]+)\*\*$/, schema.marks.strong),

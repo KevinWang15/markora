@@ -1145,3 +1145,12 @@ production table-editing, host-configurable typing/keymap,
 design-system/internationalization, exact-source extension, front-matter,
 footnote, math, alert, generated-TOC, sanitized-HTML, diagram, and all-seven
 integration foundations. No planned iteration remains in this document.
+
+Post-plan editor-robustness closure on 2026-08-26 added Typora-style extended
+bare URL, `www.`, recognized-domain, and email autolinks to the compatibility
+entry. Imported and whitespace-completed typed links retain bare canonical
+Markdown, survive reset and rich clipboard HTML, and pass through the same
+per-editor destination policy as explicit links. Literal plain paste and
+policy-rejected URL-shaped text receive a minimal escape, while an edited
+autolink whose label no longer matches its stored destination falls back to an
+explicit link instead of silently changing navigation.

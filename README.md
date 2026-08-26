@@ -197,7 +197,7 @@ See the package [resource and asset contract](./packages/core/README.md#resource
 
 ## Clipboard interoperability
 
-Normal outer-editor paste uses a deliberate fidelity order: file-bearing transfers go to the configured asset policy; rich HTML wins when present; otherwise `text/markdown` is parsed through the editor's compiled dialect; otherwise `text/plain` stays literal. Rich HTML is parsed into the schema in a detached document and then sanitized, rather than inserted into the live host DOM. Ctrl/Cmd-Shift-V keeps the conventional plain-text behavior.
+Normal outer-editor paste uses a deliberate fidelity order: file-bearing transfers go to the configured asset policy; rich HTML wins when present; otherwise `text/markdown` is parsed through the editor's compiled dialect; otherwise `text/plain` stays literal. Rich HTML is parsed into the schema in a detached document and then sanitized, rather than inserted into the live host DOM. Ctrl/Cmd-Shift-V keeps the conventional plain-text behavior. URL- or email-shaped plain text is serialized with a minimal backslash escape so a later reset cannot silently promote it into an autolink.
 
 An embedded host can offer explicit actions without reading or writing through the version-coupled ProseMirror view:
 

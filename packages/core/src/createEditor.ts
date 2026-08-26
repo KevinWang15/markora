@@ -1623,7 +1623,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     tableClipboard: advancedTables.clipboard,
     takeExtensionFailure: extensionAssembly.contributions.takeClipboardFailure,
   });
-  const builtinTypingShortcuts = createTypingShortcuts({ schema, getAncestorInfo, resources });
+  const builtinTypingShortcuts = createTypingShortcuts({
+    schema,
+    getAncestorInfo,
+    linkify: codec.tokenizer.linkify,
+    resources,
+  });
   const inputRulePlugins = [
     builtinTypingShortcuts,
     ...(extensionAssembly.contributions.inputRules

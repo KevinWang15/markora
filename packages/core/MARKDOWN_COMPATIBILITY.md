@@ -8,7 +8,7 @@ This contract applies to Markdown passed through `createEditor({ markdown })`, `
 
 Markora is a structured editor, not a byte-preserving source editor. Import parses Markdown into a ProseMirror document immediately, and export writes a canonical representation of that document. Calling `getMarkdown()` without making an edit can therefore return different text from the input. The exception is the source carried by the deliberately recognized opaque constructs below.
 
-The current dialect is a CommonMark-derived subset plus GFM-style pipe tables, strikethrough, and task-list items. It is not a claim of full CommonMark or GFM conformance.
+The current dialect is a CommonMark-derived subset plus GFM-style pipe tables, strikethrough, task-list items, and extended URL/email autolinks. It is not a claim of full CommonMark or GFM conformance.
 
 Only use serialized Markora output as the sole stored copy when input is constrained to the supported dialect, plus the documented opaque shapes, and the normalizations below are acceptable. The current release has:
 
@@ -47,7 +47,7 @@ Syntax outside both the supported dialect and the recognized opaque shapes can s
 | Inline code | CommonMark code spans | Code text is semantic content; delimiter length and padding normalize as needed. |
 | Strikethrough | An exact `~~text~~` delimiter pair | Normalized to `~~` markers. Single tildes remain escaped literal text, while runs of three or more tildes remain literal and serialize without escapes in ordinary inline positions. A block-leading long run stays escaped when needed to prevent it from becoming a tilde code fence. |
 | Hard breaks | Backslash or two-space line breaks | Normalized to a backslash followed by LF. A soft line break is not a hard break. |
-| Links | Inline links, CommonMark angle autolinks, and full/collapsed reference links, with optional titles | Normalized to inline links. Reference labels, definitions, and autolink spelling are not retained. Bare GFM URL/email autolinks are not enabled. |
+| Links | Inline links, CommonMark angle autolinks, full/collapsed reference links, and bare `http://`, `https://`, `www.`, recognized-domain, or email forms | Explicit and reference links normalize to inline syntax. CommonMark angle forms retain their existing canonical angle/inline behavior. Extended autolinks retain bare spelling while their visible text still resolves to the sanitized stored destination. Completing a recognized bare form with whitespace while typing creates the same semantic mark. A later label edit that no longer matches its destination serializes as an explicit link rather than silently retargeting. `ftp:` and every other unlisted scheme remain subject to the per-editor URL policy. |
 | Images | Inline and reference images with alt text and optional titles | Normalized to inline image syntax after the per-editor URL policy. The default `data:` subset and limits are described below. |
 | Pipe tables | Rectangular header/delimiter/body tables, optional outer pipes, alignment colons, and supported inline cell content | Normalized to outer pipes and `---` dividers. Default, left, center, and right alignment are retained. Literal pipes, including pipes in code spans, must be escaped. The semantic round-trip promise requires one unmerged cell with one paragraph per grid position and column headers in the first row. |
 
@@ -340,7 +340,8 @@ These transformations are intentional and happen on import/export even when the 
 | Non-paragraph first alert body block, when `markora-extension-alerts` is installed | One bare `>` separator line between the marker and body; nested table lines retain the quote prefix |
 | TOC marker, when `markora-extension-toc` is installed | Canonical standalone `[TOC]`; input case and accepted horizontal padding are discarded, and generated entries are never serialized |
 | Diagram fence, when `markora-extension-diagrams` is installed | Canonical safe backtick or tilde fence retaining the complete normalized info string and body; delimiter length always exceeds matching runs in the body |
-| Angle URL or email autolink | Inline link syntax |
+| Angle URL or email autolink | Canonical angle or inline link syntax, depending on whether its label exactly represents the stored destination |
+| Extended bare URL or email autolink | Bare spelling; fuzzy `www.`/domain destinations receive their normalized `http://` stored URL |
 | Character entity such as `&copy;` | Decoded Unicode text |
 | Backslash escape | Re-emitted only where the serializer needs an escape |
 | Table without outer pipes | Table with leading and trailing pipes |
@@ -349,7 +350,7 @@ Interior spaces in ordinary text are generally retained. Leading/trailing paragr
 
 ## Clipboard import and export boundary
 
-Normal paste prefers rich HTML over `text/markdown` because an internal HTML slice can retain schema information that canonical Markdown cannot encode, such as a table body row header. If HTML is absent, `text/markdown` enters through the same per-editor parser, extension codec, and URL sanitizer as other Markdown parsing boundaries. Plain text is never auto-detected as Markdown. Ctrl/Cmd-Shift-V and `commands.pastePlainText()` keep Markdown-looking punctuation literal; `commands.pasteMarkdown()` makes the opposite choice explicit.
+Normal paste prefers rich HTML over `text/markdown` because an internal HTML slice can retain schema information that canonical Markdown cannot encode, such as a table body row header. If HTML is absent, `text/markdown` enters through the same per-editor parser, extension codec, and URL sanitizer as other Markdown parsing boundaries. Plain text is never auto-detected as Markdown. Ctrl/Cmd-Shift-V and `commands.pastePlainText()` keep Markdown-looking punctuation literal; URL- and email-shaped plain text receives a minimal backslash escape in canonical Markdown so reset cannot promote it into an autolink. `commands.pasteMarkdown()` makes the opposite choice explicit.
 
 Supported external HTML is converted through schema DOM rules. Paragraphs, marks, lists and portable task checkboxes, links, images, code blocks, and tables become the corresponding document nodes. A `language-*` or `lang-*` class on a `<pre><code>` child supplies a conservative code-fence info token. Unsupported DOM, executable attributes, and unsafe built-in URLs are discarded; raw HTML supplied through Markdown is preserved only through the inert opaque-source rules above. This is still not a publishing sanitizer.
 
@@ -425,7 +426,7 @@ The defaults are:
 
 Protocol-relative URLs, backslashes, embedded whitespace or ASCII controls, malformed URLs, and unlisted schemes are rejected; surrounding whitespace is trimmed. `javascript:` and `vbscript:` cannot be enabled. A custom protocol can be listed explicitly; relative URLs can be disabled; and `data:` requires both the protocol and an exact allowed MIME type. The byte limit counts decoded base64 or percent-decoded UTF-8 bytes. Absolute URLs can be canonicalized by the browser URL parser, for example `https://example.com` becomes `https://example.com/`.
 
-A rejected parsed link loses the link mark but keeps its label text. A rejected image node is removed. These outcomes also apply when `markdown`, `reconcileMarkdown()`, or `resetMarkdown()` imports a document under a stricter host policy, so hosts must configure the policy before loading content and must not assume that changing policy later can recover discarded structure.
+A rejected parsed link loses the link mark but keeps its label text. When that text still resembles an extended autolink, canonical output adds a minimal backslash escape so the rejected destination cannot reappear after reset. A rejected image node is removed. These outcomes also apply when `markdown`, `reconcileMarkdown()`, or `resetMarkdown()` imports a document under a stricter host policy, so hosts must configure the policy before loading content and must not assume that changing policy later can recover discarded structure.
 
 Runtime URL resolution does not change serialization. `resolveUrl` receives a sanitized stored destination and a `"load"` or `"open"` purpose; its return value is checked again and is used only for that action. Returning `null` denies the action. `loadImage` may then return a policy-checked string or an ephemeral `Blob`; Blob object URLs are display-only and never enter Markdown. Similarly, uploaded files enter the document only through the sanitized URL returned by the host's `resources.assets.upload` callback.
 
@@ -457,7 +458,6 @@ Even a supported construct must stay within the shapes listed above:
 
 - pipe-table rows must match the header width; permissive imports can pad missing cells or discard extras, while live ragged rows created through trusted escape hatches are reported by `state.tableIssues()`;
 - table cells must remain unmerged and contain supported inline content in one paragraph; merged, multi-block, and HTML row-header structures are reported but do not round-trip as pipe-table structure;
-- bare URLs, `www.` addresses, and bare email addresses remain plain text unless written as CommonMark angle autolinks.
 
 These limitations are outside the semantic round-trip promise. They are candidates for conformance coverage and later editor work, not implicit extensions of the dialect.
 

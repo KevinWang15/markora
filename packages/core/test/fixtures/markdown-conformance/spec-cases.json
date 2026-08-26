@@ -402,10 +402,9 @@
       "source": "gfm-0.29",
       "section": "Autolinks",
       "url": "https://github.github.com/gfm/#example-622",
-      "classification": "unsupported-characterized",
+      "classification": "supported-normalized",
       "input": "www.commonmark.org\n",
-      "expected": "www.commonmark.org",
-      "note": "Bare GFM autolinks are not enabled and remain plain text."
+      "expected": "www.commonmark.org"
     }
   ]
 }
