@@ -17,6 +17,36 @@ afterEach(() => {
 });
 
 describe('image node view', () => {
+  it('labels empty-alt authoring objects and defers to populated native alt text', () => {
+    const ImageView = createImageViewClass({
+      imageNodeType: schema.nodes.image,
+      messages: {
+        ...defaultMarkdownEditorMessages,
+        imageEmptyAltTextLabel: 'Imagen sin texto alternativo',
+      },
+      resources: normalizeMarkdownEditorResources(undefined),
+    });
+    const imageView = new ImageView(schema.nodes.image.create({
+      alt: null,
+      src: '/decorative.png',
+      title: null,
+    }), document);
+    const image = imageView.dom.querySelector('img');
+
+    expect(image?.getAttribute('alt')).toBe('');
+    expect(image?.getAttribute('aria-label')).toBe('Imagen sin texto alternativo');
+
+    imageView.update(schema.nodes.image.create({
+      alt: 'Release diagram',
+      src: '/decorative.png',
+      title: null,
+    }));
+
+    expect(image?.getAttribute('alt')).toBe('Release diagram');
+    expect(image?.getAttribute('aria-label')).toBeNull();
+    imageView.destroy();
+  });
+
   it('exposes loading as semantic DOM state for tokenized CSS animation', () => {
     const ImageView = createImageViewClass({
       imageNodeType: schema.nodes.image,

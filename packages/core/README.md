@@ -386,6 +386,7 @@ import {
 
 const messages = {
   codeBlockPlainTextLabel: "texte brut",
+  imageEmptyAltTextLabel: "Image sans texte alternatif",
   imageLoading: "Chargement de l’image",
   taskFallbackLabel: "Tâche",
   opaqueKindLabels: {
@@ -401,7 +402,9 @@ const editor = createEditor({
 });
 ```
 
-`MarkdownEditorMessages` describes a complete locale,
+The empty-alt label is exposed only for the image object inside the editable
+authoring surface; stored Markdown and the image element's native `alt=""`
+remain unchanged. `MarkdownEditorMessages` describes a complete locale,
 `MarkdownEditorMessageOverrides` accepts a partial locale with English
 fallback, and `defaultMarkdownEditorMessages` exposes the frozen English
 defaults. Overrides and nested opaque-kind labels are validated, copied, and

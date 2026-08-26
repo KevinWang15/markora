@@ -19,6 +19,7 @@ export type MarkdownEditorMessages = Readonly<{
     context: MarkdownEditorCodeBlockLanguageMessageContext,
   ) => string;
   imageBlockedByPolicy: string;
+  imageEmptyAltTextLabel: string;
   imageFailedToLoad: string;
   imageLoading: string;
   imageMissingUrl: string;
@@ -56,6 +57,7 @@ export const defaultMarkdownEditorMessages: MarkdownEditorMessages = Object.free
     `Edit code block language: ${languageLabel}`
   ),
   imageBlockedByPolicy: "Image blocked by resource policy",
+  imageEmptyAltTextLabel: "Image without alternative text",
   imageFailedToLoad: "Image failed to load",
   imageLoading: "Loading image",
   imageMissingUrl: "Missing image URL",
@@ -72,6 +74,7 @@ const MESSAGE_KEYS = Object.freeze([
   "codeBlockPlainTextLabel",
   "codeBlockEditLanguageLabel",
   "imageBlockedByPolicy",
+  "imageEmptyAltTextLabel",
   "imageFailedToLoad",
   "imageLoading",
   "imageMissingUrl",
@@ -87,6 +90,7 @@ const STRING_MESSAGE_KEYS = Object.freeze([
   "codeBlockEditorLabel",
   "codeBlockPlainTextLabel",
   "imageBlockedByPolicy",
+  "imageEmptyAltTextLabel",
   "imageFailedToLoad",
   "imageLoading",
   "imageMissingUrl",

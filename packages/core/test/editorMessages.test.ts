@@ -27,6 +27,7 @@ describe("core editor messages", () => {
     let formatterContext: unknown;
     const opaqueKindLabels = { frontmatter: "Cabecera" };
     const overrides: MarkdownEditorMessageOverrides = {
+      imageEmptyAltTextLabel: "Imagen sin texto alternativo",
       imageLoading: "Cargando imagen",
       opaqueKindLabels,
       opaqueSourceLabel(context) {
@@ -38,6 +39,7 @@ describe("core editor messages", () => {
     opaqueKindLabels.frontmatter = "Mutated after normalization";
 
     expect(messages.imageLoading).toBe("Cargando imagen");
+    expect(messages.imageEmptyAltTextLabel).toBe("Imagen sin texto alternativo");
     expect(messages.imageMissingUrl).toBe("Missing image URL");
     expect(messages.opaqueKindLabels.frontmatter).toBe("Cabecera");
     expect(messages.opaqueKindLabels["html-block"]).toBe("HTML block");
@@ -98,6 +100,7 @@ describe("core editor messages", () => {
     const messages = normalizeMarkdownEditorMessages({
       codeBlockPlainTextLabel: "texto sin formato",
       imageBlockedByPolicy: "Imagen bloqueada por política",
+      imageEmptyAltTextLabel: "Imagen sin texto alternativo",
       opaqueEditSource: "Editar fuente",
       opaqueEditSourceLabel: ({ kindLabel }) => `Editar fuente ${kindLabel}`,
       opaqueKindLabels: { "html-block": "Bloque HTML" },
@@ -131,6 +134,8 @@ describe("core editor messages", () => {
       .toBe("texto sin formato");
     expect(element.querySelector(".mdw-image-status")?.textContent)
       .toContain("Imagen bloqueada por política");
+    expect(element.querySelector(".mdw-image img")?.getAttribute("aria-label"))
+      .toBe("Imagen sin texto alternativo");
     expect(element.querySelector(".mdw-opaque-kind")?.textContent).toBe("Bloque HTML");
     expect(element.querySelector(".mdw-opaque-block")?.getAttribute("aria-label"))
       .toBe("Fuente Markdown Bloque HTML");

@@ -249,6 +249,7 @@ export type LabEditorSpec = {
     codeBlockEditorLabel?: string;
     codeBlockPlainTextLabel?: string;
     imageBlockedByPolicy?: string;
+    imageEmptyAltTextLabel?: string;
     imageFailedToLoad?: string;
     imageLoading?: string;
     imageMissingUrl?: string;

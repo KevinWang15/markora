@@ -195,6 +195,13 @@ export function createImageViewClass(options: {
 
       this.dom.dataset.src = src;
       this.img.alt = alt;
+      if (alt) {
+        this.img.removeAttribute("aria-label");
+      } else {
+        // Empty alt remains exact in Markdown while the editable object still
+        // needs an identifiable name for assistive-technology navigation.
+        this.img.setAttribute("aria-label", messages.imageEmptyAltTextLabel);
+      }
       this.sourceText.textContent = `![${alt}](${src}${titleSuffix})`;
 
       if (title) {
