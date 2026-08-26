@@ -1463,7 +1463,7 @@ test("@required native double-click word selection ignores Markdown mark boundar
   await cdp?.detach();
 });
 
-test("@required pointer drag selection crosses Markdown mark boundaries", async ({
+test("@required pointer range selection crosses Markdown mark boundaries", async ({
   browserName,
   context,
   labPage,
@@ -1501,6 +1501,7 @@ test("@required pointer drag selection crosses Markdown mark boundaries", async 
   );
 
   const drag = async (
+    markdown: string,
     startNeedle: string,
     startOffset: number,
     startSide: "after" | "before",
@@ -1509,7 +1510,7 @@ test("@required pointer drag selection crosses Markdown mark boundaries", async 
     endSide: "after" | "before",
   ) => {
     await labPage.mouse.click(1, 1);
-    await resetEditor(labPage, id, "pre**fixmid**suffix");
+    await resetEditor(labPage, id, markdown);
     await settleEditor(labPage, id);
     const start = await textPoint(startNeedle, startOffset, startSide);
     if (cdp) {
@@ -1568,14 +1569,122 @@ test("@required pointer drag selection crosses Markdown mark boundaries", async 
     };
   };
 
-  expect(await drag("pre", 1, "before", "suffix", 2, "after")).toEqual({
+  const shiftClick = async (
+    startNeedle: string,
+    startOffset: number,
+    startSide: "after" | "before",
+    endNeedle: string,
+    endOffset: number,
+    endSide: "after" | "before",
+  ) => {
+    await labPage.mouse.click(1, 1);
+    await resetEditor(labPage, id, "pre**fixmid**suffix");
+    await settleEditor(labPage, id);
+    const click = async (
+      point: { x: number; y: number },
+      extend: boolean,
+    ) => {
+      if (cdp) {
+        const modifiers = extend ? 8 : 0;
+        await cdp.send("Input.dispatchMouseEvent", {
+          button: "left",
+          buttons: 1,
+          clickCount: 1,
+          modifiers,
+          type: "mousePressed",
+          x: point.x,
+          y: point.y,
+        });
+        await cdp.send("Input.dispatchMouseEvent", {
+          button: "left",
+          buttons: 0,
+          clickCount: 1,
+          modifiers,
+          type: "mouseReleased",
+          x: point.x,
+          y: point.y,
+        });
+        return;
+      }
+
+      if (extend) await labPage.keyboard.down("Shift");
+      try {
+        await labPage.mouse.click(point.x, point.y);
+      } finally {
+        if (extend) await labPage.keyboard.up("Shift");
+      }
+    };
+
+    await click(await textPoint(startNeedle, startOffset, startSide), false);
+    await settleEditor(labPage, id);
+    await click(await textPoint(endNeedle, endOffset, endSide), true);
+    await settleEditor(labPage, id);
+    return {
+      model: await labPage.evaluate(
+        (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+        id,
+      ),
+      text: await labPage.evaluate(() => document.getSelection()?.toString()),
+    };
+  };
+
+  const inlineMarkdown = "pre**fixmid**suffix";
+  expect(await drag(inlineMarkdown, "pre", 1, "before", "suffix", 2, "after")).toEqual({
     model: { anchor: 2, from: 2, head: 13, to: 13 },
     text: "refixmidsuf",
   });
-  expect(await drag("suffix", 2, "after", "pre", 1, "before")).toEqual({
+  expect(await drag(inlineMarkdown, "suffix", 2, "after", "pre", 1, "before")).toEqual({
     model: { anchor: 13, from: 2, head: 2, to: 13 },
     text: "refixmidsuf",
   });
+  expect(await shiftClick("pre", 1, "before", "suffix", 2, "after")).toEqual({
+    model: { anchor: 2, from: 2, head: 13, to: 13 },
+    text: "refixmidsuf",
+  });
+  if (cdp) {
+    await cdp.send("Input.insertText", { text: "X" });
+  } else {
+    await labPage.keyboard.insertText("X");
+  }
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe("pXfix");
+
+  expect(await shiftClick("suffix", 2, "after", "pre", 1, "before")).toEqual({
+    model: { anchor: 13, from: 2, head: 2, to: 13 },
+    text: "refixmidsuf",
+  });
+
+  const blockMarkdown = "one **two** three\n\nfour **five** six";
+  const forwardBlocks = await drag(
+    blockMarkdown,
+    "one ",
+    1,
+    "before",
+    " six",
+    3,
+    "after",
+  );
+  expect(forwardBlocks.model).toEqual({ anchor: 2, from: 2, head: 29, to: 29 });
+  expect(forwardBlocks.text?.replace(/\s/gu, "")).toBe("netwothreefourfivesix");
+  if (cdp) {
+    await cdp.send("Input.insertText", { text: "X" });
+  } else {
+    await labPage.keyboard.insertText("X");
+  }
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe("oX");
+
+  const backwardBlocks = await drag(
+    blockMarkdown,
+    " six",
+    3,
+    "after",
+    "one ",
+    1,
+    "before",
+  );
+  expect(backwardBlocks.model).toEqual({ anchor: 29, from: 2, head: 2, to: 29 });
+  expect(backwardBlocks.text?.replace(/\s/gu, "")).toBe("netwothreefourfivesix");
   await cdp?.detach();
 });
 
@@ -1641,6 +1750,115 @@ test("@required native triple click selects marked text blocks", async ({
   const plain = await selectBlock("prefixmidsuffix\n\nnext", false);
   expect(marked).toEqual(plain);
   expect(marked.text).toContain("prefixmidsuffix");
+  await cdp?.detach();
+});
+
+test("@required double-click word drag crosses Markdown mark boundaries", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "pointer-word-drag";
+  await mountEditor(labPage, { id, markdown: "", root: "shadow" });
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+
+  const wordDrag = async (markdown: string, marked: boolean) => {
+    await labPage.mouse.click(1, 1);
+    await resetEditor(labPage, id, markdown);
+    await settleEditor(labPage, id);
+    const point = async (needle: string, offset: number) => editorLocator(labPage, id).evaluate(
+      (element, target) => {
+        const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        let text: Text | null = null;
+        while (walker.nextNode()) {
+          const candidate = walker.currentNode as Text;
+          if (candidate.data === target.needle) {
+            text = candidate;
+            break;
+          }
+        }
+        if (!text) throw new Error(`Missing ${JSON.stringify(target.needle)} word-drag text.`);
+        const range = element.ownerDocument.createRange();
+        range.setStart(text, target.offset);
+        range.setEnd(text, target.offset + 1);
+        const rect = range.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      },
+      { needle, offset },
+    );
+    const start = await point(marked ? "fix" : "prefix alpha beta", marked ? 1 : 4);
+    if (cdp) {
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "left",
+        buttons: 1,
+        clickCount: 1,
+        type: "mousePressed",
+        x: start.x,
+        y: start.y,
+      });
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "left",
+        buttons: 0,
+        clickCount: 1,
+        type: "mouseReleased",
+        x: start.x,
+        y: start.y,
+      });
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "left",
+        buttons: 1,
+        clickCount: 2,
+        type: "mousePressed",
+        x: start.x,
+        y: start.y,
+      });
+    } else {
+      await labPage.mouse.move(start.x, start.y);
+      await labPage.mouse.down({ clickCount: 1 });
+      await labPage.mouse.up({ clickCount: 1 });
+      await labPage.mouse.down({ clickCount: 2 });
+    }
+
+    const end = await point(marked ? " alpha beta" : "prefix alpha beta", marked ? 9 : 15);
+    if (cdp) {
+      for (let step = 1; step <= 20; step += 1) {
+        const progress = step / 20;
+        await cdp.send("Input.dispatchMouseEvent", {
+          button: "left",
+          buttons: 1,
+          type: "mouseMoved",
+          x: start.x + (end.x - start.x) * progress,
+          y: start.y + (end.y - start.y) * progress,
+        });
+      }
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "left",
+        buttons: 0,
+        clickCount: 2,
+        type: "mouseReleased",
+        x: end.x,
+        y: end.y,
+      });
+    } else {
+      await labPage.mouse.move(end.x, end.y, { steps: 20 });
+      await labPage.mouse.up({ clickCount: 2 });
+    }
+    await settleEditor(labPage, id);
+    return {
+      model: await labPage.evaluate(
+        (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+        id,
+      ),
+      text: await labPage.evaluate(() => document.getSelection()?.toString()),
+    };
+  };
+
+  const plain = await wordDrag("prefix alpha beta", false);
+  const marked = await wordDrag("pre**fix** alpha beta", true);
+  expect(marked).toEqual(plain);
+  expect(marked.text).toContain("prefix alpha beta");
   await cdp?.detach();
 });
 

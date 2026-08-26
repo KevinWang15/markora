@@ -37,6 +37,7 @@ type DeletionRange = {
 };
 
 const consumeDeletion = Symbol("consume-deletion");
+const consumePointerWordSelection = Symbol("consume-pointer-word-selection");
 
 type InlineBoundaryDeletionContext = {
   immediateText: string;
@@ -88,6 +89,22 @@ type PointerWordIntent = {
   timeStamp: number;
   x: number;
   y: number;
+};
+
+type ModelWordRange = {
+  from: number;
+  to: number;
+};
+
+type PointerWordDrag = ModelWordRange & {
+  doc: ProseMirrorNode;
+  lastPosition: number | null;
+};
+
+type OwnedPointerWordSelection = {
+  anchor: number;
+  doc: ProseMirrorNode;
+  head: number;
 };
 
 function captureFallbackState(state: EditorState): FallbackState {
@@ -740,9 +757,10 @@ function isOwnedUnmodifiedPrimaryPointerEvent(
   );
 }
 
-function readSplitTextBlockAtPosition(
+function readTextBlockAtPosition(
   state: EditorState,
   position: number,
+  requireSplit: boolean,
 ) {
   if (!Number.isInteger(position) || position < 0 || position > state.doc.content.size) {
     return null;
@@ -754,7 +772,7 @@ function readSplitTextBlockAtPosition(
   const offset = position - parentStart;
 
   return (
-    parent.childCount >= 2
+    parent.childCount >= (requireSplit ? 2 : 1)
     && isTextOnlyInlineContent(parent)
     && offset >= 0
     && offset <= parent.content.size
@@ -763,35 +781,23 @@ function readSplitTextBlockAtPosition(
     : null;
 }
 
-function handleNativeDoubleClickWordSelection(
-  view: EditorView,
-  event: MouseEvent,
-  pointerPosition: number | null,
-  ownBeforeNativeSelection = false,
+function readSplitTextBlockAtPosition(
+  state: EditorState,
+  position: number,
 ) {
-  if (!isOwnedUnmodifiedPrimaryPointerEvent(view, event, pointerPosition !== null)) {
-    return false;
-  }
+  return readTextBlockAtPosition(state, position, true);
+}
 
-  const state = view.state;
-  const { selection } = state;
-  const position = pointerPosition ?? (
-    selection instanceof TextSelection && selection.empty
-      ? selection.from
-      : null
-  );
-  const block = position === null
-    ? null
-    : readSplitTextBlockAtPosition(state, position);
+function measurePointerWordRange(
+  view: EditorView,
+  state: EditorState,
+  position: number,
+  requireSplit: boolean,
+): ModelWordRange | typeof consumePointerWordSelection | null {
+  const block = readTextBlockAtPosition(state, position, requireSplit);
 
-  // Native engines normally select the whole visible word. WebKit can leave
-  // a collapsed caret when the first click reveals Markdown marker widgets
-  // and moves the marked DOM before the second click lands. Inline elements
-  // can also change punctuation-sensitive word expansion in other engines.
-  // Re-run the engine's word motion against equivalent unmarked text, using
-  // the first click's pre-reveal model position when it is available.
-  if (!block || (!(selection instanceof TextSelection) && pointerPosition === null)) {
-    return false;
+  if (!block) {
+    return null;
   }
 
   const { offset, parent, parentStart } = block;
@@ -803,8 +809,7 @@ function handleNativeDoubleClickWordSelection(
     || view.isDestroyed
     || view.state !== state
   ) {
-    event.preventDefault();
-    return true;
+    return consumePointerWordSelection;
   }
 
   const range = nativeRange
@@ -826,11 +831,56 @@ function handleNativeDoubleClickWordSelection(
     || range.fromOffset < 0
     || range.toOffset > parentText.length
   ) {
+    return null;
+  }
+
+  return {
+    from: parentStart + range.fromOffset,
+    to: parentStart + range.toOffset,
+  };
+}
+
+function handleNativeDoubleClickWordSelection(
+  view: EditorView,
+  event: MouseEvent,
+  pointerPosition: number | null,
+  ownBeforeNativeSelection = false,
+  onOwnedRange?: (range: ModelWordRange) => void,
+) {
+  if (!isOwnedUnmodifiedPrimaryPointerEvent(view, event, pointerPosition !== null)) {
     return false;
   }
 
-  const from = parentStart + range.fromOffset;
-  const to = parentStart + range.toOffset;
+  const state = view.state;
+  const { selection } = state;
+  const position = pointerPosition ?? (
+    selection instanceof TextSelection && selection.empty
+      ? selection.from
+      : null
+  );
+
+  // Native engines normally select the whole visible word. WebKit can leave
+  // a collapsed caret when the first click reveals Markdown marker widgets
+  // and moves the marked DOM before the second click lands. Inline elements
+  // can also change punctuation-sensitive word expansion in other engines.
+  // Re-run the engine's word motion against equivalent unmarked text, using
+  // the first click's pre-reveal model position when it is available.
+  if (position === null || (!(selection instanceof TextSelection) && pointerPosition === null)) {
+    return false;
+  }
+
+  const range = measurePointerWordRange(view, state, position, true);
+
+  if (range === consumePointerWordSelection) {
+    event.preventDefault();
+    return true;
+  }
+
+  if (!range) {
+    return false;
+  }
+
+  const { from, to } = range;
 
   if (selection.from === from && selection.to === to) {
     if (!ownBeforeNativeSelection) {
@@ -838,6 +888,7 @@ function handleNativeDoubleClickWordSelection(
     }
 
     event.preventDefault();
+    onOwnedRange?.(range);
     return true;
   }
 
@@ -851,6 +902,7 @@ function handleNativeDoubleClickWordSelection(
       ))
       .scrollIntoView(),
   );
+  onOwnedRange?.(range);
   return true;
 }
 
@@ -995,6 +1047,7 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
   const macPlatform = isMacPlatform(ownerWindow);
   const pendingFallbacks = new Set<number>();
   let lastFallbackState: FallbackState | null = null;
+  let ownedPointerWordSelection: OwnedPointerWordSelection | null = null;
   let pointerWordIntent: PointerWordIntent | null = null;
   const matchesPointerWordIntent = (view: EditorView, mouseEvent: MouseEvent) => Boolean(
     pointerWordIntent
@@ -1042,6 +1095,40 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
       handleDOMEvents: {
         dblclick(view, event) {
           const mouseEvent = event as MouseEvent;
+
+          if (
+            ownedPointerWordSelection
+            && isOwnedUnmodifiedPrimaryPointerEvent(view, mouseEvent, true)
+          ) {
+            const ownedSelection = ownedPointerWordSelection;
+            ownedPointerWordSelection = null;
+            mouseEvent.preventDefault();
+
+            if (
+              !view.isDestroyed
+              && view.state.doc === ownedSelection.doc
+              && (
+                !(view.state.selection instanceof TextSelection)
+                || view.state.selection.anchor !== ownedSelection.anchor
+                || view.state.selection.head !== ownedSelection.head
+              )
+            ) {
+              view.dispatch(
+                view.state.tr
+                  .setSelection(TextSelection.create(
+                    view.state.doc,
+                    ownedSelection.anchor,
+                    ownedSelection.head,
+                  ))
+                  .scrollIntoView(),
+              );
+            }
+
+            return true;
+          }
+
+          ownedPointerWordSelection = null;
+
           const matchesIntent = matchesPointerWordIntent(view, mouseEvent);
           const intent = pointerWordIntent;
           pointerWordIntent = null;
@@ -1269,7 +1356,130 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
       },
     },
     view(view) {
+      const pointerDocument = view.dom.ownerDocument;
+      const pointerWindow = pointerDocument.defaultView;
+      let pointerWordDrag: PointerWordDrag | null = null;
+
+      function stopPointerWordDrag() {
+        pointerWordDrag = null;
+        pointerDocument.removeEventListener("mousemove", handlePointerWordDrag, true);
+        pointerDocument.removeEventListener("mouseup", stopPointerWordDrag, true);
+        pointerWindow?.removeEventListener("blur", cancelPointerWordDrag);
+      }
+
+      function cancelPointerWordDrag() {
+        ownedPointerWordSelection = null;
+        stopPointerWordDrag();
+      }
+
+      function handlePointerWordDrag(event: MouseEvent) {
+        const drag = pointerWordDrag;
+
+        if (!drag) {
+          return;
+        }
+
+        if (
+          view.isDestroyed
+          || view.state.doc !== drag.doc
+          || !view.editable
+          || view.composing
+          || (event.buttons & 1) === 0
+        ) {
+          cancelPointerWordDrag();
+          return;
+        }
+
+        const bounds = view.dom.getBoundingClientRect();
+
+        if (
+          event.clientX < bounds.left
+          || event.clientX > bounds.right
+          || event.clientY < bounds.top
+          || event.clientY > bounds.bottom
+        ) {
+          return;
+        }
+
+        const coordinates = view.posAtCoords({
+          left: event.clientX,
+          top: event.clientY,
+        });
+
+        if (!coordinates) {
+          return;
+        }
+
+        event.preventDefault();
+
+        if (coordinates.pos === drag.lastPosition) {
+          return;
+        }
+
+        const state = view.state;
+        const range = measurePointerWordRange(
+          view,
+          state,
+          coordinates.pos,
+          false,
+        );
+
+        if (range === consumePointerWordSelection) {
+          cancelPointerWordDrag();
+          return;
+        }
+
+        if (!range) {
+          return;
+        }
+
+        drag.lastPosition = coordinates.pos;
+        const anchor = range.to <= drag.from ? drag.to : drag.from;
+        const head = range.to <= drag.from
+          ? range.from
+          : range.from >= drag.to
+            ? range.to
+            : drag.to;
+        const selection = state.selection;
+        ownedPointerWordSelection = {
+          anchor,
+          doc: state.doc,
+          head,
+        };
+
+        if (
+          !(selection instanceof TextSelection)
+          || selection.anchor !== anchor
+          || selection.head !== head
+        ) {
+          view.dispatch(
+            state.tr.setSelection(TextSelection.create(state.doc, anchor, head)),
+          );
+        }
+      }
+
+      function startPointerWordDrag(range: ModelWordRange) {
+        stopPointerWordDrag();
+        ownedPointerWordSelection = {
+          anchor: range.from,
+          doc: view.state.doc,
+          head: range.to,
+        };
+        pointerWordDrag = {
+          ...range,
+          doc: view.state.doc,
+          lastPosition: null,
+        };
+        pointerDocument.addEventListener("mousemove", handlePointerWordDrag, true);
+        pointerDocument.addEventListener("mouseup", stopPointerWordDrag, true);
+        pointerWindow?.addEventListener("blur", cancelPointerWordDrag);
+      }
+
       const handleMouseDown = (event: MouseEvent) => {
+        if (event.detail === 1) {
+          ownedPointerWordSelection = null;
+        }
+
         if (event.detail === 2 && matchesPointerWordIntent(view, event)) {
           const intent = pointerWordIntent!;
           pointerWordIntent = null;
@@ -1278,17 +1488,21 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
             event,
             intent.position,
             true,
+            startPointerWordDrag,
           );
           return;
         }
 
+        stopPointerWordDrag();
         rememberPointerWordIntent(view, event);
       };
       view.dom.addEventListener("mousedown", handleMouseDown, true);
 
       return {
         destroy() {
+          ownedPointerWordSelection = null;
           pointerWordIntent = null;
+          stopPointerWordDrag();
           view.dom.removeEventListener("mousedown", handleMouseDown, true);
           for (const timeoutId of pendingFallbacks) {
             ownerWindow.clearTimeout(timeoutId);
