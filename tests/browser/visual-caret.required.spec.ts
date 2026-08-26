@@ -135,6 +135,16 @@ test("@required nested, bidi, and wrapped text retain exact trusted caret hit-te
       plain: "אבגדהוזחט",
       plainNeedle: "אבגדהוזחט",
       plainOffset: 3,
+      rtlText: true,
+    },
+    {
+      id: ltrId,
+      marked: "אבג**דהו**זחט",
+      markedNeedle: "דהו",
+      plain: "אבגדהוזחט",
+      plainNeedle: "אבגדהוזחט",
+      plainOffset: 3,
+      rtlText: true,
     },
     {
       id: ltrId,
@@ -164,6 +174,16 @@ test("@required nested, bidi, and wrapped text retain exact trusted caret hit-te
       plain: "ابتثجحخدذ",
       plainNeedle: "ابتثجحخدذ",
       plainOffset: 3,
+      rtlText: true,
+    },
+    {
+      id: ltrId,
+      marked: "ابت**ثجح**خدذ",
+      markedNeedle: "ثجح",
+      plain: "ابتثجحخدذ",
+      plainNeedle: "ابتثجحخدذ",
+      plainOffset: 3,
+      rtlText: true,
     },
     {
       id: wrappedId,
@@ -210,7 +230,7 @@ test("@required nested, bidi, and wrapped text retain exact trusted caret hit-te
           : 1;
         const before = 1 + testCase.plainOffset + markedOffset;
         const after = before + rangeLength;
-        const expectedPosition = testCase.id === rtlId
+        const expectedPosition = "rtlText" in testCase && testCase.rtlText
           ? fraction < 0.5 ? after : before
           : fraction < 0.5 ? before : after;
         if (!("requireExactSide" in testCase) || testCase.requireExactSide) {

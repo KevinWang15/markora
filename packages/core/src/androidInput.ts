@@ -115,6 +115,12 @@ type PointerCaretIntent = PointerTextIntent & {
   selection: ProseMirrorSelection;
 };
 
+type PointerCaretDrag = PointerTextIntent & {
+  anchor: number;
+  lastPosition: number | null;
+  owned: boolean;
+};
+
 type ModelWordRange = {
   from: number;
   to: number;
@@ -1795,13 +1801,133 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
       const pointerDocument = view.dom.ownerDocument;
       const pointerWindow = pointerDocument.defaultView;
       let pointerBlockDrag: PointerBlockDrag | null = null;
+      let pointerCaretDrag: PointerCaretDrag | null = null;
       let pointerWordDrag: PointerWordDrag | null = null;
+
+      function stopPointerCaretDrag() {
+        pointerCaretDrag = null;
+        pointerDocument.removeEventListener("mousemove", handlePointerCaretDrag, true);
+        pointerDocument.removeEventListener("mouseup", finishPointerCaretDrag, true);
+        pointerWindow?.removeEventListener("blur", stopPointerCaretDrag);
+      }
+
+      function finishPointerCaretDrag(event: MouseEvent) {
+        if (pointerCaretDrag?.owned) {
+          event.preventDefault();
+        }
+
+        stopPointerCaretDrag();
+      }
+
+      function handlePointerCaretDrag(event: MouseEvent) {
+        const drag = pointerCaretDrag;
+
+        if (!drag) {
+          return;
+        }
+
+        if (
+          view.isDestroyed
+          || view.state.doc !== drag.doc
+          || !view.editable
+          || view.composing
+          || (event.buttons & 1) === 0
+        ) {
+          stopPointerCaretDrag();
+          return;
+        }
+
+        const horizontal = event.clientX - drag.x;
+        const vertical = event.clientY - drag.y;
+
+        // Leave sub-threshold motion as a click. Once a drag is real, the
+        // captured model position is more stable than a DOM anchor whose text
+        // node can be replaced when Markdown delimiters change visibility.
+        if (horizontal * horizontal + vertical * vertical <= 16) {
+          return;
+        }
+
+        const rawPosition = resolveOwnedPointerDragPosition(view, event);
+
+        if (rawPosition === null) {
+          return;
+        }
+
+        const head = refinePointerCaretPosition(
+          view,
+          rawPosition,
+          event.clientX,
+          event.clientY,
+        );
+        event.preventDefault();
+        drag.owned = true;
+
+        if (head === drag.lastPosition) {
+          return;
+        }
+
+        drag.lastPosition = head;
+        const state = view.state;
+        const selection = TextSelection.between(
+          state.doc.resolve(drag.anchor),
+          state.doc.resolve(head),
+        );
+
+        if (!state.selection.eq(selection)) {
+          view.dispatch(state.tr.setSelection(selection));
+        }
+      }
+
+      function startPointerCaretDrag(event: MouseEvent) {
+        stopPointerCaretDrag();
+        const intent = pointerCaretIntent;
+
+        if (
+          !intent
+          || !event.isTrusted
+          || !readTextBlockAtPosition(view.state, intent.position, true)
+          || (
+            !intent.selection.empty
+            && intent.position >= intent.selection.from
+            && intent.position <= intent.selection.to
+          )
+        ) {
+          return;
+        }
+
+        // Do not reveal delimiters on mousedown: that can move the exact text
+        // node the browser bound as its native range anchor. The click handler
+        // commits an ordinary caret; genuine movement switches to the model
+        // drag above. Pressing inside an existing selection remains native so
+        // selected-text drag-and-drop keeps its own transfer semantics.
+        event.preventDefault();
+        view.focus();
+        pointerCaretDrag = {
+          ...intent,
+          anchor: intent.position,
+          lastPosition: null,
+          owned: false,
+        };
+        pointerDocument.addEventListener("mousemove", handlePointerCaretDrag, true);
+        pointerDocument.addEventListener("mouseup", finishPointerCaretDrag, true);
+        pointerWindow?.addEventListener("blur", stopPointerCaretDrag);
+      }
 
       function stopPointerBlockDrag() {
         pointerBlockDrag = null;
         pointerDocument.removeEventListener("mousemove", handlePointerBlockDrag, true);
-        pointerDocument.removeEventListener("mouseup", stopPointerBlockDrag, true);
+        pointerDocument.removeEventListener("mouseup", finishPointerBlockDrag, true);
         pointerWindow?.removeEventListener("blur", stopPointerBlockDrag);
+      }
+
+      function finishPointerBlockDrag(event: MouseEvent) {
+        if (pointerBlockDrag) {
+          // The triple-click selection is model-owned from its initiating
+          // press. WebKit can otherwise replace it during mouseup defaulting.
+          event.preventDefault();
+        }
+
+        stopPointerBlockDrag();
       }
 
       function handlePointerBlockDrag(event: MouseEvent) {
@@ -1882,7 +2008,7 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
             .scrollIntoView(),
         );
         pointerDocument.addEventListener("mousemove", handlePointerBlockDrag, true);
-        pointerDocument.addEventListener("mouseup", stopPointerBlockDrag, true);
+        pointerDocument.addEventListener("mouseup", finishPointerBlockDrag, true);
         pointerWindow?.addEventListener("blur", stopPointerBlockDrag);
         return true;
       }
@@ -2054,10 +2180,12 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
         }
 
         stopPointerBlockDrag();
+        stopPointerCaretDrag();
         stopPointerWordDrag();
         rememberPointerBlockIntent(view, event);
         rememberPointerCaretIntent(view, event);
         rememberPointerWordIntent(view, event);
+        startPointerCaretDrag(event);
       };
       view.dom.addEventListener("mousedown", handleMouseDown, true);
       view.dom.addEventListener("click", handlePointerCaretClick, true);
@@ -2069,6 +2197,7 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
           pointerCaretIntent = null;
           pointerWordIntent = null;
           stopPointerBlockDrag();
+          stopPointerCaretDrag();
           stopPointerWordDrag();
           view.dom.removeEventListener("mousedown", handleMouseDown, true);
           view.dom.removeEventListener("click", handlePointerCaretClick, true);
