@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Liberation Sans", sans-serif;
   background: #f8fafc;
   color: #0f172a;
   --surface: rgba(255, 255, 255, 0.88);
@@ -15,11 +15,29 @@
 * { box-sizing: border-box; }
 html {
   max-width: 100%;
-  scroll-behavior: smooth;
+  /* Browser-managed focus scrolling must reveal rapid keyboard traversal immediately. */
+  scroll-behavior: auto;
+  scroll-padding-top: var(--docs-sticky-offset, 0px);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .docs-site,
+  .docs-site *,
+  .docs-site *::before,
+  .docs-site *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
+
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
   max-width: 100%;
   overflow-x: hidden;
   overflow-x: clip;
@@ -36,6 +54,18 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, m
   max-width: 100%;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .skip-link {
   position: fixed;
   z-index: 100;
@@ -49,7 +79,6 @@ code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, m
   font-weight: 700;
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
   transform: translate(-50%, calc(-100% - 16px));
-  transition: transform 120ms ease;
 }
 
 .skip-link:focus {
@@ -354,9 +383,16 @@ mark[data-demo-highlight="true"] {
 .hero-actions,
 .source-actions {
   display: flex;
+  align-items: center;
   gap: 12px;
   flex-wrap: wrap;
   margin-top: 22px;
+}
+
+.source-status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
 }
 
 .button {
@@ -371,6 +407,12 @@ mark[data-demo-highlight="true"] {
   transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background-color 120ms ease;
 }
 .button:hover { transform: translateY(-1px); }
+.button[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.58;
+  box-shadow: none;
+}
+.button[aria-disabled="true"]:hover { transform: none; }
 .button-primary {
   background: linear-gradient(135deg, #2563eb, #4f46e5);
   color: white;
@@ -556,8 +598,13 @@ mark[data-demo-highlight="true"] {
 .sidebar {
   align-self: start;
   position: sticky;
-  top: 98px;
+  top: var(--docs-sticky-offset, 98px);
+  max-height: calc(100vh - var(--docs-sticky-offset, 98px) - 12px);
+  max-height: calc(100dvh - var(--docs-sticky-offset, 98px) - 12px);
   padding: 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 8px;
 }
 .sidebar-section + .sidebar-section {
   margin-top: 18px;
@@ -573,6 +620,17 @@ mark[data-demo-highlight="true"] {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+.route-loading {
+  min-height: 160px;
+  color: var(--text-muted);
+}
+.route-error h1 {
+  margin: 8px 0 0;
+}
+.route-error p {
+  max-width: 64ch;
+  color: var(--text-muted);
 }
 .docs-main,
 .sidebar {
@@ -767,8 +825,9 @@ mark[data-demo-highlight="true"] {
   z-index: 40;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-width: 280px;
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
   padding: 12px;
   border: 1px solid #d0d7de;
   border-radius: 14px;
@@ -776,17 +835,33 @@ mark[data-demo-highlight="true"] {
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
 }
 .mdw-toolbar-popover[hidden] { display: none !important; }
+.mdw-toolbar-popover-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .mdw-toolbar-popover::before {
   content: "";
   position: absolute;
   top: -7px;
-  left: 18px;
+  left: var(--mdw-toolbar-popover-arrow-left, 18px);
   width: 12px;
   height: 12px;
   border-top: 1px solid #d0d7de;
   border-left: 1px solid #d0d7de;
   background: #ffffff;
   transform: rotate(45deg);
+}
+.mdw-toolbar-popover[data-side="above"]::before {
+  top: auto;
+  bottom: -7px;
+  border-top: 0;
+  border-left: 0;
+  border-right: 1px solid #d0d7de;
+  border-bottom: 1px solid #d0d7de;
 }
 .mdw-toolbar-popover-title { font-size: 0.95rem; font-weight: 600; color: #24292f; }
 .mdw-toolbar-popover-field { display: flex; flex-direction: column; gap: 6px; }
@@ -798,6 +873,12 @@ mark[data-demo-highlight="true"] {
   border-radius: 10px;
   font: inherit;
 }
+.mdw-toolbar-popover-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 0.8rem;
+}
+.mdw-toolbar-popover-error[hidden] { display: none; }
 .mdw-toolbar-popover-actions { display: flex; gap: 8px; }
 .mdw-toolbar-popover-button {
   padding: 6px 10px;
@@ -903,8 +984,26 @@ mark[data-demo-highlight="true"] {
     position: static;
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
+    padding: 12px;
   }
-  .topnav { width: 100%; }
+  .brand small { display: none; }
+  .topnav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
+  }
+  .topnav-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 6px;
+    font-size: 0.82rem;
+    line-height: 1.15;
+    text-align: center;
+  }
   .hero-banner,
   .panel,
   .feature-card,
@@ -915,6 +1014,22 @@ mark[data-demo-highlight="true"] {
   #source { min-height: 380px; }
   .doc-page-nav { flex-direction: column; }
   .doc-page-nav-next { text-align: left; margin-left: 0; }
+}
+
+@media (pointer: coarse) {
+  .brand,
+  .button,
+  .code-block-copy,
+  .mdw-toolbar-popover-input,
+  .mdw-toolbar-popover-button {
+    min-height: 44px;
+  }
+  .mdw-toolbar-button,
+  .mdw-toolbar-button-compact {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
 }
 
 
@@ -958,6 +1073,7 @@ mark[data-demo-highlight="true"] {
 .dev-floating-button,
 .dev-modal-close,
 .dev-example-button {
+  min-height: 44px;
   padding: 10px 14px;
   cursor: pointer;
   transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
@@ -984,14 +1100,21 @@ mark[data-demo-highlight="true"] {
   padding: 24px;
   background: rgba(15, 23, 42, 0.14);
   backdrop-filter: blur(8px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .dev-modal {
   width: min(960px, 100%);
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 24px;
   background: #ffffff;
   box-shadow: 0 24px 80px rgba(15, 23, 42, 0.18);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 12px;
 }
 
 .dev-modal-source {
@@ -1018,6 +1141,10 @@ mark[data-demo-highlight="true"] {
 
 .dev-modal-actions {
   align-items: center;
+}
+
+.dev-modal-actions .button {
+  min-height: 44px;
 }
 
 .dev-lab-source {
@@ -1088,4 +1215,70 @@ mark[data-demo-highlight="true"] {
 .docs-site-dev .dev-example-button,
 .docs-site-dev .dev-pill {
   background: #ffffff;
+}
+
+@media (max-width: 720px), (max-height: 480px) {
+  .dev-modal-backdrop {
+    padding: 8px;
+  }
+
+  .dev-modal {
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 16px;
+  }
+
+  .dev-modal-source,
+  .dev-modal-presets {
+    padding: 14px;
+  }
+}
+
+@media (forced-colors: active) {
+  #source,
+  #output {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+
+  .topnav-link.is-active,
+  .sidebar-link.is-active,
+  .mdw-toolbar-button.is-active,
+  .dev-example-button.is-active,
+  .button-primary {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+    box-shadow: none;
+    forced-color-adjust: none;
+  }
+
+  .button-primary[aria-disabled="true"] {
+    border-color: GrayText;
+    background: Canvas;
+    color: GrayText;
+    opacity: 1;
+  }
+
+  .skip-link:focus,
+  .brand:focus,
+  .topnav-link:focus,
+  .sidebar-link:focus,
+  .button:focus,
+  .code-block-copy:focus,
+  .doc-page-nav-link:focus,
+  .mdw-toolbar-button:focus,
+  .mdw-toolbar-popover-input:focus,
+  .mdw-toolbar-popover-button:focus,
+  #source:focus,
+  .dev-floating-button:focus,
+  .dev-modal-close:focus,
+  .dev-example-button:focus,
+  .dev-lab-source:focus {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
 }

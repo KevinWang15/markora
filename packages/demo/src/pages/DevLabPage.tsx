@@ -1,6 +1,6 @@
 import { createEditor, type MarkdownEditor, type OpaqueMarkdownEditRequest } from "markora";
 import { createDefaultUi } from "markora-ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { devLabExamples } from "../lib/content";
 
 type DevExample = (typeof devLabExamples)[number];
@@ -29,10 +29,18 @@ export function DevLabPage() {
   const activeExampleRef = useRef<DevExample>(getExampleFromHash(window.location.hash));
   const [activeSlug, setActiveSlug] = useState(activeExampleRef.current.slug);
   const [markdownSource, setMarkdownSource] = useState(activeExampleRef.current.markdown);
+  const [sourceDraft, setSourceDraft] = useState(activeExampleRef.current.markdown);
   const [opaqueSourceDraft, setOpaqueSourceDraft] = useState("");
   const [opaqueSourceKind, setOpaqueSourceKind] = useState<OpaqueMarkdownEditRequest["kind"] | null>(null);
   const [isSourceOpen, setIsSourceOpen] = useState(false);
   const [isPresetsOpen, setIsPresetsOpen] = useState(false);
+
+  const cancelSourceEdit = useCallback(() => {
+    opaqueEditRequestRef.current = null;
+    setOpaqueSourceDraft("");
+    setOpaqueSourceKind(null);
+    setIsSourceOpen(false);
+  }, []);
 
   useEffect(() => {
     const editorElement = editorElementRef.current;
@@ -72,6 +80,9 @@ export function DevLabPage() {
       opaqueEditRequestRef.current = null;
       setOpaqueSourceKind(null);
       setActiveSlug(nextExample.slug);
+      setSourceDraft(nextExample.markdown);
+      setIsSourceOpen(false);
+      setIsPresetsOpen(false);
       // Presets represent different documents, so discard transient editor state.
       editor.commands.resetMarkdown(nextExample.markdown);
       editor.flushChange();
@@ -100,13 +111,26 @@ export function DevLabPage() {
     const focusableSelector = "button:not(:disabled), textarea:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex='-1'])";
     const focusableElements = () => Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
     const initialFocus = dialog.querySelector<HTMLElement>("[data-autofocus]") ?? focusableElements()[0] ?? dialog;
-    initialFocus.focus();
+    const revealFocusedElement = (element: HTMLElement) => {
+      element.scrollIntoView({ block: "nearest", inline: "nearest" });
+    };
+    const handleFocusIn = (event: FocusEvent) => {
+      if (event.target instanceof HTMLElement) {
+        revealFocusedElement(event.target);
+      }
+    };
+    dialog.addEventListener("focusin", handleFocusIn);
+    initialFocus.focus({ preventScroll: true });
+    revealFocusedElement(initialFocus);
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        setIsSourceOpen(false);
-        setIsPresetsOpen(false);
+        if (isSourceOpen) {
+          cancelSourceEdit();
+        } else {
+          setIsPresetsOpen(false);
+        }
         return;
       }
 
@@ -136,6 +160,7 @@ export function DevLabPage() {
     dialog.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      dialog.removeEventListener("focusin", handleFocusIn);
       dialog.removeEventListener("keydown", handleKeyDown);
 
       if (trigger?.isConnected) {
@@ -144,7 +169,7 @@ export function DevLabPage() {
         sourceButtonRef.current?.focus();
       }
     };
-  }, [isPresetsOpen, isSourceOpen]);
+  }, [cancelSourceEdit, isPresetsOpen, isSourceOpen]);
 
   const activeExample = useMemo(
     () => devLabExamples.find((example) => example.slug === activeSlug) ?? DEFAULT_EXAMPLE,
@@ -156,6 +181,7 @@ export function DevLabPage() {
     opaqueEditRequestRef.current = null;
     setOpaqueSourceKind(null);
     setActiveSlug(example.slug);
+    setSourceDraft(example.markdown);
     window.history.replaceState(null, "", `${window.location.pathname}#${example.slug}`);
 
     if (!editorRef.current) {
@@ -191,10 +217,12 @@ export function DevLabPage() {
     }
 
     // Source edits update the current document through mapped selection/history.
-    editorRef.current.commands.reconcileMarkdown(markdownSource);
+    editorRef.current.commands.reconcileMarkdown(sourceDraft);
     editorRef.current.flushChange();
-    setMarkdownSource(editorRef.current.getMarkdown());
-    setIsSourceOpen(false);
+    const nextMarkdown = editorRef.current.getMarkdown();
+    setMarkdownSource(nextMarkdown);
+    setSourceDraft(nextMarkdown);
+    cancelSourceEdit();
   };
 
   return (
@@ -226,10 +254,16 @@ export function DevLabPage() {
           aria-expanded={isSourceOpen}
           aria-haspopup="dialog"
           onClick={() => {
+            if (isSourceOpen) {
+              cancelSourceEdit();
+              return;
+            }
+
             sourceTriggerRef.current = sourceButtonRef.current;
             opaqueEditRequestRef.current = null;
             setOpaqueSourceKind(null);
-            setIsSourceOpen((open) => !open);
+            setSourceDraft(editorRef.current?.getMarkdown() ?? markdownSource);
+            setIsSourceOpen(true);
             setIsPresetsOpen(false);
           }}
         >
@@ -258,12 +292,13 @@ export function DevLabPage() {
                 Close
               </button>
             </div>
-            <div className="dev-lab-example-buttons">
+            <div className="dev-lab-example-buttons" role="group" aria-label="Markdown presets">
               {devLabExamples.map((example) => (
                 <button
                   key={example.slug}
                   type="button"
                   data-autofocus={example.slug === activeSlug ? "true" : undefined}
+                  aria-pressed={example.slug === activeSlug}
                   className={example.slug === activeSlug ? "dev-example-button is-active" : "dev-example-button"}
                   onClick={() => loadExample(example)}
                 >
@@ -277,7 +312,7 @@ export function DevLabPage() {
       ) : null}
 
       {isSourceOpen ? (
-        <div className="dev-modal-backdrop" onClick={() => setIsSourceOpen(false)}>
+        <div className="dev-modal-backdrop" onClick={cancelSourceEdit}>
           <section
             ref={sourceDialogRef}
             id="dev-source-dialog"
@@ -299,8 +334,8 @@ export function DevLabPage() {
                 <button type="button" className="button button-primary" onClick={applySource}>
                   {opaqueSourceKind ? "Save preserved source" : "Apply source"}
                 </button>
-                <button type="button" className="dev-modal-close" onClick={() => setIsSourceOpen(false)}>
-                  Close
+                <button type="button" className="dev-modal-close" onClick={cancelSourceEdit}>
+                  Cancel
                 </button>
               </div>
             </div>
@@ -308,12 +343,12 @@ export function DevLabPage() {
               className="dev-lab-source"
               data-autofocus="true"
               spellCheck={false}
-              value={opaqueSourceKind ? opaqueSourceDraft : markdownSource}
+              value={opaqueSourceKind ? opaqueSourceDraft : sourceDraft}
               onChange={(event) => {
                 if (opaqueSourceKind) {
                   setOpaqueSourceDraft(event.target.value);
                 } else {
-                  setMarkdownSource(event.target.value);
+                  setSourceDraft(event.target.value);
                 }
               }}
             />
