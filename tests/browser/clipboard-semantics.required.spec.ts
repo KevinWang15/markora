@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { CDPSession, Page } from "@playwright/test";
 import {
   canRunEditorCommand,
   clearEditorEvents,
@@ -13,9 +13,36 @@ import {
   resetEditor,
   runEditorCommand,
   settleEditor,
+  snapshotEditor,
   test,
   updateEditorOptions,
 } from "./fixtures";
+
+async function dispatchChromiumClipboardCommand(
+  cdp: CDPSession,
+  command: "Copy" | "Cut" | "Paste",
+) {
+  const key = command === "Copy" ? "c" : command === "Cut" ? "x" : "v";
+  const code = `Key${key.toUpperCase()}`;
+  const windowsVirtualKeyCode = key.toUpperCase().charCodeAt(0);
+  await cdp.send("Input.dispatchKeyEvent", {
+    code,
+    commands: [command],
+    key,
+    modifiers: 2,
+    nativeVirtualKeyCode: windowsVirtualKeyCode,
+    type: "rawKeyDown",
+    windowsVirtualKeyCode,
+  });
+  await cdp.send("Input.dispatchKeyEvent", {
+    code,
+    key,
+    modifiers: 2,
+    nativeVirtualKeyCode: windowsVirtualKeyCode,
+    type: "keyUp",
+    windowsVirtualKeyCode,
+  });
+}
 
 async function dragBackwardAcrossActiveCode(page: Page, id: string) {
   const editor = editorLocator(page, id);
@@ -283,16 +310,29 @@ test("@required trusted cut writes all representations, mutates once, and undoes
   expect(await runEditorCommand(labPage, id, { type: "undo" })).toBe(false);
 });
 
-test("@required Chromium CDP copy exposes all synchronous clipboard representations", async ({
+test("@required Chromium CDP copy and paste survive the native clipboard as one semantic edit", async ({
   browserName,
   context,
   labPage,
 }) => {
   test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP input commands.");
 
-  const id = "clipboard-cdp-copy";
-  await mountEditor(labPage, { id, markdown: "# CDP\n\n**copy**" });
-  await focusEditor(labPage, id, "all");
+  const source = "clipboard-cdp-copy-source";
+  const target = "clipboard-cdp-copy-target";
+  const markdown = [
+    "# Native clipboard",
+    "",
+    "A **strong** [link](/target).",
+    "",
+    "* one",
+    "* two",
+  ].join("\n");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: new URL(labPage.url()).origin,
+  });
+  await mountEditor(labPage, { id: source, markdown, root: "shadow" });
+  await mountEditor(labPage, { id: target, markdown: "", root: "shadow" });
+  await focusEditor(labPage, source, "all");
   await labPage.evaluate((editorId) => {
     const section = document.querySelector(`[data-e2e-editor="${editorId}"]`)!;
     const target = window as typeof window & {
@@ -306,34 +346,90 @@ test("@required Chromium CDP copy exposes all synchronous clipboard representati
         types: Array.from(data?.types ?? []),
       };
     }, { once: true });
-  }, id);
+  }, source);
 
   const cdp = await context.newCDPSession(labPage);
-  await cdp.send("Input.dispatchKeyEvent", {
-    code: "KeyC",
-    commands: ["Copy"],
-    key: "c",
-    modifiers: 2,
-    type: "keyDown",
-    windowsVirtualKeyCode: 67,
-  });
-  await cdp.send("Input.dispatchKeyEvent", {
-    code: "KeyC",
-    key: "c",
-    modifiers: 2,
-    type: "keyUp",
-    windowsVirtualKeyCode: 67,
-  });
+  await dispatchChromiumClipboardCommand(cdp, "Copy");
+  await expect.poll(() => labPage.evaluate(() => navigator.clipboard.readText())).toContain(
+    "Native clipboard",
+  );
   const copied = await labPage.evaluate(() => (
     window as typeof window & {
       __markoraCdpCopy?: { markdown: string; types: string[] };
     }
   ).__markoraCdpCopy);
   expect(copied).toEqual({
-    markdown: "# CDP\n\n**copy**",
+    markdown,
     types: expect.arrayContaining(["text/html", "text/plain", "text/markdown"]),
   });
-  expect(await getMarkdown(labPage, id)).toBe("# CDP\n\n**copy**");
+  expect(await getMarkdown(labPage, source)).toBe(markdown);
+
+  await focusEditor(labPage, target, "end");
+  await dispatchChromiumClipboardCommand(cdp, "Paste");
+  await settleEditor(labPage, target);
+  expect(await getMarkdown(labPage, target)).toBe(markdown);
+  await expect(editorLocator(labPage, target).locator("h1")).toHaveText("Native clipboard");
+  await expect(editorLocator(labPage, target).locator("strong")).toHaveText("strong");
+  await expect(editorLocator(labPage, target).locator('a[href="/target"]')).toHaveText("link");
+  await expect(editorLocator(labPage, target)).toBeFocused();
+  const selection = (await snapshotEditor(labPage, target)).selection;
+  expect(selection.from).toBe(selection.to);
+
+  expect(await runEditorCommand(labPage, target, { type: "undo" })).toBe(true);
+  await settleEditor(labPage, target);
+  expect(await getMarkdown(labPage, target)).toBe("");
+  expect(await runEditorCommand(labPage, target, { type: "redo" })).toBe(true);
+  await settleEditor(labPage, target);
+  expect(await getMarkdown(labPage, target)).toBe(markdown);
+  await cdp.detach();
+});
+
+test("@required Chromium CDP cut and paste retain a linked slice with independent history", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP input commands.");
+
+  const source = "clipboard-cdp-cut-source";
+  const target = "clipboard-cdp-cut-target";
+  const original = "alpha [beta](/target) gamma";
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: new URL(labPage.url()).origin,
+  });
+  await mountEditor(labPage, { id: source, markdown: original, root: "shadow" });
+  await mountEditor(labPage, { id: target, markdown: "delta suffix", root: "shadow" });
+  expect(await labPage.evaluate((id) => (
+    window.__MARKORA_BROWSER_LAB__!.selectText(id, "beta", "all")
+  ), source)).toBe(true);
+  const cdp = await context.newCDPSession(labPage);
+
+  await dispatchChromiumClipboardCommand(cdp, "Cut");
+  await expect.poll(() => labPage.evaluate(() => navigator.clipboard.readText())).toBe("beta");
+  await settleEditor(labPage, source);
+  expect(await getMarkdown(labPage, source)).toBe("alpha  gamma");
+  expect(await runEditorCommand(labPage, source, { type: "undo" })).toBe(true);
+  await settleEditor(labPage, source);
+  expect(await getMarkdown(labPage, source)).toBe(original);
+
+  expect(await labPage.evaluate((id) => (
+    window.__MARKORA_BROWSER_LAB__!.selectText(id, "suffix", "all")
+  ), target)).toBe(true);
+  await dispatchChromiumClipboardCommand(cdp, "Paste");
+  await settleEditor(labPage, target);
+  expect(await getMarkdown(labPage, target)).toBe("delta [beta](/target)");
+  await expect(editorLocator(labPage, target).locator('a[href="/target"]')).toHaveText("beta");
+  await expect(editorLocator(labPage, target)).toBeFocused();
+  const selection = (await snapshotEditor(labPage, target)).selection;
+  expect(selection.from).toBe(selection.to);
+
+  expect(await runEditorCommand(labPage, target, { type: "undo" })).toBe(true);
+  await settleEditor(labPage, target);
+  expect(await getMarkdown(labPage, target)).toBe("delta suffix");
+  expect(await runEditorCommand(labPage, target, { type: "redo" })).toBe(true);
+  await settleEditor(labPage, target);
+  expect(await getMarkdown(labPage, target)).toBe("delta [beta](/target)");
+  await cdp.detach();
 });
 
 test("@required passive code cut owns native DOM mutation and remains one-step undoable", async ({ labPage }) => {
