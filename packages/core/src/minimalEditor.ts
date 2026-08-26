@@ -22,6 +22,7 @@ import { createChangeEmitter } from "./changeEmitter";
 import { createClipboardSemantics } from "./clipboardSemantics";
 import { normalizeMarkdownEditorChangeMode } from "./changeMode";
 import { createHostIdleScheduler } from "./idleScheduler";
+import { createAndroidInputPlugin } from "./androidInput";
 import { createNativeHistoryPlugin } from "./nativeHistory";
 import { buildReconciledDocumentTransaction } from "./documentUpdate";
 import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
@@ -841,6 +842,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         : []),
       ...(autoPairPlugin ? [autoPairPlugin] : []),
       ...extensionAssembly.contributions.plugins,
+      createAndroidInputPlugin(ownerWindow),
       clipboard.plugin,
       // Clamp the final slice after both structured transforms and raw extension
       // plugins so extension precedence cannot reintroduce unsafe URLs.
