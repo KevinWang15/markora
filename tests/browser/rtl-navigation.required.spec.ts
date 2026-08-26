@@ -101,7 +101,7 @@ test("@required bidi mark boundaries follow physical browser caret motion", asyn
   }
 });
 
-test("@required bidi mark exits preserve the following native physical-arrow step", async ({ labPage }) => {
+test("@required bidi mark exits preserve native physical-arrow progression", async ({ labPage }) => {
   const cases = [
     {
       arrow: "ArrowLeft",
@@ -151,10 +151,20 @@ test("@required bidi mark exits preserve the following native physical-arrow ste
       markdown: testCase.markedMarkdown,
     });
 
-    await selectTextBoundary(labPage, plainId, testCase.text, testCase.mode);
-    await labPage.keyboard.press(testCase.arrow);
-    await settleEditor(labPage, plainId);
-    const plainHead = (await snapshotEditor(labPage, plainId)).selection.head;
+    const collectProgression = async (id: string) => {
+      await selectTextBoundary(labPage, id, testCase.text, testCase.mode);
+      const positions = [(await snapshotEditor(labPage, id)).selection.head];
+      for (let step = 0; step < 10; step += 1) {
+        await labPage.keyboard.press(testCase.arrow);
+        await settleEditor(labPage, id);
+        positions.push((await snapshotEditor(labPage, id)).selection.head);
+      }
+      return positions.filter((position, positionIndex) => (
+        positionIndex === 0 || position !== positions[positionIndex - 1]
+      ));
+    };
+
+    const plainProgression = await collectProgression(plainId);
 
     await selectTextBoundary(labPage, markedId, testCase.text, testCase.mode);
     const boundaryHead = (await snapshotEditor(labPage, markedId)).selection.head;
@@ -163,9 +173,20 @@ test("@required bidi mark exits preserve the following native physical-arrow ste
     expect((await snapshotEditor(labPage, markedId)).selection.head).toBe(boundaryHead);
     await expect(editorLocator(labPage, markedId).locator(".mdw-marker-strong")).toHaveCount(0);
 
-    await labPage.keyboard.press(testCase.arrow);
-    await settleEditor(labPage, markedId);
-    expect((await snapshotEditor(labPage, markedId)).selection.head).toBe(plainHead);
+    const markedPositions = [boundaryHead];
+    for (let step = 0; step < 10; step += 1) {
+      await labPage.keyboard.press(testCase.arrow);
+      await settleEditor(labPage, markedId);
+      markedPositions.push((await snapshotEditor(labPage, markedId)).selection.head);
+    }
+    const markedProgression = markedPositions.filter((position, positionIndex) => (
+      positionIndex === 0 || position !== markedPositions[positionIndex - 1]
+    ));
+
+    // WebKit can consume an arrow press to change an internal bidi caret level
+    // without changing the model position. Compare the native position order,
+    // rather than the number of keypresses needed to traverse that order.
+    expect(markedProgression, JSON.stringify(testCase)).toEqual(plainProgression);
   }
 });
 
