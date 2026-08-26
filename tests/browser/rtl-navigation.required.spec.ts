@@ -88,6 +88,7 @@ test("@required bidi mark boundaries follow physical browser caret motion", asyn
       markdown: testCase.markdown,
     });
     await selectTextBoundary(labPage, testCase.id, testCase.text, testCase.mode);
+    await settleEditor(labPage, testCase.id);
     await labPage.keyboard.press(testCase.arrow);
     await labPage.keyboard.insertText("X");
     await settleEditor(labPage, testCase.id);

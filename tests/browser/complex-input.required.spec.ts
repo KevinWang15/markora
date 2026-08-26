@@ -1393,6 +1393,7 @@ test("@required native double-click word selection ignores Markdown mark boundar
   const selectAt = async (markdown: string, marked: boolean, offset: number) => {
     await labPage.mouse.click(1, 1);
     await resetEditor(labPage, id, markdown);
+    await settleEditor(labPage, id);
     const point = await editorLocator(labPage, id).evaluate((element, target) => {
       const { inMark, offset: textOffset } = target;
       const container = inMark ? element.querySelector("strong") : element.querySelector("p");
@@ -1406,34 +1407,46 @@ test("@required native double-click word selection ignores Markdown mark boundar
       const rect = range.getBoundingClientRect();
       return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     }, { inMark: marked, offset });
-    if (cdp) {
-      await cdp.send("Input.dispatchMouseEvent", {
-        button: "left",
-        buttons: 1,
-        clickCount: 2,
-        type: "mousePressed",
-        x: point.x,
-        y: point.y,
-      });
-      await cdp.send("Input.dispatchMouseEvent", {
-        button: "left",
-        buttons: 0,
-        clickCount: 2,
-        type: "mouseReleased",
-        x: point.x,
-        y: point.y,
-      });
-    } else {
-      await labPage.mouse.dblclick(point.x, point.y);
-    }
-    await settleEditor(labPage, id);
-    return {
-      model: await labPage.evaluate(
-        (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
-        id,
-      ),
-      text: await labPage.evaluate(() => document.getSelection()?.toString()),
+    const doubleClick = async () => {
+      if (cdp) {
+        await cdp.send("Input.dispatchMouseEvent", {
+          button: "left",
+          buttons: 1,
+          clickCount: 2,
+          type: "mousePressed",
+          x: point.x,
+          y: point.y,
+        });
+        await cdp.send("Input.dispatchMouseEvent", {
+          button: "left",
+          buttons: 0,
+          clickCount: 2,
+          type: "mouseReleased",
+          x: point.x,
+          y: point.y,
+        });
+      } else {
+        await labPage.mouse.dblclick(point.x, point.y);
+      }
+      await settleEditor(labPage, id);
+      return {
+        model: await labPage.evaluate(
+          (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+          id,
+        ),
+        text: await labPage.evaluate(() => document.getSelection()?.toString()),
+      };
     };
+
+    const first = await doubleClick();
+    if (marked || first.text) return first;
+
+    // Under parallel load WebKit can occasionally drop both native clicks on
+    // the unmarked control. Retry only that browser-owned oracle; a collapsed
+    // marked result remains a product failure and is never retried.
+    await labPage.mouse.click(1, 1);
+    await settleEditor(labPage, id);
+    return doubleClick();
   };
 
   for (const testCase of [
@@ -1447,6 +1460,187 @@ test("@required native double-click word selection ignores Markdown mark boundar
     expect(marked).toEqual(plain);
     expect(marked.text).not.toBe("");
   }
+  await cdp?.detach();
+});
+
+test("@required pointer drag selection crosses Markdown mark boundaries", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "pointer-mark-drag-selection";
+  await mountEditor(labPage, { id, markdown: "", root: "shadow" });
+  const cdp = browserName === "chromium" ? await context.newCDPSession(labPage) : null;
+
+  const textPoint = async (
+    needle: string,
+    offset: number,
+    side: "after" | "before",
+  ) => editorLocator(labPage, id).evaluate(
+    (element, target) => {
+      const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      let text: Text | null = null;
+      while (walker.nextNode()) {
+        const candidate = walker.currentNode as Text;
+        if (candidate.data === target.needle) {
+          text = candidate;
+          break;
+        }
+      }
+      if (!text) throw new Error(`Missing ${JSON.stringify(target.needle)} text node.`);
+      const range = element.ownerDocument.createRange();
+      range.setStart(text, target.offset);
+      range.setEnd(text, target.offset + 1);
+      const rect = range.getBoundingClientRect();
+      return {
+        x: target.side === "before" ? rect.left + 1 : rect.right - 1,
+        y: rect.top + rect.height / 2,
+      };
+    },
+    { needle, offset, side },
+  );
+
+  const drag = async (
+    startNeedle: string,
+    startOffset: number,
+    startSide: "after" | "before",
+    endNeedle: string,
+    endOffset: number,
+    endSide: "after" | "before",
+  ) => {
+    await labPage.mouse.click(1, 1);
+    await resetEditor(labPage, id, "pre**fixmid**suffix");
+    await settleEditor(labPage, id);
+    const start = await textPoint(startNeedle, startOffset, startSide);
+    if (cdp) {
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "none",
+        buttons: 0,
+        type: "mouseMoved",
+        x: start.x,
+        y: start.y,
+      });
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "left",
+        buttons: 1,
+        clickCount: 1,
+        type: "mousePressed",
+        x: start.x,
+        y: start.y,
+      });
+    } else {
+      await labPage.mouse.move(start.x, start.y);
+      await labPage.mouse.down();
+    }
+
+    const end = await textPoint(endNeedle, endOffset, endSide);
+    if (cdp) {
+      for (let step = 1; step <= 20; step += 1) {
+        const progress = step / 20;
+        await cdp.send("Input.dispatchMouseEvent", {
+          button: "left",
+          buttons: 1,
+          type: "mouseMoved",
+          x: start.x + (end.x - start.x) * progress,
+          y: start.y + (end.y - start.y) * progress,
+        });
+      }
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "left",
+        buttons: 0,
+        clickCount: 1,
+        type: "mouseReleased",
+        x: end.x,
+        y: end.y,
+      });
+    } else {
+      await labPage.mouse.move(end.x, end.y, { steps: 20 });
+      await labPage.mouse.up();
+    }
+
+    await settleEditor(labPage, id);
+    return {
+      model: await labPage.evaluate(
+        (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+        id,
+      ),
+      text: await labPage.evaluate(() => document.getSelection()?.toString()),
+    };
+  };
+
+  expect(await drag("pre", 1, "before", "suffix", 2, "after")).toEqual({
+    model: { anchor: 2, from: 2, head: 13, to: 13 },
+    text: "refixmidsuf",
+  });
+  expect(await drag("suffix", 2, "after", "pre", 1, "before")).toEqual({
+    model: { anchor: 13, from: 2, head: 2, to: 13 },
+    text: "refixmidsuf",
+  });
+  await cdp?.detach();
+});
+
+test("@required native triple click selects marked text blocks", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "pointer-mark-triple-click";
+  await mountEditor(labPage, { id, markdown: "", root: "shadow" });
+  const cdp = browserName === "chromium" ? await context.newCDPSession(labPage) : null;
+
+  const selectBlock = async (markdown: string, marked: boolean) => {
+    await labPage.mouse.click(1, 1);
+    await resetEditor(labPage, id, markdown);
+    await settleEditor(labPage, id);
+    const point = await editorLocator(labPage, id).evaluate((element, inMark) => {
+      const container = inMark ? element.querySelector("strong") : element.querySelector("p");
+      const text = container?.firstChild;
+      if (!text || text.nodeType !== Node.TEXT_NODE) {
+        throw new Error("Missing triple-click target text.");
+      }
+      const range = element.ownerDocument.createRange();
+      range.setStart(text, inMark ? 2 : 5);
+      range.setEnd(text, inMark ? 3 : 6);
+      const rect = range.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }, marked);
+
+    for (const clickCount of [1, 2, 3]) {
+      if (cdp) {
+        await cdp.send("Input.dispatchMouseEvent", {
+          button: "left",
+          buttons: 1,
+          clickCount,
+          type: "mousePressed",
+          x: point.x,
+          y: point.y,
+        });
+        await cdp.send("Input.dispatchMouseEvent", {
+          button: "left",
+          buttons: 0,
+          clickCount,
+          type: "mouseReleased",
+          x: point.x,
+          y: point.y,
+        });
+      } else {
+        await labPage.mouse.click(point.x, point.y, { clickCount });
+      }
+    }
+    await settleEditor(labPage, id);
+    return {
+      model: await labPage.evaluate(
+        (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+        id,
+      ),
+      text: await labPage.evaluate(() => document.getSelection()?.toString()),
+    };
+  };
+
+  const marked = await selectBlock("pre**fixmid**suffix\n\nnext", true);
+  const plain = await selectBlock("prefixmidsuffix\n\nnext", false);
+  expect(marked).toEqual(plain);
+  expect(marked.text).toContain("prefixmidsuffix");
   await cdp?.detach();
 });
 
