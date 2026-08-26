@@ -52,6 +52,29 @@ function readContiguousTextBefore(parent: ProseMirrorNode, parentOffset: number)
   return chunks.reverse().join("");
 }
 
+function readContiguousTextAfter(parent: ProseMirrorNode, parentOffset: number) {
+  const childAfter = parent.childAfter(parentOffset);
+  const nodeAfter = childAfter.node;
+
+  if (!nodeAfter?.isText || !nodeAfter.text) {
+    return "";
+  }
+
+  const chunks = [nodeAfter.text.slice(parentOffset - childAfter.offset)];
+
+  for (let index = childAfter.index + 1; index < parent.childCount; index += 1) {
+    const child = parent.child(index);
+
+    if (!child.isText || !child.text) {
+      break;
+    }
+
+    chunks.push(child.text);
+  }
+
+  return chunks.join("");
+}
+
 function isAndroidChrome(ownerWindow: BrowserWindow) {
   const userAgent = ownerWindow.navigator.userAgent;
   return /\bAndroid\b/i.test(userAgent) && /\bChrome\//i.test(userAgent);
@@ -88,6 +111,37 @@ export function findPreviousGraphemeStart(
   return text.length - 1;
 }
 
+export function findNextGraphemeEnd(
+  text: string,
+  intl: SegmentingIntl = Intl as SegmentingIntl,
+) {
+  if (!text) {
+    return 0;
+  }
+
+  if (intl.Segmenter) {
+    for (const segment of new intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)) {
+      if (segment.index > 0) {
+        return segment.index;
+      }
+    }
+
+    return text.length;
+  }
+
+  const firstCodeUnit = text.charCodeAt(0);
+
+  if (firstCodeUnit >= 0xd800 && firstCodeUnit <= 0xdbff && text.length > 1) {
+    const nextCodeUnit = text.charCodeAt(1);
+
+    if (nextCodeUnit >= 0xdc00 && nextCodeUnit <= 0xdfff) {
+      return 2;
+    }
+  }
+
+  return 1;
+}
+
 export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
   const androidChrome = isAndroidChrome(ownerWindow);
   const pendingFallbacks = new Set<number>();
@@ -111,8 +165,17 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
           if (
             inputEvent.defaultPrevented
             || inputEvent.isComposing
-            || inputEvent.inputType !== "deleteContentBackward"
           ) {
+            return false;
+          }
+
+          const direction = inputEvent.inputType === "deleteContentBackward"
+            ? "backward"
+            : inputEvent.inputType === "deleteContentForward"
+              ? "forward"
+              : null;
+
+          if (!direction) {
             return false;
           }
 
@@ -154,16 +217,19 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
             view.dom.blur();
             view.focus();
 
-            const backspaceEvent = ownerDocument.createEvent("Event") as KeyboardEvent;
-            backspaceEvent.initEvent("keydown", true, true);
-            Object.assign(backspaceEvent, {
-              code: "Backspace",
-              key: "Backspace",
-              keyCode: 8,
+            const deleteKey = direction === "backward"
+              ? { code: "Backspace", key: "Backspace", keyCode: 8 }
+              : { code: "Delete", key: "Delete", keyCode: 46 };
+            const deleteEvent = ownerDocument.createEvent("Event") as KeyboardEvent;
+            deleteEvent.initEvent("keydown", true, true);
+            Object.assign(deleteEvent, {
+              code: deleteKey.code,
+              key: deleteKey.key,
+              keyCode: deleteKey.keyCode,
             });
             const stateBeforeKeyDown = view.state;
             const handled = view.someProp("handleKeyDown", (handler) => (
-              handler(view, backspaceEvent) || undefined
+              handler(view, deleteEvent) || undefined
             ));
 
             if (view.state !== stateBeforeKeyDown) {
@@ -184,44 +250,74 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
               return;
             }
 
-            const nodeBefore = selection.$from.nodeBefore;
+            const adjacentNode = direction === "backward"
+              ? selection.$from.nodeBefore
+              : selection.$from.nodeAfter;
 
-            if (nodeBefore && !nodeBefore.isText && nodeBefore.isInline && nodeBefore.isAtom) {
+            if (
+              adjacentNode
+              && !adjacentNode.isText
+              && adjacentNode.isInline
+              && adjacentNode.isAtom
+            ) {
+              const from = direction === "backward"
+                ? selection.from - adjacentNode.nodeSize
+                : selection.from;
+              const to = direction === "backward"
+                ? selection.from
+                : selection.from + adjacentNode.nodeSize;
               view.dispatch(
                 view.state.tr
-                  .delete(selection.from - nodeBefore.nodeSize, selection.from)
+                  .delete(from, to)
                   .scrollIntoView(),
               );
               lastFallbackState = captureFallbackState(view.state);
               return;
             }
 
-            const textBefore = readContiguousTextBefore(
-              selection.$from.parent,
-              selection.$from.parentOffset,
-            );
+            const adjacentText = direction === "backward"
+              ? readContiguousTextBefore(
+                  selection.$from.parent,
+                  selection.$from.parentOffset,
+                )
+              : readContiguousTextAfter(
+                  selection.$from.parent,
+                  selection.$from.parentOffset,
+                );
 
-            if (!textBefore) {
+            if (!adjacentText) {
               return;
             }
 
-            const graphemeStart = findPreviousGraphemeStart(textBefore);
-            const graphemeLength = textBefore.length - graphemeStart;
+            const graphemeLength = direction === "backward"
+              ? adjacentText.length - findPreviousGraphemeStart(adjacentText)
+              : findNextGraphemeEnd(adjacentText);
 
-            if (graphemeLength <= 0 || graphemeLength > selection.from) {
+            const from = direction === "backward"
+              ? selection.from - graphemeLength
+              : selection.from;
+            const to = direction === "backward"
+              ? selection.from
+              : selection.from + graphemeLength;
+
+            if (
+              graphemeLength <= 0
+              || from < 0
+              || to > view.state.doc.content.size
+            ) {
               return;
             }
 
             view.dispatch(
               view.state.tr
-                .delete(selection.from - graphemeLength, selection.from)
+                .delete(from, to)
                 .scrollIntoView(),
             );
             lastFallbackState = captureFallbackState(view.state);
           }, 60);
 
           pendingFallbacks.add(timeoutId);
-          // Returning true suppresses ProseMirror's code-unit fallback. The
+          // Returning true suppresses ProseMirror's backward code-unit fallback. The
           // native beforeinput default remains allowed because it is not
           // prevented; the timeout runs only when no document change follows.
           return true;

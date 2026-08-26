@@ -294,8 +294,12 @@ export function createManagedBlockBoundaryPlugin(options: CreateManagedBlockBoun
       return handled;
     }
 
-    if (event.key === "Backspace") {
-      const handled = boundary.side === "after"
+    if (event.key === "Backspace" || event.key === "Delete") {
+      const removesManagedBlock = (
+        (event.key === "Backspace" && boundary.side === "after")
+        || (event.key === "Delete" && boundary.side === "before")
+      );
+      const handled = removesManagedBlock
         ? options.removeManagedBlockAtBoundary(view, boundary)
         : options.insertParagraphAtManagedBlockBoundary(view, boundary);
 

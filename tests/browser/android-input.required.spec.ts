@@ -21,12 +21,13 @@ test.use({
   viewport: { height: 915, width: 412 },
 });
 
-async function dispatchNoMutationBackspace(
+async function dispatchNoMutationDeletion(
   context: BrowserContext,
   id: string,
   page: Page,
   target: "code-mirror" | "prosemirror" = "prosemirror",
   count = 1,
+  inputType: "deleteContentBackward" | "deleteContentForward" = "deleteContentBackward",
 ) {
   const cdp = await context.newCDPSession(page);
   const containerSelector = `[data-e2e-editor="${id}"]`;
@@ -45,7 +46,7 @@ async function dispatchNoMutationBackspace(
         const event = new InputEvent("beforeinput", {
           bubbles: true,
           cancelable: true,
-          inputType: "deleteContentBackward",
+          inputType: ${JSON.stringify(inputType)},
         });
         target.dispatchEvent(event);
         events.push(event);
@@ -81,7 +82,7 @@ test("@required Android CDP fallback deletes complete grapheme clusters", async 
       { editorId: id, text: value },
     )).toBe(true);
 
-    const event = await dispatchNoMutationBackspace(context, id, labPage);
+    const event = await dispatchNoMutationDeletion(context, id, labPage);
     expect(event.defaultPrevented).toBe(false);
     expect(event.userAgent).toContain("Android");
     await expect.poll(() => getMarkdown(labPage, id)).toBe("A");
@@ -100,7 +101,7 @@ test("@required Android CDP fallback deletes complete grapheme clusters", async 
     ({ editorId, text }) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, text, "end"),
     { editorId: id, text: burst },
   )).toBe(true);
-  await dispatchNoMutationBackspace(context, id, labPage, "prosemirror", 3);
+  await dispatchNoMutationDeletion(context, id, labPage, "prosemirror", 3);
   await expect.poll(() => getMarkdown(labPage, id)).toBe("A😀👩‍💻");
 
   expect(await labPage.evaluate(
@@ -116,7 +117,7 @@ test("@required Android CDP fallback deletes complete grapheme clusters", async 
     (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "A😀", "end"),
     shadowId,
   )).toBe(true);
-  await dispatchNoMutationBackspace(context, shadowId, labPage);
+  await dispatchNoMutationDeletion(context, shadowId, labPage);
   await expect.poll(() => getMarkdown(labPage, shadowId)).toBe("A");
 });
 
@@ -143,7 +144,7 @@ test("@required Android CDP fallback deletes graphemes across mark boundaries", 
       id,
     );
 
-    await dispatchNoMutationBackspace(context, id, labPage);
+    await dispatchNoMutationDeletion(context, id, labPage);
     await expect.poll(() => getMarkdown(labPage, id)).toBe("A");
     expect(await labPage.evaluate(
       (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
@@ -161,7 +162,7 @@ test("@required Android CDP fallback deletes graphemes across mark boundaries", 
   );
   await labPage.keyboard.press("ArrowLeft");
   await settleEditor(labPage, id);
-  await dispatchNoMutationBackspace(context, id, labPage);
+  await dispatchNoMutationDeletion(context, id, labPage);
   await expect.poll(() => getMarkdown(labPage, id)).toBe("AZ");
   expect(await labPage.evaluate(
     (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
@@ -176,7 +177,7 @@ test("@required Android CDP fallback deletes graphemes across mark boundaries", 
     (editorId) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, "end"),
     id,
   );
-  await dispatchNoMutationBackspace(context, id, labPage);
+  await dispatchNoMutationDeletion(context, id, labPage);
   await expect.poll(() => getMarkdown(labPage, id)).toBe("A![alt](/boundary.png)");
   await expect(editorLocator(labPage, id).locator(".mdw-image")).toHaveCount(1);
   expect(await labPage.evaluate(
@@ -185,6 +186,165 @@ test("@required Android CDP fallback deletes graphemes across mark boundaries", 
   )).toBe(true);
   await settleEditor(labPage, id);
   expect(await getMarkdown(labPage, id)).toBe(atomBoundaryMarkdown);
+});
+
+test("@required Android CDP fallback deletes forward graphemes and inline atoms", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing Android CDP input control.");
+
+  const id = "android-forward-delete";
+  await mountEditor(labPage, { id, markdown: "" });
+
+  for (const markdown of [
+    "😀A",
+    "👩‍💻A",
+    "éA",
+    "👍🏽A",
+    "🇨🇳A",
+    "**e**́A",
+    "👩**‍**💻A",
+    "👍**🏽**A",
+    "🇨**🇳**A",
+  ] as const) {
+    await resetEditor(labPage, id, markdown);
+    expect(await getMarkdown(labPage, id)).toBe(markdown);
+    await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, "start"),
+      id,
+    );
+    await dispatchNoMutationDeletion(
+      context,
+      id,
+      labPage,
+      "prosemirror",
+      1,
+      "deleteContentForward",
+    );
+    await expect.poll(() => getMarkdown(labPage, id)).toBe("A");
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+      id,
+    )).toBe(true);
+    await settleEditor(labPage, id);
+    expect(await getMarkdown(labPage, id)).toBe(markdown);
+  }
+
+  const imageMarkdown = "![alt](/forward.png)A";
+  await resetEditor(labPage, id, imageMarkdown);
+  await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, "start"),
+    id,
+  );
+  await dispatchNoMutationDeletion(
+    context,
+    id,
+    labPage,
+    "prosemirror",
+    1,
+    "deleteContentForward",
+  );
+  await expect.poll(() => getMarkdown(labPage, id)).toBe("A");
+  await expect(editorLocator(labPage, id).locator(".mdw-image")).toHaveCount(0);
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(imageMarkdown);
+
+  const burst = "😀👩‍💻é👍🏽🇨🇳A";
+  await resetEditor(labPage, id, burst);
+  await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, "start"),
+    id,
+  );
+  await dispatchNoMutationDeletion(
+    context,
+    id,
+    labPage,
+    "prosemirror",
+    3,
+    "deleteContentForward",
+  );
+  await expect.poll(() => getMarkdown(labPage, id)).toBe("👍🏽🇨🇳A");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(burst);
+
+  const codeMarkdown = ["```text", "👩‍💻A", "```"].join("\n");
+  await resetEditor(labPage, id, codeMarkdown);
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "👩‍💻A", "start"),
+    id,
+  )).toBe(true);
+  const codeMirror = editorLocator(labPage, id).locator(".cm-content");
+  await expect(codeMirror).toHaveCount(1);
+  await codeMirror.click();
+  await labPage.keyboard.press("Home");
+  await dispatchNoMutationDeletion(
+    context,
+    id,
+    labPage,
+    "code-mirror",
+    1,
+    "deleteContentForward",
+  );
+  await expect.poll(() => getMarkdown(labPage, id)).toBe([
+    "```text",
+    "A",
+    "```",
+  ].join("\n"));
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(codeMarkdown);
+});
+
+test("@required Android CDP forward fallback preserves managed-block deletion", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing Android CDP input control.");
+
+  const id = "android-forward-managed";
+  const table = [
+    "| A | B |",
+    "| --- | --- |",
+    "| one | two |",
+  ].join("\n");
+  await mountEditor(labPage, { id, markdown: table });
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "A", "start"),
+    id,
+  )).toBe(true);
+  await labPage.keyboard.press("ArrowLeft");
+  await settleEditor(labPage, id);
+  await expect(editorLocator(labPage, id).locator("table.mdw-managed-block-cursor-before")).toHaveCount(1);
+
+  await dispatchNoMutationDeletion(
+    context,
+    id,
+    labPage,
+    "prosemirror",
+    1,
+    "deleteContentForward",
+  );
+  await expect.poll(() => getMarkdown(labPage, id)).toBe("");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(table);
 });
 
 test("@required Android CDP fallback preserves structural Backspace commands", async ({
@@ -208,7 +368,7 @@ test("@required Android CDP fallback preserves structural Backspace commands", a
   await labPage.keyboard.press("ArrowRight");
   await expect(editorLocator(labPage, id).locator("table.mdw-managed-block-cursor-after")).toHaveCount(1);
 
-  await dispatchNoMutationBackspace(context, id, labPage);
+  await dispatchNoMutationDeletion(context, id, labPage);
   await expect.poll(() => getMarkdown(labPage, id)).toBe("");
   expect(await labPage.evaluate(
     (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
@@ -219,7 +379,7 @@ test("@required Android CDP fallback preserves structural Backspace commands", a
 
   await resetEditor(labPage, id, "![alt](/android.png)");
   await labPage.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, "end"), id);
-  await dispatchNoMutationBackspace(context, id, labPage);
+  await dispatchNoMutationDeletion(context, id, labPage);
   await expect.poll(() => getMarkdown(labPage, id)).toBe("");
 });
 
@@ -237,7 +397,7 @@ test("@required Android CDP fallback expires after editor state changes", async 
     (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "end"),
     id,
   )).toBe(true);
-  await dispatchNoMutationBackspace(context, id, labPage);
+  await dispatchNoMutationDeletion(context, id, labPage);
   expect(await labPage.evaluate(
     (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
     id,
@@ -250,7 +410,7 @@ test("@required Android CDP fallback expires after editor state changes", async 
     (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
     id,
   )).toBe(true);
-  await dispatchNoMutationBackspace(context, id, labPage);
+  await dispatchNoMutationDeletion(context, id, labPage);
   await updateEditorOptions(labPage, id, { editable: false });
   await labPage.waitForTimeout(100);
   expect(await getMarkdown(labPage, id)).toBe("alpha");
@@ -261,7 +421,7 @@ test("@required Android CDP fallback expires after editor state changes", async 
     (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
     id,
   )).toBe(true);
-  await dispatchNoMutationBackspace(context, id, labPage);
+  await dispatchNoMutationDeletion(context, id, labPage);
   await editor.evaluate((element) => {
     element.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
   });
@@ -276,7 +436,7 @@ test("@required Android CDP fallback expires after editor state changes", async 
     (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
     id,
   )).toBe(true);
-  await dispatchNoMutationBackspace(context, id, labPage);
+  await dispatchNoMutationDeletion(context, id, labPage);
   await labPage.evaluate(() => {
     const button = document.createElement("button");
     button.id = "android-external-focus";
@@ -306,7 +466,7 @@ test("@required Android CDP fallback preserves auto-pairs and active code graphe
   await labPage.keyboard.insertText("(");
   await settleEditor(labPage, pairId);
   expect(await getMarkdown(labPage, pairId)).toBe("()");
-  await dispatchNoMutationBackspace(context, pairId, labPage);
+  await dispatchNoMutationDeletion(context, pairId, labPage);
   await expect.poll(() => getMarkdown(labPage, pairId)).toBe("");
 
   const codeId = "android-code-grapheme-backspace";
@@ -321,7 +481,7 @@ test("@required Android CDP fallback preserves auto-pairs and active code graphe
   await codeMirror.click();
   await labPage.keyboard.press("End");
 
-  await dispatchNoMutationBackspace(context, codeId, labPage, "code-mirror");
+  await dispatchNoMutationDeletion(context, codeId, labPage, "code-mirror");
   await expect.poll(() => getMarkdown(labPage, codeId)).toBe([
     "```text",
     "A",

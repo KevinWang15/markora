@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findPreviousGraphemeStart } from "../src/androidInput";
+import { findNextGraphemeEnd, findPreviousGraphemeStart } from "../src/androidInput";
 
 describe("Android input fallback", () => {
   it.each([
@@ -14,5 +14,19 @@ describe("Android input fallback", () => {
 
   it("falls back to a complete code point when Intl.Segmenter is unavailable", () => {
     expect(findPreviousGraphemeStart("A😀", {} as typeof Intl)).toBe(1);
+  });
+
+  it.each([
+    ["😀A", 2],
+    ["👩‍💻A", 5],
+    ["éA", 2],
+    ["👍🏽A", 4],
+    ["🇨🇳A", 4],
+  ])("finds the next grapheme boundary in %s", (text, expected) => {
+    expect(findNextGraphemeEnd(text)).toBe(expected);
+  });
+
+  it("falls forward by a complete code point when Intl.Segmenter is unavailable", () => {
+    expect(findNextGraphemeEnd("😀A", {} as typeof Intl)).toBe(2);
   });
 });

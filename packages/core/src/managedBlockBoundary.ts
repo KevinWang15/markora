@@ -124,10 +124,6 @@ export function createManagedBlockBoundaryHelpers(options: CreateManagedBlockBou
   }
 
   function removeManagedBlockAtBoundary(view: EditorView, boundary: ManagedBlockBoundary) {
-    if (boundary.side !== "after") {
-      return false;
-    }
-
     const { state } = view;
     const $block = state.doc.resolve(boundary.blockPos);
     const blockIndex = $block.index();
@@ -149,15 +145,19 @@ export function createManagedBlockBoundaryHelpers(options: CreateManagedBlockBou
     const nextNode = $nextPos.nodeAfter;
     const previousNode = $nextPos.nodeBefore;
     const previousSelection = findTextSelectionInImmediatePreviousNode(tr.doc, nextPos);
+    const nextSelection = Selection.findFrom($nextPos, 1, true);
 
-    if (previousSelection) {
+    if (boundary.side === "before" && nextSelection) {
+      tr.setSelection(nextSelection);
+    } else if (boundary.side === "before" && isManagedBlockNode(nextNode)) {
+      tr.setSelection(ManagedBlockCursor.create(tr.doc, nextPos, "before", isManagedBlockNode)!);
+    } else if (previousSelection) {
       tr.setSelection(previousSelection);
     } else if (isManagedBlockNode(nextNode)) {
       tr.setSelection(ManagedBlockCursor.create(tr.doc, nextPos, "before", isManagedBlockNode)!);
     } else if (isManagedBlockNode(previousNode)) {
       tr.setSelection(ManagedBlockCursor.create(tr.doc, nextPos - previousNode.nodeSize, "after", isManagedBlockNode)!);
     } else {
-      const nextSelection = Selection.findFrom($nextPos, 1, true);
       tr.setSelection(nextSelection ?? Selection.near($nextPos, -1));
     }
 

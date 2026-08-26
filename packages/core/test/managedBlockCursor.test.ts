@@ -703,6 +703,48 @@ describe('ManagedBlockCursor', () => {
     expect(editor.view.state.doc.firstChild?.type.name).toBe('paragraph');
   });
 
+  it.each([
+    ['table', ['| A | B |', '| --- | --- |', '| a | b |'].join('\n')],
+    ['code_block', ['```js', 'const a = 1;', '```'].join('\n')],
+  ] as const)('deletes the %s on Delete from before-edge cursor', (nodeName, markdown) => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown,
+    });
+
+    const managedBlock = findNodeByName(editor.view.state.doc, nodeName);
+    setSelection(editor, ManagedBlockCursor.create(
+      editor.view.state.doc,
+      managedBlock.pos,
+      'before',
+      (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node),
+    )!);
+
+    expect(pressKey(editor, 'Delete')).toBe(true);
+    expect(countNodes(editor.view.state.doc, nodeName)).toBe(0);
+    expect(editor.view.state.doc.firstChild?.type.name).toBe('paragraph');
+  });
+
+  it('inserts a paragraph after a managed block on Delete from after-edge cursor', () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: ['| A | B |', '| --- | --- |', '| a | b |'].join('\n'),
+    });
+
+    const table = findNodeByName(editor.view.state.doc, 'table');
+    setSelection(editor, ManagedBlockCursor.create(
+      editor.view.state.doc,
+      table.pos,
+      'after',
+      (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node),
+    )!);
+
+    expect(pressKey(editor, 'Delete')).toBe(true);
+    expect(editor.view.state.doc.child(0).type.name).toBe('table');
+    expect(editor.view.state.doc.child(1).type.name).toBe('paragraph');
+    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+  });
+
   it('inserts a paragraph below the code block on Enter from after-edge cursor even if CodeMirror keeps focus', async () => {
     const editor = createEditor({
       element: createHost(),
