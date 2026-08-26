@@ -1,3 +1,4 @@
+import type { Node as ProseMirrorNode } from "prosemirror-model";
 import { Plugin, TextSelection } from "prosemirror-state";
 
 type GraphemeSegment = {
@@ -58,6 +59,7 @@ export function findPreviousGraphemeStart(
 export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
   const androidChrome = isAndroidChrome(ownerWindow);
   const pendingFallbacks = new Set<number>();
+  let lastFallbackDoc: ProseMirrorNode | null = null;
 
   return new Plugin({
     props: {
@@ -86,7 +88,10 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
           const timeoutId = ownerWindow.setTimeout(() => {
             pendingFallbacks.delete(timeoutId);
 
-            if (view.isDestroyed || view.state.doc !== initialDoc) {
+            if (
+              view.isDestroyed
+              || (view.state.doc !== initialDoc && view.state.doc !== lastFallbackDoc)
+            ) {
               return;
             }
 
@@ -108,9 +113,18 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
               key: "Backspace",
               keyCode: 8,
             });
+            const docBeforeKeyDown = view.state.doc;
             const handled = view.someProp("handleKeyDown", (handler) => (
               handler(view, backspaceEvent) || undefined
             ));
+
+            if (view.state.doc !== docBeforeKeyDown) {
+              // A queued burst may share one initial snapshot. Record changes
+              // made by an earlier fallback so each event still gets exactly
+              // one recovery attempt without mistaking native input for ours.
+              lastFallbackDoc = view.state.doc;
+              return;
+            }
 
             if (handled) {
               return;
@@ -130,6 +144,7 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
                   .delete(selection.from - nodeBefore.nodeSize, selection.from)
                   .scrollIntoView(),
               );
+              lastFallbackDoc = view.state.doc;
               return;
             }
 
@@ -151,6 +166,7 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
                 .delete(selection.from - graphemeLength, selection.from)
                 .scrollIntoView(),
             );
+            lastFallbackDoc = view.state.doc;
           }, 60);
 
           pendingFallbacks.add(timeoutId);
@@ -169,6 +185,7 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
           }
 
           pendingFallbacks.clear();
+          lastFallbackDoc = null;
         },
       };
     },

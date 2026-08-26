@@ -25,20 +25,32 @@ async function dispatchNoMutationBackspace(
   id: string,
   page: Page,
   target: "code-mirror" | "prosemirror" = "prosemirror",
+  count = 1,
 ) {
   const cdp = await context.newCDPSession(page);
   const selector = `[data-e2e-editor="${id}"] ${target === "code-mirror" ? ".cm-content" : ".ProseMirror"}`;
   const result = await cdp.send("Runtime.evaluate", {
-    expression: `(() => {
-      const target = document.querySelector(${JSON.stringify(selector)});
-      if (!(target instanceof HTMLElement)) throw new Error("Android editor target missing.");
-      const event = new InputEvent("beforeinput", {
-        bubbles: true,
-        cancelable: true,
-        inputType: "deleteContentBackward",
-      });
-      target.dispatchEvent(event);
-      return { defaultPrevented: event.defaultPrevented, userAgent: navigator.userAgent };
+    awaitPromise: true,
+    expression: `(async () => {
+      const events = [];
+      for (let index = 0; index < ${count}; index += 1) {
+        const target = document.querySelector(${JSON.stringify(selector)});
+        if (!(target instanceof HTMLElement)) throw new Error("Android editor target missing.");
+        const event = new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          inputType: "deleteContentBackward",
+        });
+        target.dispatchEvent(event);
+        events.push(event);
+        if (index + 1 < ${count}) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      }
+      return {
+        defaultPrevented: events.some((event) => event.defaultPrevented),
+        userAgent: navigator.userAgent,
+      };
     })()`,
     returnByValue: true,
   });
@@ -75,6 +87,22 @@ test("@required Android CDP fallback deletes complete grapheme clusters", async 
     await settleEditor(labPage, id);
     expect(await getMarkdown(labPage, id)).toBe(value);
   }
+
+  const burst = "A😀👩‍💻é👍🏽🇨🇳";
+  await resetEditor(labPage, id, burst);
+  expect(await labPage.evaluate(
+    ({ editorId, text }) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, text, "end"),
+    { editorId: id, text: burst },
+  )).toBe(true);
+  await dispatchNoMutationBackspace(context, id, labPage, "prosemirror", 3);
+  await expect.poll(() => getMarkdown(labPage, id)).toBe("A😀👩‍💻");
+
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(burst);
 });
 
 test("@required Android CDP fallback preserves structural Backspace commands", async ({
