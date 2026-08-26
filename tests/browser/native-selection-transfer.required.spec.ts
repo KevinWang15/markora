@@ -28,6 +28,9 @@ async function dragPointer(
   start: PointerPoint,
   target: PointerPoint,
 ) {
+  const distance = Math.hypot(target.x - start.x, target.y - start.y);
+  const steps = Math.max(30, Math.min(120, Math.ceil(distance / 4)));
+
   if (cdp) {
     await cdp.send("Input.dispatchMouseEvent", {
       button: "none",
@@ -44,8 +47,8 @@ async function dragPointer(
       x: start.x,
       y: start.y,
     });
-    for (let step = 1; step <= 30; step += 1) {
-      const progress = step / 30;
+    for (let step = 1; step <= steps; step += 1) {
+      const progress = step / steps;
       await cdp.send("Input.dispatchMouseEvent", {
         button: "left",
         buttons: 1,
@@ -67,7 +70,7 @@ async function dragPointer(
 
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
-  await page.mouse.move(target.x, target.y, { steps: 30 });
+  await page.mouse.move(target.x, target.y, { steps });
   await page.mouse.up();
 }
 
@@ -567,6 +570,185 @@ test("@required native rich-text drag copies literal text into passive nested co
   ), id)).toBe(true);
   await settleEditor(labPage, id);
   expect(await getMarkdown(labPage, id)).toBe(expected);
+
+  await cdp?.detach();
+});
+
+test("@required native active-code drag moves one plain selection inside CodeMirror", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(
+    browserName === "webkit",
+    "Playwright WebKit does not synthesize dragstart from a live active-CodeMirror text selection.",
+  );
+  const id = "native-active-code-internal";
+  const original = [
+    "```text",
+    "alpha CODE omega",
+    "```",
+  ].join("\n");
+  const expected = [
+    "```text",
+    "alpha  omegaCODE",
+    "```",
+  ].join("\n");
+  await mountEditor(labPage, { id, markdown: original, root: "shadow" });
+  const code = editorLocator(labPage, id).locator(".cm-content");
+  await code.click();
+  await settleEditor(labPage, id);
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, id, "CODE", 3, "after", ".cm-content"),
+    await textPoint(labPage, id, "CODE", 0, "before", ".cm-content"),
+  );
+  await settleEditor(labPage, id);
+  const selected = await snapshotEditor(labPage, id);
+  expect(selected.selection.to - selected.selection.from).toBe("CODE".length);
+  await armNativeDragCapture(labPage, id);
+
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, id, "CODE", 1, "before", ".cm-content"),
+    await textPoint(labPage, id, "omega", 4, "after", ".cm-content"),
+  );
+  await settleEditor(labPage, id);
+
+  const dragEvents = await readNativeDragCapture(labPage);
+  expect(await getMarkdown(labPage, id), JSON.stringify(dragEvents)).toBe(expected);
+  const dragstart = dragEvents.filter(({ type }) => type === "dragstart");
+  expect(dragstart).toHaveLength(1);
+  expect(new Set(dragstart[0]?.types.filter((type) => !type.startsWith("text/_moz_"))))
+    .toEqual(new Set(["text/html", "text/plain"]));
+  expect(dragstart[0]?.plain).toBe("CODE");
+  expect(dragstart[0]?.html).toContain("CODE");
+  const drop = dragEvents.filter(({ type }) => type === "drop");
+  expect(drop).toHaveLength(1);
+  expect(drop[0]?.defaultPrevented).toBe(true);
+  expect(dragEvents.every(({ isTrusted }) => isTrusted)).toBe(true);
+  const moved = await snapshotEditor(labPage, id);
+  expect(moved.codeMirrorFocused).toBe(true);
+  expect(moved.prosemirrorFocused).toBe(false);
+  expect(moved.selection.to - moved.selection.from).toBe("CODE".length);
+
+  await labPage.keyboard.press("ControlOrMeta+Z");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(original);
+  await labPage.keyboard.press("ControlOrMeta+Shift+Z");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(expected);
+
+  await cdp?.detach();
+});
+
+test("@required native active-code drag copies between editors with isolated history", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(
+    browserName === "webkit",
+    "Playwright WebKit does not synthesize dragstart from a live active-CodeMirror text selection.",
+  );
+  const sourceId = "native-active-code-cross-source";
+  const destinationId = "native-active-code-cross-destination";
+  const source = [
+    "```text",
+    "alpha CODE omega",
+    "```",
+  ].join("\n");
+  const destination = [
+    "```text",
+    "target Z",
+    "```",
+  ].join("\n");
+  const expectedDestination = [
+    "```text",
+    "target ZCODE",
+    "```",
+  ].join("\n");
+  await mountEditor(labPage, { id: sourceId, markdown: source, root: "shadow" });
+  await mountEditor(labPage, {
+    id: destinationId,
+    markdown: destination,
+    root: "shadow",
+  });
+  const sourceCode = editorLocator(labPage, sourceId).locator(".cm-content");
+  const destinationCode = editorLocator(labPage, destinationId).locator(".cm-content");
+  await destinationCode.click();
+  await sourceCode.click();
+  await settleEditor(labPage, sourceId);
+  await settleEditor(labPage, destinationId);
+  expect((await snapshotEditor(labPage, sourceId)).codeBlocks.active).toBe(1);
+  expect((await snapshotEditor(labPage, destinationId)).codeBlocks.active).toBe(1);
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, sourceId, "CODE", 3, "after", ".cm-content"),
+    await textPoint(labPage, sourceId, "CODE", 0, "before", ".cm-content"),
+  );
+  await settleEditor(labPage, sourceId);
+  const selected = await snapshotEditor(labPage, sourceId);
+  expect(selected.selection.to - selected.selection.from).toBe("CODE".length);
+  expect(await sourceCode.evaluate((element) => {
+    const root = element.getRootNode() as Document | (ShadowRoot & {
+      getSelection?: Document["getSelection"];
+    });
+    const selection = root.getSelection?.() ?? element.ownerDocument.getSelection();
+    return selection?.toString() ?? "";
+  })).toBe("CODE");
+  await armNativeDragCapture(labPage, sourceId);
+  await armNativeDragCapture(labPage, destinationId);
+
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, sourceId, "CODE", 1, "before", ".cm-content"),
+    await textPoint(labPage, destinationId, "target Z", 7, "after", ".cm-content"),
+  );
+  await settleEditor(labPage, sourceId);
+  await settleEditor(labPage, destinationId);
+
+  const dragEvents = await readNativeDragCapture(labPage);
+  expect(await getMarkdown(labPage, sourceId), JSON.stringify(dragEvents)).toBe(source);
+  expect(await getMarkdown(labPage, destinationId), JSON.stringify(dragEvents))
+    .toBe(expectedDestination);
+  const dragstart = dragEvents.filter(({ editorId, type }) => (
+    editorId === sourceId && type === "dragstart"
+  ));
+  expect(dragstart).toHaveLength(1);
+  expect(new Set(dragstart[0]?.types.filter((type) => !type.startsWith("text/_moz_"))))
+    .toEqual(new Set(["text/html", "text/plain"]));
+  expect(dragstart[0]?.plain).toBe("CODE");
+  expect(dragstart[0]?.html).toContain("CODE");
+  const drop = dragEvents.filter(({ editorId, type }) => (
+    editorId === destinationId && type === "drop"
+  ));
+  expect(drop).toHaveLength(1);
+  expect(drop[0]?.defaultPrevented).toBe(true);
+  expect(dragEvents.every(({ isTrusted }) => isTrusted)).toBe(true);
+  const inserted = await snapshotEditor(labPage, destinationId);
+  expect(inserted.codeMirrorFocused).toBe(true);
+  expect(inserted.prosemirrorFocused).toBe(false);
+  expect(inserted.selection.to - inserted.selection.from).toBe("CODE".length);
+
+  await labPage.keyboard.press("ControlOrMeta+Z");
+  await settleEditor(labPage, destinationId);
+  expect(await getMarkdown(labPage, destinationId)).toBe(destination);
+  expect(await getMarkdown(labPage, sourceId)).toBe(source);
+  await labPage.keyboard.press("ControlOrMeta+Shift+Z");
+  await settleEditor(labPage, destinationId);
+  expect(await getMarkdown(labPage, destinationId)).toBe(expectedDestination);
+  expect(await getMarkdown(labPage, sourceId)).toBe(source);
 
   await cdp?.detach();
 });
