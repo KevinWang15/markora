@@ -122,6 +122,26 @@ export function renderCanonicalMarkdownList(
   listState.inTightList = previousTight;
 }
 
+/** @internal Avoid blank separators between blocks in a tight list item. */
+export function renderCanonicalMarkdownListItem(
+  state: MarkdownSerializerState,
+  node: ProseMirrorNode,
+) {
+  const listState = state as MarkdownListSerializerState;
+
+  node.forEach((child, _offset, index) => {
+    if (index > 0 && listState.inTightList) {
+      const closed = listState.closed;
+      listState.flushClose(1);
+      if (closed?.type === child.type) {
+        listState.closed = closed;
+      }
+    }
+
+    state.render(child, node, index);
+  });
+}
+
 // Markdown-it counts both list and list-item containers, so this admits 127
 // recursively nested list items. Keep a separate parser ceiling above the
 // product limit: if hostile input reaches Markdown-it's recursion guard, the

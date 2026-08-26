@@ -32,6 +32,7 @@ import {
   orderedMarkdownListTokenAttrs,
   registerMarkdownEditorTokenizerRules,
   renderCanonicalMarkdownList,
+  renderCanonicalMarkdownListItem,
   selectCanonicalMarkdownListMarker,
   wrapMarkdownEditorExtensionRuntimeCallback,
 } from "./markdownContributionCompiler";
@@ -53,6 +54,7 @@ import {
   EntitySafeMarkdownSerializer,
   escapeMarkdownEntityReferences,
   flattenMarkdownImageDescription,
+  normalizeExpelledMarkdownWhitespace,
   serializeEntitySafeMarkdownImage,
   serializeEntitySafeMarkdownText,
 } from "./markdownTextSerialization";
@@ -338,11 +340,19 @@ export function createMinimalMarkdownCodec(
   });
   const serializerNodes: Record<string, (typeof defaultMarkdownSerializer.nodes)[string]> = {
     ...defaultMarkdownSerializer.nodes,
-    text(state: MarkdownSerializerState, node: ProseMirrorNode) {
+    text(
+      state: MarkdownSerializerState,
+      node: ProseMirrorNode,
+      parent: ProseMirrorNode,
+      index: number,
+    ) {
       serializeEntitySafeMarkdownText(
         state,
         node,
         tokenizer.utils.unescapeAll,
+        undefined,
+        undefined,
+        parent.type.name === "heading" && index === parent.childCount - 1,
       );
     },
     image(state: MarkdownSerializerState, node: ProseMirrorNode) {
@@ -356,6 +366,7 @@ export function createMinimalMarkdownCodec(
       const bullet = selectCanonicalMarkdownListMarker(state, node, "*", "-");
       renderCanonicalMarkdownList(state, node, "  ", () => `${bullet} `);
     },
+    list_item: renderCanonicalMarkdownListItem,
     code_block: serializeCodeBlock,
     ordered_list(state: MarkdownSerializerState, node: ProseMirrorNode) {
       const delimiter = selectCanonicalMarkdownListMarker(state, node, ".", ")");
@@ -475,7 +486,7 @@ export function createMinimalMarkdownCodec(
 
   const parser = new MarkdownParser(schema, tokenizer, parserTokens);
   const escapeExtraCharacters = combineMarkdownSerializerEscapePatterns(
-    [],
+    [/<(?=\/?[A-Za-z]|[!?])/g],
     extensions.map(({ definition }) => (
       definition.markdown?.serializer?.escapeExtraCharacters
     )),
@@ -486,6 +497,9 @@ export function createMinimalMarkdownCodec(
     escapeExtraCharacters ? { escapeExtraCharacters } : {},
     tokenizer.utils.unescapeAll,
   );
+  const expellableMarkNames = new Set(Object.entries(serializerMarks)
+    .filter(([, serializer]) => serializer.expelEnclosingWhitespace)
+    .map(([name]) => name));
   const parse = (markdown: string) => {
     if (!markdown.trim()) {
       return schema.topNodeType.createAndFill();
@@ -495,7 +509,10 @@ export function createMinimalMarkdownCodec(
       markdown,
       createMarkdownEditorSourceEnvironment(markdown),
     );
-    return sanitizeNode(schema, resources, parsed) ?? schema.topNodeType.createAndFill();
+    const sanitized = sanitizeNode(schema, resources, parsed) ?? schema.topNodeType.createAndFill();
+    return sanitized
+      ? normalizeExpelledMarkdownWhitespace(sanitized, expellableMarkNames)
+      : sanitized;
   };
 
   return Object.freeze({

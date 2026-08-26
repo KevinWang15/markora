@@ -36,14 +36,14 @@ Syntax outside both the supported dialect and the recognized opaque shapes can s
 | Construct | Accepted forms | Fidelity and limits |
 | --- | --- | --- |
 | Paragraphs and plain text | CommonMark paragraph text | Semantic round-trip for text content. Soft source line breaks become spaces, and surrounding block whitespace normalizes. Entity-looking literal text is escaped when needed so a later parse cannot decode it, while entity-produced tabs, line feeds, carriage returns, and non-ASCII whitespace use numeric references when raw source characters would change structure or be trimmed. |
-| Headings | ATX levels 1–6 and Setext headings | Normalized to ATX `#` markers without optional closing hashes. |
+| Headings | ATX levels 1–6 and Setext headings | Normalized to ATX `#` markers without optional closing hashes. Literal trailing hashes are escaped so they cannot become a closing-hash sequence on reset. |
 | Blockquotes | CommonMark `>` blocks with supported child blocks | Normalized marker layout. Soft line breaks inside a paragraph become spaces. |
 | Thematic breaks | CommonMark asterisk, hyphen, or underscore forms | Normalized to `---`. |
-| Bullet lists | Ordinary lists using CommonMark bullet markers, including supported nested blocks | Normalized to `*` markers, alternating with `-` only where needed to retain a boundary between adjacent list nodes. A pure list chain supports up to 127 recursively nested items; combined block containers share the same bounded structural-depth budget. Deeper input throws `RangeError` instead of returning partial content. |
+| Bullet lists | Ordinary lists using CommonMark bullet markers, including supported nested blocks | Normalized to `*` markers, alternating with `-` only where needed to retain a boundary between adjacent list nodes. Tight items with blockquotes or multiple supported blocks retain tight-list structure. A pure list chain supports up to 127 recursively nested items; combined block containers share the same bounded structural-depth budget. Deeper input throws `RangeError` instead of returning partial content. |
 | Ordered lists | Period or parenthesis delimiters with a start of 0 or greater | Normalized to period delimiters and explicit sequential numbering, alternating with parenthesis delimiters only where needed to retain a boundary between adjacent list nodes. |
 | Task lists | A literal `[ ]`, `[x]`, or `[X]` marker at the start of a bullet-list item, including empty, nested, and supported multi-block items | Normalized to `* [ ]` and `* [x]` with two-space continuation indentation. Escaped brackets and entity-decoded bracket text remain ordinary list content rather than becoming interactive tasks. Supported nested lists, paragraphs, and code blocks round-trip semantically within the shared structural-depth budget. |
 | Code blocks | Indented blocks and backtick or tilde fences, with an optional info string | Code text and the complete normalized info string are semantic content. Surrounding info whitespace is trimmed on import and command input. Output uses a fence longer than delimiter runs in the body, choosing tildes when the info contains a backtick; the original fence character and length are otherwise not retained. NUL/CR/LF cannot occur in info, and raw NUL/CR code text injected through advanced transactions cannot be serialized exactly. |
-| Emphasis and strong | CommonMark `*`/`_` and `**`/`__` forms | Normalized to `*emphasis*` and `**strong**`. |
+| Emphasis and strong | CommonMark `*`/`_` and `**`/`__` forms | Normalized to `*emphasis*` and `**strong**`. Crossing delimiter runs canonicalize into non-crossing runs; visually inert boundary whitespace moves outside changing emphasis/strong marks when needed to preserve every visible mark span across reset. |
 | Inline code | CommonMark code spans | Code text is semantic content; delimiter length and padding normalize as needed. |
 | Strikethrough | An exact `~~text~~` delimiter pair | Normalized to `~~` markers. Single tildes remain escaped literal text, while runs of three or more tildes remain literal and serialize without escapes in ordinary inline positions. A block-leading long run stays escaped when needed to prevent it from becoming a tilde code fence. |
 | Hard breaks | Backslash or two-space line breaks | Normalized to a backslash followed by LF. A soft line break is not a hard break. |
@@ -458,13 +458,9 @@ Opaque raw HTML is not executed by the editor because its source is rendered onl
 
 Even a supported construct must stay within the shapes listed above:
 
-- table cells must remain unmerged and contain supported inline content in one paragraph; merged, multi-block, and HTML row-header structures are reported but do not round-trip as pipe-table structure;
-- heading text that ends in an authored escaped hash can normalize into a CommonMark closing-hash sequence and lose those trailing hashes after another parse;
-- a tight list whose non-final item contains a blockquote or multiple non-paragraph blocks can normalize into a loose list after another parse;
-- crossing emphasis/strong delimiter layouts represented by CommonMark examples 418, 430, and 432 can lose part of their mark structure after serialization;
-- the minimal entry can promote the escaped email-like angle text in CommonMark example 606 to an autolink after serialization; root compatibility escapes this boundary safely.
+- table cells must remain unmerged and contain supported inline content in one paragraph; merged, multi-block, and HTML row-header structures are reported but do not round-trip as pipe-table structure.
 
-These limitations are outside the semantic round-trip promise. They are candidates for conformance coverage and later editor work, not implicit extensions of the dialect.
+This limitation is outside the semantic round-trip promise. It is a candidate for later editor work, not an implicit extension of the dialect.
 
 ## Host integration rules
 

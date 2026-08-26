@@ -64,15 +64,6 @@ function audit(codec: MarkdownEditorCodec) {
   return failures;
 }
 
-const sharedReviewedFailures: AuditFailure[] = [
-  { example: 76, section: "ATX headings", semanticStable: false, serializationIdempotent: false },
-  { example: 320, section: "Lists", semanticStable: false, serializationIdempotent: false },
-  { example: 321, section: "Lists", semanticStable: false, serializationIdempotent: false },
-  { example: 418, section: "Emphasis and strong emphasis", semanticStable: false, serializationIdempotent: false },
-  { example: 430, section: "Emphasis and strong emphasis", semanticStable: false, serializationIdempotent: false },
-  { example: 432, section: "Emphasis and strong emphasis", semanticStable: false, serializationIdempotent: false },
-];
-
 describe("full CommonMark 0.31.2 semantic-stability audit", () => {
   it("retains the complete attributed 652-example source fixture", () => {
     expect(fixture).toMatchObject({
@@ -89,19 +80,11 @@ describe("full CommonMark 0.31.2 semantic-stability audit", () => {
     );
   });
 
-  it("keeps every root result stable except the explicitly reviewed remaining cases", () => {
-    expect(audit(createCompatibilityMarkdownCodec())).toEqual(sharedReviewedFailures);
+  it("keeps every root result semantically stable and serialization-idempotent", () => {
+    expect(audit(createCompatibilityMarkdownCodec())).toEqual([]);
   });
 
-  it("keeps every minimal result stable except the explicitly reviewed remaining cases", () => {
-    expect(audit(createMinimalMarkdownCodec())).toEqual([
-      ...sharedReviewedFailures,
-      {
-        example: 606,
-        section: "Autolinks",
-        semanticStable: false,
-        serializationIdempotent: false,
-      },
-    ]);
+  it("keeps every minimal result semantically stable and serialization-idempotent", () => {
+    expect(audit(createMinimalMarkdownCodec())).toEqual([]);
   });
 });

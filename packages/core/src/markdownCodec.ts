@@ -25,6 +25,7 @@ import {
   orderedMarkdownListTokenAttrs,
   registerMarkdownEditorTokenizerRules,
   renderCanonicalMarkdownList,
+  renderCanonicalMarkdownListItem,
   selectCanonicalMarkdownListMarker,
   wrapMarkdownEditorExtensionRuntimeCallback,
 } from "./markdownContributionCompiler";
@@ -53,6 +54,7 @@ import {
   encodeMarkdownAttributeText,
   escapeMarkdownEntityReferences,
   flattenMarkdownImageDescription,
+  normalizeExpelledMarkdownWhitespace,
   serializeEntitySafeMarkdownImage,
   serializeEntitySafeMarkdownText,
 } from "./markdownTextSerialization";
@@ -1005,7 +1007,12 @@ const serializerNodes: Record<
   (typeof defaultMarkdownSerializer.nodes)[string]
 > = {
     ...defaultMarkdownSerializer.nodes,
-    text(state: MarkdownSerializerState, node: ProseMirrorNode) {
+    text(
+      state: MarkdownSerializerState,
+      node: ProseMirrorNode,
+      parent: ProseMirrorNode,
+      index: number,
+    ) {
       const runtime = state as MarkdownSerializerStateRuntime;
       let source = node.text ?? "";
 
@@ -1023,6 +1030,7 @@ const serializerNodes: Record<
         markdownTokenizer.utils.unescapeAll,
         !runtime.inAutolink,
         source,
+        parent.type.name === "heading" && index === parent.childCount - 1,
       );
       runtime.escapeBareAutolinks = false;
     },
@@ -1097,6 +1105,7 @@ const serializerNodes: Record<
 
       listState.inTightList = previousTight;
     },
+    list_item: renderCanonicalMarkdownListItem,
     ordered_list(state: MarkdownSerializerState, node: ProseMirrorNode) {
       const delimiter = selectCanonicalMarkdownListMarker(state, node, ".", ")");
       const start = Number.isSafeInteger(node.attrs.order) ? node.attrs.order : 1;
@@ -1281,6 +1290,9 @@ const markdownSerializer = new CompatibilityMarkdownSerializer(serializerNodes, 
     definition.markdown?.serializer?.escapeExtraCharacters
   ))),
 }, markdownTokenizer.linkify, markdownTokenizer.utils.unescapeAll);
+const expellableMarkNames = new Set(Object.entries(serializerMarks)
+  .filter(([, serializer]) => serializer.expelEnclosingWhitespace)
+  .map(([name]) => name));
 
 function stripTaskPrefixFromInline(fragment: Fragment, count: number) {
   let remaining = count;
@@ -1461,9 +1473,12 @@ function parseMarkdown(markdown: string) {
     return schema.topNodeType.createAndFill();
   }
 
-  return sanitizeImportedDoc(normalizeTaskListNode(
-    markdownParser.parse(markdown, createMarkdownEditorSourceEnvironment(markdown)),
-  ));
+  return normalizeExpelledMarkdownWhitespace(
+    sanitizeImportedDoc(normalizeTaskListNode(
+      markdownParser.parse(markdown, createMarkdownEditorSourceEnvironment(markdown)),
+    )),
+    expellableMarkNames,
+  );
 }
 
 function createImportedContentSanitizerPlugin() {

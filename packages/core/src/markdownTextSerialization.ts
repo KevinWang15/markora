@@ -3,11 +3,16 @@ import {
   MarkdownSerializer,
   MarkdownSerializerState,
 } from "prosemirror-markdown";
-import type { Node as ProseMirrorNode } from "prosemirror-model";
+import {
+  Fragment,
+  Mark,
+  type Node as ProseMirrorNode,
+} from "prosemirror-model";
 
 type MarkdownEntityDecoder = (source: string) => string;
 
 type MarkdownSerializerStateRuntime = MarkdownSerializerState & {
+  escapeTrailingHeadingHashes?: boolean;
   inAutolink?: boolean;
   out: string;
 };
@@ -82,10 +87,18 @@ export function createEntitySafeMarkdownSerializerState(
   const state = new MarkdownSerializerStateRuntimeConstructor(nodes, marks, options);
   const baseEscape = state.esc.bind(state);
 
-  state.esc = (source: string, startOfLine = false) => encodeMarkdownAttributeText(
-    baseEscape(source, startOfLine),
-    unescapeAll,
-  );
+  state.esc = (source: string, startOfLine = false) => {
+    let escaped = encodeMarkdownAttributeText(
+      baseEscape(source, startOfLine),
+      unescapeAll,
+    );
+
+    if (state.escapeTrailingHeadingHashes) {
+      escaped = escaped.replace(/(#+)([ \t]*)$/u, "\\$1$2");
+    }
+
+    return escaped;
+  };
   return state;
 }
 
@@ -95,29 +108,183 @@ export function serializeEntitySafeMarkdownText(
   unescapeAll: MarkdownEntityDecoder,
   escape = !(state as MarkdownSerializerStateRuntime).inAutolink,
   source = node.text ?? "",
+  escapeTrailingHeadingHashes = false,
 ) {
+  const runtime = state as MarkdownSerializerStateRuntime;
+  const previousEscapeTrailingHeadingHashes = runtime.escapeTrailingHeadingHashes;
+  runtime.escapeTrailingHeadingHashes = escapeTrailingHeadingHashes;
   let cursor = 0;
 
-  for (let index = source.indexOf("\n"); index >= 0; index = source.indexOf("\n", cursor)) {
-    if (index > cursor) {
-      const segment = source.slice(cursor, index);
+  try {
+    for (let index = source.indexOf("\n"); index >= 0; index = source.indexOf("\n", cursor)) {
+      if (index > cursor) {
+        const segment = source.slice(cursor, index);
+        state.text(
+          escape ? segment : escapeMarkdownEntityReferences(segment, unescapeAll),
+          escape,
+        );
+      }
+
+      state.text("&#10;", false);
+      cursor = index + 1;
+    }
+
+    if (cursor < source.length) {
+      const segment = source.slice(cursor);
       state.text(
         escape ? segment : escapeMarkdownEntityReferences(segment, unescapeAll),
         escape,
       );
     }
+  } finally {
+    runtime.escapeTrailingHeadingHashes = previousEscapeTrailingHeadingHashes;
+  }
+}
 
-    state.text("&#10;", false);
-    cursor = index + 1;
+function withoutExpellableMarks(
+  marks: readonly Mark[],
+  expellableMarkNames: ReadonlySet<string>,
+) {
+  return marks.filter(mark => !expellableMarkNames.has(mark.type.name));
+}
+
+function hasCrossingExpellableMarkRuns(
+  children: readonly ProseMirrorNode[],
+  expellableMarkNames: ReadonlySet<string>,
+) {
+  const marks: Mark[] = [];
+
+  for (const child of children) {
+    for (const mark of child.marks) {
+      if (
+        expellableMarkNames.has(mark.type.name)
+        && !marks.some(candidate => candidate.eq(mark))
+      ) {
+        marks.push(mark);
+      }
+    }
   }
 
-  if (cursor < source.length) {
-    const segment = source.slice(cursor);
-    state.text(
-      escape ? segment : escapeMarkdownEntityReferences(segment, unescapeAll),
-      escape,
-    );
+  const runs = marks.flatMap((mark) => {
+    const result: Array<{ start: number; end: number }> = [];
+    let start = -1;
+
+    children.forEach((child, index) => {
+      const present = mark.isInSet(child.marks);
+      if (present && start < 0) {
+        start = index;
+      } else if (!present && start >= 0) {
+        result.push({ start, end: index - 1 });
+        start = -1;
+      }
+    });
+
+    if (start >= 0) {
+      result.push({ start, end: children.length - 1 });
+    }
+
+    return result;
+  });
+
+  return runs.some((left, leftIndex) => runs.slice(leftIndex + 1).some(right => (
+    (left.start < right.start && right.start <= left.end && left.end < right.end)
+    || (right.start < left.start && left.start <= right.end && right.end < left.end)
+  )));
+}
+
+function hasLeadingWhitespaceAfterExpellableMarkReduction(
+  children: readonly ProseMirrorNode[],
+  expellableMarkNames: ReadonlySet<string>,
+) {
+  return children.some((child, index) => {
+    const previous = children[index - 1];
+    if (!previous || !child.isText || !/^\s/u.test(child.text ?? "")) {
+      return false;
+    }
+
+    const runStart = (mark: Mark) => {
+      let start = index - 1;
+      while (start > 0 && mark.isInSet(children[start - 1]!.marks)) {
+        start -= 1;
+      }
+      return start;
+    };
+    const removed = previous.marks.filter(mark => (
+      expellableMarkNames.has(mark.type.name) && !mark.isInSet(child.marks)
+    ));
+    const retained = child.marks.filter(mark => expellableMarkNames.has(mark.type.name));
+
+    return removed.some(removedMark => retained.some(retainedMark => (
+      runStart(removedMark) === runStart(retainedMark)
+    )));
+  });
+}
+
+/**
+ * Align parsed inline whitespace with ProseMirror Markdown's serializer policy.
+ * Marked whitespace at a changing delimiter boundary cannot always be represented
+ * without crossing Markdown delimiters, so retain it as unformatted whitespace.
+ */
+export function normalizeExpelledMarkdownWhitespace(
+  node: ProseMirrorNode,
+  expellableMarkNames: ReadonlySet<string>,
+): ProseMirrorNode {
+  if (node.isLeaf || node.isText) {
+    return node;
   }
+
+  const children: ProseMirrorNode[] = [];
+  node.forEach((child) => {
+    children.push(normalizeExpelledMarkdownWhitespace(child, expellableMarkNames));
+  });
+
+  if (
+    node.inlineContent
+    && expellableMarkNames.size > 0
+    && (
+      hasCrossingExpellableMarkRuns(children, expellableMarkNames)
+      || hasLeadingWhitespaceAfterExpellableMarkReduction(children, expellableMarkNames)
+    )
+  ) {
+    const normalized: ProseMirrorNode[] = [];
+
+    children.forEach((child, index) => {
+      if (!child.isText || !child.marks.some(mark => expellableMarkNames.has(mark.type.name))) {
+        normalized.push(child);
+        return;
+      }
+
+      const source = child.text ?? "";
+      const previous = children[index - 1];
+      const next = children[index + 1];
+      const stripLeading = !previous || !Mark.sameSet(previous.marks, child.marks);
+      const stripTrailing = !next || !Mark.sameSet(next.marks, child.marks);
+      const leadingLength = stripLeading ? source.match(/^\s+/u)?.[0].length ?? 0 : 0;
+      const trailingLength = stripTrailing ? source.match(/\s+$/u)?.[0].length ?? 0 : 0;
+      const trailingStart = Math.max(leadingLength, source.length - trailingLength);
+      const plainMarks = withoutExpellableMarks(child.marks, expellableMarkNames);
+
+      if (leadingLength === 0 && trailingLength === 0) {
+        normalized.push(child);
+        return;
+      }
+
+      if (leadingLength > 0) {
+        normalized.push(child.type.schema.text(source.slice(0, leadingLength), plainMarks));
+      }
+      if (trailingStart > leadingLength) {
+        normalized.push(child.type.schema.text(source.slice(leadingLength, trailingStart), child.marks));
+      }
+      if (trailingStart < source.length) {
+        normalized.push(child.type.schema.text(source.slice(trailingStart), plainMarks));
+      }
+    });
+
+    return node.type.create(node.attrs, Fragment.fromArray(normalized), node.marks);
+  }
+
+  const content = Fragment.fromArray(children);
+  return content.eq(node.content) ? node : node.copy(content);
 }
 
 export function serializeEntitySafeMarkdownImage(

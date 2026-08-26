@@ -1167,9 +1167,18 @@ and complete image descriptions no longer truncate to their first tokenizer
 child. Each boundary has production Shadow DOM coverage with real Chromium
 DevTools Protocol input plus Firefox/WebKit reset verification.
 
-Verification for this entity-stability increment passes 1,487 unit/integration
-tests and every build, declaration, API, ESM, extension, and browser-type gate.
-The complete required production-browser matrix passes 557 cases with 79
+The final CommonMark stability exceptions are also closed in both codecs.
+Trailing heading hashes remain literal, tight multi-block list items stay
+tight, crossing emphasis/strong runs canonicalize without losing visible mark
+spans, and escaped email-like angle text cannot become an autolink. The full
+652-example audit now has zero semantic-stability or serializer-idempotence
+exceptions for both root and minimal, with production Shadow DOM edit/reset
+coverage using Chromium DevTools Protocol input.
+
+Verification for this final CommonMark-stability increment passes 1,498
+unit/integration tests and every build, declaration, API, ESM, extension, and
+browser-type gate.
+The complete required production-browser matrix passes 560 cases with 79
 intentional capability skips across Chromium, Firefox, and WebKit. Package
 smoke and the core plus all-seven performance/memory budgets through 1 MiB pass
 with zero retained nodes, listeners, or documents; advisory timing warnings

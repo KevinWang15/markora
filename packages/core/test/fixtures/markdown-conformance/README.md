@@ -9,10 +9,10 @@ The specification content is licensed under [CC BY-SA 4.0](https://creativecommo
 
 `commonmark-0.31.2.json` additionally retains the Markdown input and section
 metadata for all 652 examples from the attributed CommonMark 0.31.2
-`spec.json`. The full audit requires semantic and serializer stability for every
-example except a short, explicitly reviewed failure list. This is a robustness
-boundary, not a claim that every stable example belongs to Markora's supported
-dialect.
+`spec.json`. The full audit requires semantic and serializer stability for all
+652 examples in both the root compatibility and minimal codecs, with no
+exception list. This is a robustness boundary, not a claim that every stable
+example belongs to Markora's supported dialect.
 
 This is a representative characterization suite for Markora's published dialect, not a claim of complete CommonMark or GFM compliance. `supported-normalized`, `security-normalized`, `boundary-characterized`, and `unsupported-characterized` cases must retain both their reviewed output and semantic stability. Each `known-limitation` explicitly declares whether semantic stability remains required or is already known to fail, so an interoperability mismatch does not hide an unrelated regression.
 
