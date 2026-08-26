@@ -364,6 +364,7 @@ type BrowserLabTestSpec = {
       | "html-comment"
       | "inline-directive"
       | "inline-html"
+      | "reference-definition"
       | "unknown-fence",
       string
     >>;

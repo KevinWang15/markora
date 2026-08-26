@@ -1,4 +1,5 @@
 import type MarkdownIt from "markdown-it";
+import markdownItReferenceRule from "markdown-it/lib/rules_block/reference.mjs";
 import type StateBlock from "markdown-it/lib/rules_block/state_block.mjs";
 import type StateCore from "markdown-it/lib/rules_core/state_core.mjs";
 import type StateInline from "markdown-it/lib/rules_inline/state_inline.mjs";
@@ -14,6 +15,7 @@ export const opaqueMarkdownKinds = [
   "directive-leaf",
   "inline-html",
   "inline-directive",
+  "reference-definition",
   "unknown-fence",
 ] as const;
 
@@ -79,6 +81,31 @@ function addOpaqueBlockToken(
     markoraOpaqueSource: getOpaqueBlockSource(state, startLine, endLine),
   } satisfies OpaqueTokenMeta;
   state.line = endLine;
+}
+
+function referenceDefinitionRule(
+  state: StateBlock,
+  startLine: number,
+  endLine: number,
+  silent: boolean,
+) {
+  const matched = markdownItReferenceRule(state, startLine, endLine, silent);
+
+  if (!matched || silent) {
+    return matched;
+  }
+
+  // Markdown-it has already registered the definition in env.references and
+  // advanced state.line. Its built-in rule intentionally emits no token;
+  // retain the authored definition as an inert source block as well so both
+  // used and unused definitions survive the visual editing boundary.
+  addOpaqueBlockToken(
+    state,
+    startLine,
+    state.line,
+    "reference-definition",
+  );
+  return true;
 }
 
 function frontmatterRule(state: StateBlock, startLine: number, endLine: number, silent: boolean) {
@@ -427,6 +454,7 @@ export function configureOpaqueMarkdown(tokenizer: MarkdownIt) {
   tokenizer.block.ruler.before("fence", "markora_display_math", displayMathRule, { alt: blockAlternates });
   tokenizer.block.ruler.before("fence", "markora_directive_container", directiveContainerRule, { alt: blockAlternates });
   tokenizer.block.ruler.before("fence", "markora_directive_leaf", directiveLeafRule, { alt: blockAlternates });
+  tokenizer.block.ruler.at("reference", referenceDefinitionRule);
   tokenizer.inline.ruler.before("text", "markora_inline_directive", inlineDirectiveRule);
   tokenizer.core.ruler.after("block", "markora_html_source", hydrateHtmlBlockSources);
   tokenizer.core.ruler.after("inline", "markora_inline_source", hydrateInlineSources);

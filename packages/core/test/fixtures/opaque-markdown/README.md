@@ -16,6 +16,6 @@ Inline HTML opening and closing tags are separate `inline-html` nodes so support
 
 Recognition is deliberately conservative. Front matter is recognized only at the document head. Display math must occupy a standalone line or balanced standalone delimiter lines. Autolinks take precedence over HTML, while currency, angle comparisons, time punctuation, code spans, and fenced-code bodies must not be misclassified.
 
-All CommonMark backtick and tilde fences remain supported generic code blocks even when their info strings are unknown to the syntax-highlighting registry or contain extension-style attributes. They retain the published normalized-code contract. `unknown-fence` is reserved for a future explicitly recognized non-CommonMark fenced extension; this fixture version does not invent a detector for arbitrary punctuation.
+Valid CommonMark link-reference definitions retain exact source in root compatibility while their uses resolve normally. All CommonMark backtick and tilde fences remain supported generic code blocks even when their info strings are unknown to the syntax-highlighting registry or contain extension-style attributes. They retain the published normalized-code contract. `unknown-fence` is reserved for a future explicitly recognized non-CommonMark fenced extension; this fixture version does not invent a detector for arbitrary punctuation.
 
 Raw HTML is source only. Tests and NodeViews must display it using text nodes or `textContent`; no fixture source may be parsed into DOM elements or executed.

@@ -263,6 +263,7 @@ export type LabEditorSpec = {
       | "html-comment"
       | "inline-directive"
       | "inline-html"
+      | "reference-definition"
       | "unknown-fence",
       string
     >>;

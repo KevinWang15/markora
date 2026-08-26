@@ -47,6 +47,7 @@ const DEFAULT_OPAQUE_KIND_LABELS: Readonly<Record<OpaqueMarkdownKind, string>> =
   "html-comment": "HTML comment",
   "inline-directive": "Inline directive",
   "inline-html": "Inline HTML",
+  "reference-definition": "Link reference definition",
   "unknown-fence": "Unknown fenced extension",
 });
 

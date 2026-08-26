@@ -420,6 +420,8 @@ const optionsWithUi: CreateEditorOptions = {
 };
 
 const opaqueKind: OpaqueMarkdownKind = "frontmatter";
+const referenceDefinitionKind: OpaqueMarkdownKind = "reference-definition";
+void referenceDefinitionKind;
 const optionsWithOpaqueEditor: CreateEditorOptions = {
   element: hostElement,
   onEditOpaqueMarkdown(request: OpaqueMarkdownEditRequest) {

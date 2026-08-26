@@ -1,6 +1,8 @@
 {
   "schemaVersion": 1,
-  "lexicalGuarantees": [],
+  "lexicalGuarantees": [
+    "Top-level valid CommonMark link-reference definition source is retained exactly inside each root-compatibility source block."
+  ],
   "sources": [
     {
       "id": "commonmark-0.31.2",
@@ -140,7 +142,7 @@
       "url": "https://spec.commonmark.org/0.31.2/#example-192",
       "classification": "supported-normalized",
       "input": "[foo]: /url \"title\"\n\n[foo]\n",
-      "expected": "[foo](/url \"title\")"
+      "expected": "[foo]: /url \"title\"\n\n[foo](/url \"title\")"
     },
     {
       "id": "commonmark-199",

@@ -11,9 +11,27 @@
     "directive-leaf",
     "inline-html",
     "inline-directive",
+    "reference-definition",
     "unknown-fence"
   ],
   "cases": [
+    {
+      "id": "reference-definitions-used-and-unused",
+      "classification": "opaque-block",
+      "note": "The root compatibility entry retains every valid CommonMark definition as exact inert source while ordinary reference uses resolve to canonical inline links.",
+      "input": "[unused]: https://example.com \"kept\"\n\n[used]: /target 'title'\n\nUse [label][used].\n",
+      "expected": "[unused]: https://example.com \"kept\"\n\n[used]: /target 'title'\n\nUse [label](/target \"title\").",
+      "opaqueNodes": [
+        {
+          "kind": "reference-definition",
+          "source": "[unused]: https://example.com \"kept\""
+        },
+        {
+          "kind": "reference-definition",
+          "source": "[used]: /target 'title'"
+        }
+      ]
+    },
     {
       "id": "frontmatter-basic-with-supported-neighbors",
       "classification": "opaque-block",

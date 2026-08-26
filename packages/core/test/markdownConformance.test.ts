@@ -133,11 +133,13 @@ describe('versioned Markdown conformance manifest', () => {
     }
   });
 
-  it('matches the published absence of lexical round-trip guarantees', () => {
+  it('matches the published bounded lexical round-trip guarantee', () => {
     const compatibilityContract = readFileSync(join(testDirectory, '..', 'MARKDOWN_COMPATIBILITY.md'), 'utf8');
 
-    expect(manifest.lexicalGuarantees).toEqual([]);
-    expect(compatibilityContract).toContain('| Lexical round-trip | Original bytes, markers, escapes, whitespace, and reference definitions survive. | None. |');
+    expect(manifest.lexicalGuarantees).toEqual([
+      'Top-level valid CommonMark link-reference definition source is retained exactly inside each root-compatibility source block.',
+    ]);
+    expect(compatibilityContract).toContain('| Lexical round-trip | Original bytes, markers, escapes, whitespace, and reference definitions survive. | Valid top-level CommonMark link-reference definitions in the root compatibility entry');
   });
 });
 

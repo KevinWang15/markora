@@ -43,6 +43,7 @@ describe("core editor messages", () => {
     expect(messages.imageMissingUrl).toBe("Missing image URL");
     expect(messages.opaqueKindLabels.frontmatter).toBe("Cabecera");
     expect(messages.opaqueKindLabels["html-block"]).toBe("HTML block");
+    expect(messages.opaqueKindLabels["reference-definition"]).toBe("Link reference definition");
     expect(messages.opaqueSourceLabel(Object.freeze({
       kind: "frontmatter",
       kindLabel: messages.opaqueKindLabels.frontmatter,

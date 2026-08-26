@@ -176,6 +176,7 @@ describe('versioned opaque Markdown fixture manifest', () => {
       'directive-leaf',
       'inline-html',
       'inline-directive',
+      'reference-definition',
       'unknown-fence',
     ]);
     expect(new Set(manifest.opaqueKinds).size).toBe(manifest.opaqueKinds.length);
@@ -188,10 +189,10 @@ describe('versioned opaque Markdown fixture manifest', () => {
       manifest.cases.filter((testCase) => testCase.classification === classification).length,
     ]));
 
-    expect(manifest.cases).toHaveLength(25);
+    expect(manifest.cases).toHaveLength(26);
     expect(new Set(caseIds).size).toBe(caseIds.length);
     expect(classificationCounts).toEqual({
-      'opaque-block': 13,
+      'opaque-block': 14,
       'opaque-inline': 3,
       negative: 9,
     });

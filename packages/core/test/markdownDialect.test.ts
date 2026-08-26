@@ -41,7 +41,7 @@ describe('published Markdown dialect contract', () => {
     {
       behavior: 'reference links',
       input: '[docs][guide]\n\n[guide]: /guide "Guide"',
-      expected: '[docs](/guide "Guide")',
+      expected: '[docs](/guide "Guide")\n\n[guide]: /guide "Guide"',
     },
     {
       behavior: 'escapes and entities',
@@ -105,27 +105,35 @@ describe('published Markdown dialect contract', () => {
     {
       construct: 'footnotes',
       input: 'Text[^1]\n\n[^1]: Note',
-      output: 'Text[^1](Note)',
+      output: 'Text[^1](Note)\n\n[^1]: Note',
+      opaqueNodes: [{
+        type: 'raw_block',
+        kind: 'reference-definition',
+        source: '[^1]: Note',
+      }],
     },
     {
       construct: 'inline math',
       input: 'Inline $x + y$ math',
       output: 'Inline $x + y$ math',
+      opaqueNodes: [],
     },
     {
       construct: 'GitHub callouts',
       input: '> [!NOTE]\n> Important',
       output: '> \\[!NOTE\\] Important',
+      opaqueNodes: [],
     },
     {
       construct: 'TOC markers',
       input: '[TOC]',
       output: '\\[TOC\\]',
+      opaqueNodes: [],
     },
-  ])('characterizes the unreported fallback for unsupported $construct', ({ input, output }) => {
+  ])('characterizes the unreported fallback for unsupported $construct', ({ input, output, opaqueNodes }) => {
     expect(() => parseMarkdown(input)).not.toThrow();
     expect(normalizeMarkdown(input)).toBe(output);
-    expect(collectOpaqueNodes(input)).toEqual([]);
+    expect(collectOpaqueNodes(input)).toEqual(opaqueNodes);
   });
 
   it('treats Mermaid fences as generic code blocks, not diagram syntax', () => {

@@ -7,7 +7,7 @@ Write Markdown at the speed of thought, inside your product.
 ## Features
 
 - Semantic import/edit/export for the documented Markdown dialect, with normalized serialization
-- Exact, inert source preservation for conservatively recognized front matter, display math, HTML, and directives
+- Exact, inert source preservation for valid link-reference definitions and conservatively recognized front matter, display math, HTML, and directives
 - Headings, blockquotes, lists, task items, images, code fences, and pipe tables
 - Inline marks for bold, italic, code, strike, and links
 - Exact, lightweight source-text code-fence shells with viewport-lazy CodeMirror editing
@@ -20,7 +20,7 @@ Write Markdown at the speed of thought, inside your product.
 
 ## Markdown compatibility
 
-`markdown`, `editor.commands.reconcileMarkdown()`, and `editor.commands.resetMarkdown()` are parsing boundaries. `editor.getMarkdown()` and `onChange` return normalized serialization, not the original document bytes. With the root entry's exact default compatibility preset and no matching extension, Markora retains conservatively recognized front matter, standalone display math, HTML, comments, and directives as inert opaque source atoms; other unsupported extensions may still be reinterpreted without an error. Official extension packages claim their documented forms and give them semantic behavior. Deprecated `setMarkdown()` has the same hard-reset behavior as `resetMarkdown()`.
+`markdown`, `editor.commands.reconcileMarkdown()`, and `editor.commands.resetMarkdown()` are parsing boundaries. `editor.getMarkdown()` and `onChange` return normalized serialization, not the original document bytes. With the root entry's exact default compatibility preset, Markora retains valid CommonMark link-reference definitions plus conservatively recognized front matter, standalone display math, HTML, comments, and directives as inert source atoms. Reference uses still normalize to inline links, while unused and duplicate definition source no longer disappears. Other unsupported extensions may still be reinterpreted without an error. Official extension packages claim their documented forms and give them semantic behavior. Deprecated `setMarkdown()` has the same hard-reset behavior as `resetMarkdown()`.
 
 Read the complete [Markdown dialect and fidelity contract](./MARKDOWN_COMPATIBILITY.md), which is also included in the published package.
 
