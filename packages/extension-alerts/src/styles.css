@@ -29,13 +29,16 @@
 }
 
 .mdw-alert[data-mdw-alert-kind="important"] {
-  --_mdw-alert-color: var(--mdw-alert-important-color, #8250df);
+  --_mdw-alert-color: var(
+    --mdw-alert-important-color,
+    var(--mdw-color-important, #8250df)
+  );
 }
 
 .mdw-alert[data-mdw-alert-kind="warning"] {
   --_mdw-alert-color: var(
     --mdw-alert-warning-color,
-    var(--mdw-color-warning, #9a6700)
+    var(--mdw-color-warning, #8a5900)
   );
 }
 

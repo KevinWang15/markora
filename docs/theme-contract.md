@@ -65,7 +65,7 @@ The reference values live in `markora/themes.css`; the unthemed fallback remains
 | `--mdw-color-border`, `--mdw-color-border-strong` | Ordinary and emphasized boundaries |
 | `--mdw-color-accent`, `--mdw-color-accent-strong`, `--mdw-color-accent-soft`, `--mdw-color-accent-softer` | Links, active controls, and selection surfaces |
 | `--mdw-color-focus`, `--mdw-color-focus-soft`, `--mdw-color-selection`, `--mdw-color-selection-overlay`, `--mdw-color-selection-text` | Focus and selection indicators |
-| `--mdw-color-danger`, `--mdw-color-danger-soft` | Validation and failure state |
+| `--mdw-color-success`, `--mdw-color-important`, `--mdw-color-warning`, `--mdw-color-danger`, `--mdw-color-danger-soft` | Positive, emphasized, warning, and failure state |
 | `--mdw-color-caret`, `--mdw-color-caret-contrast` | Gap, managed-block, and code caret roles |
 | `--mdw-shadow-caret`, `--mdw-shadow-subtle`, `--mdw-shadow-control`, `--mdw-shadow-overlay`, `--mdw-code-block-inset-shadow`, `--mdw-task-checked-shadow` | Elevation and contrast effects; reference contrast modes remove nonessential shadows |
 | `--mdw-syntax-keyword`, `--mdw-syntax-literal`, `--mdw-syntax-name`, `--mdw-syntax-property`, `--mdw-syntax-string`, `--mdw-syntax-comment`, `--mdw-syntax-type`, `--mdw-syntax-operator` | Code syntax roles shared by static and active code blocks |

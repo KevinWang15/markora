@@ -123,6 +123,32 @@ test("@required alerts round-trip all kinds and preserve negatives in root and m
   }
 });
 
+test("@required alert labels meet contrast in every reference theme", async ({
+  labPage,
+}) => {
+  const markdown = ["note", "tip", "important", "warning", "caution"]
+    .flatMap((kind) => [`> [!${kind}]`, `> ${kind} body.`, ""])
+    .join("\n");
+
+  for (const theme of ["light", "dark", "contrast"] as const) {
+    await mountEditor(labPage, {
+      extensionMode: "alerts",
+      id: `alerts-theme-${theme}`,
+      markdown,
+      root: "shadow",
+      theme,
+    });
+  }
+
+  const results = await new AxeBuilder({ page: labPage }).analyze();
+  expect(
+    results.violations.map(({ id: rule, nodes }) => ({
+      nodes: nodes.map(({ failureSummary, target }) => ({ failureSummary, target })),
+      rule,
+    })),
+  ).toEqual([]);
+});
+
 test("@required alert commands preserve content and are guarded, stateful, and one-step undoable", async ({
   labPage,
 }) => {
@@ -367,7 +393,12 @@ test("@required localized RTL alerts expose visible kind text, editable content,
   await expect(alert).toHaveAccessibleName("تنبيه مخصص");
 
   const results = await new AxeBuilder({ page: labPage }).analyze();
-  expect(results.violations.map(({ id: rule }) => rule)).toEqual([]);
+  expect(
+    results.violations.map(({ id: rule, nodes }) => ({
+      nodes: nodes.map(({ failureSummary, target }) => ({ failureSummary, target })),
+      rule,
+    })),
+  ).toEqual([]);
 });
 
 test("@required Chromium CDP edits alert content and copies canonical semantic data", async ({
