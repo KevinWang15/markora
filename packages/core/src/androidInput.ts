@@ -369,6 +369,15 @@ function probeNativeTextMotion(
     selection.modify(alter, direction, granularity);
     nextAnchorOffset = readProbeOffset(probe, selection.anchorNode, selection.anchorOffset);
     nextFocusOffset = readProbeOffset(probe, selection.focusNode, selection.focusOffset);
+
+    if (alter === "extend" && nextAnchorOffset !== anchorOffset) {
+      // Chromium can wrap an outward extension at an isolated probe's edge to
+      // its first character, changing both ends of the selection. Extension
+      // must preserve its anchor; reject that synthetic-probe artifact so the
+      // original event can operate on the editor's real multi-block DOM.
+      nextAnchorOffset = null;
+      nextFocusOffset = null;
+    }
   } catch {
     nextAnchorOffset = null;
     nextFocusOffset = null;
@@ -644,6 +653,26 @@ function handleNativeHorizontalNavigation(
 
   const parentStart = selection.$head.start();
   const parentText = selection.$head.parent.textContent;
+  const currentFocusOffset = selection.head - parentStart;
+  const directionNode = view.domAtPos(selection.head, 0).node;
+  const directionElement = directionNode.nodeType === 1
+    ? directionNode as Element
+    : directionNode.parentElement;
+  const rtl = view.dom.ownerDocument.defaultView?.getComputedStyle(
+    directionElement ?? view.dom,
+  ).direction === "rtl";
+  const outwardHorizontalNavigation = (characterSelection || wordNavigation) && (
+    (currentFocusOffset === 0 && event.key === (rtl ? "ArrowRight" : "ArrowLeft"))
+    || (
+      currentFocusOffset === parentText.length
+      && event.key === (rtl ? "ArrowLeft" : "ArrowRight")
+    )
+  );
+
+  if (outwardHorizontalNavigation) {
+    return false;
+  }
+
   const motion = probeNativeTextMotion(
     view,
     parentText,

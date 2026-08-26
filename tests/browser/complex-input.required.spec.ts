@@ -872,19 +872,23 @@ test("@required word navigation ignores Markdown mark boundaries across engines"
     }
   }
 
-  for (const extend of [false, true]) {
-    const blockMarkdown = "**alpha**\n\nbeta";
-    await resetEditor(labPage, id, blockMarkdown);
+  const navigateBlockEdge = async (
+    markdown: string,
+    needle: string,
+    mode: "end" | "start",
+    key: "ArrowLeft" | "ArrowRight",
+    extend: boolean,
+    editorId = id,
+  ) => {
+    await resetEditor(labPage, editorId, markdown);
     expect(await labPage.evaluate(
-      (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
-      id,
+      ({ editorId, nextMode, nextNeedle }) => (
+        window.__MARKORA_BROWSER_LAB__!.selectText(editorId, nextNeedle, nextMode)
+      ),
+      { editorId, nextMode: mode, nextNeedle: needle },
     )).toBe(true);
-    await settleEditor(labPage, id);
-    const edge = (await labPage.evaluate(
-      (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection.head,
-      id,
-    ));
-    await editorLocator(labPage, id).evaluate((element) => {
+    await settleEditor(labPage, editorId);
+    await editorLocator(labPage, editorId).evaluate((element) => {
       const targetWindow = window as Window & {
         __markoraWordBlockEdgePrevented?: boolean;
       };
@@ -895,12 +899,8 @@ test("@required word navigation ignores Markdown mark boundaries across engines"
         });
       }, { once: true });
     });
-    await pressWordNavigation("ArrowRight", extend);
-    await settleEditor(labPage, id);
-    const selection = await labPage.evaluate(
-      (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
-      id,
-    );
+    await pressWordNavigation(key, extend);
+    await settleEditor(labPage, editorId);
     expect(await labPage.evaluate(() => {
       const targetWindow = window as Window & {
         __markoraWordBlockEdgePrevented?: boolean;
@@ -909,10 +909,35 @@ test("@required word navigation ignores Markdown mark boundaries across engines"
       delete targetWindow.__markoraWordBlockEdgePrevented;
       return prevented;
     })).toBe(false);
-    expect(selection.anchor).toBeLessThanOrEqual(selection.to);
-    expect(selection.head).toBeGreaterThanOrEqual(selection.from);
-    expect(edge).toBe(6);
-    expect(await getMarkdown(labPage, id)).toBe(blockMarkdown);
+    await expect(editorLocator(labPage, editorId)).toBeFocused();
+    expect(await getMarkdown(labPage, editorId)).toBe(markdown);
+    return labPage.evaluate(
+      (nextEditorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(nextEditorId).selection,
+      editorId,
+    );
+  };
+
+  for (const testCase of [
+    { key: "ArrowRight", mode: "end", needle: "alpha" },
+    { key: "ArrowLeft", mode: "start", needle: "beta" },
+  ] as const) {
+    for (const extend of [false, true]) {
+      const plain = await navigateBlockEdge(
+        "alpha\n\nbeta",
+        testCase.needle,
+        testCase.mode,
+        testCase.key,
+        extend,
+      );
+      const marked = await navigateBlockEdge(
+        "**alpha**\n\n**beta**",
+        testCase.needle,
+        testCase.mode,
+        testCase.key,
+        extend,
+      );
+      expect(marked).toEqual(plain);
+    }
   }
 
   const rtlId = "rtl-marked-word-navigation";
@@ -954,6 +979,31 @@ test("@required word navigation ignores Markdown mark boundaries across engines"
       rtlId,
     );
     expect(markedRight).toEqual(plainRight);
+  }
+
+  for (const testCase of [
+    { key: "ArrowLeft", mode: "end", needle: "אבגדהו" },
+    { key: "ArrowRight", mode: "start", needle: "זחט" },
+  ] as const) {
+    for (const extend of [false, true]) {
+      const plain = await navigateBlockEdge(
+        "אבגדהו\n\nזחט",
+        testCase.needle,
+        testCase.mode,
+        testCase.key,
+        extend,
+        rtlId,
+      );
+      const marked = await navigateBlockEdge(
+        "**אבגדהו**\n\n**זחט**",
+        testCase.needle,
+        testCase.mode,
+        testCase.key,
+        extend,
+        rtlId,
+      );
+      expect(marked).toEqual(plain);
+    }
   }
 
   if (browserName === "firefox") {
@@ -1046,27 +1096,28 @@ test("@required character selection ignores Markdown mark boundaries across engi
     needle: string,
     mode: "end" | "start",
     key: "ArrowLeft" | "ArrowRight",
+    editorId = id,
   ) => {
-    await resetEditor(labPage, id, markdown);
+    await resetEditor(labPage, editorId, markdown);
     expect(await labPage.evaluate(
       ({ editorId, nextNeedle, nextMode }) => (
         window.__MARKORA_BROWSER_LAB__!.selectText(editorId, nextNeedle, nextMode)
       ),
-      { editorId: id, nextMode: mode, nextNeedle: needle },
+      { editorId, nextMode: mode, nextNeedle: needle },
     )).toBe(true);
-    await settleEditor(labPage, id);
-    await clearEditorEvents(labPage, id);
+    await settleEditor(labPage, editorId);
+    await clearEditorEvents(labPage, editorId);
     await pressSelectionArrow(key);
-    await settleEditor(labPage, id);
-    await expect(editorLocator(labPage, id)).toBeFocused();
-    const events = await getEditorEvents(labPage, id);
+    await settleEditor(labPage, editorId);
+    await expect(editorLocator(labPage, editorId)).toBeFocused();
+    const events = await getEditorEvents(labPage, editorId);
     expect(events.counts.focus).toBe(0);
     expect(events.counts.blur).toBe(0);
-    expect(await getMarkdown(labPage, id)).toBe(markdown);
-    return labPage.evaluate((editorId) => ({
-      model: window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+    expect(await getMarkdown(labPage, editorId)).toBe(markdown);
+    return labPage.evaluate((nextEditorId) => ({
+      model: window.__MARKORA_BROWSER_LAB__!.snapshot(nextEditorId).selection,
       text: document.getSelection()?.toString() ?? "",
-    }), id);
+    }), editorId);
   };
 
   for (const testCase of [
@@ -1147,46 +1198,97 @@ test("@required character selection ignores Markdown mark boundaries across engi
     expect(marked).toEqual(plain);
   }
 
-  const blockMarkdown = "**alpha**\n\nbeta";
-  await resetEditor(labPage, id, blockMarkdown);
+  const repeatedMarkdown = "alpha**beta**\n\ngamma";
+  await resetEditor(labPage, id, repeatedMarkdown);
   expect(await labPage.evaluate(
-    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "start"),
     id,
   )).toBe(true);
   await settleEditor(labPage, id);
-  const edge = await labPage.evaluate(
-    (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection.head,
-    id,
-  );
-  await editorLocator(labPage, id).evaluate((element) => {
-    const targetWindow = window as Window & {
-      __markoraCharacterBlockEdgePrevented?: boolean;
-    };
-    delete targetWindow.__markoraCharacterBlockEdgePrevented;
-    element.addEventListener("keydown", (event) => {
-      queueMicrotask(() => {
-        targetWindow.__markoraCharacterBlockEdgePrevented = event.defaultPrevented;
-      });
-    }, { once: true });
-  });
-  await pressSelectionArrow("ArrowRight");
-  await settleEditor(labPage, id);
-  const blockSelection = await labPage.evaluate(
+  await clearEditorEvents(labPage, id);
+
+  for (let index = 0; index < 5; index += 1) {
+    await pressSelectionArrow("ArrowRight");
+    await settleEditor(labPage, id);
+  }
+
+  expect(await labPage.evaluate(
     (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
     id,
-  );
-  expect(await labPage.evaluate(() => {
-    const targetWindow = window as Window & {
-      __markoraCharacterBlockEdgePrevented?: boolean;
-    };
-    const prevented = targetWindow.__markoraCharacterBlockEdgePrevented;
-    delete targetWindow.__markoraCharacterBlockEdgePrevented;
-    return prevented;
-  })).toBe(false);
-  expect(blockSelection.anchor).toBeLessThanOrEqual(blockSelection.to);
-  expect(blockSelection.head).toBeGreaterThanOrEqual(blockSelection.from);
-  expect(edge).toBe(6);
-  expect(await getMarkdown(labPage, id)).toBe(blockMarkdown);
+  )).toEqual({ anchor: 6, from: 6, head: 12, to: 12 });
+  await pressSelectionArrow("ArrowLeft");
+  await settleEditor(labPage, id);
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+    id,
+  )).toEqual({ anchor: 6, from: 6, head: 10, to: 10 });
+  await expect(editorLocator(labPage, id)).toBeFocused();
+  const repeatedEvents = await getEditorEvents(labPage, id);
+  expect(repeatedEvents.counts.focus).toBe(0);
+  expect(repeatedEvents.counts.blur).toBe(0);
+  expect(await getMarkdown(labPage, id)).toBe(repeatedMarkdown);
+
+  for (const testCase of [
+    {
+      expected: { anchor: 6, from: 6, head: 8, to: 8 },
+      key: "ArrowRight",
+      mode: "end",
+      needle: "alpha",
+    },
+    {
+      expected: { anchor: 8, from: 6, head: 6, to: 8 },
+      key: "ArrowLeft",
+      mode: "start",
+      needle: "beta",
+    },
+  ] as const) {
+    const plain = await selectFrom(
+      "alpha\n\nbeta",
+      testCase.needle,
+      testCase.mode,
+      testCase.key,
+    );
+    expect(plain.model).toEqual(testCase.expected);
+    const marked = await selectFrom(
+      "**alpha**\n\n**beta**",
+      testCase.needle,
+      testCase.mode,
+      testCase.key,
+    );
+    expect(marked).toEqual(plain);
+  }
+
+  const rtlId = "rtl-marked-character-selection";
+  await mountEditor(labPage, { direction: "rtl", id: rtlId, markdown: "" });
+
+  for (const testCase of [
+    {
+      key: "ArrowLeft",
+      mode: "end",
+      needle: "אבגדהו",
+    },
+    {
+      key: "ArrowRight",
+      mode: "start",
+      needle: "זחט",
+    },
+  ] as const) {
+    const plain = await selectFrom(
+      "אבגדהו\n\nזחט",
+      testCase.needle,
+      testCase.mode,
+      testCase.key,
+      rtlId,
+    );
+    const marked = await selectFrom(
+      "**אבגדהו**\n\n**זחט**",
+      testCase.needle,
+      testCase.mode,
+      testCase.key,
+      rtlId,
+    );
+    expect(marked).toEqual(plain);
+  }
 });
 
 test("@required mixed bidirectional text can be selected and replaced logically", async ({ labPage }) => {

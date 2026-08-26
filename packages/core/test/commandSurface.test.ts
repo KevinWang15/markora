@@ -690,7 +690,13 @@ describe("public command and state surface", () => {
         const textNode = this.focusNode;
 
         if (!(textNode instanceof Text)) {
-          throw new Error("The word-motion probe must use a text node.");
+          throw new Error("The text-motion probe must use a text node.");
+        }
+
+        if (granularity === "character" && textNode.data === "wrapprobe") {
+          this.collapse(textNode, 0);
+          this.extend(textNode, 1);
+          return;
         }
 
         const backward = direction === "backward" || direction === "left";
@@ -756,6 +762,24 @@ describe("public command and state surface", () => {
           to: 6,
         });
 
+        editor.commands.resetMarkdown("wrapprobe");
+        selectText(editor, "probe", "start");
+        const invalidCharacterProbe = new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          key: "ArrowRight",
+          shiftKey: true,
+        });
+
+        expect(editor.view.dom.dispatchEvent(invalidCharacterProbe)).toBe(true);
+        expect(invalidCharacterProbe.defaultPrevented).toBe(false);
+        expect(editor.view.state.selection).toMatchObject({
+          anchor: 5,
+          from: 5,
+          head: 5,
+          to: 5,
+        });
+
         editor.commands.resetMarkdown("alpha**beta** gamma");
         selectText(editor, "alpha", "start");
         const moveForward = new KeyboardEvent("keydown", {
@@ -803,7 +827,7 @@ describe("public command and state surface", () => {
         expect(atomAdjacentNavigation.defaultPrevented).toBe(false);
         expect(editor.getMarkdown()).toBe(hardBreakMarkdown);
 
-        editor.commands.resetMarkdown("**alpha**\n\nbeta");
+        editor.commands.resetMarkdown("**alpha**\n\n**beta**");
         selectText(editor, "alpha", "end");
 
         for (const blockEdgeNavigation of [
@@ -823,6 +847,26 @@ describe("public command and state surface", () => {
           expect(editor.view.dom.dispatchEvent(blockEdgeNavigation)).toBe(true);
           expect(blockEdgeNavigation.defaultPrevented).toBe(false);
           expect(editor.view.state.selection.from).toBe(6);
+        }
+
+        for (const blockEdgeNavigation of [
+          new KeyboardEvent("keydown", {
+            bubbles: true,
+            cancelable: true,
+            ctrlKey: true,
+            key: "ArrowLeft",
+          }),
+          new KeyboardEvent("keydown", {
+            bubbles: true,
+            cancelable: true,
+            key: "ArrowLeft",
+            shiftKey: true,
+          }),
+        ]) {
+          selectText(editor, "beta", "start");
+          expect(editor.view.dom.dispatchEvent(blockEdgeNavigation)).toBe(true);
+          expect(blockEdgeNavigation.defaultPrevented).toBe(false);
+          expect(editor.view.state.selection.from).toBe(8);
         }
 
         editor.destroy();
