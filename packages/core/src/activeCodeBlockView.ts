@@ -811,6 +811,24 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
         this.claimInnerSelection();
       }
 
+      if (
+        isInside
+        && event.type === "dragend"
+        && !this.isOuterSelectionInsideCodeBlock()
+      ) {
+        const activeElement = getActiveElement(this.outerView);
+
+        // ProseMirror focuses before it dispatches its drop transaction. When
+        // a drag starts in CodeMirror and ends on the outer surface, that
+        // ordering lets this still-focused inner editor reclaim focus from
+        // the pre-drop code selection. Hand ownership to the now-selected
+        // outer destination after the native gesture finishes, but only when
+        // no synchronous host focus handoff superseded the drag.
+        if (containsNode(this.cm.dom, activeElement)) {
+          this.outerView.focus();
+        }
+      }
+
       return isInside || ownsClipboard;
     }
 

@@ -13,7 +13,9 @@ type PointerPoint = { x: number; y: number };
 type NativeDragRecord = {
   defaultPrevented: boolean;
   editorId: string;
+  html: string;
   isTrusted: boolean;
+  plain: string;
   type: string;
   types: string[];
 };
@@ -121,7 +123,9 @@ async function armNativeDragCapture(page: Page, id: string) {
         (window as typeof window & { __markoraNativeDrag: NativeDragRecord[] }).__markoraNativeDrag.push({
           defaultPrevented: event.defaultPrevented,
           editorId,
+          html: event.dataTransfer?.getData("text/html") ?? "",
           isTrusted: event.isTrusted,
+          plain: event.dataTransfer?.getData("text/plain") ?? "",
           type: event.type,
           types: Array.from(event.dataTransfer?.types ?? []),
         });
@@ -561,6 +565,193 @@ test("@required native rich-text drag copies literal text into passive nested co
   expect(await labPage.evaluate((editorId) => (
     window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "redo" })
   ), id)).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(expected);
+
+  await cdp?.detach();
+});
+
+test("@required native active-code drag copies plain text into the rich surface", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(
+    browserName === "webkit",
+    "Playwright WebKit does not synthesize dragstart from a live active-CodeMirror text selection.",
+  );
+  const id = "native-active-code-source";
+  const original = [
+    "```text",
+    "alpha CODE omega",
+    "```",
+    "",
+    "target Z",
+  ].join("\n");
+  const expected = [
+    "```text",
+    "alpha CODE omega",
+    "```",
+    "",
+    "target ZCODE",
+  ].join("\n");
+  await mountEditor(labPage, { id, markdown: original, root: "shadow" });
+  const code = editorLocator(labPage, id).locator(".cm-content");
+  await code.click();
+  await settleEditor(labPage, id);
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, id, "CODE", 3, "after", ".cm-content"),
+    await textPoint(labPage, id, "CODE", 0, "before", ".cm-content"),
+  );
+  await settleEditor(labPage, id);
+  const selected = await snapshotEditor(labPage, id);
+  expect(selected.codeBlocks.active).toBe(1);
+  expect(selected.codeMirrorFocused).toBe(true);
+  expect(selected.selection.to - selected.selection.from).toBe("CODE".length);
+  expect(await code.evaluate((element) => {
+    const root = element.getRootNode() as Document | (ShadowRoot & {
+      getSelection?: Document["getSelection"];
+    });
+    const selection = root.getSelection?.() ?? element.ownerDocument.getSelection();
+    return selection?.toString() ?? "";
+  })).toBe("CODE");
+  await armNativeDragCapture(labPage, id);
+
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, id, "CODE", 1, "before", ".cm-content"),
+    await textPoint(labPage, id, "target Z", 7, "after"),
+  );
+  await settleEditor(labPage, id);
+
+  const dragEvents = await readNativeDragCapture(labPage);
+  expect(await getMarkdown(labPage, id), JSON.stringify(dragEvents)).toBe(expected);
+  const dragstart = dragEvents.filter(({ type }) => type === "dragstart");
+  expect(dragstart).toHaveLength(1);
+  expect(new Set(dragstart[0]?.types.filter((type) => !type.startsWith("text/_moz_"))))
+    .toEqual(new Set(["text/html", "text/plain"]));
+  expect(dragstart[0]?.plain).toBe("CODE");
+  expect(dragstart[0]?.html).toContain("CODE");
+  const drop = dragEvents.filter(({ type }) => type === "drop");
+  expect(drop).toHaveLength(1);
+  expect(drop[0]?.defaultPrevented).toBe(true);
+  expect(dragEvents.every(({ isTrusted }) => isTrusted)).toBe(true);
+  const inserted = await snapshotEditor(labPage, id);
+  expect(inserted.prosemirrorFocused).toBe(true);
+  expect(inserted.selection.to - inserted.selection.from).toBe("CODE".length);
+
+  await labPage.keyboard.press("ControlOrMeta+Z");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(original);
+  await labPage.keyboard.press("ControlOrMeta+Shift+Z");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(expected);
+
+  await labPage.keyboard.press("ControlOrMeta+Z");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(original);
+  await code.click();
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, id, "CODE", 3, "after", ".cm-content"),
+    await textPoint(labPage, id, "CODE", 0, "before", ".cm-content"),
+  );
+  await settleEditor(labPage, id);
+  const hostButton = labPage.locator("#native-active-code-host-handoff");
+  await labPage.evaluate((editorId) => {
+    const button = document.createElement("button");
+    button.id = "native-active-code-host-handoff";
+    button.textContent = "Host handoff";
+    document.body.append(button);
+    document.querySelector(`[data-e2e-editor="${editorId}"]`)!.addEventListener("drop", () => {
+      button.focus();
+    }, { once: true });
+  }, id);
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, id, "CODE", 1, "before", ".cm-content"),
+    await textPoint(labPage, id, "target Z", 7, "after"),
+  );
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(expected);
+  await expect(hostButton).toBeFocused();
+  const handedOff = await snapshotEditor(labPage, id);
+  expect(handedOff.codeMirrorFocused).toBe(false);
+  expect(handedOff.prosemirrorFocused).toBe(false);
+
+  await cdp?.detach();
+});
+
+test("@required native passive-code drag moves plain text into the rich surface", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  await reloadWithoutIntersectionObserver(labPage);
+  const id = "native-passive-code-source";
+  const original = [
+    "```text",
+    "alpha CODE omega",
+    "```",
+    "",
+    "target Z",
+  ].join("\n");
+  const expected = [
+    "```text",
+    "alpha  omega",
+    "```",
+    "",
+    "target ZCODE",
+  ].join("\n");
+  await mountEditor(labPage, { id, markdown: original, root: "shadow" });
+  expect(await labPage.evaluate((editorId) => (
+    window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "CODE", "all")
+  ), id)).toBe(true);
+  await settleEditor(labPage, id);
+  const selected = await snapshotEditor(labPage, id);
+  expect(selected.codeBlocks.active).toBe(0);
+  expect(selected.codeBlocks.staticViews).toBe(1);
+  expect(selected.selection.to - selected.selection.from).toBe("CODE".length);
+  await armNativeDragCapture(labPage, id);
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+
+  await dragPointer(
+    labPage,
+    cdp,
+    await textPoint(labPage, id, "CODE", 1, "before", ".mdw-code-block-static-code"),
+    await textPoint(labPage, id, "target Z", 7, "after"),
+  );
+  await settleEditor(labPage, id);
+
+  const dragEvents = await readNativeDragCapture(labPage);
+  expect(await getMarkdown(labPage, id), JSON.stringify(dragEvents)).toBe(expected);
+  const dragstart = dragEvents.filter(({ type }) => type === "dragstart");
+  expect(dragstart).toHaveLength(1);
+  expect(new Set(dragstart[0]?.types)).toEqual(new Set(["text/html", "text/plain"]));
+  expect(dragstart[0]?.plain).toBe("CODE");
+  expect(dragstart[0]?.html).toContain("CODE");
+  const drop = dragEvents.filter(({ type }) => type === "drop");
+  expect(drop).toHaveLength(1);
+  expect(drop[0]?.defaultPrevented).toBe(true);
+  expect(dragEvents.every(({ isTrusted }) => isTrusted)).toBe(true);
+  const inserted = await snapshotEditor(labPage, id);
+  expect(inserted.prosemirrorFocused).toBe(true);
+  expect(inserted.selection.to - inserted.selection.from).toBe("CODE".length);
+
+  await labPage.keyboard.press("ControlOrMeta+Z");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(original);
+  await labPage.keyboard.press("ControlOrMeta+Shift+Z");
   await settleEditor(labPage, id);
   expect(await getMarkdown(labPage, id)).toBe(expected);
 
