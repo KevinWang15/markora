@@ -81,6 +81,12 @@ function selectText(
   );
 }
 
+function pressKey(editor: MarkdownEditor, key: string) {
+  const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key });
+
+  return editor.view.someProp("handleKeyDown", (handler) => handler(editor.view, event)) ?? false;
+}
+
 function getNodeCount(editor: MarkdownEditor, name: string) {
   let count = 0;
   editor.view.state.doc.descendants((node) => {
@@ -203,6 +209,38 @@ describe("public command and state surface", () => {
     expect(editor.commands.toggleBulletList()).toBe(true);
     expect(editor.getMarkdown()).toBe("* one\n\n* two");
     expect(editor.state.isActive.bulletList()).toBe(true);
+
+    editor.destroy();
+  });
+
+  it("continues completed tasks as unchecked items", () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: "* [x] completed",
+    });
+    selectText(editor, "completed", "end");
+
+    expect(pressKey(editor, "Enter")).toBe(true);
+    expect(editor.getMarkdown()).toBe("* [x] completed\n* [ ] ");
+    expect(editor.state.isActive.taskChecked()).toBe(false);
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe("* [x] completed");
+
+    editor.destroy();
+  });
+
+  it("inserts an unchecked task before a completed task without clearing it", () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: "* [x] completed",
+    });
+    selectText(editor, "completed", "start");
+
+    expect(pressKey(editor, "Enter")).toBe(true);
+    expect(editor.getMarkdown()).toBe("* [ ] \n* [x] completed");
+    expect(editor.state.isActive.taskChecked()).toBe(true);
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe("* [x] completed");
 
     editor.destroy();
   });

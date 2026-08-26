@@ -3,7 +3,15 @@ import { closeHistory, history, redo, undo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
 import { type Node as ProseMirrorNode, type NodeType } from "prosemirror-model";
 import { sinkListItem, splitListItem, liftListItem } from "prosemirror-schema-list";
-import { AllSelection, EditorState, NodeSelection, Plugin, Selection, TextSelection } from "prosemirror-state";
+import {
+  AllSelection,
+  type Command,
+  EditorState,
+  NodeSelection,
+  Plugin,
+  Selection,
+  TextSelection,
+} from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { ManagedBlockCursor } from "./managedBlockCursor";
 export { ManagedBlockCursor } from "./managedBlockCursor";
@@ -443,6 +451,56 @@ function throwCollectedErrors(message: string, errors: unknown[]) {
 
 function createChangeContext(origin: MarkdownEditorChangeOrigin): MarkdownEditorChangeContext {
   return Object.freeze({ origin });
+}
+
+function createListItemSplitCommand(itemType: NodeType): Command {
+  const splitOrdinaryItem = splitListItem(itemType);
+
+  return (state, dispatch, view) => {
+    const { $from } = state.selection;
+
+    for (let depth = $from.depth; depth > 0; depth -= 1) {
+      const item = $from.node(depth);
+
+      if (item.type !== itemType) {
+        continue;
+      }
+
+      if (typeof item.attrs.checked !== "boolean") {
+        return splitOrdinaryItem(state, dispatch, view);
+      }
+
+      const uncheckedAttrs = {
+        ...item.attrs,
+        checked: false,
+      };
+      const isAtItemStart = $from.index(depth) === 0 && $from.parentOffset === 0;
+
+      if (!isAtItemStart || !dispatch) {
+        return splitListItem(itemType, isAtItemStart ? item.attrs : uncheckedAttrs)(
+          state,
+          dispatch,
+          view,
+        );
+      }
+
+      const itemPos = $from.before(depth);
+      return splitListItem(itemType, item.attrs)(state, (transaction) => {
+        const leadingItem = transaction.doc.nodeAt(itemPos);
+
+        if (leadingItem?.type === itemType) {
+          transaction.setNodeMarkup(itemPos, itemType, {
+            ...leadingItem.attrs,
+            checked: false,
+          });
+        }
+
+        dispatch(transaction);
+      }, view);
+    }
+
+    return splitOrdinaryItem(state, dispatch, view);
+  };
 }
 
 function createSchemaRuntimeHelpers(
@@ -1106,6 +1164,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   });
 
   const listItemType = schema.nodes.list_item;
+  const splitListItemForInput = createListItemSplitCommand(listItemType);
   const structuralCommandSet = createStructuralCommandSet(schema);
   const createToggleMarkCommand = (name: MarkdownEditorMark): EditorCommand => {
     const markType = schema.marks[name];
@@ -1681,7 +1740,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       : []),
     ...(shortcutKeymap ? [shortcutKeymap] : []),
     keymap({
-      Enter: chainCommands(splitListItem(listItemType), liftEmptyBlock),
+      Enter: chainCommands(splitListItemForInput, liftEmptyBlock),
       Tab: (state, dispatch, view) => moveTableCell(view!, 1) || sinkListItem(listItemType)(state, dispatch, view),
       "Shift-Tab": (state, dispatch, view) => moveTableCell(view!, -1) || liftListItem(listItemType)(state, dispatch, view),
       ArrowUp: (_state, _dispatch, view) => moveTableCellVertical(view!, -1),

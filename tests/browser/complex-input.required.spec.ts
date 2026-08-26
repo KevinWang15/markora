@@ -210,6 +210,124 @@ test("@required Chromium CDP preserves active IME image syntax", async ({
   expect(await getMarkdown(labPage, id)).toBe(imageSyntax);
 });
 
+test("@required Chromium CDP preserves rich text across IME replacement and cancellation", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP IME control.");
+
+  const id = "cdp-selection-composition";
+  const original = "before **selected** after";
+  await mountEditor(labPage, { id, markdown: original });
+  const editor = editorLocator(labPage, id);
+  const cdp = await context.newCDPSession(labPage);
+
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "selected", "all"),
+    id,
+  )).toBe(true);
+  await cdp.send("Input.imeSetComposition", {
+    text: "候補",
+    selectionStart: "候補".length,
+    selectionEnd: "候補".length,
+  });
+  await expect(editor.locator("strong")).toHaveText("候補");
+
+  await cdp.send("Input.imeSetComposition", {
+    text: "",
+    selectionStart: 0,
+    selectionEnd: 0,
+  });
+  await settleEditor(labPage, id);
+  await expect(editor.locator("strong")).toHaveCount(0);
+  expect(await getMarkdown(labPage, id)).toBe("before  after");
+
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  await expect(editor.locator("strong")).toHaveText("selected");
+  expect(await getMarkdown(labPage, id)).toBe(original);
+
+  await resetEditor(labPage, id, original);
+
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "selected", "all"),
+    id,
+  )).toBe(true);
+  await cdp.send("Input.imeSetComposition", {
+    text: "変換",
+    selectionStart: "変換".length,
+    selectionEnd: "変換".length,
+  });
+  await cdp.send("Input.insertText", { text: "確定" });
+  await settleEditor(labPage, id);
+  await expect(editor.locator("strong")).toHaveText("確定");
+  expect(await getMarkdown(labPage, id)).toBe("before **確定** after");
+
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  await expect(editor.locator("strong")).toHaveText("selected");
+  expect(await getMarkdown(labPage, id)).toBe(original);
+});
+
+test("@required Chromium CDP continues completed tasks as unchecked items", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing raw CDP key events.");
+
+  const id = "cdp-task-continuation";
+  const original = "* [x] completed";
+  await mountEditor(labPage, { id, markdown: original });
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "completed", "end"),
+    id,
+  )).toBe(true);
+
+  const cdp = await context.newCDPSession(labPage);
+  for (const type of ["rawKeyDown", "keyUp"] as const) {
+    await cdp.send("Input.dispatchKeyEvent", {
+      code: "Enter",
+      key: "Enter",
+      nativeVirtualKeyCode: 13,
+      type,
+      windowsVirtualKeyCode: 13,
+    });
+  }
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe("* [x] completed\n* [ ] ");
+
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(original);
+
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "completed", "start"),
+    id,
+  )).toBe(true);
+  for (const type of ["rawKeyDown", "keyUp"] as const) {
+    await cdp.send("Input.dispatchKeyEvent", {
+      code: "Enter",
+      key: "Enter",
+      nativeVirtualKeyCode: 13,
+      type,
+      windowsVirtualKeyCode: 13,
+    });
+  }
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe("* [ ] \n* [x] completed");
+});
+
 test("@required dead-key output, emoji, and surrogate deletion remain intact", async ({ labPage }) => {
   const id = "unicode";
   await mountEditor(labPage, { id, markdown: "" });
