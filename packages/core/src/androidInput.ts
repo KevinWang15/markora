@@ -1,3 +1,4 @@
+import type { Node as ProseMirrorNode } from "prosemirror-model";
 import { Plugin, TextSelection, type EditorState } from "prosemirror-state";
 
 type GraphemeSegment = {
@@ -26,6 +27,29 @@ function captureFallbackState(state: EditorState): FallbackState {
     doc: state.doc,
     selection: state.selection,
   };
+}
+
+function readContiguousTextBefore(parent: ProseMirrorNode, parentOffset: number) {
+  const childBefore = parent.childBefore(parentOffset);
+  const nodeBefore = childBefore.node;
+
+  if (!nodeBefore?.isText || !nodeBefore.text) {
+    return "";
+  }
+
+  const chunks = [nodeBefore.text.slice(0, parentOffset - childBefore.offset)];
+
+  for (let index = childBefore.index - 1; index >= 0; index -= 1) {
+    const child = parent.child(index);
+
+    if (!child.isText || !child.text) {
+      break;
+    }
+
+    chunks.push(child.text);
+  }
+
+  return chunks.reverse().join("");
 }
 
 function isAndroidChrome(ownerWindow: BrowserWindow) {
@@ -172,7 +196,10 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
               return;
             }
 
-            const textBefore = nodeBefore?.text;
+            const textBefore = readContiguousTextBefore(
+              selection.$from.parent,
+              selection.$from.parentOffset,
+            );
 
             if (!textBefore) {
               return;

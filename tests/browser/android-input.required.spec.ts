@@ -120,6 +120,73 @@ test("@required Android CDP fallback deletes complete grapheme clusters", async 
   await expect.poll(() => getMarkdown(labPage, shadowId)).toBe("A");
 });
 
+test("@required Android CDP fallback deletes graphemes across mark boundaries", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing Android CDP input control.");
+
+  const id = "android-marked-grapheme";
+  await mountEditor(labPage, { id, markdown: "" });
+
+  for (const markdown of [
+    "Ae**́**",
+    "A👩**‍**💻",
+    "A👍**🏽**",
+    "A🇨**🇳**",
+  ] as const) {
+    await resetEditor(labPage, id, markdown);
+    expect(await getMarkdown(labPage, id)).toBe(markdown);
+    await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, "end"),
+      id,
+    );
+
+    await dispatchNoMutationBackspace(context, id, labPage);
+    await expect.poll(() => getMarkdown(labPage, id)).toBe("A");
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+      id,
+    )).toBe(true);
+    await settleEditor(labPage, id);
+    expect(await getMarkdown(labPage, id)).toBe(markdown);
+  }
+
+  const interiorMarkdown = "Ae**́**Z";
+  await resetEditor(labPage, id, interiorMarkdown);
+  await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, "end"),
+    id,
+  );
+  await labPage.keyboard.press("ArrowLeft");
+  await settleEditor(labPage, id);
+  await dispatchNoMutationBackspace(context, id, labPage);
+  await expect.poll(() => getMarkdown(labPage, id)).toBe("AZ");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(interiorMarkdown);
+
+  const atomBoundaryMarkdown = "A![alt](/boundary.png)**́**";
+  await resetEditor(labPage, id, atomBoundaryMarkdown);
+  await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, "end"),
+    id,
+  );
+  await dispatchNoMutationBackspace(context, id, labPage);
+  await expect.poll(() => getMarkdown(labPage, id)).toBe("A![alt](/boundary.png)");
+  await expect(editorLocator(labPage, id).locator(".mdw-image")).toHaveCount(1);
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+    id,
+  )).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(atomBoundaryMarkdown);
+});
+
 test("@required Android CDP fallback preserves structural Backspace commands", async ({
   browserName,
   context,
