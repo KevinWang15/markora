@@ -1,25 +1,28 @@
 import type { Node as ProseMirrorNode } from "prosemirror-model";
 import { Plugin, TextSelection, type EditorState } from "prosemirror-state";
+import type { EditorView } from "prosemirror-view";
 
-type GraphemeSegment = {
+type TextSegment = {
   index: number;
+  isWordLike?: boolean;
+  segment?: string;
 };
 
-type GraphemeSegments = Iterable<GraphemeSegment> & {
-  containing?(codeUnitIndex: number): GraphemeSegment | undefined;
+type TextSegments = Iterable<TextSegment> & {
+  containing?(codeUnitIndex: number): TextSegment | undefined;
 };
 
-type GraphemeSegmenter = {
-  segment(input: string): GraphemeSegments;
+type TextSegmenter = {
+  segment(input: string): TextSegments;
 };
 
-type GraphemeSegmenterConstructor = new (
+type TextSegmenterConstructor = new (
   locales?: string | readonly string[],
-  options?: { granularity: "grapheme" },
-) => GraphemeSegmenter;
+  options?: { granularity: "grapheme" | "word" },
+) => TextSegmenter;
 
 type SegmentingIntl = typeof Intl & {
-  Segmenter?: GraphemeSegmenterConstructor;
+  Segmenter?: TextSegmenterConstructor;
 };
 
 type BrowserWindow = Window & typeof globalThis;
@@ -31,6 +34,38 @@ type DeletionDirection = "backward" | "forward";
 type DeletionRange = {
   from: number;
   to: number;
+};
+
+type InlineBoundaryDeletionContext = {
+  immediateText: string;
+  parent: ProseMirrorNode;
+  parentOffset: number;
+  selection: TextSelection;
+};
+
+type DomSelectionRange = {
+  anchorNode: Node | null;
+  anchorOffset: number;
+  focusNode: Node | null;
+  focusOffset: number;
+};
+
+type EditorViewWithDomSelection = EditorView & {
+  domSelection(): Selection | null;
+  domSelectionRange(): DomSelectionRange;
+};
+
+type SelectionWithWordMotion = Selection & {
+  modify?: (
+    alter: "extend",
+    direction: DeletionDirection,
+    granularity: "word",
+  ) => void;
+};
+
+type NativeWordDeletionProbe = {
+  deletionLength: number | null;
+  focusHandedOff: boolean;
 };
 
 function captureFallbackState(state: EditorState): FallbackState {
@@ -160,10 +195,167 @@ export function findNextGraphemeEnd(
   return 1;
 }
 
-function findCrossInlineBoundaryDeletionRange(
+export function findWordDeletionLength(
+  text: string,
+  direction: DeletionDirection,
+  intl: SegmentingIntl = Intl as SegmentingIntl,
+) {
+  if (!text || !intl.Segmenter) {
+    return 0;
+  }
+
+  const segments = new intl.Segmenter(undefined, { granularity: "word" }).segment(text);
+
+  if (direction === "backward") {
+    let word = segments.containing?.(text.length - 1);
+
+    if (!word) {
+      for (const segment of segments) {
+        word = segment;
+      }
+    }
+
+    return word?.isWordLike
+      ? text.length - word.index
+      : 0;
+  }
+
+  let word: TextSegment | undefined;
+
+  for (const segment of segments) {
+    word = segment;
+    break;
+  }
+
+  if (!word?.isWordLike || typeof word.segment !== "string") {
+    return 0;
+  }
+
+  return word.segment.length;
+}
+
+function restoreDomSelection(
+  selection: SelectionWithWordMotion,
+  original: DomSelectionRange,
+) {
+  if (!original.anchorNode || !original.focusNode) {
+    return;
+  }
+
+  try {
+    selection.collapse(original.anchorNode, original.anchorOffset);
+
+    if (
+      (original.focusNode !== original.anchorNode || original.focusOffset !== original.anchorOffset)
+      && typeof selection.extend === "function"
+    ) {
+      selection.extend(original.focusNode, original.focusOffset);
+    }
+  } catch {
+    // A synchronous host callback may have detached the original editor DOM.
+  }
+}
+
+function getActiveElement(view: EditorView) {
+  const root = view.root as Node & { activeElement?: Element | null };
+  return root.activeElement ?? view.dom.ownerDocument.activeElement;
+}
+
+function focusElement(element: Element | null) {
+  const focus = (element as (Element & { focus?: unknown }) | null)?.focus;
+
+  if (typeof focus === "function") {
+    focus.call(element, { preventScroll: true });
+  }
+}
+
+function probeNativeWordDeletionLength(
+  view: EditorView,
+  text: string,
+  direction: DeletionDirection,
+): NativeWordDeletionProbe | null {
+  // Mark elements split the editable DOM into text nodes, so native word
+  // motion can stop at a mark boundary. Measure the engine's own word motion
+  // against equivalent unmarked text to preserve platform-specific behavior.
+  const internalView = view as EditorViewWithDomSelection;
+  const selection = internalView.domSelection?.() as SelectionWithWordMotion | null;
+  const original = internalView.domSelectionRange?.();
+  const originalActiveElement = getActiveElement(view);
+  const parent = view.dom.parentNode;
+
+  if (
+    !text
+    || !selection
+    || typeof selection.modify !== "function"
+    || !original?.anchorNode
+    || !original.focusNode
+    || !parent
+  ) {
+    return null;
+  }
+
+  const probe = view.dom.ownerDocument.createElement("span");
+  probe.contentEditable = "true";
+  probe.setAttribute("aria-hidden", "true");
+  probe.style.cssText = "position:fixed;left:-10000px;white-space:pre;opacity:0;pointer-events:none";
+  const language = view.dom.getAttribute("lang")
+    ?? view.dom.closest<HTMLElement>("[lang]")?.getAttribute("lang");
+
+  if (language) {
+    probe.lang = language;
+  }
+
+  probe.dir = view.dom.ownerDocument.defaultView?.getComputedStyle(view.dom).direction === "rtl"
+    ? "rtl"
+    : "ltr";
+  probe.textContent = text;
+  parent.appendChild(probe);
+  const textNode = probe.firstChild;
+
+  if (!textNode) {
+    probe.remove();
+    return null;
+  }
+
+  let deletionLength: number | null = null;
+  let focusHandedOff = false;
+
+  try {
+    selection.collapse(textNode, direction === "backward" ? text.length : 0);
+    selection.modify("extend", direction, "word");
+
+    if (
+      selection.anchorNode
+      && selection.focusNode
+      && probe.contains(selection.anchorNode)
+      && probe.contains(selection.focusNode)
+    ) {
+      deletionLength = selection.toString().length;
+    }
+  } catch {
+    deletionLength = null;
+  } finally {
+    const activeAfterProbe = getActiveElement(view);
+    probe.remove();
+
+    if (activeAfterProbe === probe) {
+      focusElement(originalActiveElement);
+    } else if (activeAfterProbe !== originalActiveElement) {
+      focusHandedOff = true;
+    }
+
+    if (!focusHandedOff) {
+      restoreDomSelection(selection, original);
+    }
+  }
+
+  return { deletionLength, focusHandedOff };
+}
+
+function readInlineBoundaryDeletionContext(
   state: EditorState,
   direction: DeletionDirection,
-): DeletionRange | null {
+): InlineBoundaryDeletionContext | null {
   const { selection } = state;
 
   if (!(selection instanceof TextSelection) || !selection.empty) {
@@ -195,6 +387,49 @@ function findCrossInlineBoundaryDeletionRange(
     return null;
   }
 
+  return {
+    immediateText,
+    parent,
+    parentOffset,
+    selection,
+  };
+}
+
+function createDeletionRange(
+  state: EditorState,
+  selection: TextSelection,
+  direction: DeletionDirection,
+  deletionLength: number,
+): DeletionRange | null {
+  const from = direction === "backward"
+    ? selection.from - deletionLength
+    : selection.from;
+  const to = direction === "backward"
+    ? selection.from
+    : selection.from + deletionLength;
+
+  return deletionLength > 0 && from >= 0 && to <= state.doc.content.size
+    ? { from, to }
+    : null;
+}
+
+function findCrossInlineBoundaryGraphemeDeletionRange(
+  state: EditorState,
+  direction: DeletionDirection,
+): DeletionRange | null {
+  const context = readInlineBoundaryDeletionContext(state, direction);
+
+  if (!context) {
+    return null;
+  }
+
+  const {
+    immediateText,
+    parent,
+    parentOffset,
+    selection,
+  } = context;
+
   const clusterFitsImmediateText = direction === "backward"
     ? findPreviousGraphemeStart(immediateText) > 0
     : findNextGraphemeEnd(immediateText) < immediateText.length;
@@ -217,16 +452,46 @@ function findCrossInlineBoundaryDeletionRange(
     return null;
   }
 
-  const from = direction === "backward"
-    ? selection.from - graphemeLength
-    : selection.from;
-  const to = direction === "backward"
-    ? selection.from
-    : selection.from + graphemeLength;
+  return createDeletionRange(state, selection, direction, graphemeLength);
+}
 
-  return from >= 0 && to <= state.doc.content.size
-    ? { from, to }
-    : null;
+function findCrossInlineBoundaryWordDeletionRange(
+  view: EditorView,
+  direction: DeletionDirection,
+): DeletionRange | null {
+  const { state } = view;
+  const context = readInlineBoundaryDeletionContext(state, direction);
+
+  if (!context) {
+    return null;
+  }
+
+  const {
+    immediateText,
+    parent,
+    parentOffset,
+    selection,
+  } = context;
+  const adjacentText = direction === "backward"
+    ? readContiguousTextBefore(parent, parentOffset)
+    : readContiguousTextAfter(parent, parentOffset);
+  const segmentedWordLength = findWordDeletionLength(adjacentText, direction);
+
+  if (segmentedWordLength <= immediateText.length) {
+    return null;
+  }
+
+  const nativeProbe = probeNativeWordDeletionLength(view, adjacentText, direction);
+
+  if (nativeProbe?.focusHandedOff) {
+    return null;
+  }
+
+  // Once the selection has moved through the probe, handle the deletion here;
+  // delegating the event back to the browser can otherwise turn it into a no-op.
+  const wordLength = nativeProbe?.deletionLength ?? segmentedWordLength;
+
+  return createDeletionRange(state, selection, direction, wordLength);
 }
 
 export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
@@ -255,18 +520,30 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
             return false;
           }
 
-          const direction = inputEvent.inputType === "deleteContentBackward"
-            ? "backward"
+          const deletion = inputEvent.inputType === "deleteContentBackward"
+            ? { direction: "backward", unit: "content" } as const
             : inputEvent.inputType === "deleteContentForward"
-              ? "forward"
-              : null;
+              ? { direction: "forward", unit: "content" } as const
+              : inputEvent.inputType === "deleteWordBackward"
+                ? { direction: "backward", unit: "word" } as const
+                : inputEvent.inputType === "deleteWordForward"
+                  ? { direction: "forward", unit: "word" } as const
+                  : null;
 
-          if (!direction) {
+          if (!deletion) {
             return false;
           }
 
           const crossBoundaryRange = inputEvent.cancelable
-            ? findCrossInlineBoundaryDeletionRange(view.state, direction)
+            ? deletion.unit === "content"
+              ? findCrossInlineBoundaryGraphemeDeletionRange(
+                  view.state,
+                  deletion.direction,
+                )
+              : findCrossInlineBoundaryWordDeletionRange(
+                  view,
+                  deletion.direction,
+                )
             : null;
 
           if (crossBoundaryRange) {
@@ -279,9 +556,11 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
             return true;
           }
 
-          if (!androidChrome) {
+          if (!androidChrome || deletion.unit !== "content") {
             return false;
           }
+
+          const { direction } = deletion;
 
           const initialState = captureFallbackState(view.state);
           const timeoutId = ownerWindow.setTimeout(() => {

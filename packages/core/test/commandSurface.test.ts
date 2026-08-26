@@ -617,6 +617,65 @@ describe("public command and state surface", () => {
     }
   });
 
+  it("deletes words split by marks atomically in both runtime paths", () => {
+    for (const editor of [
+      createEditor({ element: createHost(), markdown: "alpha**beta** gamma" }),
+      createMinimalEditor({ element: createHost(), markdown: "alpha**beta** gamma" }),
+    ]) {
+      selectText(editor, "beta", "end");
+      const backward = new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "deleteWordBackward",
+      });
+
+      expect(editor.view.dom.dispatchEvent(backward)).toBe(false);
+      expect(backward.defaultPrevented).toBe(true);
+      expect(editor.getMarkdown()).toBe(" gamma");
+      expect(editor.commands.undo()).toBe(true);
+      expect(editor.getMarkdown()).toBe("alpha**beta** gamma");
+
+      editor.commands.resetMarkdown("alpha**beta** gamma");
+      selectText(editor, "alpha", "start");
+      const forward = new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "deleteWordForward",
+      });
+
+      expect(editor.view.dom.dispatchEvent(forward)).toBe(false);
+      expect(forward.defaultPrevented).toBe(true);
+      expect(editor.getMarkdown()).toBe(" gamma");
+
+      editor.commands.resetMarkdown("alphabeta gamma");
+      selectText(editor, "alphabeta", "end");
+      const nativeDeletion = new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "deleteWordBackward",
+      });
+
+      expect(editor.view.dom.dispatchEvent(nativeDeletion)).toBe(true);
+      expect(nativeDeletion.defaultPrevented).toBe(false);
+      expect(editor.getMarkdown()).toBe("alphabeta gamma");
+
+      editor.commands.resetMarkdown("alpha**beta** gamma");
+      selectText(editor, "beta", "end");
+      const composingDeletion = new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "deleteWordBackward",
+        isComposing: true,
+      });
+
+      expect(editor.view.dom.dispatchEvent(composingDeletion)).toBe(true);
+      expect(composingDeletion.defaultPrevented).toBe(false);
+      expect(editor.getMarkdown()).toBe("alpha**beta** gamma");
+
+      editor.destroy();
+    }
+  });
+
   it("validates table arguments and preserves destroyed-editor errors", () => {
     const editor = createEditor({ element: createHost(), markdown: "alpha" });
 

@@ -1,7 +1,9 @@
 import type { Locator, Page } from "@playwright/test";
 import {
+  clearEditorEvents,
   editorLocator,
   expect,
+  getEditorEvents,
   getMarkdown,
   mountEditor,
   resetEditor,
@@ -565,6 +567,158 @@ test("@required marked grapheme clusters delete atomically across engines", asyn
   await pressDeletionKey("Delete");
   await settleEditor(labPage, id);
   expect(await getMarkdown(labPage, id)).toBe("A**X**Z");
+});
+
+test("@required word deletion ignores Markdown mark boundaries across engines", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "cdp-marked-word-delete";
+  await mountEditor(labPage, { id, markdown: "" });
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+  const pressWordDeletion = async (key: "Backspace" | "Delete") => {
+    if (!cdp) {
+      await labPage.keyboard.press(`Control+${key}`);
+      return;
+    }
+
+    const keyCode = key === "Backspace" ? 8 : 46;
+
+    for (const type of ["rawKeyDown", "keyUp"] as const) {
+      await cdp.send("Input.dispatchKeyEvent", {
+        code: key,
+        key,
+        modifiers: 2,
+        nativeVirtualKeyCode: keyCode,
+        type,
+        windowsVirtualKeyCode: keyCode,
+      });
+    }
+  };
+  const deleteFrom = async (
+    markdown: string,
+    needle: string,
+    mode: "end" | "start",
+    key: "Backspace" | "Delete",
+  ) => {
+    await resetEditor(labPage, id, markdown);
+    expect(await labPage.evaluate(
+      ({ editorId, nextNeedle, nextMode }) => (
+        window.__MARKORA_BROWSER_LAB__!.selectText(editorId, nextNeedle, nextMode)
+      ),
+      { editorId: id, nextMode: mode, nextNeedle: needle },
+    )).toBe(true);
+    await settleEditor(labPage, id);
+    await clearEditorEvents(labPage, id);
+    await pressWordDeletion(key);
+    await settleEditor(labPage, id);
+    await expect(editorLocator(labPage, id)).toBeFocused();
+    const events = await getEditorEvents(labPage, id);
+    expect(events.counts.focus).toBe(0);
+    expect(events.counts.blur).toBe(0);
+    const result = await editorLocator(labPage, id).textContent();
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+      id,
+    )).toBe(true);
+    await settleEditor(labPage, id);
+    expect(await getMarkdown(labPage, id)).toBe(markdown);
+    return result;
+  };
+
+  for (const testCase of [
+    {
+      backwardNeedle: "beta",
+      forwardNeedle: "alpha",
+      marked: "alpha**beta** gamma",
+      plain: "alphabeta gamma",
+      plainNeedle: "alphabeta",
+    },
+    {
+      backwardNeedle: "beta",
+      forwardNeedle: "alpha",
+      marked: "alpha[beta](/word) gamma",
+      plain: "alphabeta gamma",
+      plainNeedle: "alphabeta",
+    },
+    {
+      backwardNeedle: "'t",
+      forwardNeedle: "can",
+      marked: "**can**'t next",
+      plain: "can't next",
+      plainNeedle: "can't",
+    },
+    {
+      backwardNeedle: "пожаловать",
+      forwardNeedle: "добро",
+      marked: "добро**пожаловать** мир",
+      plain: "добропожаловать мир",
+      plainNeedle: "добропожаловать",
+    },
+  ] as const) {
+    const plainBackward = await deleteFrom(
+      testCase.plain,
+      testCase.plainNeedle,
+      "end",
+      "Backspace",
+    );
+    const markedBackward = await deleteFrom(
+      testCase.marked,
+      testCase.backwardNeedle,
+      "end",
+      "Backspace",
+    );
+    expect(markedBackward).toBe(plainBackward);
+
+    const plainForward = await deleteFrom(
+      testCase.plain,
+      testCase.plainNeedle,
+      "start",
+      "Delete",
+    );
+    const markedForward = await deleteFrom(
+      testCase.marked,
+      testCase.forwardNeedle,
+      "start",
+      "Delete",
+    );
+    expect(markedForward).toBe(plainForward);
+  }
+
+  if (browserName === "firefox") {
+    const handoffMarkdown = "alpha**beta** gamma";
+    await resetEditor(labPage, id, handoffMarkdown);
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "end"),
+      id,
+    )).toBe(true);
+    await settleEditor(labPage, id);
+    await labPage.evaluate(() => {
+      const button = document.createElement("button");
+      button.id = "word-probe-focus-handoff";
+      button.textContent = "Host focus target";
+      document.body.append(button);
+      document.addEventListener("focusin", (event) => {
+        const target = event.target;
+
+        if (
+          target instanceof HTMLElement
+          && target.isContentEditable
+          && target.getAttribute("aria-hidden") === "true"
+        ) {
+          button.focus();
+        }
+      }, { capture: true, once: true });
+    });
+    await pressWordDeletion("Backspace");
+    await settleEditor(labPage, id);
+    await expect(labPage.locator("#word-probe-focus-handoff")).toBeFocused();
+    expect(await getMarkdown(labPage, id)).toBe(handoffMarkdown);
+    await labPage.locator("#word-probe-focus-handoff").evaluate((button) => button.remove());
+  }
 });
 
 test("@required mixed bidirectional text can be selected and replaced logically", async ({ labPage }) => {
