@@ -559,6 +559,64 @@ describe("public command and state surface", () => {
     }
   });
 
+  it("deletes graphemes split by marks atomically in both runtime paths", () => {
+    for (const editor of [
+      createEditor({ element: createHost(), markdown: "Ae**́**Z" }),
+      createMinimalEditor({ element: createHost(), markdown: "Ae**́**Z" }),
+    ]) {
+      selectText(editor, "Z", "start");
+      const backward = new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "deleteContentBackward",
+      });
+
+      expect(editor.view.dom.dispatchEvent(backward)).toBe(false);
+      expect(backward.defaultPrevented).toBe(true);
+      expect(editor.getMarkdown()).toBe("AZ");
+      expect(editor.commands.undo()).toBe(true);
+      expect(editor.getMarkdown()).toBe("Ae**́**Z");
+
+      editor.commands.resetMarkdown("A👩**‍**💻Z");
+      selectText(editor, "A", "end");
+      const forward = new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "deleteContentForward",
+      });
+
+      expect(editor.view.dom.dispatchEvent(forward)).toBe(false);
+      expect(forward.defaultPrevented).toBe(true);
+      expect(editor.getMarkdown()).toBe("AZ");
+
+      editor.commands.resetMarkdown("AB");
+      selectText(editor, "B", "end");
+      const nativeDeletion = new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "deleteContentBackward",
+      });
+
+      expect(editor.view.dom.dispatchEvent(nativeDeletion)).toBe(true);
+      expect(nativeDeletion.defaultPrevented).toBe(false);
+      expect(editor.getMarkdown()).toBe("AB");
+
+      editor.commands.resetMarkdown("Ae**́**Z");
+      selectText(editor, "Z", "start");
+      const noncancelableDeletion = new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: false,
+        inputType: "deleteContentBackward",
+      });
+
+      expect(editor.view.dom.dispatchEvent(noncancelableDeletion)).toBe(true);
+      expect(noncancelableDeletion.defaultPrevented).toBe(false);
+      expect(editor.getMarkdown()).toBe("Ae**́**Z");
+
+      editor.destroy();
+    }
+  });
+
   it("validates table arguments and preserves destroyed-editor errors", () => {
     const editor = createEditor({ element: createHost(), markdown: "alpha" });
 

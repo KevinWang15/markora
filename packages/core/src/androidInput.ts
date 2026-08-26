@@ -5,8 +5,12 @@ type GraphemeSegment = {
   index: number;
 };
 
+type GraphemeSegments = Iterable<GraphemeSegment> & {
+  containing?(codeUnitIndex: number): GraphemeSegment | undefined;
+};
+
 type GraphemeSegmenter = {
-  segment(input: string): Iterable<GraphemeSegment>;
+  segment(input: string): GraphemeSegments;
 };
 
 type GraphemeSegmenterConstructor = new (
@@ -21,6 +25,13 @@ type SegmentingIntl = typeof Intl & {
 type BrowserWindow = Window & typeof globalThis;
 
 type FallbackState = Pick<EditorState, "doc" | "selection">;
+
+type DeletionDirection = "backward" | "forward";
+
+type DeletionRange = {
+  from: number;
+  to: number;
+};
 
 function captureFallbackState(state: EditorState): FallbackState {
   return {
@@ -89,9 +100,16 @@ export function findPreviousGraphemeStart(
   }
 
   if (intl.Segmenter) {
+    const segments = new intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text);
+    const containingSegment = segments.containing?.(text.length - 1);
+
+    if (containingSegment) {
+      return containingSegment.index;
+    }
+
     let previousStart = 0;
 
-    for (const segment of new intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)) {
+    for (const segment of segments) {
       previousStart = segment.index;
     }
 
@@ -142,7 +160,76 @@ export function findNextGraphemeEnd(
   return 1;
 }
 
-export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
+function findCrossInlineBoundaryDeletionRange(
+  state: EditorState,
+  direction: DeletionDirection,
+): DeletionRange | null {
+  const { selection } = state;
+
+  if (!(selection instanceof TextSelection) || !selection.empty) {
+    return null;
+  }
+
+  const { parent, parentOffset } = selection.$from;
+  const adjacentChild = direction === "backward"
+    ? parent.childBefore(parentOffset)
+    : parent.childAfter(parentOffset);
+  const adjacentNode = adjacentChild.node;
+
+  if (!adjacentNode?.isText || !adjacentNode.text) {
+    return null;
+  }
+
+  const offsetInChild = parentOffset - adjacentChild.offset;
+  const immediateText = direction === "backward"
+    ? adjacentNode.text.slice(0, offsetInChild)
+    : adjacentNode.text.slice(offsetInChild);
+  const siblingIndex = direction === "backward"
+    ? adjacentChild.index - 1
+    : adjacentChild.index + 1;
+  const sibling = siblingIndex >= 0 && siblingIndex < parent.childCount
+    ? parent.child(siblingIndex)
+    : null;
+
+  if (!immediateText || !sibling?.isText) {
+    return null;
+  }
+
+  const clusterFitsImmediateText = direction === "backward"
+    ? findPreviousGraphemeStart(immediateText) > 0
+    : findNextGraphemeEnd(immediateText) < immediateText.length;
+
+  if (clusterFitsImmediateText) {
+    return null;
+  }
+
+  const adjacentText = direction === "backward"
+    ? readContiguousTextBefore(parent, parentOffset)
+    : readContiguousTextAfter(parent, parentOffset);
+  const graphemeLength = direction === "backward"
+    ? adjacentText.length - findPreviousGraphemeStart(adjacentText)
+    : findNextGraphemeEnd(adjacentText);
+
+  // Native engines already delete a complete grapheme within one DOM text
+  // node. Intervene only when a mark boundary splits the cluster across
+  // multiple model/DOM text nodes, where engines otherwise delete one piece.
+  if (graphemeLength <= immediateText.length) {
+    return null;
+  }
+
+  const from = direction === "backward"
+    ? selection.from - graphemeLength
+    : selection.from;
+  const to = direction === "backward"
+    ? selection.from
+    : selection.from + graphemeLength;
+
+  return from >= 0 && to <= state.doc.content.size
+    ? { from, to }
+    : null;
+}
+
+export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
   const androidChrome = isAndroidChrome(ownerWindow);
   const pendingFallbacks = new Set<number>();
   let lastFallbackState: FallbackState | null = null;
@@ -152,8 +239,7 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
       handleDOMEvents: {
         beforeinput(view, event) {
           if (
-            !androidChrome
-            || !view.editable
+            !view.editable
             || view.composing
             || !("inputType" in event)
           ) {
@@ -176,6 +262,24 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
               : null;
 
           if (!direction) {
+            return false;
+          }
+
+          const crossBoundaryRange = inputEvent.cancelable
+            ? findCrossInlineBoundaryDeletionRange(view.state, direction)
+            : null;
+
+          if (crossBoundaryRange) {
+            inputEvent.preventDefault();
+            view.dispatch(
+              view.state.tr
+                .delete(crossBoundaryRange.from, crossBoundaryRange.to)
+                .scrollIntoView(),
+            );
+            return true;
+          }
+
+          if (!androidChrome) {
             return false;
           }
 

@@ -16,6 +16,24 @@ describe("Android input fallback", () => {
     expect(findPreviousGraphemeStart("A😀", {} as typeof Intl)).toBe(1);
   });
 
+  it("uses direct segment lookup for long backward text when the runtime supports it", () => {
+    const segments = {
+      containing: () => ({ index: 999 }),
+      *[Symbol.iterator](): IterableIterator<{ index: number }> {
+        throw new Error("The iterable fallback should not run.");
+      },
+    };
+    const intl = {
+      Segmenter: class {
+        segment() {
+          return segments;
+        }
+      },
+    } as unknown as typeof Intl;
+
+    expect(findPreviousGraphemeStart("A".repeat(1_000), intl)).toBe(999);
+  });
+
   it.each([
     ["😀A", 2],
     ["👩‍💻A", 5],

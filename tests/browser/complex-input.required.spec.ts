@@ -480,6 +480,93 @@ test("@required dead-key output, emoji, and surrogate deletion remain intact", a
   expect(await getMarkdown(labPage, id)).toBe("A");
 });
 
+test("@required marked grapheme clusters delete atomically across engines", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "cdp-marked-grapheme-delete";
+  await mountEditor(labPage, { id, markdown: "" });
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+  const pressDeletionKey = async (key: "Backspace" | "Delete") => {
+    if (!cdp) {
+      await labPage.keyboard.press(key);
+      return;
+    }
+
+    const keyCode = key === "Backspace" ? 8 : 46;
+
+    for (const type of ["rawKeyDown", "keyUp"] as const) {
+      await cdp.send("Input.dispatchKeyEvent", {
+        code: key,
+        key,
+        nativeVirtualKeyCode: keyCode,
+        type,
+        windowsVirtualKeyCode: keyCode,
+      });
+    }
+  };
+  const cases = [
+    "e**́**",
+    "👩**‍**💻",
+    "👍**🏽**",
+    "🇨**🇳**",
+  ] as const;
+
+  for (const grapheme of cases) {
+    const markdown = `A${grapheme}Z`;
+    await resetEditor(labPage, id, markdown);
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "Z", "start"),
+      id,
+    )).toBe(true);
+    await pressDeletionKey("Backspace");
+    await settleEditor(labPage, id);
+    expect(await getMarkdown(labPage, id)).toBe("AZ");
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+      id,
+    )).toBe(true);
+    await settleEditor(labPage, id);
+    expect(await getMarkdown(labPage, id)).toBe(markdown);
+
+    await resetEditor(labPage, id, markdown);
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "A", "end"),
+      id,
+    )).toBe(true);
+    await pressDeletionKey("Delete");
+    await settleEditor(labPage, id);
+    expect(await getMarkdown(labPage, id)).toBe("AZ");
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.command(editorId, { type: "undo" }),
+      id,
+    )).toBe(true);
+    await settleEditor(labPage, id);
+    expect(await getMarkdown(labPage, id)).toBe(markdown);
+  }
+
+  await resetEditor(labPage, id, "Ae**́Z**Q");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "Z", "start"),
+    id,
+  )).toBe(true);
+  await pressDeletionKey("Backspace");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe("A**Z**Q");
+
+  await resetEditor(labPage, id, "A**Xe**́Z");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "e", "start"),
+    id,
+  )).toBe(true);
+  await pressDeletionKey("Delete");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe("A**X**Z");
+});
+
 test("@required mixed bidirectional text can be selected and replaced logically", async ({ labPage }) => {
   const id = "bidi";
   await mountEditor(labPage, {
