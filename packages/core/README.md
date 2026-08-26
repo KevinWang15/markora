@@ -543,6 +543,13 @@ Valid GFM output requires a rectangular table, column headers in the first row, 
 
 `markora/minimal` and the root entry with `createMinimalMarkdownEditorPreset()` expose the same typed methods, so shared host toolbar code does not need a different interface. Because tasks and tables are absent from that schema, their commands and matching `can`/`isActive` checks consistently return `false`, while `tableIssues()` returns an empty frozen list. The minimal preset still supports paragraphs, headings, blockquotes, ordinary bullet and ordered lists (including indent/lift), hard breaks, horizontal rules, and plain code blocks.
 
+Root and minimal share ordinary-list keyboard editing: Enter continues the
+current item, Enter on the resulting empty item exits the list, Tab indents an
+item when a preceding sibling makes that possible, and Shift-Tab outdents it.
+Each edit participates in normal history. Tab remains native when the selection
+is outside a list; in root tables it retains the table-navigation behavior
+described above, and a focused task checkbox retains native sequential focus.
+
 ## Typing ergonomics and keymaps
 
 `CreateEditorOptions.typing` is a copied, creation-time policy. `autoPairs` accepts `parentheses`, `square-brackets`, `braces`, `single-quotes`, `double-quotes`, `emphasis-asterisks`, `emphasis-underscores`, `strong-asterisks`, `strong-underscores`, `inline-code`, and `strikethrough`. It defaults to an empty list. `wrapSelection` defaults to `true`; set it to `false` to leave non-empty selections to the browser/editor's ordinary text-input behavior.

@@ -1193,3 +1193,11 @@ official escaped-pipe table code-span case additionally has production Shadow
 DOM coverage: Chromium DevTools Protocol input edits a sibling cell, then all
 three engines verify that the inline-code mark and canonical table survive a
 reset.
+
+The next editor-robustness pass closed a core keyboard mismatch between the
+root and minimal entries. Minimal now shares root's ordinary-list Enter, Tab,
+and Shift-Tab behavior: continuation, empty-item exit, indentation, and outdent
+all preserve normal undo history, while Tab outside a list remains native. The
+task-aware split command is shared instead of duplicated. Raw Chromium DevTools
+Protocol key events and Firefox/WebKit keyboard input verify both entries in
+production Shadow DOM.

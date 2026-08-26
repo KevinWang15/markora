@@ -1,4 +1,9 @@
-import { baseKeymap, toggleMark } from "prosemirror-commands";
+import {
+  baseKeymap,
+  chainCommands,
+  liftEmptyBlock,
+  toggleMark,
+} from "prosemirror-commands";
 import { closeHistory, history, redo, undo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
 import type {
@@ -68,7 +73,10 @@ import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
 import { createImageViewClass } from "./imageView";
 import { createMinimalMarkdownCodec } from "./minimalMarkdownCodec";
 import { createPlaceholderPlugin } from "./placeholderPlugin";
-import { createStructuralCommandSet } from "./structuralCommands";
+import {
+  createListItemSplitCommand,
+  createStructuralCommandSet,
+} from "./structuralCommands";
 import {
   getMarkdownEditorTransactionEmitChange,
   getMarkdownEditorTransactionOrigin,
@@ -767,6 +775,14 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     { command: trackedUndo, defaultKeys: ["Mod-z"], id: "@markora/core/undo" },
     { command: trackedRedo, defaultKeys: ["Shift-Mod-z", "Mod-y"], id: "@markora/core/redo" },
   ], shortcuts);
+  const listItemType = codec.schema.nodes.list_item;
+  const listEditingKeymap = listItemType
+    ? keymap({
+        Enter: chainCommands(createListItemSplitCommand(listItemType), liftEmptyBlock),
+        Tab: structuralCommandSet.commands.sinkListItem,
+        "Shift-Tab": structuralCommandSet.commands.liftListItem,
+      })
+    : null;
   let plugins: readonly Plugin[];
   const assertActive = (operation: string) => {
     if (lifecycle !== "active" || view.isDestroyed) {
@@ -853,6 +869,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         ? [extensionAssembly.contributions.keymap]
         : []),
       ...(shortcutKeymap ? [shortcutKeymap] : []),
+      ...(listEditingKeymap ? [listEditingKeymap] : []),
       keymap(baseKeymap),
     ];
   } catch (error) {

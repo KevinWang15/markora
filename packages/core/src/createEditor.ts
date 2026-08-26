@@ -2,7 +2,7 @@ import { baseKeymap, chainCommands, liftEmptyBlock, toggleMark } from "prosemirr
 import { closeHistory, history, redo, undo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
 import { type Node as ProseMirrorNode, type NodeType } from "prosemirror-model";
-import { sinkListItem, splitListItem, liftListItem } from "prosemirror-schema-list";
+import { sinkListItem, liftListItem } from "prosemirror-schema-list";
 import {
   AllSelection,
   type Command,
@@ -149,7 +149,10 @@ import {
 } from "./typingErgonomics";
 import { createTaskListHelpers } from "./taskListUtils";
 import { createTaskListItemViewClass } from "./taskListItemView";
-import { createStructuralCommandSet } from "./structuralCommands";
+import {
+  createListItemSplitCommand,
+  createStructuralCommandSet,
+} from "./structuralCommands";
 import { createMediaActionHelpers } from "./mediaActionUtils";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import { createOpaqueNodeViewClass } from "./opaqueNodeView";
@@ -453,56 +456,6 @@ function throwCollectedErrors(message: string, errors: unknown[]) {
 
 function createChangeContext(origin: MarkdownEditorChangeOrigin): MarkdownEditorChangeContext {
   return Object.freeze({ origin });
-}
-
-function createListItemSplitCommand(itemType: NodeType): Command {
-  const splitOrdinaryItem = splitListItem(itemType);
-
-  return (state, dispatch, view) => {
-    const { $from } = state.selection;
-
-    for (let depth = $from.depth; depth > 0; depth -= 1) {
-      const item = $from.node(depth);
-
-      if (item.type !== itemType) {
-        continue;
-      }
-
-      if (typeof item.attrs.checked !== "boolean") {
-        return splitOrdinaryItem(state, dispatch, view);
-      }
-
-      const uncheckedAttrs = {
-        ...item.attrs,
-        checked: false,
-      };
-      const isAtItemStart = $from.index(depth) === 0 && $from.parentOffset === 0;
-
-      if (!isAtItemStart || !dispatch) {
-        return splitListItem(itemType, isAtItemStart ? item.attrs : uncheckedAttrs)(
-          state,
-          dispatch,
-          view,
-        );
-      }
-
-      const itemPos = $from.before(depth);
-      return splitListItem(itemType, item.attrs)(state, (transaction) => {
-        const leadingItem = transaction.doc.nodeAt(itemPos);
-
-        if (leadingItem?.type === itemType) {
-          transaction.setNodeMarkup(itemPos, itemType, {
-            ...leadingItem.attrs,
-            checked: false,
-          });
-        }
-
-        dispatch(transaction);
-      }, view);
-    }
-
-    return splitOrdinaryItem(state, dispatch, view);
-  };
 }
 
 function createSchemaRuntimeHelpers(

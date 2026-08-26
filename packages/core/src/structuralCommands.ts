@@ -2,6 +2,7 @@ import { lift, setBlockType, wrapIn } from "prosemirror-commands";
 import {
   liftListItem as createLiftListItemCommand,
   sinkListItem as createSinkListItemCommand,
+  splitListItem,
   wrapInList,
 } from "prosemirror-schema-list";
 import type {
@@ -50,6 +51,56 @@ type ListItemInfo = Readonly<{
 type NormalizedCodeBlockOptions = Readonly<{
   language: string;
 }>;
+
+export function createListItemSplitCommand(itemType: NodeType): Command {
+  const splitOrdinaryItem = splitListItem(itemType);
+
+  return (state, dispatch, view) => {
+    const { $from } = state.selection;
+
+    for (let depth = $from.depth; depth > 0; depth -= 1) {
+      const item = $from.node(depth);
+
+      if (item.type !== itemType) {
+        continue;
+      }
+
+      if (typeof item.attrs.checked !== "boolean") {
+        return splitOrdinaryItem(state, dispatch, view);
+      }
+
+      const uncheckedAttrs = {
+        ...item.attrs,
+        checked: false,
+      };
+      const isAtItemStart = $from.index(depth) === 0 && $from.parentOffset === 0;
+
+      if (!isAtItemStart || !dispatch) {
+        return splitListItem(itemType, isAtItemStart ? item.attrs : uncheckedAttrs)(
+          state,
+          dispatch,
+          view,
+        );
+      }
+
+      const itemPos = $from.before(depth);
+      return splitListItem(itemType, item.attrs)(state, (transaction) => {
+        const leadingItem = transaction.doc.nodeAt(itemPos);
+
+        if (leadingItem?.type === itemType) {
+          transaction.setNodeMarkup(itemPos, itemType, {
+            ...leadingItem.attrs,
+            checked: false,
+          });
+        }
+
+        dispatch(transaction);
+      }, view);
+    }
+
+    return splitOrdinaryItem(state, dispatch, view);
+  };
+}
 
 function normalizeHeadingLevel(level: MarkdownEditorHeadingLevel) {
   if (!Number.isInteger(level) || level < 1 || level > 6) {

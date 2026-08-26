@@ -110,6 +110,75 @@ describe("minimal embedded editor entry", () => {
     expect(editor.commands.redo()).toBe(true);
   });
 
+  it("continues, indents, and outdents lists without trapping unrelated Tab input", () => {
+    const original = "* parent\n* child";
+    const nested = "* parent\n  * child";
+    const editor = track(createEditor({
+      element: createHost(),
+      markdown: original,
+    }));
+    const selectTextEnd = (text: string) => {
+      let end: number | undefined;
+
+      editor.view.state.doc.descendants((node, pos) => {
+        if (node.isText && node.text === text) {
+          end = pos + node.nodeSize;
+        }
+      });
+
+      if (end === undefined) {
+        throw new Error(`Missing text ${JSON.stringify(text)}.`);
+      }
+
+      editor.view.dispatch(editor.view.state.tr.setSelection(
+        TextSelection.create(editor.view.state.doc, end),
+      ));
+    };
+    const press = (key: "Enter" | "Tab", shiftKey = false) => {
+      const event = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key,
+        shiftKey,
+      });
+      editor.view.dom.dispatchEvent(event);
+      return event;
+    };
+
+    selectTextEnd("child");
+    expect(press("Tab").defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe(nested);
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe(original);
+
+    editor.commands.resetMarkdown(nested);
+    selectTextEnd("child");
+    expect(press("Tab", true).defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe(original);
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe(nested);
+
+    editor.commands.resetMarkdown("* parent");
+    selectTextEnd("parent");
+    expect(press("Enter").defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe("* parent\n* ");
+    expect(press("Enter").defaultPrevented).toBe(true);
+    expect(editor.view.state.doc.childCount).toBe(2);
+    expect(editor.view.state.doc.firstChild?.type.name).toBe("bullet_list");
+    expect(editor.view.state.doc.firstChild?.childCount).toBe(1);
+    expect(editor.view.state.doc.lastChild?.type.name).toBe("paragraph");
+
+    editor.commands.resetMarkdown("* only");
+    selectTextEnd("only");
+    expect(press("Tab").defaultPrevented).toBe(false);
+    expect(editor.getMarkdown()).toBe("* only");
+
+    editor.commands.resetMarkdown("plain");
+    selectTextEnd("plain");
+    expect(press("Tab").defaultPrevented).toBe(false);
+    expect(editor.getMarkdown()).toBe("plain");
+  });
+
   it("uses one extension codec, registry, and assembly across document updates", () => {
     const editor = track(createEditor({
       element: createHost(),
