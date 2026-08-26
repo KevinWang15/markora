@@ -47,6 +47,15 @@ import {
   sanitizeResourceUrl,
   type NormalizedMarkdownEditorResources,
 } from "./resourcePolicy";
+import {
+  containsMarkdownEntityReference,
+  createEntitySafeMarkdownSerializerState,
+  encodeMarkdownAttributeText,
+  escapeMarkdownEntityReferences,
+  flattenMarkdownImageDescription,
+  serializeEntitySafeMarkdownImage,
+  serializeEntitySafeMarkdownText,
+} from "./markdownTextSerialization";
 import type { TableAlignment } from "./tableNavigation";
 import { widestRowTableRule } from "./raggedTableMarkdown";
 import {
@@ -102,22 +111,22 @@ type MarkdownSerializerStateRuntime = MarkdownSerializerState & {
   inAutolink?: boolean;
   inMarkdownLink?: boolean;
   out: string;
+  pendingBareAutolinkBoundary?: boolean;
+  protectBareAutolinkBoundary?: boolean;
 };
-type MarkdownSerializerStateConstructor = new (
-  nodes: MarkdownSerializer["nodes"],
-  marks: MarkdownSerializer["marks"],
-  options: MarkdownSerializer["options"] & { tightLists?: boolean },
-) => MarkdownSerializerStateRuntime;
-
-const MarkdownSerializerStateRuntimeConstructor = MarkdownSerializerState as unknown as MarkdownSerializerStateConstructor;
-
 function createCompatibilityMarkdownSerializerState(
   nodes: MarkdownSerializer["nodes"],
   marks: MarkdownSerializer["marks"],
   options: MarkdownSerializer["options"] & { tightLists?: boolean },
   linkify: MarkdownIt["linkify"],
+  unescapeAll: MarkdownIt["utils"]["unescapeAll"],
 ) {
-  const state = new MarkdownSerializerStateRuntimeConstructor(nodes, marks, options);
+  const state = createEntitySafeMarkdownSerializerState(
+    nodes,
+    marks,
+    options,
+    unescapeAll,
+  ) as MarkdownSerializerStateRuntime;
   const baseEscape = state.esc.bind(state);
 
   const escapeFoundationText = (str: string, startOfLine = false) => baseEscape(str, startOfLine).replace(
@@ -171,6 +180,7 @@ class CompatibilityMarkdownSerializer extends MarkdownSerializer {
     marks: MarkdownSerializer["marks"],
     options: MarkdownSerializer["options"] & { tightLists?: boolean },
     private readonly linkify: MarkdownIt["linkify"],
+    private readonly unescapeAll: MarkdownIt["utils"]["unescapeAll"],
   ) {
     super(nodes, marks, options);
   }
@@ -181,6 +191,7 @@ class CompatibilityMarkdownSerializer extends MarkdownSerializer {
       this.marks,
       { ...this.options, ...options },
       this.linkify,
+      this.unescapeAll,
     );
     state.renderContent(content);
     return state.out;
@@ -892,6 +903,16 @@ configureMarkdownTokenizerNesting(markdownTokenizer);
 
 const foundationMarkdownTokens: Record<string, ParseSpec> = {
   ...defaultMarkdownParser.tokens,
+  image: {
+    ...defaultMarkdownParser.tokens.image,
+    getAttrs(token: Token) {
+      return {
+        src: token.attrGet("src"),
+        title: token.attrGet("title") || null,
+        alt: flattenMarkdownImageDescription(token.children),
+      };
+    },
+  },
   link: {
     ...defaultMarkdownParser.tokens.link,
     getAttrs(token: Token) {
@@ -986,9 +1007,31 @@ const serializerNodes: Record<
     ...defaultMarkdownSerializer.nodes,
     text(state: MarkdownSerializerState, node: ProseMirrorNode) {
       const runtime = state as MarkdownSerializerStateRuntime;
+      let source = node.text ?? "";
+
+      if (runtime.protectBareAutolinkBoundary && source) {
+        const firstCharacter = String.fromCodePoint(source.codePointAt(0)!);
+        state.text(`&#${firstCharacter.codePointAt(0)!};`, false);
+        source = source.slice(firstCharacter.length);
+        runtime.protectBareAutolinkBoundary = false;
+      }
+
       runtime.escapeBareAutolinks = !runtime.inAutolink && !runtime.inMarkdownLink;
-      defaultMarkdownSerializer.nodes.text(state, node, node, 0);
+      serializeEntitySafeMarkdownText(
+        state,
+        node,
+        markdownTokenizer.utils.unescapeAll,
+        !runtime.inAutolink,
+        source,
+      );
       runtime.escapeBareAutolinks = false;
+    },
+    image(state: MarkdownSerializerState, node: ProseMirrorNode) {
+      serializeEntitySafeMarkdownImage(
+        state,
+        node,
+        markdownTokenizer.utils.unescapeAll,
+      );
     },
     code_block: serializeCodeBlock,
     raw_block(state: MarkdownSerializerState, node: ProseMirrorNode) {
@@ -1075,27 +1118,46 @@ const serializerMarks: Record<
     open(state, mark, parent, index) {
       const runtime = state as MarkdownSerializerStateRuntime;
       let label = "";
+      let labelEndIndex = index;
 
       for (let childIndex = index; childIndex < parent.childCount; childIndex += 1) {
         const child = parent.child(childIndex);
         if (!child.isText || !mark.isInSet(child.marks)) break;
         label += child.text ?? "";
+        labelEndIndex = childIndex + 1;
       }
 
       const match = markdownTokenizer.linkify.match(label)?.[0] ?? null;
       const safeHref = match && match.index === 0 && match.lastIndex === label.length
         ? sanitizeResourceUrl(resources, "link", match.url)
         : null;
+      const following = labelEndIndex < parent.childCount
+        ? parent.child(labelEndIndex)
+        : null;
+      const unmarkedFollowingText = following?.isText && following.marks.length === 0
+        ? following.text ?? ""
+        : "";
+      const combinedMatch = unmarkedFollowingText
+        ? markdownTokenizer.linkify.match(`${label}${unmarkedFollowingText}`)?.find((candidate) => (
+            candidate.index === 0 && candidate.lastIndex > label.length
+          ))
+        : null;
       const isBareAutolink = mark.attrs.autolink === true
         && !mark.attrs.title
-        && safeHref === mark.attrs.href;
+        && safeHref === mark.attrs.href
+        && !containsMarkdownEntityReference(
+          label,
+          markdownTokenizer.utils.unescapeAll,
+        );
 
       if (isBareAutolink) {
         runtime.bareAutolink = true;
         runtime.inAutolink = true;
+        runtime.pendingBareAutolinkBoundary = Boolean(combinedMatch);
         return "";
       }
 
+      runtime.pendingBareAutolinkBoundary = false;
       runtime.inMarkdownLink = true;
       const open = defaultMarkdownSerializer.marks.link.open;
       return typeof open === "function" ? open(state, mark, parent, index) : open;
@@ -1105,12 +1167,29 @@ const serializerMarks: Record<
       if (runtime.bareAutolink) {
         runtime.bareAutolink = false;
         runtime.inAutolink = undefined;
+        runtime.protectBareAutolinkBoundary = runtime.pendingBareAutolinkBoundary;
+        runtime.pendingBareAutolinkBoundary = false;
         return "";
       }
 
       runtime.inMarkdownLink = false;
-      const close = defaultMarkdownSerializer.marks.link.close;
-      return typeof close === "function" ? close(state, mark, parent, index) : close;
+      const inAutolink = runtime.inAutolink;
+      runtime.inAutolink = undefined;
+      if (inAutolink) {
+        return ">";
+      }
+
+      const href = escapeMarkdownEntityReferences(
+        typeof mark.attrs.href === "string" ? mark.attrs.href : "",
+        markdownTokenizer.utils.unescapeAll,
+      ).replace(/[()"]+/g, (characters) => characters.replace(/./g, "\\$&"));
+      const title = typeof mark.attrs.title === "string" && mark.attrs.title
+        ? ` "${encodeMarkdownAttributeText(
+            mark.attrs.title,
+            markdownTokenizer.utils.unescapeAll,
+          ).replace(/"/g, '\\"')}"`
+        : "";
+      return `](${href}${title})`;
     },
     mixable: true,
   },
@@ -1201,7 +1280,7 @@ const markdownSerializer = new CompatibilityMarkdownSerializer(serializerNodes, 
   ], resolvedExtensions.map(({ definition }) => (
     definition.markdown?.serializer?.escapeExtraCharacters
   ))),
-}, markdownTokenizer.linkify);
+}, markdownTokenizer.linkify, markdownTokenizer.utils.unescapeAll);
 
 function stripTaskPrefixFromInline(fragment: Fragment, count: number) {
   let remaining = count;

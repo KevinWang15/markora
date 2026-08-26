@@ -48,6 +48,14 @@ import {
   type MarkdownEditorOrderedSchemaMap,
 } from "./schemaContributionOrder";
 import { createMarkdownEditorSourceEnvironment } from "./markdownSource";
+import {
+  encodeMarkdownAttributeText,
+  EntitySafeMarkdownSerializer,
+  escapeMarkdownEntityReferences,
+  flattenMarkdownImageDescription,
+  serializeEntitySafeMarkdownImage,
+  serializeEntitySafeMarkdownText,
+} from "./markdownTextSerialization";
 
 const minimalTokenizerFoundationAnchors = [
   { id: "@markora/foundation/block/fence", phase: "block", markdownItName: "fence" },
@@ -305,6 +313,16 @@ export function createMinimalMarkdownCodec(
   const parserTokens = compileMarkdownEditorParserTokens({
     foundationTokens: {
       ...defaultMarkdownParser.tokens,
+      image: {
+        ...defaultMarkdownParser.tokens.image,
+        getAttrs(token) {
+          return {
+            src: token.attrGet("src"),
+            title: token.attrGet("title") || null,
+            alt: flattenMarkdownImageDescription(token.children),
+          };
+        },
+      },
       ordered_list: {
         ...defaultMarkdownParser.tokens.ordered_list,
         getAttrs: orderedMarkdownListTokenAttrs,
@@ -320,6 +338,20 @@ export function createMinimalMarkdownCodec(
   });
   const serializerNodes: Record<string, (typeof defaultMarkdownSerializer.nodes)[string]> = {
     ...defaultMarkdownSerializer.nodes,
+    text(state: MarkdownSerializerState, node: ProseMirrorNode) {
+      serializeEntitySafeMarkdownText(
+        state,
+        node,
+        tokenizer.utils.unescapeAll,
+      );
+    },
+    image(state: MarkdownSerializerState, node: ProseMirrorNode) {
+      serializeEntitySafeMarkdownImage(
+        state,
+        node,
+        tokenizer.utils.unescapeAll,
+      );
+    },
     bullet_list(state: MarkdownSerializerState, node: ProseMirrorNode) {
       const bullet = selectCanonicalMarkdownListMarker(state, node, "*", "-");
       renderCanonicalMarkdownList(state, node, "  ", () => `${bullet} `);
@@ -339,6 +371,29 @@ export function createMinimalMarkdownCodec(
   };
   const serializerMarks: Record<string, (typeof defaultMarkdownSerializer.marks)[string]> = {
     ...defaultMarkdownSerializer.marks,
+    link: {
+      ...defaultMarkdownSerializer.marks.link,
+      close(state, mark) {
+        const runtime = state as MarkdownSerializerState & { inAutolink?: boolean };
+        const inAutolink = runtime.inAutolink;
+        runtime.inAutolink = undefined;
+        if (inAutolink) {
+          return ">";
+        }
+
+        const href = escapeMarkdownEntityReferences(
+          typeof mark.attrs.href === "string" ? mark.attrs.href : "",
+          tokenizer.utils.unescapeAll,
+        ).replace(/[()"]+/g, (characters) => characters.replace(/./g, "\\$&"));
+        const title = typeof mark.attrs.title === "string" && mark.attrs.title
+          ? ` "${encodeMarkdownAttributeText(
+              mark.attrs.title,
+              tokenizer.utils.unescapeAll,
+            ).replace(/"/g, '\\"')}"`
+          : "";
+        return `](${href}${title})`;
+      },
+    },
   };
 
   for (const { definition } of extensions) {
@@ -425,10 +480,11 @@ export function createMinimalMarkdownCodec(
       definition.markdown?.serializer?.escapeExtraCharacters
     )),
   );
-  const serializer = new MarkdownSerializer(
+  const serializer = new EntitySafeMarkdownSerializer(
     serializerNodes,
     serializerMarks,
-    escapeExtraCharacters ? { escapeExtraCharacters } : undefined,
+    escapeExtraCharacters ? { escapeExtraCharacters } : {},
+    tokenizer.utils.unescapeAll,
   );
   const parse = (markdown: string) => {
     if (!markdown.trim()) {

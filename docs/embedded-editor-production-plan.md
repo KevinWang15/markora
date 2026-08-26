@@ -1154,3 +1154,23 @@ per-editor destination policy as explicit links. Literal plain paste and
 policy-rejected URL-shaped text receive a minimal escape, while an edited
 autolink whose label no longer matches its stored destination falls back to an
 explicit link instead of silently changing navigation.
+
+The same continuing robustness audit ran the root and minimal codecs against all
+652 CommonMark 0.31.2 examples and retained that complete attributed fixture in
+addition to the representative corpus.
+It closed silent surplus-cell loss in ragged GFM tables, retained every valid
+used or unused link-reference definition as inert source, and made entity
+semantics stable across serialization. Literal entity-looking text can no
+longer decode on reset; entity-produced tabs, line feeds, carriage returns, and
+trimmable Unicode whitespace remain inline text through numeric references;
+and complete image descriptions no longer truncate to their first tokenizer
+child. Each boundary has production Shadow DOM coverage with real Chromium
+DevTools Protocol input plus Firefox/WebKit reset verification.
+
+Verification for this entity-stability increment passes 1,487 unit/integration
+tests and every build, declaration, API, ESM, extension, and browser-type gate.
+The complete required production-browser matrix passes 557 cases with 79
+intentional capability skips across Chromium, Firefox, and WebKit. Package
+smoke and the core plus all-seven performance/memory budgets through 1 MiB pass
+with zero retained nodes, listeners, or documents; advisory timing warnings
+remain visible below their hard failure ceilings.

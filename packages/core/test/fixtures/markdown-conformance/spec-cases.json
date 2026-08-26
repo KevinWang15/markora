@@ -19,6 +19,16 @@
   ],
   "cases": [
     {
+      "id": "commonmark-14",
+      "source": "commonmark-0.31.2",
+      "section": "Backslash escapes",
+      "url": "https://spec.commonmark.org/0.31.2/#example-14",
+      "classification": "supported-normalized",
+      "input": "\\*not emphasized*\n\\<br/> not a tag\n\\[not a link](/foo)\n\\`not code`\n1\\. not a list\n\\* not a list\n\\# not a heading\n\\[foo]: /url \"not a reference\"\n\\&ouml; not a character entity\n",
+      "expected": "\\*not emphasized\\* \\<br/> not a tag \\[not a link\\](/foo) \\`not code\\` 1. not a list \\* not a list # not a heading \\[foo\\]: /url \"not a reference\" \\&ouml; not a character entity",
+      "note": "An escaped ampersand keeps entity-looking text literal after canonical soft-line folding and reset."
+    },
+    {
       "id": "commonmark-16",
       "source": "commonmark-0.31.2",
       "section": "Backslash escapes",
@@ -46,6 +56,16 @@
       "expected": "[foo](/bar* \"ti*tle\")"
     },
     {
+      "id": "commonmark-25",
+      "source": "commonmark-0.31.2",
+      "section": "Entity and numeric character references",
+      "url": "https://spec.commonmark.org/0.31.2/#example-25",
+      "classification": "supported-normalized",
+      "input": "&nbsp; &amp; &copy; &AElig; &Dcaron;\n&frac34; &HilbertSpace; &DifferentialD;\n&ClockwiseContourIntegral; &ngE;\n",
+      "expected": "&#160; & © Æ Ď ¾ ℋ ⅆ ∲ ≧̸",
+      "note": "Decoded Unicode text normalizes directly except entity-produced whitespace that Markdown source would otherwise trim."
+    },
+    {
       "id": "commonmark-26",
       "source": "commonmark-0.31.2",
       "section": "Entity and numeric character references",
@@ -53,6 +73,26 @@
       "classification": "supported-normalized",
       "input": "&#35; &#1234; &#992; &#0;\n",
       "expected": "\\# Ӓ Ϡ �"
+    },
+    {
+      "id": "commonmark-39",
+      "source": "commonmark-0.31.2",
+      "section": "Entity and numeric character references",
+      "url": "https://spec.commonmark.org/0.31.2/#example-39",
+      "classification": "supported-normalized",
+      "input": "foo&#10;&#10;bar\n",
+      "expected": "foo&#10;&#10;bar",
+      "note": "Entity-produced line feeds stay text within one paragraph rather than becoming block separators."
+    },
+    {
+      "id": "commonmark-40",
+      "source": "commonmark-0.31.2",
+      "section": "Entity and numeric character references",
+      "url": "https://spec.commonmark.org/0.31.2/#example-40",
+      "classification": "supported-normalized",
+      "input": "&#9;foo\n",
+      "expected": "&#9;foo",
+      "note": "An entity-produced leading tab stays paragraph text rather than becoming an indented code block."
     },
     {
       "id": "commonmark-43",
