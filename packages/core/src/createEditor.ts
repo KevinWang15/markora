@@ -22,6 +22,7 @@ import { createChangeEmitter } from "./changeEmitter";
 import { createClipboardSemantics } from "./clipboardSemantics";
 import { normalizeMarkdownEditorChangeMode } from "./changeMode";
 import { createHostIdleScheduler } from "./idleScheduler";
+import { createNativeHistoryPlugin } from "./nativeHistory";
 import { createAssetUploadController } from "./assetUploads";
 import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
 import {
@@ -1735,6 +1736,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     // plugins so extension precedence cannot reintroduce unsafe URLs.
     codec.createImportedContentSanitizerPlugin(),
     history(),
+    createNativeHistoryPlugin(),
     ...(extensionAssembly.contributions.keymap
       ? [extensionAssembly.contributions.keymap]
       : []),

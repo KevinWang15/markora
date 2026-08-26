@@ -529,6 +529,36 @@ describe("public command and state surface", () => {
     }
   });
 
+  it("routes native history input through synchronized undo and redo state", () => {
+    for (const editor of [
+      createEditor({ element: createHost(), markdown: "alpha" }),
+      createMinimalEditor({ element: createHost(), markdown: "alpha" }),
+    ]) {
+      selectText(editor, "alpha", "end");
+      editor.view.dispatch(editor.view.state.tr.insertText("!"));
+      expect(editor.getMarkdown()).toBe("alpha!");
+      expect(editor.state.can.undo()).toBe(true);
+
+      editor.view.dom.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        inputType: "historyUndo",
+      }));
+      expect(editor.getMarkdown()).toBe("alpha");
+      expect(editor.state.can.undo()).toBe(false);
+      expect(editor.state.can.redo()).toBe(true);
+
+      editor.view.dom.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        inputType: "historyRedo",
+      }));
+      expect(editor.getMarkdown()).toBe("alpha!");
+      expect(editor.state.can.undo()).toBe(true);
+      expect(editor.state.can.redo()).toBe(false);
+
+      editor.destroy();
+    }
+  });
+
   it("validates table arguments and preserves destroyed-editor errors", () => {
     const editor = createEditor({ element: createHost(), markdown: "alpha" });
 

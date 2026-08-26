@@ -328,6 +328,120 @@ test("@required Chromium CDP continues completed tasks as unchecked items", asyn
   expect(await getMarkdown(labPage, id)).toBe("* [ ] \n* [x] completed");
 });
 
+test("@required native history stays synchronized across browser engines", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "native-history";
+  await mountEditor(labPage, { id, markdown: "alpha" });
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
+    id,
+  )).toBe(true);
+
+  const cdp = browserName === "chromium" ? await context.newCDPSession(labPage) : null;
+  const runNativeHistory = async (command: "redo" | "undo") => {
+    if (cdp) {
+      return (await cdp.send("Runtime.evaluate", {
+        expression: `document.execCommand(${JSON.stringify(command)})`,
+        returnByValue: true,
+      })).result.value;
+    }
+
+    return labPage.evaluate((nextCommand) => document.execCommand(nextCommand), command);
+  };
+
+  if (cdp) {
+    await cdp.send("Input.insertText", { text: "!" });
+  } else {
+    await labPage.keyboard.insertText("!");
+  }
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe("alpha!");
+
+  expect(await runNativeHistory("undo")).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe("alpha");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.can(editorId, { type: "undo" }),
+    id,
+  )).toBe(false);
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.can(editorId, { type: "redo" }),
+    id,
+  )).toBe(true);
+
+  expect(await runNativeHistory("redo")).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe("alpha!");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.can(editorId, { type: "undo" }),
+    id,
+  )).toBe(true);
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.can(editorId, { type: "redo" }),
+    id,
+  )).toBe(false);
+});
+
+test("@required Chromium CDP deletes across a managed table and restores it natively", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP native input control.");
+
+  const id = "cdp-managed-range-delete";
+  const original = [
+    "before alpha",
+    "",
+    "| A | B |",
+    "| --- | --- |",
+    "| one | two |",
+    "",
+    "omega after",
+  ].join("\n");
+  await mountEditor(labPage, { id, markdown: original });
+
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "start"),
+    id,
+  )).toBe(true);
+  const from = await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection.from,
+    id,
+  );
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "omega", "end"),
+    id,
+  )).toBe(true);
+  const to = await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection.to,
+    id,
+  );
+  await labPage.evaluate(
+    ({ editorId, anchor, head }) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, { anchor, head }),
+    { anchor: from, editorId: id, head: to },
+  );
+  expect(await labPage.evaluate(() => document.getSelection()?.toString())).toContain("one");
+
+  const cdp = await context.newCDPSession(labPage);
+  expect((await cdp.send("Runtime.evaluate", {
+    expression: 'document.execCommand("delete")',
+    returnByValue: true,
+  })).result.value).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe("before  after");
+
+  expect((await cdp.send("Runtime.evaluate", {
+    expression: 'document.execCommand("undo")',
+    returnByValue: true,
+  })).result.value).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(original);
+});
+
 test("@required dead-key output, emoji, and surrogate deletion remain intact", async ({ labPage }) => {
   const id = "unicode";
   await mountEditor(labPage, { id, markdown: "" });
