@@ -808,7 +808,7 @@
   cursor: text;
 }
 
-.mdw-host .ProseMirror.mdw-native-visual-line-motion :is(
+.mdw-host .ProseMirror.mdw-native-visual-motion :is(
   .mdw-marker-strong,
   .mdw-marker-em,
   .mdw-marker-code,

@@ -122,7 +122,7 @@ test("@required visual-line navigation ignores revealed Markdown marker geometry
     await pressVisualLineKey(key, extend);
     await settleEditor(labPage, id);
     await expect(editor).toBeFocused();
-    await expect(editor).not.toHaveClass(/mdw-native-visual-line-motion/);
+    await expect(editor).not.toHaveClass(/mdw-native-visual-motion/);
     expect(await getMarkdown(labPage, id)).toBe(normalizedMarkdown);
     const events = await getEditorEvents(labPage, id);
     expect(events.counts.focus).toBe(0);
