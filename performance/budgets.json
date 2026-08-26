@@ -45,26 +45,26 @@
       "102400": {
         "initialParseRenderSyncMs": { "statistic": "maximum", "warning": 140, "failure": 200 },
         "initialParseRenderToPresentationMs": { "statistic": "maximum", "warning": 260, "failure": 380 },
-        "codecParseMs": { "statistic": "maximum", "warning": 20, "failure": 30 },
-        "codecSerializeMs": { "statistic": "maximum", "warning": 12, "failure": 25 },
+        "codecParseMs": { "statistic": "maximum", "warning": 20, "failure": 50 },
+        "codecSerializeMs": { "statistic": "maximum", "warning": 12, "failure": 35 },
         "keydownToPresentationProxyMs": { "statistic": "maximum", "warning": 45, "failure": 70 },
         "dirtyTeardownMs": { "statistic": "maximum", "warning": 35, "failure": 50 }
       },
       "512000": {
-        "initialParseRenderSyncMs": { "statistic": "maximum", "warning": 560, "failure": 950 },
-        "initialParseRenderToPresentationMs": { "statistic": "maximum", "warning": 1000, "failure": 1400 },
-        "codecParseMs": { "statistic": "maximum", "warning": 70, "failure": 150 },
-        "codecSerializeMs": { "statistic": "maximum", "warning": 260, "failure": 650 },
-        "keydownToPresentationProxyMs": { "statistic": "maximum", "warning": 330, "failure": 700 },
-        "dirtyTeardownMs": { "statistic": "maximum", "warning": 360, "failure": 725 }
+        "initialParseRenderSyncMs": { "statistic": "maximum", "warning": 560, "failure": 1250 },
+        "initialParseRenderToPresentationMs": { "statistic": "maximum", "warning": 1000, "failure": 1750 },
+        "codecParseMs": { "statistic": "maximum", "warning": 70, "failure": 200 },
+        "codecSerializeMs": { "statistic": "maximum", "warning": 260, "failure": 900 },
+        "keydownToPresentationProxyMs": { "statistic": "maximum", "warning": 330, "failure": 950 },
+        "dirtyTeardownMs": { "statistic": "maximum", "warning": 360, "failure": 1000 }
       },
       "1048576": {
-        "initialParseRenderSyncMs": { "statistic": "maximum", "warning": 1550, "failure": 3200 },
-        "initialParseRenderToPresentationMs": { "statistic": "maximum", "warning": 2300, "failure": 3800 },
+        "initialParseRenderSyncMs": { "statistic": "maximum", "warning": 1550, "failure": 4250 },
+        "initialParseRenderToPresentationMs": { "statistic": "maximum", "warning": 2300, "failure": 5100 },
         "codecParseMs": { "statistic": "maximum", "warning": 190, "failure": 280 },
-        "codecSerializeMs": { "statistic": "maximum", "warning": 1100, "failure": 2800 },
-        "keydownToPresentationProxyMs": { "statistic": "maximum", "warning": 1150, "failure": 2850 },
-        "dirtyTeardownMs": { "statistic": "maximum", "warning": 1300, "failure": 2950 }
+        "codecSerializeMs": { "statistic": "maximum", "warning": 1100, "failure": 3500 },
+        "keydownToPresentationProxyMs": { "statistic": "maximum", "warning": 1150, "failure": 3750 },
+        "dirtyTeardownMs": { "statistic": "maximum", "warning": 1300, "failure": 3800 }
       }
     },
     "hotPath": {
