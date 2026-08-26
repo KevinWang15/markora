@@ -173,7 +173,7 @@ describe("public command and state surface", () => {
     editor.destroy();
   });
 
-  it("switches list kinds, task state, and flat-task constraints without hidden attrs", () => {
+  it("switches list kinds and task state without hidden attrs", () => {
     const editor = createEditor({
       element: createHost(),
       markdown: "* [x] one\n* [ ] two",
@@ -184,7 +184,7 @@ describe("public command and state surface", () => {
     expect(editor.state.isActive.taskChecked()).toBe(true);
     expect(editor.state.can.sinkListItem()).toBe(false);
     expect(editor.commands.sinkListItem()).toBe(false);
-    expect(editor.state.can.liftListItem()).toBe(false);
+    expect(editor.state.can.liftListItem()).toBe(true);
     expect(editor.commands.toggleOrderedList()).toBe(true);
     expect(editor.state.isActive.orderedList()).toBe(true);
     expect(editor.getMarkdown()).toBe("1. one\n\n2. two");
@@ -209,6 +209,29 @@ describe("public command and state surface", () => {
     expect(editor.commands.toggleBulletList()).toBe(true);
     expect(editor.getMarkdown()).toBe("* one\n\n* two");
     expect(editor.state.isActive.bulletList()).toBe(true);
+
+    editor.destroy();
+  });
+
+  it("sinks and lifts task items without losing task state", () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: "* [x] one\n* [ ] two",
+    });
+    selectText(editor, "two", "end");
+
+    expect(editor.state.can.sinkListItem()).toBe(true);
+    expect(editor.commands.sinkListItem()).toBe(true);
+    expect(editor.getMarkdown()).toBe("* [x] one\n  * [ ] two");
+    expect(editor.state.isActive.taskList()).toBe(true);
+    expect(editor.state.isActive.taskChecked(false)).toBe(true);
+
+    const nested = editor.getMarkdown();
+    editor.commands.resetMarkdown(nested);
+    selectText(editor, "two", "end");
+    expect(editor.state.can.liftListItem()).toBe(true);
+    expect(editor.commands.liftListItem()).toBe(true);
+    expect(editor.getMarkdown()).toBe("* [x] one\n* [ ] two");
 
     editor.destroy();
   });

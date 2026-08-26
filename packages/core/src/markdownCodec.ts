@@ -652,6 +652,7 @@ export function createCompatibilityMarkdownCodec(
 const markdownTokenizer = new MarkdownIt("commonmark", { html: true })
   .enable("strikethrough")
   .enable("table");
+const taskCheckedTokenAttribute = "data-markora-task-checked";
 // Markdown-it's built-in allowlist would discard host-approved custom schemes
 // before the editor policy can inspect them. Preserve candidate destinations
 // here, then enforce the per-editor policy on the parsed ProseMirror document.
@@ -689,6 +690,41 @@ markdownTokenizer.core.ruler.after("inline", "markora_table_cell_paragraphs", (s
   state.tokens = nextTokens;
 });
 
+// Task recognition must inspect authored inline source before Markdown-it
+// resolves escapes and entities into indistinguishable text tokens.
+markdownTokenizer.core.ruler.after("inline", "markora_task_list_items", (state) => {
+  const listStack: string[] = [];
+
+  for (let index = 0; index < state.tokens.length; index += 1) {
+    const token = state.tokens[index];
+
+    if (token.type === "bullet_list_open" || token.type === "ordered_list_open") {
+      listStack.push(token.type);
+      continue;
+    }
+
+    if (token.type === "bullet_list_close" || token.type === "ordered_list_close") {
+      listStack.pop();
+      continue;
+    }
+
+    if (
+      token.type !== "list_item_open"
+      || listStack[listStack.length - 1] !== "bullet_list_open"
+      || state.tokens[index + 1]?.type !== "paragraph_open"
+      || state.tokens[index + 2]?.type !== "inline"
+    ) {
+      continue;
+    }
+
+    const taskMatch = state.tokens[index + 2].content.match(/^\[( |x|X)\](?=[ \t\n]|$)/);
+
+    if (taskMatch) {
+      token.attrSet(taskCheckedTokenAttribute, taskMatch[1].toLowerCase() === "x" ? "true" : "false");
+    }
+  }
+});
+
 registerMarkdownEditorTokenizerRules(
   markdownTokenizer,
   resolvedExtensions,
@@ -698,6 +734,20 @@ configureMarkdownTokenizerNesting(markdownTokenizer);
 
 const foundationMarkdownTokens: Record<string, ParseSpec> = {
   ...defaultMarkdownParser.tokens,
+  list_item: {
+    ...defaultMarkdownParser.tokens.list_item,
+    getAttrs(token: Token) {
+      const checked = token.attrGet(taskCheckedTokenAttribute);
+
+      return {
+        checked: checked === "true"
+          ? true
+          : checked === "false"
+            ? false
+            : null,
+      };
+    },
+  },
   ordered_list: {
     ...defaultMarkdownParser.tokens.ordered_list,
     getAttrs: orderedMarkdownListTokenAttrs,
@@ -825,8 +875,7 @@ const serializerNodes: Record<
           typeof checked === "boolean"
             ? `${bullet} [${checked ? "x" : " "}] `
             : `${bullet} `;
-        const delim = " ".repeat(firstDelim.length);
-        state.wrapBlock(delim, firstDelim, node, () => state.render(child, node, index));
+        state.wrapBlock("  ", firstDelim, node, () => state.render(child, node, index));
       });
 
       listState.inTightList = previousTight;
@@ -978,14 +1027,18 @@ function normalizeTaskListNode(node: ProseMirrorNode, parentTypeName?: string): 
 
   let nextNode = node.type.create(node.attrs, children, node.marks);
 
-  if (parentTypeName === "bullet_list" && nextNode.type === schema.nodes.list_item && nextNode.childCount > 0) {
+  if (
+    parentTypeName === "bullet_list"
+    && nextNode.type === schema.nodes.list_item
+    && typeof nextNode.attrs.checked === "boolean"
+    && nextNode.childCount > 0
+  ) {
     const firstChild = nextNode.firstChild;
 
     if (firstChild?.type === schema.nodes.paragraph) {
-      const match = firstChild.textContent.match(/^\[( |x|X)\]\s+/);
+      const match = firstChild.textContent.match(/^\[( |x|X)\](?:\s+|$)/);
 
       if (match) {
-        const checked = match[1].toLowerCase() === "x";
         const prefixLength = match[0].length;
         const nextParagraph = firstChild.copy(stripTaskPrefixFromInline(firstChild.content, prefixLength));
         const taskChildren = [nextParagraph];
@@ -994,7 +1047,7 @@ function normalizeTaskListNode(node: ProseMirrorNode, parentTypeName?: string): 
           taskChildren.push(nextNode.child(index));
         }
 
-        nextNode = schema.nodes.list_item.create({ ...nextNode.attrs, checked }, taskChildren, nextNode.marks);
+        nextNode = schema.nodes.list_item.create(nextNode.attrs, taskChildren, nextNode.marks);
       }
     }
   }

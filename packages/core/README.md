@@ -8,7 +8,7 @@ Write Markdown at the speed of thought, inside your product.
 
 - Semantic import/edit/export for the documented Markdown dialect, with normalized serialization
 - Exact, inert source preservation for conservatively recognized front matter, display math, HTML, and directives
-- Headings, blockquotes, lists, flat task items, images, code fences, and pipe tables
+- Headings, blockquotes, lists, task items, images, code fences, and pipe tables
 - Inline marks for bold, italic, code, strike, and links
 - Exact, lightweight source-text code-fence shells with viewport-lazy CodeMirror editing
 - Lazy-loaded CodeMirror runtime and built-in languages with host-extensible loaders
@@ -531,7 +531,7 @@ The command contract is designed for toolbar and keyboard integrations:
 - A successful interactive command focuses the outer editor. A successful built-in interactive document-changing command other than undo/redo is one transaction with origin `"command"` and contributes one undoable history step. A successful stored-mark-only command emits `state` with `docChanged: false` and does not emit `update`.
 - A command that returns `false` does not focus the editor, mutate history, or emit state/update/change activity. Invalid programmer arguments still throw instead of returning `false`: heading levels are integers from 1 through 6; table dimensions are integers from 1 through 100; table insertion sides are `"before"` or `"after"`; row directions are `"up"` or `"down"`; column directions are `"left"` or `"right"`; task values are Boolean; alignments are `"left"`, `"center"`, `"right"`, or `null`; and a code-block language is a string or `null`, trimmed on input, with a normalized limit of 128 characters and no NUL or line-break character. Backticks are legal in the complete fence info string; serialization uses a safe tilde fence for them.
 
-The root compatibility preset supports tasks and tables. Tasks are deliberately flat: task items are direct bullet-list children, new tasks are unchecked, and `sinkListItem()`/`liftListItem()` return `false` for them rather than creating unsupported nesting. `setTaskChecked(checked)` applies only to task items and returns `false` when the item is already in the requested state.
+The root compatibility preset supports tasks and tables. Task items may contain supported additional blocks and nested bullet or task lists. New tasks are unchecked; `sinkListItem()` and `liftListItem()` preserve checked state while an item remains in a list, and `setTaskChecked(checked)` applies only to task items and returns `false` when the item is already in the requested state.
 
 `insertTable()` defaults to three columns and two total rows, including the header row. Its `rows` and `columns` options accept integers from 1 through 100; a one-row table contains only its header. `addTableRow(side)` and `addTableColumn(side)` default to `"after"`; for a rectangular cell selection they insert before its first row/column or after its last. Deleting, moving, or aligning applies to the selected contiguous rows or columns. Body rows can move without crossing the pinned header row, and columns carry their alignment with them.
 

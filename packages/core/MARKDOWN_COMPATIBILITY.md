@@ -8,7 +8,7 @@ This contract applies to Markdown passed through `createEditor({ markdown })`, `
 
 Markora is a structured editor, not a byte-preserving source editor. Import parses Markdown into a ProseMirror document immediately, and export writes a canonical representation of that document. Calling `getMarkdown()` without making an edit can therefore return different text from the input. The exception is the source carried by the deliberately recognized opaque constructs below.
 
-The current dialect is a CommonMark-derived subset plus GFM-style pipe tables, strikethrough, and flat task-list items. It is not a claim of full CommonMark or GFM conformance.
+The current dialect is a CommonMark-derived subset plus GFM-style pipe tables, strikethrough, and task-list items. It is not a claim of full CommonMark or GFM conformance.
 
 Only use serialized Markora output as the sole stored copy when input is constrained to the supported dialect, plus the documented opaque shapes, and the normalizations below are acceptable. The current release has:
 
@@ -41,7 +41,7 @@ Syntax outside both the supported dialect and the recognized opaque shapes can s
 | Thematic breaks | CommonMark asterisk, hyphen, or underscore forms | Normalized to `---`. |
 | Bullet lists | Ordinary lists using CommonMark bullet markers, including supported nested blocks | Normalized to `*` markers, alternating with `-` only where needed to retain a boundary between adjacent list nodes. A pure list chain supports up to 127 recursively nested items; combined block containers share the same bounded structural-depth budget. Deeper input throws `RangeError` instead of returning partial content. |
 | Ordered lists | Period or parenthesis delimiters with a start of 0 or greater | Normalized to period delimiters and explicit sequential numbering, alternating with parenthesis delimiters only where needed to retain a boundary between adjacent list nodes. |
-| Task lists | Flat `[ ]`, `[x]`, or `[X]` items directly inside a bullet list | Normalized to `* [ ]` and `* [x]`. Nested lists or additional blocks inside task items are not supported reliably. |
+| Task lists | A literal `[ ]`, `[x]`, or `[X]` marker at the start of a bullet-list item, including empty, nested, and supported multi-block items | Normalized to `* [ ]` and `* [x]` with two-space continuation indentation. Escaped brackets and entity-decoded bracket text remain ordinary list content rather than becoming interactive tasks. Supported nested lists, paragraphs, and code blocks round-trip semantically within the shared structural-depth budget. |
 | Code blocks | Indented blocks and backtick or tilde fences, with an optional info string | Code text and the complete normalized info string are semantic content. Surrounding info whitespace is trimmed on import and command input. Output uses a fence longer than delimiter runs in the body, choosing tildes when the info contains a backtick; the original fence character and length are otherwise not retained. NUL/CR/LF cannot occur in info, and raw NUL/CR code text injected through advanced transactions cannot be serialized exactly. |
 | Emphasis and strong | CommonMark `*`/`_` and `**`/`__` forms | Normalized to `*emphasis*` and `**strong**`. |
 | Inline code | CommonMark code spans | Code text is semantic content; delimiter length and padding normalize as needed. |
@@ -455,8 +455,6 @@ Opaque raw HTML is not executed by the editor because its source is rendered onl
 
 Even a supported construct must stay within the shapes listed above:
 
-- task items must be flat; nested lists, extra paragraphs, and code blocks inside a task item can drift on reparse;
-- escaping an `[x]`-like prefix at the start of a bullet item does not reliably opt out of task conversion;
 - pipe-table rows must match the header width; permissive imports can pad missing cells or discard extras, while live ragged rows created through trusted escape hatches are reported by `state.tableIssues()`;
 - table cells must remain unmerged and contain supported inline content in one paragraph; merged, multi-block, and HTML row-header structures are reported but do not round-trip as pipe-table structure;
 - bare URLs, `www.` addresses, and bare email addresses remain plain text unless written as CommonMark angle autolinks.

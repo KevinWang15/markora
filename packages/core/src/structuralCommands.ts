@@ -566,17 +566,8 @@ export function createStructuralCommandSet(schema: Schema) {
   const toggleBulletList = createToggleListCommand(schema, "bullet_list");
   const toggleOrderedList = createToggleListCommand(schema, "ordered_list");
   const toggleTaskList = createToggleTaskListCommand(schema);
-  const rawSinkListItem = listItemType ? createSinkListItemCommand(listItemType) : (() => false);
-  const rawLiftListItem = listItemType ? createLiftListItemCommand(listItemType) : (() => false);
-  const selectionContainsTasks = (state: EditorState) => selectedItemsHaveTaskState(
-    getSelectedListItems(state, listItemType),
-  );
-  const sinkListItem: Command = (state, dispatch, view) => (
-    selectionContainsTasks(state) ? false : rawSinkListItem(state, dispatch, view)
-  );
-  const liftListItem: Command = (state, dispatch, view) => (
-    selectionContainsTasks(state) ? false : rawLiftListItem(state, dispatch, view)
-  );
+  const sinkListItem = listItemType ? createSinkListItemCommand(listItemType) : (() => false);
+  const liftListItem = listItemType ? createLiftListItemCommand(listItemType) : (() => false);
   const insertHardBreak = createInsertLeafCommand(schema, "hard_break");
   const insertHorizontalRule = createInsertLeafCommand(schema, "horizontal_rule");
 

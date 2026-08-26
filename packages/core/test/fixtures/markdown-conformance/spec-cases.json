@@ -374,11 +374,9 @@
       "source": "gfm-0.29",
       "section": "Task list items",
       "url": "https://github.github.com/gfm/#example-280",
-      "classification": "known-limitation",
-      "semanticStability": "known-failing",
+      "classification": "supported-normalized",
       "input": "- [x] foo\n  - [ ] bar\n  - [x] baz\n- [ ] bim\n",
-      "expected": "* [x] foo\n      * [ ] bar\n      * [x] baz\n* [ ] bim",
-      "note": "Only flat task items are supported; nested task content does not satisfy the semantic-stability guarantee."
+      "expected": "* [x] foo\n  * [ ] bar\n  * [x] baz\n* [ ] bim"
     },
     {
       "id": "gfm-491",

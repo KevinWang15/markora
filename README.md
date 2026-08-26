@@ -22,7 +22,7 @@ Write Markdown at the speed of thought, inside your product.
 ## Highlights
 
 - Typora-like visual editing in a host-owned mount, with normalized Markdown output
-- Semantic import/edit/export for the documented dialect: a CommonMark-derived subset, pipe tables, strikethrough, and flat task items
+- Semantic import/edit/export for the documented dialect: a CommonMark-derived subset, pipe tables, strikethrough, and task items
 - Inert, exact-source atoms for conservatively recognized front matter, display math, HTML, comments, and directives
 - Inline marks for bold, italic, code, strike, and links
 - Exact source-text code-fence shells with viewport-lazy CodeMirror editing and lazy-loaded built-in grammars
@@ -242,7 +242,7 @@ renderToolbar();
 
 `state.can.*` is a pure dry run: it does not dispatch, focus, add history, or emit events. Interactive commands and their `can` checks return `false` while read-only, during active IME composition, when the operation is unavailable, or when it would be a no-op; `state.isActive.*` remains observational in those modes. A successful interactive command focuses the editor. A successful document-changing command other than undo/redo is tagged with origin `"command"` and contributes one undoable history step, while a failed command leaves focus, history, and events untouched.
 
-The root entry supports flat task items and tables. Tasks cannot be indented or nested. Tables default to three columns and two total rows (the first is the header), and explicit row/column counts must be integers from 1 through 100. `markora/minimal` exposes the same typed task/table methods for portable host code, but those commands and related `can`/`isActive` checks return `false` because the syntax is absent.
+The root entry supports task items and tables. Task items can contain supported additional blocks and nested bullet or task lists; `sinkListItem()` and `liftListItem()` retain checked state while the item remains in a list. Tables default to three columns and two total rows (the first is the header), and explicit row/column counts must be integers from 1 through 100. `markora/minimal` exposes the same typed task/table methods for portable host code, but those commands and related `can`/`isActive` checks return `false` because the syntax is absent.
 
 ## Embed configuration and lifecycle
 

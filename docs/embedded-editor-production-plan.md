@@ -855,6 +855,15 @@ and verification decisions are frozen in the
   edits through Chromium CDP and native Firefox/WebKit input, resets from the
   serialized Markdown, and verifies that list counts, starts, and output remain
   stable.
+- Compatibility task recognition now uses authored inline token source before
+  escape and entity resolution, so only literal task markers gain interactive
+  state; empty tasks reparse, while escaped and entity-produced prefixes remain
+  ordinary text. Two-space structural continuation indentation makes nested
+  tasks, additional paragraphs, and code blocks semantically idempotent, and
+  public sink/lift commands now match keyboard indentation while preserving
+  checked state. A production-built three-engine regression edits the mixed
+  structure through Chromium CDP and native Firefox/WebKit input, then resets
+  and verifies the same text, task controls, nesting, blocks, and Markdown.
 - `markora-extension-alerts` provides semantic GitHub blockquote alerts in root
   and minimal for note, tip, important, warning, and caution. A lightweight
   authored-marker claim runs before the foundation blockquote rule, while a
