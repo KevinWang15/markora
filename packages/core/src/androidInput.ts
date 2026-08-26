@@ -111,6 +111,10 @@ type PointerTextIntent = {
   y: number;
 };
 
+type PointerCaretIntent = PointerTextIntent & {
+  selection: ProseMirrorSelection;
+};
+
 type ModelWordRange = {
   from: number;
   to: number;
@@ -1243,6 +1247,7 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
   let lastFallbackState: FallbackState | null = null;
   let ownedPointerWordSelection: OwnedPointerWordSelection | null = null;
   let pointerBlockIntent: PointerTextIntent | null = null;
+  let pointerCaretIntent: PointerCaretIntent | null = null;
   let pointerWordIntent: PointerTextIntent | null = null;
   const matchesPointerIntent = (
     intent: PointerTextIntent | null,
@@ -1320,6 +1325,28 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
       timeStamp: mouseEvent.timeStamp,
       x: mouseEvent.clientX,
       y: mouseEvent.clientY,
+    };
+  };
+  const rememberPointerCaretIntent = (view: EditorView, mouseEvent: MouseEvent) => {
+    pointerCaretIntent = null;
+    const intent = pointerBlockIntent;
+
+    if (
+      mouseEvent.detail !== 1
+      || !intent
+      || !matchesPointerIntent(intent, view, mouseEvent)
+      || !readTextBlockAtPosition(
+        view.state,
+        intent.position,
+        false,
+      )
+    ) {
+      return;
+    }
+
+    pointerCaretIntent = {
+      ...intent,
+      selection: view.state.selection,
     };
   };
 
@@ -1783,6 +1810,46 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
         pointerWindow?.addEventListener("blur", cancelPointerWordDrag);
       }
 
+      const handlePointerCaretClick = (event: MouseEvent) => {
+        const intent = pointerCaretIntent;
+        pointerCaretIntent = null;
+
+        if (
+          !intent
+          || !event.isTrusted
+          || event.detail !== 1
+          || !matchesPointerIntent(intent, view, event)
+          || !isOwnedUnmodifiedPrimaryPointerEvent(view, event, true)
+          || !readTextBlockAtPosition(view.state, intent.position, false)
+        ) {
+          return;
+        }
+
+        const state = view.state;
+        const { selection } = state;
+
+        // A new non-empty selection means the pointer produced a real drag.
+        // Preserve it. If the old selection survived unchanged, however, the
+        // marker reveal swallowed the click and the pre-reveal position wins.
+        if (!selection.empty && !selection.eq(intent.selection)) {
+          return;
+        }
+
+        if (
+          selection instanceof TextSelection
+          && selection.empty
+          && selection.from === intent.position
+        ) {
+          return;
+        }
+
+        view.dispatch(
+          state.tr
+            .setSelection(TextSelection.create(state.doc, intent.position))
+            .scrollIntoView(),
+        );
+      };
+
       const handleMouseDown = (event: MouseEvent) => {
         if (event.detail === 1) {
           ownedPointerWordSelection = null;
@@ -1816,18 +1883,22 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
         stopPointerBlockDrag();
         stopPointerWordDrag();
         rememberPointerBlockIntent(view, event);
+        rememberPointerCaretIntent(view, event);
         rememberPointerWordIntent(view, event);
       };
       view.dom.addEventListener("mousedown", handleMouseDown, true);
+      view.dom.addEventListener("click", handlePointerCaretClick, true);
 
       return {
         destroy() {
           ownedPointerWordSelection = null;
           pointerBlockIntent = null;
+          pointerCaretIntent = null;
           pointerWordIntent = null;
           stopPointerBlockDrag();
           stopPointerWordDrag();
           view.dom.removeEventListener("mousedown", handleMouseDown, true);
+          view.dom.removeEventListener("click", handlePointerCaretClick, true);
           for (const timeoutId of pendingFallbacks) {
             ownerWindow.clearTimeout(timeoutId);
           }
