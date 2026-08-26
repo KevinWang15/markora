@@ -298,3 +298,45 @@ test("@required Chromium CDP drives rectangular table selection and clipboard ex
   });
   expect(await getMarkdown(labPage, id)).toBe(TABLE_MARKDOWN);
 });
+
+test("@required modified cell-collapse keys preserve rectangular table selections", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const id = "table-modified-selection";
+  await mountEditor(labPage, { id, markdown: TABLE_MARKDOWN });
+  const editor = editorLocator(labPage, id);
+  const cells = editor.locator("table tr").nth(1).locator("td");
+  const cdp = browserName === "chromium" ? await context.newCDPSession(labPage) : null;
+
+  for (const modifiers of [2, 8]) {
+    for (const { code, key, keyCode } of [
+      { code: "Enter", key: "Enter", keyCode: 13 },
+      { code: "Escape", key: "Escape", keyCode: 27 },
+      { code: "F2", key: "F2", keyCode: 113 },
+    ]) {
+      await dragAcrossCells(labPage, cells.nth(0), cells.nth(1));
+      await settleEditor(labPage, id);
+      if (cdp) {
+        for (const type of ["rawKeyDown", "keyUp"] as const) {
+          await cdp.send("Input.dispatchKeyEvent", {
+            code,
+            key,
+            modifiers,
+            nativeVirtualKeyCode: keyCode,
+            type,
+            windowsVirtualKeyCode: keyCode,
+          });
+        }
+      } else {
+        await labPage.keyboard.press(`${modifiers === 2 ? "Control" : "Shift"}+${key}`);
+      }
+      await settleEditor(labPage, id);
+      expect(await getEditorActiveState(labPage, id, { type: "tableCellSelection" })).toBe(true);
+      await expect(editor.locator("td.selectedCell")).toHaveCount(2);
+    }
+  }
+
+  await cdp?.detach();
+});

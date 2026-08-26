@@ -880,6 +880,142 @@ describe("public command and state surface", () => {
     }
   });
 
+  it("recovers native double-click word selection when mark reveal collapses it", () => {
+    const modifyDescriptor = Object.getOwnPropertyDescriptor(Selection.prototype, "modify");
+
+    Object.defineProperty(Selection.prototype, "modify", {
+      configurable: true,
+      value(
+        this: Selection,
+        alter: "extend" | "move",
+        direction: "backward" | "forward" | "left" | "right",
+        granularity: "character" | "word",
+      ) {
+        const textNode = this.focusNode;
+
+        if (!(textNode instanceof Text) || alter !== "extend" || granularity !== "word") {
+          throw new Error("The pointer word probe must extend an unmarked text node.");
+        }
+
+        if (textNode.data.includes("'")) {
+          return;
+        }
+
+        this.extend(textNode, direction === "backward" ? 0 : textNode.data.length);
+      },
+    });
+
+    try {
+      for (const editor of [
+        createEditor({ element: createHost(), markdown: "pre**fixmid**suffix" }),
+        createMinimalEditor({ element: createHost(), markdown: "pre**fixmid**suffix" }),
+      ]) {
+        const originalPosAtCoords = editor.view.posAtCoords;
+        editor.view.posAtCoords = () => ({ inside: -1, pos: 6 });
+        const firstMouseDown = new MouseEvent("mousedown", {
+          bubbles: true,
+          button: 0,
+          cancelable: true,
+          clientX: 20,
+          clientY: 20,
+          detail: 1,
+        });
+        expect(editor.view.dom.querySelector("strong")!.dispatchEvent(firstMouseDown)).toBe(true);
+
+        selectText(editor, "fixmid", "end");
+        const secondMouseDown = new MouseEvent("mousedown", {
+          bubbles: true,
+          button: 0,
+          cancelable: true,
+          clientX: 20,
+          clientY: 20,
+          detail: 2,
+        });
+        const shiftedTarget = editor.view.dom.querySelector(".mdw-marker")
+          ?? editor.view.dom.querySelector("strong")!;
+        expect(shiftedTarget.dispatchEvent(secondMouseDown)).toBe(false);
+        expect(secondMouseDown.defaultPrevented).toBe(true);
+        expect(editor.view.state.selection).toMatchObject({
+          anchor: 1,
+          from: 1,
+          head: 16,
+          to: 16,
+        });
+        editor.view.posAtCoords = originalPosAtCoords;
+
+        selectText(editor, "fixmid", "end");
+        const modifiedDoubleClick = new MouseEvent("dblclick", {
+          bubbles: true,
+          button: 0,
+          cancelable: true,
+          ctrlKey: true,
+        });
+        expect(editor.view.dom.querySelector("strong")!.dispatchEvent(modifiedDoubleClick)).toBe(true);
+        expect(modifiedDoubleClick.defaultPrevented).toBe(false);
+        expect(editor.view.state.selection.from).toBe(10);
+
+        editor.commands.resetMarkdown("prefixmidsuffix");
+        selectText(editor, "prefixmidsuffix", "end");
+        const nativeDoubleClick = new MouseEvent("dblclick", {
+          bubbles: true,
+          button: 0,
+          cancelable: true,
+        });
+        expect(editor.view.dom.querySelector("p")!.dispatchEvent(nativeDoubleClick)).toBe(true);
+        expect(nativeDoubleClick.defaultPrevented).toBe(false);
+        expect(editor.view.state.selection.from).toBe(16);
+
+        editor.destroy();
+      }
+
+      const segmentedFallbackEditor = createEditor({
+        element: createHost(),
+        markdown: "can'**tstop**now",
+      });
+      const originalPosAtCoords = segmentedFallbackEditor.view.posAtCoords;
+      segmentedFallbackEditor.view.posAtCoords = () => ({ inside: -1, pos: 7 });
+      const firstMouseDown = new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+        clientX: 30,
+        clientY: 30,
+        detail: 1,
+      });
+      expect(
+        segmentedFallbackEditor.view.dom.querySelector("strong")!.dispatchEvent(firstMouseDown),
+      ).toBe(true);
+
+      selectText(segmentedFallbackEditor, "tstop", "end");
+      const secondMouseDown = new MouseEvent("mousedown", {
+        bubbles: true,
+        button: 0,
+        cancelable: true,
+        clientX: 30,
+        clientY: 30,
+        detail: 2,
+      });
+      expect(
+        segmentedFallbackEditor.view.dom.querySelector(".mdw-marker")!.dispatchEvent(secondMouseDown),
+      ).toBe(false);
+      expect(secondMouseDown.defaultPrevented).toBe(true);
+      expect(segmentedFallbackEditor.view.state.selection).toMatchObject({
+        anchor: 1,
+        from: 1,
+        head: 13,
+        to: 13,
+      });
+      segmentedFallbackEditor.view.posAtCoords = originalPosAtCoords;
+      segmentedFallbackEditor.destroy();
+    } finally {
+      if (modifyDescriptor) {
+        Object.defineProperty(Selection.prototype, "modify", modifyDescriptor);
+      } else {
+        Reflect.deleteProperty(Selection.prototype, "modify");
+      }
+    }
+  });
+
   it("validates table arguments and preserves destroyed-editor errors", () => {
     const editor = createEditor({ element: createHost(), markdown: "alpha" });
 

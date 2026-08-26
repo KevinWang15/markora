@@ -76,6 +76,20 @@ type NativeWordDeletionProbe = {
   focusHandedOff: boolean;
 };
 
+type NativeWordRangeProbe = {
+  focusHandedOff: boolean;
+  fromOffset: number | null;
+  toOffset: number | null;
+};
+
+type PointerWordIntent = {
+  doc: ProseMirrorNode;
+  position: number;
+  timeStamp: number;
+  x: number;
+  y: number;
+};
+
 function captureFallbackState(state: EditorState): FallbackState {
   return {
     doc: state.doc,
@@ -240,6 +254,49 @@ export function findWordDeletionLength(
   }
 
   return word.segment.length;
+}
+
+function findSegmentedWordRange(
+  text: string,
+  offset: number,
+  intl: SegmentingIntl,
+) {
+  if (!text || !intl.Segmenter || offset < 0 || offset > text.length) {
+    return null;
+  }
+
+  const segments = new intl.Segmenter(undefined, { granularity: "word" }).segment(text);
+  const candidateOffsets = offset === text.length
+    ? [Math.max(0, offset - 1)]
+    : offset > 0
+      ? [offset, offset - 1]
+      : [offset];
+
+  for (const candidateOffset of candidateOffsets) {
+    let candidate = segments.containing?.(candidateOffset);
+
+    if (!candidate) {
+      for (const segment of segments) {
+        if (
+          typeof segment.segment === "string"
+          && candidateOffset >= segment.index
+          && candidateOffset < segment.index + segment.segment.length
+        ) {
+          candidate = segment;
+          break;
+        }
+      }
+    }
+
+    if (candidate?.isWordLike && typeof candidate.segment === "string") {
+      return {
+        fromOffset: candidate.index,
+        toOffset: candidate.index + candidate.segment.length,
+      };
+    }
+  }
+
+  return null;
 }
 
 function restoreDomSelection(
@@ -433,6 +490,54 @@ function probeNativeWordDeletionLength(
   };
 }
 
+function probeNativeWordRange(
+  view: EditorView,
+  text: string,
+  offset: number,
+): NativeWordRangeProbe | null {
+  const backward = probeNativeTextMotion(
+    view,
+    text,
+    offset,
+    offset,
+    "extend",
+    "backward",
+    "word",
+  );
+
+  if (!backward || backward.focusHandedOff) {
+    return backward
+      ? { focusHandedOff: true, fromOffset: null, toOffset: null }
+      : null;
+  }
+
+  const forward = probeNativeTextMotion(
+    view,
+    text,
+    offset,
+    offset,
+    "extend",
+    "forward",
+    "word",
+  );
+
+  if (!forward || forward.focusHandedOff) {
+    return forward
+      ? { focusHandedOff: true, fromOffset: null, toOffset: null }
+      : null;
+  }
+
+  return {
+    focusHandedOff: false,
+    fromOffset: backward.focusOffset === null
+      ? null
+      : Math.min(offset, backward.focusOffset),
+    toOffset: forward.focusOffset === null
+      ? null
+      : Math.max(offset, forward.focusOffset),
+  };
+}
+
 function readInlineBoundaryDeletionContext(
   state: EditorState,
   direction: DeletionDirection,
@@ -600,6 +705,155 @@ function isTextOnlyInlineContent(parent: ProseMirrorNode) {
   return true;
 }
 
+function isOwnedUnmodifiedPrimaryPointerEvent(
+  view: EditorView,
+  event: MouseEvent,
+  allowMarkerTarget = false,
+) {
+  const ownerWindow = view.dom.ownerDocument.defaultView;
+  const target = event.target;
+  const targetElement = ownerWindow && target instanceof ownerWindow.Element
+    ? target
+    : ownerWindow && target instanceof ownerWindow.Node
+      ? target.parentElement
+      : null;
+  const excludedTarget = targetElement?.closest(
+    ".mdw-marker, .cm-editor, button, input, select, textarea, [contenteditable=false]",
+  );
+
+  return Boolean(
+    ownerWindow
+    && view.editable
+    && !view.composing
+    && !event.defaultPrevented
+    && event.button === 0
+    && !event.altKey
+    && !event.ctrlKey
+    && !event.metaKey
+    && !event.shiftKey
+    && target instanceof ownerWindow.Node
+    && view.dom.contains(target)
+    && (
+      !excludedTarget
+      || (allowMarkerTarget && excludedTarget.classList.contains("mdw-marker"))
+    )
+  );
+}
+
+function readSplitTextBlockAtPosition(
+  state: EditorState,
+  position: number,
+) {
+  if (!Number.isInteger(position) || position < 0 || position > state.doc.content.size) {
+    return null;
+  }
+
+  const $position = state.doc.resolve(position);
+  const parent = $position.parent;
+  const parentStart = $position.start();
+  const offset = position - parentStart;
+
+  return (
+    parent.childCount >= 2
+    && isTextOnlyInlineContent(parent)
+    && offset >= 0
+    && offset <= parent.content.size
+  )
+    ? { offset, parent, parentStart }
+    : null;
+}
+
+function handleNativeDoubleClickWordSelection(
+  view: EditorView,
+  event: MouseEvent,
+  pointerPosition: number | null,
+  ownBeforeNativeSelection = false,
+) {
+  if (!isOwnedUnmodifiedPrimaryPointerEvent(view, event, pointerPosition !== null)) {
+    return false;
+  }
+
+  const state = view.state;
+  const { selection } = state;
+  const position = pointerPosition ?? (
+    selection instanceof TextSelection && selection.empty
+      ? selection.from
+      : null
+  );
+  const block = position === null
+    ? null
+    : readSplitTextBlockAtPosition(state, position);
+
+  // Native engines normally select the whole visible word. WebKit can leave
+  // a collapsed caret when the first click reveals Markdown marker widgets
+  // and moves the marked DOM before the second click lands. Inline elements
+  // can also change punctuation-sensitive word expansion in other engines.
+  // Re-run the engine's word motion against equivalent unmarked text, using
+  // the first click's pre-reveal model position when it is available.
+  if (!block || (!(selection instanceof TextSelection) && pointerPosition === null)) {
+    return false;
+  }
+
+  const { offset, parent, parentStart } = block;
+  const parentText = parent.textContent;
+  const nativeRange = probeNativeWordRange(view, parentText, offset);
+
+  if (
+    nativeRange?.focusHandedOff
+    || view.isDestroyed
+    || view.state !== state
+  ) {
+    event.preventDefault();
+    return true;
+  }
+
+  const range = nativeRange
+    && nativeRange.fromOffset !== null
+    && nativeRange.toOffset !== null
+    && nativeRange.fromOffset !== nativeRange.toOffset
+    ? nativeRange
+    : findSegmentedWordRange(
+      parentText,
+      offset,
+      (view.dom.ownerDocument.defaultView?.Intl ?? Intl) as SegmentingIntl,
+    );
+
+  if (
+    !range
+    || range.fromOffset === null
+    || range.toOffset === null
+    || range.fromOffset === range.toOffset
+    || range.fromOffset < 0
+    || range.toOffset > parentText.length
+  ) {
+    return false;
+  }
+
+  const from = parentStart + range.fromOffset;
+  const to = parentStart + range.toOffset;
+
+  if (selection.from === from && selection.to === to) {
+    if (!ownBeforeNativeSelection) {
+      return false;
+    }
+
+    event.preventDefault();
+    return true;
+  }
+
+  event.preventDefault();
+  view.dispatch(
+    state.tr
+      .setSelection(TextSelection.create(
+        state.doc,
+        from,
+        to,
+      ))
+      .scrollIntoView(),
+  );
+  return true;
+}
+
 export function isWordNavigationShortcut(
   event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey">,
   macPlatform: boolean,
@@ -741,10 +995,62 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
   const macPlatform = isMacPlatform(ownerWindow);
   const pendingFallbacks = new Set<number>();
   let lastFallbackState: FallbackState | null = null;
+  let pointerWordIntent: PointerWordIntent | null = null;
+  const matchesPointerWordIntent = (view: EditorView, mouseEvent: MouseEvent) => Boolean(
+    pointerWordIntent
+    && pointerWordIntent.doc === view.state.doc
+    && mouseEvent.timeStamp - pointerWordIntent.timeStamp >= 0
+    && mouseEvent.timeStamp - pointerWordIntent.timeStamp <= 1_000
+    && Math.abs(mouseEvent.clientX - pointerWordIntent.x) <= 4
+    && Math.abs(mouseEvent.clientY - pointerWordIntent.y) <= 4
+  );
+  const rememberPointerWordIntent = (view: EditorView, mouseEvent: MouseEvent) => {
+    if (mouseEvent.detail !== 1) {
+      return;
+    }
+
+    pointerWordIntent = null;
+
+    if (!isOwnedUnmodifiedPrimaryPointerEvent(view, mouseEvent)) {
+      return;
+    }
+
+    const coordinates = view.posAtCoords({
+      left: mouseEvent.clientX,
+      top: mouseEvent.clientY,
+    });
+
+    if (
+      !coordinates
+      || !readSplitTextBlockAtPosition(view.state, coordinates.pos)
+    ) {
+      pointerWordIntent = null;
+      return;
+    }
+
+    pointerWordIntent = {
+      doc: view.state.doc,
+      position: coordinates.pos,
+      timeStamp: mouseEvent.timeStamp,
+      x: mouseEvent.clientX,
+      y: mouseEvent.clientY,
+    };
+  };
 
   return new Plugin({
     props: {
       handleDOMEvents: {
+        dblclick(view, event) {
+          const mouseEvent = event as MouseEvent;
+          const matchesIntent = matchesPointerWordIntent(view, mouseEvent);
+          const intent = pointerWordIntent;
+          pointerWordIntent = null;
+          return handleNativeDoubleClickWordSelection(
+            view,
+            mouseEvent,
+            matchesIntent ? intent!.position : null,
+          );
+        },
         keydown(view, event) {
           return handleNativeHorizontalNavigation(
             view,
@@ -962,9 +1268,28 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
         },
       },
     },
-    view() {
+    view(view) {
+      const handleMouseDown = (event: MouseEvent) => {
+        if (event.detail === 2 && matchesPointerWordIntent(view, event)) {
+          const intent = pointerWordIntent!;
+          pointerWordIntent = null;
+          handleNativeDoubleClickWordSelection(
+            view,
+            event,
+            intent.position,
+            true,
+          );
+          return;
+        }
+
+        rememberPointerWordIntent(view, event);
+      };
+      view.dom.addEventListener("mousedown", handleMouseDown, true);
+
       return {
         destroy() {
+          pointerWordIntent = null;
+          view.dom.removeEventListener("mousedown", handleMouseDown, true);
           for (const timeoutId of pendingFallbacks) {
             ownerWindow.clearTimeout(timeoutId);
           }

@@ -1385,6 +1385,71 @@ test("@required modified structural keys preserve native editing behavior", asyn
   await expect(editorLocator(labPage, id).locator("table")).toHaveCount(1);
 });
 
+test("@required native double-click word selection ignores Markdown mark boundaries", async ({ browserName, context, labPage }) => {
+  const id = "pointer-word-mark-selection";
+  await mountEditor(labPage, { id, markdown: "", root: "shadow" });
+  const cdp = browserName === "chromium" ? await context.newCDPSession(labPage) : null;
+
+  const selectAt = async (markdown: string, marked: boolean, offset: number) => {
+    await labPage.mouse.click(1, 1);
+    await resetEditor(labPage, id, markdown);
+    const point = await editorLocator(labPage, id).evaluate((element, target) => {
+      const { inMark, offset: textOffset } = target;
+      const container = inMark ? element.querySelector("strong") : element.querySelector("p");
+      const text = container?.firstChild;
+      if (!text || text.nodeType !== Node.TEXT_NODE) {
+        throw new Error(`Missing target text node for ${JSON.stringify(element.textContent)}.`);
+      }
+      const range = element.ownerDocument.createRange();
+      range.setStart(text, textOffset);
+      range.setEnd(text, textOffset + 1);
+      const rect = range.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }, { inMark: marked, offset });
+    if (cdp) {
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "left",
+        buttons: 1,
+        clickCount: 2,
+        type: "mousePressed",
+        x: point.x,
+        y: point.y,
+      });
+      await cdp.send("Input.dispatchMouseEvent", {
+        button: "left",
+        buttons: 0,
+        clickCount: 2,
+        type: "mouseReleased",
+        x: point.x,
+        y: point.y,
+      });
+    } else {
+      await labPage.mouse.dblclick(point.x, point.y);
+    }
+    await settleEditor(labPage, id);
+    return {
+      model: await labPage.evaluate(
+        (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+        id,
+      ),
+      text: await labPage.evaluate(() => document.getSelection()?.toString()),
+    };
+  };
+
+  for (const testCase of [
+    { marked: "pre**fixmid**suffix", markedOffset: 2, plain: "prefixmidsuffix", plainOffset: 5 },
+    { marked: "при**ветмир**снова", markedOffset: 2, plain: "приветмирснова", plainOffset: 5 },
+    { marked: "can'**tstop**now", markedOffset: 2, plain: "can'tstopnow", plainOffset: 6 },
+    { marked: "אבג**דהו**זחט", markedOffset: 2, plain: "אבגדהוזחט", plainOffset: 5 },
+  ]) {
+    const plain = await selectAt(testCase.plain, false, testCase.plainOffset);
+    const marked = await selectAt(testCase.marked, true, testCase.markedOffset);
+    expect(marked).toEqual(plain);
+    expect(marked.text).not.toBe("");
+  }
+  await cdp?.detach();
+});
+
 test("@required mixed bidirectional text can be selected and replaced logically", async ({ labPage }) => {
   const id = "bidi";
   await mountEditor(labPage, {
