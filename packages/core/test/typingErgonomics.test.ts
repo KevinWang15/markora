@@ -54,11 +54,12 @@ function selectText(editor: MarkdownEditor, from: number, to: number) {
   ));
 }
 
-function backspace(editor: MarkdownEditor) {
+function backspace(editor: MarkdownEditor, init: KeyboardEventInit = {}) {
   const event = new KeyboardEvent("keydown", {
     bubbles: true,
     cancelable: true,
     key: "Backspace",
+    ...init,
   });
   return editor.view.someProp("handleKeyDown", (handler) => handler(editor.view, event));
 }
@@ -122,6 +123,8 @@ describe("configurable typing ergonomics", () => {
     editor.commands.resetMarkdown("");
     typeText(editor, "(");
     editor.view.dispatch(closeHistory(editor.view.state.tr));
+    expect(backspace(editor, { ctrlKey: true })).toBeFalsy();
+    expect(editor.view.state.doc.textContent).toBe("()");
     expect(backspace(editor)).toBe(true);
     expect(editor.view.state.doc.textContent).toBe("");
     expect(editor.commands.undo()).toBe(true);

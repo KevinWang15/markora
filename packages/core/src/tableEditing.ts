@@ -532,6 +532,13 @@ export function createTableEditing(options: CreateTableEditingOptions) {
       handleKeyDown(view, event) {
         if (
           view.state.selection instanceof CellSelection
+          && !view.composing
+          && !event.isComposing
+          && event.keyCode !== 229
+          && !event.altKey
+          && !event.ctrlKey
+          && !event.metaKey
+          && !event.shiftKey
           && (event.key === "Escape" || event.key === "Enter" || event.key === "F2")
         ) {
           return collapseCellSelection(view);

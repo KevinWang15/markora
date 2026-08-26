@@ -1291,6 +1291,100 @@ test("@required character selection ignores Markdown mark boundaries across engi
   }
 });
 
+test("@required modified structural keys preserve native editing behavior", async ({ browserName, context, labPage }) => {
+  const id = "structural-modifier-ownership";
+  await mountEditor(labPage, { id, markdown: "" });
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+  const pressRaw = async (
+    code: string,
+    key: string,
+    keyCode: number,
+    modifiers: number,
+  ) => {
+    if (cdp) {
+      for (const type of ["rawKeyDown", "keyUp"] as const) {
+        await cdp.send("Input.dispatchKeyEvent", {
+          code,
+          key,
+          modifiers,
+          nativeVirtualKeyCode: keyCode,
+          type,
+          windowsVirtualKeyCode: keyCode,
+        });
+      }
+    } else {
+      const prefix = modifiers === 2 ? "Control+" : modifiers === 8 ? "Shift+" : "";
+      await labPage.keyboard.press(`${prefix}${key}`);
+    }
+    await settleEditor(labPage, id);
+  };
+  const readResult = async () => ({
+    markdown: await getMarkdown(labPage, id),
+    selection: await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.snapshot(editorId).selection,
+      id,
+    ),
+  });
+
+  const wordDeleteResults = [];
+  for (const markdown of ["previous words\n\nHeading", "previous words\n\n## Heading"]) {
+    await resetEditor(labPage, id, markdown);
+    expect(await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "Heading", "start"),
+      id,
+    )).toBe(true);
+    await pressRaw("Backspace", "Backspace", 8, 2);
+    wordDeleteResults.push(await readResult());
+  }
+  expect(wordDeleteResults[1]).toEqual(wordDeleteResults[0]);
+  expect(wordDeleteResults[1]).toEqual({
+    markdown: "previous wordsHeading",
+    selection: { anchor: 15, from: 15, head: 15, to: 15 },
+  });
+
+  for (const { marker, markdown } of [
+    { marker: "---", markdown: "\\---" },
+    { marker: "```", markdown: "\\`\\`\\`" },
+  ] as const) {
+    await resetEditor(labPage, id, "");
+    await labPage.evaluate(
+      (editorId) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, "start"),
+      id,
+    );
+    await labPage.keyboard.insertText(marker);
+    await pressRaw("Enter", "Enter", 13, 8);
+    expect(await getMarkdown(labPage, id)).toBe(markdown);
+    await expect(editorLocator(labPage, id).locator("p")).toHaveCount(1);
+    await expect(editorLocator(labPage, id).locator("p br")).toHaveCount(2);
+    await expect(editorLocator(labPage, id).locator("hr, .mdw-code-block")).toHaveCount(0);
+  }
+
+  await resetEditor(labPage, id, "");
+  await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, "start"),
+    id,
+  );
+  await labPage.keyboard.insertText("| A |");
+  await pressRaw("Enter", "Enter", 13, 0);
+  await labPage.keyboard.insertText("| --- |");
+  await pressRaw("Enter", "Enter", 13, 8);
+  expect(await getMarkdown(labPage, id)).toBe("| A |\n\n| --- |");
+  await expect(editorLocator(labPage, id).locator("table")).toHaveCount(0);
+
+  const table = ["| A |", "| --- |", "| value |"].join("\n");
+  await resetEditor(labPage, id, table);
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "A", "start"),
+    id,
+  )).toBe(true);
+  await pressRaw("ArrowLeft", "ArrowLeft", 37, 0);
+  await pressRaw("Delete", "Delete", 46, 2);
+  expect(await getMarkdown(labPage, id)).toBe(table);
+  await expect(editorLocator(labPage, id).locator("table")).toHaveCount(1);
+});
+
 test("@required mixed bidirectional text can be selected and replaced logically", async ({ labPage }) => {
   const id = "bidi";
   await mountEditor(labPage, {

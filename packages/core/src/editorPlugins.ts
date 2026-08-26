@@ -14,6 +14,30 @@ export type RevealMarkConfig = {
   getMarkers: (markInfo: MarkInfo) => { start: string; end: string };
 };
 
+function hasCommandModifier(event: KeyboardEvent) {
+  return event.altKey || event.ctrlKey || event.metaKey;
+}
+
+function isPlainStructuralKey(view: EditorView, event: KeyboardEvent) {
+  return (
+    !view.composing
+    && !event.isComposing
+    && event.keyCode !== 229
+    && !hasCommandModifier(event)
+    && !event.shiftKey
+  );
+}
+
+function isBackwardDeleteKey(view: EditorView, event: KeyboardEvent) {
+  return (
+    event.key === "Backspace"
+    && !view.composing
+    && !event.isComposing
+    && event.keyCode !== 229
+    && !hasCommandModifier(event)
+  );
+}
+
 function getHorizontalRuleMarkup(text: string) {
   const trimmed = text.trim();
 
@@ -45,7 +69,7 @@ export function createHorizontalRulePlugin(options: {
         const { state } = view;
         const { selection } = state;
 
-        if (event.key === "Enter" && selection.empty) {
+        if (event.key === "Enter" && isPlainStructuralKey(view, event) && selection.empty) {
           const { $from } = selection;
           const parent = $from.parent;
 
@@ -66,7 +90,7 @@ export function createHorizontalRulePlugin(options: {
           }
         }
 
-        if (event.key === "Backspace" && selection.empty) {
+        if (isBackwardDeleteKey(view, event) && selection.empty) {
           const { $from } = selection;
 
           if ($from.parent.type === schema.nodes.paragraph && $from.parentOffset === 0) {
@@ -101,7 +125,7 @@ export function createHorizontalRulePlugin(options: {
           }
         }
 
-        if (event.key === "ArrowUp" && selection.empty) {
+        if (event.key === "ArrowUp" && isPlainStructuralKey(view, event) && selection.empty) {
           const { $from } = selection;
 
           if ($from.parent.type === schema.nodes.paragraph && $from.parentOffset === 0) {
@@ -117,7 +141,11 @@ export function createHorizontalRulePlugin(options: {
           }
         }
 
-        if ((event.key === "ArrowDown" || event.key === "Enter") && selection instanceof NodeSelection) {
+        if (
+          (event.key === "ArrowDown" || event.key === "Enter")
+          && isPlainStructuralKey(view, event)
+          && selection instanceof NodeSelection
+        ) {
           const selectedNode = selection.node;
 
           if (selectedNode.type === schema.nodes.horizontal_rule) {
@@ -258,11 +286,11 @@ export function createHeadingEditingPlugin(options: {
         return updateHeadingLevel(view, currentLevel + 1);
       },
       handleKeyDown(view, event) {
-        if (event.key === "Enter" && convertPipeTable(view)) {
+        if (event.key === "Enter" && isPlainStructuralKey(view, event) && convertPipeTable(view)) {
           return true;
         }
 
-        if (event.key !== "Backspace") {
+        if (!isBackwardDeleteKey(view, event)) {
           return false;
         }
 
@@ -372,24 +400,27 @@ export function createMarkBoundaryPlugin(options: {
           return false;
         }
 
-        if (event.key === "Enter" && convertFenceToCodeBlock(view)) {
+        if (event.key === "Enter" && isPlainStructuralKey(view, event) && convertFenceToCodeBlock(view)) {
           return true;
         }
 
-        if (event.shiftKey && event.key === "ArrowUp" && maybeExtendSelectionAcrossCodeBlock(view, -1)) {
-          return true;
-        }
-
-        if (event.shiftKey && event.key === "ArrowDown" && maybeExtendSelectionAcrossCodeBlock(view, 1)) {
-          return true;
-        }
-
-        const plainHorizontalArrow = (
-          !event.altKey
-          && !event.ctrlKey
-          && !event.metaKey
-          && !event.shiftKey
+        const plainShiftArrow = (
+          event.shiftKey
+          && !view.composing
+          && !event.isComposing
+          && event.keyCode !== 229
+          && !hasCommandModifier(event)
         );
+
+        if (plainShiftArrow && event.key === "ArrowUp" && maybeExtendSelectionAcrossCodeBlock(view, -1)) {
+          return true;
+        }
+
+        if (plainShiftArrow && event.key === "ArrowDown" && maybeExtendSelectionAcrossCodeBlock(view, 1)) {
+          return true;
+        }
+
+        const plainHorizontalArrow = isPlainStructuralKey(view, event);
 
         if (plainHorizontalArrow && event.key === "ArrowLeft") {
           return escapeBoundaryMark(view, "left");

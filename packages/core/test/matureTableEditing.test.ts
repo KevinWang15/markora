@@ -3,6 +3,7 @@ import { DOMParser as ProseMirrorDOMParser } from "prosemirror-model";
 import { TextSelection } from "prosemirror-state";
 import { CellSelection, tableEditingKey } from "prosemirror-tables";
 import { createEditor, type MarkdownEditor } from "../src";
+import { createTableEditing } from "../src/tableEditing";
 import { setMarkdownEditorExternalUpdatePermission } from "../src/transactionOrigin";
 
 if (!Range.prototype.getClientRects) {
@@ -95,12 +96,12 @@ function selectedCellText(instance: MarkdownEditor) {
   return null;
 }
 
-function press(instance: MarkdownEditor, key: string, shiftKey = false) {
+function press(instance: MarkdownEditor, key: string, init: KeyboardEventInit = {}) {
   const event = new KeyboardEvent("keydown", {
     bubbles: true,
     cancelable: true,
     key,
-    shiftKey,
+    ...init,
   });
   instance.view.dom.dispatchEvent(event);
   return event;
@@ -153,6 +154,27 @@ describe("mature table commands", () => {
       ["a", "b", "c"],
       ["d", "e", "f"],
     ]);
+  });
+
+  it("does not collapse cell selections for modified and composing keys", () => {
+    const instance = editor();
+    const adapter = createTableEditing({
+      reportBrowserError: () => undefined,
+      schema: instance.view.state.schema,
+    }).plugins[0];
+    const handleKeyDown = adapter.props.handleKeyDown!;
+
+    for (const [key, init] of [
+      ["Escape", { ctrlKey: true }],
+      ["Enter", { ctrlKey: true }],
+      ["F2", { ctrlKey: true }],
+      ["Enter", { isComposing: true }],
+    ] as const) {
+      selectCells(instance, 1, 0, 2, 1);
+      const event = new KeyboardEvent("keydown", { key, ...init });
+      expect(handleKeyDown(instance.view, event), key).toBe(false);
+      expect(instance.state.isActive.tableCellSelection(), key).toBe(true);
+    }
   });
 
   it("supports before/after insertion, pinned-header reordering, and bounded resizing", () => {
@@ -314,7 +336,7 @@ describe("mature table commands", () => {
     expect(selectedCellText(instance)).toBe("");
     press(instance, "Tab");
     expect(selectedCellText(instance)).toBe("below");
-    press(instance, "Tab", true);
+    press(instance, "Tab", { shiftKey: true });
     expect(selectedCellText(instance)).toBe("");
   });
 

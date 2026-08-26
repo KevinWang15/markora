@@ -114,7 +114,7 @@ function pressKey(editor: ReturnType<typeof createEditor>, key: string) {
   return handled;
 }
 
-function pressModifiedKey(editor: ReturnType<typeof createEditor>, key: string, modifiers: { shiftKey?: boolean } = {}) {
+function pressModifiedKey(editor: ReturnType<typeof createEditor>, key: string, modifiers: KeyboardEventInit = {}) {
   const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers });
   let handled = false;
   editor.view.someProp('handleKeyDown', (handler) => {
@@ -556,6 +556,36 @@ describe('ManagedBlockCursor', () => {
     expect(editor.view.state.doc.firstChild?.type.name).toBe('paragraph');
     expect(editor.view.state.doc.child(1).type.name).toBe('table');
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+  });
+
+  it('does not delete managed blocks for modified deletion keys', () => {
+    const beforeEditor = createEditor({
+      element: createHost(),
+      markdown: ['| A | B |', '| --- | --- |', '| a | b |'].join('\n'),
+    });
+    const beforeTable = findNodeByName(beforeEditor.view.state.doc, 'table');
+    setSelection(beforeEditor, ManagedBlockCursor.create(
+      beforeEditor.view.state.doc,
+      beforeTable.pos,
+      'before',
+      (node) => isManagedBlockNodeFromSchema(beforeEditor.view.state.schema, node),
+    )!);
+    pressModifiedKey(beforeEditor, 'Delete', { ctrlKey: true });
+    expect(countNodes(beforeEditor.view.state.doc, 'table')).toBe(1);
+
+    const afterEditor = createEditor({
+      element: createHost(),
+      markdown: ['| A | B |', '| --- | --- |', '| a | b |'].join('\n'),
+    });
+    const afterTable = findNodeByName(afterEditor.view.state.doc, 'table');
+    setSelection(afterEditor, ManagedBlockCursor.create(
+      afterEditor.view.state.doc,
+      afterTable.pos,
+      'after',
+      (node) => isManagedBlockNodeFromSchema(afterEditor.view.state.schema, node),
+    )!);
+    pressModifiedKey(afterEditor, 'Backspace', { ctrlKey: true });
+    expect(countNodes(afterEditor.view.state.doc, 'table')).toBe(1);
   });
 
   it.each(['before', 'after'] as const)(

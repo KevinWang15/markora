@@ -62,6 +62,13 @@ test("@required configured auto-pairs wrap, delete, and undo through real Shadow
   await settleEditor(labPage, id);
   await expect(editor.locator("p")).toHaveText("()");
 
+  await labPage.keyboard.press("Control+Backspace");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(")");
+  await labPage.keyboard.press("ControlOrMeta+z");
+  await settleEditor(labPage, id);
+  await expect(editor.locator("p")).toHaveText("()");
+
   await resetEditor(labPage, id, "alpha");
   await selectText(labPage, id, "alpha");
   await labPage.keyboard.type("*");

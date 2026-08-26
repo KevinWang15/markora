@@ -188,11 +188,19 @@ export type CreateManagedBlockBoundaryPluginOptions = {
 
 export function createManagedBlockBoundaryPlugin(options: CreateManagedBlockBoundaryPluginOptions) {
   const handleManagedBlockKeyDown = (view: EditorView, event: KeyboardEvent) => {
-    const horizontalDirection: PhysicalHorizontalDirection | null = event.key === "ArrowLeft"
-      ? "left"
-      : event.key === "ArrowRight"
-        ? "right"
-        : null;
+    if (view.composing || event.isComposing || event.keyCode === 229) {
+      return false;
+    }
+
+    const commandModified = event.altKey || event.ctrlKey || event.metaKey;
+    const plainKey = !commandModified && !event.shiftKey;
+    const horizontalDirection: PhysicalHorizontalDirection | null = plainKey
+      ? event.key === "ArrowLeft"
+        ? "left"
+        : event.key === "ArrowRight"
+          ? "right"
+          : null
+      : null;
 
     if (horizontalDirection) {
       const tableBoundary = (["before", "after"] as const).map((side) => ({
@@ -266,7 +274,7 @@ export function createManagedBlockBoundaryPlugin(options: CreateManagedBlockBoun
       return handled;
     }
 
-    if (event.key === "Enter") {
+    if (plainKey && event.key === "Enter") {
       debugManagedBlockCursor(() => ({
         phase: "handleKeyDown:enter",
         selectionType: view.state.selection.constructor.name,
@@ -294,7 +302,7 @@ export function createManagedBlockBoundaryPlugin(options: CreateManagedBlockBoun
       return handled;
     }
 
-    if (event.key === "Backspace" || event.key === "Delete") {
+    if (!commandModified && (event.key === "Backspace" || event.key === "Delete")) {
       const removesManagedBlock = (
         (event.key === "Backspace" && boundary.side === "after")
         || (event.key === "Delete" && boundary.side === "before")

@@ -711,6 +711,9 @@ export function createAutoPairPlugin(options: {
       handleKeyDown(view, event) {
         if (
           event.key !== "Backspace"
+          || event.altKey
+          || event.ctrlKey
+          || event.metaKey
           || event.isComposing
           || event.keyCode === 229
           || view.composing
