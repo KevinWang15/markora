@@ -101,6 +101,121 @@ test("@required bidi mark boundaries follow physical browser caret motion", asyn
   }
 });
 
+test("@required one physical arrow exits every coincident mark boundary", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const cases = [
+    {
+      arrow: "ArrowLeft" as const,
+      direction: "ltr" as const,
+      expected: "pre X***fix*** suffix",
+      markdown: "pre ***fix*** suffix",
+      markerNames: ["strong", "em"],
+      mode: "start" as const,
+      text: "fix",
+    },
+    {
+      arrow: "ArrowRight" as const,
+      direction: "ltr" as const,
+      expected: "pre ***fix***X suffix",
+      markdown: "pre ***fix*** suffix",
+      markerNames: ["strong", "em"],
+      mode: "end" as const,
+      text: "fix",
+    },
+    {
+      arrow: "ArrowLeft" as const,
+      direction: "ltr" as const,
+      expected: "pre X**[fix](/target)** suffix",
+      markdown: "pre [**fix**](/target) suffix",
+      markerNames: ["link", "strong"],
+      mode: "start" as const,
+      text: "fix",
+    },
+    {
+      arrow: "ArrowRight" as const,
+      direction: "ltr" as const,
+      expected: "pre **[fix](/target)**X suffix",
+      markdown: "pre [**fix**](/target) suffix",
+      markerNames: ["link", "strong"],
+      mode: "end" as const,
+      text: "fix",
+    },
+    {
+      arrow: "ArrowRight" as const,
+      direction: "rtl" as const,
+      expected: "X***אבג***",
+      markdown: "***אבג***",
+      markerNames: ["strong", "em"],
+      mode: "start" as const,
+      text: "אבג",
+    },
+    {
+      arrow: "ArrowLeft" as const,
+      direction: "rtl" as const,
+      expected: "***אבג***X",
+      markdown: "***אבג***",
+      markerNames: ["strong", "em"],
+      mode: "end" as const,
+      text: "אבג",
+    },
+  ];
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+
+  const pressArrow = async (key: "ArrowLeft" | "ArrowRight") => {
+    if (!cdp) {
+      await labPage.keyboard.press(key);
+      return;
+    }
+
+    const keyCode = key === "ArrowLeft" ? 37 : 39;
+    for (const type of ["rawKeyDown", "keyUp"] as const) {
+      await cdp.send("Input.dispatchKeyEvent", {
+        code: key,
+        key,
+        nativeVirtualKeyCode: keyCode,
+        type,
+        windowsVirtualKeyCode: keyCode,
+      });
+    }
+  };
+
+  for (const [index, testCase] of cases.entries()) {
+    const id = `coincident-mark-boundary-${index}`;
+    await mountEditor(labPage, {
+      direction: testCase.direction,
+      id,
+      markdown: testCase.markdown,
+      root: "shadow",
+    });
+    await selectTextBoundary(labPage, id, testCase.text, testCase.mode);
+    await settleEditor(labPage, id);
+    const boundaryHead = (await snapshotEditor(labPage, id)).selection.head;
+
+    await pressArrow(testCase.arrow);
+    await settleEditor(labPage, id);
+    expect((await snapshotEditor(labPage, id)).selection.head).toBe(boundaryHead);
+    for (const markerName of testCase.markerNames) {
+      await expect(editorLocator(labPage, id).locator(`.mdw-marker-${markerName}`))
+        .toHaveCount(0);
+    }
+
+    if (cdp) {
+      await cdp.send("Input.insertText", { text: "X" });
+    } else {
+      await labPage.keyboard.insertText("X");
+    }
+    await settleEditor(labPage, id);
+    expect(await getMarkdown(labPage, id), JSON.stringify(testCase)).toBe(testCase.expected);
+  }
+
+  await cdp?.detach();
+});
+
 test("@required bidi mark exits preserve native physical-arrow progression", async ({ labPage }) => {
   const cases = [
     {

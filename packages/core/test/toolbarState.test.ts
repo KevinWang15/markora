@@ -114,6 +114,78 @@ describe('toolbar state', () => {
     expect(editor.getToolbarState().bold.active).toBe(false);
   });
 
+  it('escapes every mark at one outward boundary before typing', () => {
+    for (const testCase of [
+      {
+        arrow: 'ArrowLeft',
+        expected: 'preX***fix*** suffix',
+        markdown: 'pre***fix*** suffix',
+        markNames: ['strong', 'em'],
+        side: 'start',
+      },
+      {
+        arrow: 'ArrowRight',
+        expected: 'pre***fix***X suffix',
+        markdown: 'pre***fix*** suffix',
+        markNames: ['strong', 'em'],
+        side: 'end',
+      },
+      {
+        arrow: 'ArrowLeft',
+        expected: 'preX**[fix](/target)** suffix',
+        markdown: 'pre[**fix**](/target) suffix',
+        markNames: ['link', 'strong'],
+        side: 'start',
+      },
+      {
+        arrow: 'ArrowRight',
+        expected: 'pre**[fix](/target)**X suffix',
+        markdown: 'pre[**fix**](/target) suffix',
+        markNames: ['link', 'strong'],
+        side: 'end',
+      },
+    ]) {
+      const editor = createEditor({
+        element: createHost(),
+        markdown: testCase.markdown,
+      });
+      const range = findMarkedTextRange(editor, testCase.markNames[0]!);
+      const position = testCase.side === 'start' ? range.start : range.end;
+      setSelection(editor, TextSelection.create(editor.view.state.doc, position));
+
+      expect(pressKey(editor, testCase.arrow)).toBe(true);
+      const storedMarkNames = editor.view.state.storedMarks?.map((mark) => mark.type.name) ?? [];
+      for (const markName of testCase.markNames) {
+        expect(storedMarkNames).not.toContain(markName);
+        expect(editor.view.dom.querySelectorAll(`.mdw-marker-${markName}`)).toHaveLength(0);
+      }
+
+      editor.view.dispatch(editor.view.state.tr.insertText('X'));
+      expect(editor.getMarkdown()).toBe(testCase.expected);
+      editor.destroy();
+    }
+  });
+
+  it('retains an outer mark that continues across the escaped boundary', () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: 'pre**outer *inner* tail** suffix',
+    });
+    const inner = findMarkedTextRange(editor, 'em');
+    setSelection(editor, TextSelection.create(editor.view.state.doc, inner.end));
+
+    expect(pressKey(editor, 'ArrowRight')).toBe(true);
+    const storedMarkNames = editor.view.state.storedMarks?.map((mark) => mark.type.name) ?? [];
+    expect(storedMarkNames).toContain('strong');
+    expect(storedMarkNames).not.toContain('em');
+    expect(editor.view.dom.querySelectorAll('.mdw-marker-em')).toHaveLength(0);
+    expect(editor.view.dom.querySelectorAll('.mdw-marker-strong')).toHaveLength(2);
+
+    editor.view.dispatch(editor.view.state.tr.insertText('X'));
+    expect(editor.getMarkdown()).toBe('pre**outer *inner*X tail** suffix');
+    editor.destroy();
+  });
+
   it('uses physical RTL arrows when escaping strong boundaries', () => {
     const editor = createEditor({
       element: createHost(),

@@ -16,7 +16,7 @@ export type BoundaryMarkInfo = {
 };
 
 export type EscapedBoundary = {
-  markName: BoundaryMarkName;
+  markNames: readonly BoundaryMarkName[];
   pos: number;
   side: "before" | "after";
 };
@@ -28,8 +28,14 @@ export function createMarkBoundaryHelpers(options: {
 }) {
   const { getMarkInfo } = options;
 
-  function getBoundaryMark(state: EditorState, side: LogicalHorizontalSide) {
+  function getBoundaryMarks(state: EditorState, side: LogicalHorizontalSide) {
     const markNames: BoundaryMarkName[] = ["code", "link", "strong", "em", "strike"];
+    const boundaries: Array<{
+      markInfo: BoundaryMarkInfo;
+      markName: BoundaryMarkName;
+      pos: number;
+      side: "before" | "after";
+    }> = [];
 
     for (const markName of markNames) {
       const markInfo = getMarkInfo(state, markName);
@@ -39,15 +45,23 @@ export function createMarkBoundaryHelpers(options: {
       }
 
       if (side === "before" && state.selection.from === markInfo.start) {
-        return { markName, pos: markInfo.start, side: "before" as const };
+        boundaries.push({ markInfo, markName, pos: markInfo.start, side: "before" });
       }
 
       if (side === "after" && state.selection.from === markInfo.end) {
-        return { markName, pos: markInfo.end, side: "after" as const };
+        boundaries.push({ markInfo, markName, pos: markInfo.end, side: "after" });
       }
     }
 
-    return null;
+    return boundaries;
+  }
+
+  function getBoundaryMark(state: EditorState, side: LogicalHorizontalSide) {
+    const boundary = getBoundaryMarks(state, side)[0];
+
+    return boundary
+      ? { markName: boundary.markName, pos: boundary.pos, side: boundary.side }
+      : null;
   }
 
   function getEscapedBoundary(state: EditorState) {
@@ -57,7 +71,11 @@ export function createMarkBoundaryHelpers(options: {
   function isEscapedOutsideBoundary(state: EditorState, markName: BoundaryMarkName, markInfo: BoundaryMarkInfo) {
     const escaped = getEscapedBoundary(state);
 
-    if (!escaped || escaped.markName !== markName || escaped.pos !== state.selection.from) {
+    if (
+      !escaped
+      || !escaped.markNames.includes(markName)
+      || escaped.pos !== state.selection.from
+    ) {
       return false;
     }
 
@@ -69,22 +87,22 @@ export function createMarkBoundaryHelpers(options: {
 
   function escapeBoundaryMark(view: EditorView, direction: PhysicalHorizontalDirection) {
     const fallbackSide = horizontalArrowLogicalSide(view, direction);
-    let boundary: ReturnType<typeof getBoundaryMark> = null;
+    let boundary: EscapedBoundary | null = null;
 
     for (const side of ["before", "after"] as const) {
-      const candidate = getBoundaryMark(view.state, side);
+      const markNames = getBoundaryMarks(view.state, side)
+        .filter(({ markInfo }) => (
+          (probeVisualRangeMotion(view, direction, markInfo.start, markInfo.end) ?? fallbackSide)
+          === side
+        ))
+        .map(({ markName }) => markName);
 
-      if (!candidate) {
-        continue;
-      }
-
-      const markInfo = getMarkInfo(view.state, candidate.markName);
-      const visualMotion = markInfo
-        ? probeVisualRangeMotion(view, direction, markInfo.start, markInfo.end)
-        : null;
-
-      if ((visualMotion ?? fallbackSide) === side) {
-        boundary = candidate;
+      if (markNames.length > 0) {
+        boundary = {
+          markNames,
+          pos: view.state.selection.from,
+          side,
+        };
         break;
       }
     }
@@ -97,15 +115,18 @@ export function createMarkBoundaryHelpers(options: {
 
     if (
       escaped &&
-      escaped.markName === boundary.markName &&
       escaped.pos === boundary.pos &&
-      escaped.side === boundary.side
+      escaped.side === boundary.side &&
+      boundary.markNames.every((markName) => escaped.markNames.includes(markName))
     ) {
       return false;
     }
 
     const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, boundary.pos));
-    const storedMarks = view.state.selection.$from.marks().filter((mark) => mark.type.name !== boundary.markName);
+    const escapedMarkNames = new Set<string>(boundary.markNames);
+    const storedMarks = view.state.selection.$from.marks().filter((mark) => (
+      !escapedMarkNames.has(mark.type.name)
+    ));
     tr.setStoredMarks(storedMarks);
     tr.setMeta(escapedBoundaryKey, boundary);
     view.dispatch(tr);
