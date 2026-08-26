@@ -28,8 +28,13 @@ async function reloadWithoutIntersectionObserver(page: Page) {
   await expect(page.locator("[data-e2e-browser-lab]")).toHaveAttribute("data-ready", "true");
 }
 
-async function dispatchExternalDrop(cdp: CDPSession, point: Point, items: DropItem[]) {
-  const data = { dragOperationsMask: 1, items };
+async function dispatchExternalDrop(
+  cdp: CDPSession,
+  point: Point,
+  items: DropItem[],
+  files: string[] = [],
+) {
+  const data = { dragOperationsMask: 1, files, items };
   for (const type of ["dragEnter", "dragOver", "drop"] as const) {
     await cdp.send("Input.dispatchDragEvent", {
       data,
@@ -38,6 +43,46 @@ async function dispatchExternalDrop(cdp: CDPSession, point: Point, items: DropIt
       y: point.y,
     });
   }
+}
+
+type NativeFileTransferCapture = {
+  defaultPrevented: boolean;
+  dropEffect?: string;
+  files: Array<{ name: string; size: number; type: string }>;
+  isTrusted: boolean;
+  types: string[];
+};
+
+async function armNativeFileTransferCapture(
+  page: Page,
+  id: string,
+  eventName: "dragover" | "drop",
+) {
+  await page.evaluate(({ editorId, eventName: browserEventName }) => {
+    const section = document.querySelector(`[data-e2e-editor="${editorId}"]`)!;
+    (window as typeof window & { __markoraNativeFileTransfer?: unknown }).__markoraNativeFileTransfer = undefined;
+    section.addEventListener(browserEventName, (rawEvent) => {
+      const event = rawEvent as DragEvent;
+      const transfer = event.dataTransfer;
+      (window as typeof window & { __markoraNativeFileTransfer?: unknown }).__markoraNativeFileTransfer = {
+        defaultPrevented: event.defaultPrevented,
+        dropEffect: transfer?.dropEffect,
+        files: Array.from(transfer?.files ?? [], (file) => ({
+          name: file.name,
+          size: file.size,
+          type: file.type,
+        })),
+        isTrusted: event.isTrusted,
+        types: Array.from(transfer?.types ?? []),
+      };
+    }, { once: true });
+  }, { editorId: id, eventName });
+}
+
+async function readNativeFileTransferCapture(page: Page) {
+  return page.evaluate(() => (
+    window as typeof window & { __markoraNativeFileTransfer?: NativeFileTransferCapture }
+  ).__markoraNativeFileTransfer);
 }
 
 async function textPoint(page: Page, id: string, needle: string, selector?: string) {
@@ -346,6 +391,165 @@ test("@required Chromium CDP external drop enters exact passive-code coordinates
   expect(await runEditorCommand(labPage, id, { type: "undo" })).toBe(true);
   await settleEditor(labPage, id);
   expect(await getMarkdown(labPage, id)).toBe(original);
+  await cdp.detach();
+});
+
+test("@required Chromium CDP trusted file drop uses the host uploader at its outer coordinate", async ({
+  browserName,
+  context,
+  labPage,
+}, testInfo) => {
+  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP drag commands.");
+  const id = "native-file-upload";
+  const original = "alpha omega";
+  await mountEditor(labPage, {
+    id,
+    markdown: original,
+    resourceMode: "immediate-upload",
+    root: "shadow",
+  });
+  await armNativeFileTransferCapture(labPage, id, "drop");
+
+  const cdp = await context.newCDPSession(labPage);
+  await dispatchExternalDrop(
+    cdp,
+    await textPoint(labPage, id, "omega"),
+    [
+      { data: "<strong>mixed rich text must not enter</strong>", mimeType: "text/html" },
+      { data: "mixed plain text must not enter", mimeType: "text/plain" },
+    ],
+    [`${testInfo.config.rootDir}/../../banner.png`],
+  );
+  await settleEditor(labPage, id);
+
+  const captured = await readNativeFileTransferCapture(labPage);
+  expect(captured).toMatchObject({
+    defaultPrevented: true,
+    dropEffect: "copy",
+    files: [{ name: "banner.png", size: 8_550, type: "image/png" }],
+    isTrusted: true,
+  });
+  expect(new Set(captured?.types)).toEqual(new Set(["Files", "text/html", "text/plain"]));
+  expect(await getMarkdown(labPage, id)).toBe("alpha [banner.png](/uploads/banner.png)omega");
+  expect((await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.resourceLog(editorId),
+    id,
+  )).uploads).toEqual([{ fileName: "banner.png", source: "drop" }]);
+
+  expect(await runEditorCommand(labPage, id, { type: "undo" })).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(original);
+  expect(await runEditorCommand(labPage, id, { type: "redo" })).toBe(true);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe("alpha [banner.png](/uploads/banner.png)omega");
+  expect((await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.resourceLog(editorId),
+    id,
+  )).uploads).toHaveLength(1);
+  await cdp.detach();
+});
+
+test("@required Chromium CDP trusted file drops are rejected by outer and nested-code guards", async ({
+  browserName,
+  context,
+  labPage,
+}, testInfo) => {
+  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP drag commands.");
+  await reloadWithoutIntersectionObserver(labPage);
+  const cdp = await context.newCDPSession(labPage);
+  const file = `${testInfo.config.rootDir}/../../banner.png`;
+  const mixedItems = [
+    { data: "<strong>mixed rich text must not enter</strong>", mimeType: "text/html" },
+    { data: "mixed plain text must not enter", mimeType: "text/plain" },
+  ];
+
+  const outerId = "native-file-reject-outer";
+  const outerOriginal = "alpha omega";
+  await mountEditor(labPage, { id: outerId, markdown: outerOriginal, root: "shadow" });
+  await armNativeFileTransferCapture(labPage, outerId, "dragover");
+  await dispatchExternalDrop(
+    cdp,
+    await textPoint(labPage, outerId, "omega"),
+    mixedItems,
+    [file],
+  );
+  await settleEditor(labPage, outerId);
+  const outerCapture = await readNativeFileTransferCapture(labPage);
+  expect(outerCapture).toMatchObject({
+    defaultPrevented: true,
+    dropEffect: "none",
+    files: [],
+    isTrusted: true,
+  });
+  expect(new Set(outerCapture?.types)).toEqual(new Set(["Files", "text/html", "text/plain"]));
+  expect(await getMarkdown(labPage, outerId)).toBe(outerOriginal);
+
+  const activeId = "native-file-reject-active-code";
+  const activeOriginal = "```text\nalpha omega\n```";
+  await mountEditor(labPage, {
+    id: activeId,
+    markdown: activeOriginal,
+    resourceMode: "immediate-upload",
+    root: "shadow",
+  });
+  const activeCode = editorLocator(labPage, activeId).locator(".mdw-code-block");
+  await activeCode.locator(".mdw-code-block-static-code").click({ position: { x: 5, y: 5 } });
+  await expect(activeCode).toHaveAttribute("data-mdw-code-block-state", "active");
+  await expect(activeCode.locator(".cm-content")).toBeFocused();
+  await settleEditor(labPage, activeId);
+  await armNativeFileTransferCapture(labPage, activeId, "dragover");
+  await dispatchExternalDrop(
+    cdp,
+    await textPoint(labPage, activeId, "omega", ".cm-content"),
+    mixedItems,
+    [file],
+  );
+  await settleEditor(labPage, activeId);
+  const activeCapture = await readNativeFileTransferCapture(labPage);
+  expect(activeCapture).toMatchObject({
+    defaultPrevented: true,
+    dropEffect: "none",
+    files: [],
+    isTrusted: true,
+  });
+  expect(new Set(activeCapture?.types)).toEqual(new Set(["Files", "text/html", "text/plain"]));
+  expect(await getMarkdown(labPage, activeId)).toBe(activeOriginal);
+  expect((await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.resourceLog(editorId),
+    activeId,
+  )).uploads).toEqual([]);
+
+  const passiveId = "native-file-reject-passive-code";
+  const passiveOriginal = "```text\nalpha omega\n```";
+  await mountEditor(labPage, {
+    id: passiveId,
+    markdown: passiveOriginal,
+    resourceMode: "immediate-upload",
+    root: "shadow",
+  });
+  expect((await snapshotEditor(labPage, passiveId)).codeBlocks.active).toBe(0);
+  await armNativeFileTransferCapture(labPage, passiveId, "dragover");
+  await dispatchExternalDrop(
+    cdp,
+    await textPoint(labPage, passiveId, "omega", ".mdw-code-block-static-code"),
+    mixedItems,
+    [file],
+  );
+  await settleEditor(labPage, passiveId);
+  const passiveCapture = await readNativeFileTransferCapture(labPage);
+  expect(passiveCapture).toMatchObject({
+    defaultPrevented: true,
+    dropEffect: "none",
+    files: [],
+    isTrusted: true,
+  });
+  expect(new Set(passiveCapture?.types)).toEqual(new Set(["Files", "text/html", "text/plain"]));
+  expect(await getMarkdown(labPage, passiveId)).toBe(passiveOriginal);
+  expect((await snapshotEditor(labPage, passiveId)).codeBlocks.active).toBe(0);
+  expect((await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.resourceLog(editorId),
+    passiveId,
+  )).uploads).toEqual([]);
   await cdp.detach();
 });
 
