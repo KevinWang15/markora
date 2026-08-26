@@ -7,6 +7,7 @@ import {
   resetEditor,
   settleEditor,
   test,
+  updateEditorOptions,
 } from "./fixtures";
 
 const androidChromeUserAgent = [
@@ -28,13 +29,18 @@ async function dispatchNoMutationBackspace(
   count = 1,
 ) {
   const cdp = await context.newCDPSession(page);
-  const selector = `[data-e2e-editor="${id}"] ${target === "code-mirror" ? ".cm-content" : ".ProseMirror"}`;
+  const containerSelector = `[data-e2e-editor="${id}"]`;
+  const targetSelector = target === "code-mirror" ? ".cm-content" : ".ProseMirror";
   const result = await cdp.send("Runtime.evaluate", {
     awaitPromise: true,
     expression: `(async () => {
       const events = [];
       for (let index = 0; index < ${count}; index += 1) {
-        const target = document.querySelector(${JSON.stringify(selector)});
+        const container = document.querySelector(${JSON.stringify(containerSelector)});
+        if (!(container instanceof HTMLElement)) throw new Error("Android editor container missing.");
+        const shadowHost = container.querySelector("[data-e2e-shadow-host]");
+        const root = shadowHost?.shadowRoot ?? container;
+        const target = root.querySelector(${JSON.stringify(targetSelector)});
         if (!(target instanceof HTMLElement)) throw new Error("Android editor target missing.");
         const event = new InputEvent("beforeinput", {
           bubbles: true,
@@ -103,6 +109,15 @@ test("@required Android CDP fallback deletes complete grapheme clusters", async 
   )).toBe(true);
   await settleEditor(labPage, id);
   expect(await getMarkdown(labPage, id)).toBe(burst);
+
+  const shadowId = "android-shadow-grapheme";
+  await mountEditor(labPage, { id: shadowId, markdown: "A😀", root: "shadow" });
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "A😀", "end"),
+    shadowId,
+  )).toBe(true);
+  await dispatchNoMutationBackspace(context, shadowId, labPage);
+  await expect.poll(() => getMarkdown(labPage, shadowId)).toBe("A");
 });
 
 test("@required Android CDP fallback preserves structural Backspace commands", async ({
@@ -139,6 +154,72 @@ test("@required Android CDP fallback preserves structural Backspace commands", a
   await labPage.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.focus(editorId, "end"), id);
   await dispatchNoMutationBackspace(context, id, labPage);
   await expect.poll(() => getMarkdown(labPage, id)).toBe("");
+});
+
+test("@required Android CDP fallback expires after editor state changes", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing Android CDP input control.");
+
+  const id = "android-stale-backspace";
+  const editor = editorLocator(labPage, id);
+  await mountEditor(labPage, { id, markdown: "alpha beta" });
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "end"),
+    id,
+  )).toBe(true);
+  await dispatchNoMutationBackspace(context, id, labPage);
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
+    id,
+  )).toBe(true);
+  await labPage.waitForTimeout(100);
+  expect(await getMarkdown(labPage, id)).toBe("alpha beta");
+
+  await resetEditor(labPage, id, "alpha");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
+    id,
+  )).toBe(true);
+  await dispatchNoMutationBackspace(context, id, labPage);
+  await updateEditorOptions(labPage, id, { editable: false });
+  await labPage.waitForTimeout(100);
+  expect(await getMarkdown(labPage, id)).toBe("alpha");
+  await updateEditorOptions(labPage, id, { editable: true });
+
+  await resetEditor(labPage, id, "alpha");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
+    id,
+  )).toBe(true);
+  await dispatchNoMutationBackspace(context, id, labPage);
+  await editor.evaluate((element) => {
+    element.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+  });
+  await labPage.waitForTimeout(100);
+  expect(await getMarkdown(labPage, id)).toBe("alpha");
+  await editor.evaluate((element) => {
+    element.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
+  });
+
+  await resetEditor(labPage, id, "alpha");
+  expect(await labPage.evaluate(
+    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
+    id,
+  )).toBe(true);
+  await dispatchNoMutationBackspace(context, id, labPage);
+  await labPage.evaluate(() => {
+    const button = document.createElement("button");
+    button.id = "android-external-focus";
+    button.textContent = "External focus";
+    document.body.append(button);
+    button.focus();
+  });
+  await labPage.waitForTimeout(100);
+  expect(await getMarkdown(labPage, id)).toBe("alpha");
+  await expect(labPage.locator("#android-external-focus")).toBeFocused();
 });
 
 test("@required Android CDP fallback preserves auto-pairs and active code graphemes", async ({

@@ -1,5 +1,4 @@
-import type { Node as ProseMirrorNode } from "prosemirror-model";
-import { Plugin, TextSelection } from "prosemirror-state";
+import { Plugin, TextSelection, type EditorState } from "prosemirror-state";
 
 type GraphemeSegment = {
   index: number;
@@ -19,6 +18,15 @@ type SegmentingIntl = typeof Intl & {
 };
 
 type BrowserWindow = Window & typeof globalThis;
+
+type FallbackState = Pick<EditorState, "doc" | "selection">;
+
+function captureFallbackState(state: EditorState): FallbackState {
+  return {
+    doc: state.doc,
+    selection: state.selection,
+  };
+}
 
 function isAndroidChrome(ownerWindow: BrowserWindow) {
   const userAgent = ownerWindow.navigator.userAgent;
@@ -59,7 +67,7 @@ export function findPreviousGraphemeStart(
 export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
   const androidChrome = isAndroidChrome(ownerWindow);
   const pendingFallbacks = new Set<number>();
-  let lastFallbackDoc: ProseMirrorNode | null = null;
+  let lastFallbackState: FallbackState | null = null;
 
   return new Plugin({
     props: {
@@ -84,45 +92,61 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
             return false;
           }
 
-          const initialDoc = view.state.doc;
+          const initialState = captureFallbackState(view.state);
           const timeoutId = ownerWindow.setTimeout(() => {
             pendingFallbacks.delete(timeoutId);
 
+            const { state } = view;
+            const matchesInitialState = (
+              state.doc === initialState.doc
+              && state.selection.eq(initialState.selection)
+            );
+            const matchesFallbackState = Boolean(
+              lastFallbackState
+              && state.doc === lastFallbackState.doc
+              && state.selection.eq(lastFallbackState.selection),
+            );
+
             if (
               view.isDestroyed
-              || (view.state.doc !== initialDoc && view.state.doc !== lastFallbackDoc)
+              || !view.editable
+              || view.composing
+              || (!matchesInitialState && !matchesFallbackState)
             ) {
               return;
             }
 
-            const activeElement = view.dom.ownerDocument.activeElement;
+            const ownerDocument = view.dom.ownerDocument;
+            const activeElement = view.root.activeElement ?? ownerDocument.activeElement;
 
             if (
-              !activeElement
-              || activeElement === view.dom
-              || activeElement === view.dom.ownerDocument.body
+              activeElement
+              && activeElement !== view.dom
+              && activeElement !== ownerDocument.body
             ) {
-              view.dom.blur();
-              view.focus();
+              return;
             }
 
-            const backspaceEvent = view.dom.ownerDocument.createEvent("Event") as KeyboardEvent;
+            view.dom.blur();
+            view.focus();
+
+            const backspaceEvent = ownerDocument.createEvent("Event") as KeyboardEvent;
             backspaceEvent.initEvent("keydown", true, true);
             Object.assign(backspaceEvent, {
               code: "Backspace",
               key: "Backspace",
               keyCode: 8,
             });
-            const docBeforeKeyDown = view.state.doc;
+            const stateBeforeKeyDown = view.state;
             const handled = view.someProp("handleKeyDown", (handler) => (
               handler(view, backspaceEvent) || undefined
             ));
 
-            if (view.state.doc !== docBeforeKeyDown) {
+            if (view.state !== stateBeforeKeyDown) {
               // A queued burst may share one initial snapshot. Record changes
               // made by an earlier fallback so each event still gets exactly
               // one recovery attempt without mistaking native input for ours.
-              lastFallbackDoc = view.state.doc;
+              lastFallbackState = captureFallbackState(view.state);
               return;
             }
 
@@ -144,7 +168,7 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
                   .delete(selection.from - nodeBefore.nodeSize, selection.from)
                   .scrollIntoView(),
               );
-              lastFallbackDoc = view.state.doc;
+              lastFallbackState = captureFallbackState(view.state);
               return;
             }
 
@@ -166,7 +190,7 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
                 .delete(selection.from - graphemeLength, selection.from)
                 .scrollIntoView(),
             );
-            lastFallbackDoc = view.state.doc;
+            lastFallbackState = captureFallbackState(view.state);
           }, 60);
 
           pendingFallbacks.add(timeoutId);
@@ -185,7 +209,7 @@ export function createAndroidInputPlugin(ownerWindow: BrowserWindow) {
           }
 
           pendingFallbacks.clear();
-          lastFallbackDoc = null;
+          lastFallbackState = null;
         },
       };
     },
