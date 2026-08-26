@@ -10,7 +10,7 @@ import {
   test,
 } from "./fixtures";
 
-test("@required vertical navigation ignores revealed Markdown marker geometry", async ({
+test("@required visual-line navigation ignores revealed Markdown marker geometry", async ({
   browserName,
   context,
   labPage,
@@ -50,8 +50,8 @@ test("@required vertical navigation ignores revealed Markdown marker geometry", 
     target.style.width = "500px";
   });
 
-  const pressVerticalArrow = async (
-    key: "ArrowDown" | "ArrowUp",
+  const pressVisualLineKey = async (
+    key: "ArrowDown" | "ArrowUp" | "End" | "Home",
     extend: boolean,
   ) => {
     if (!cdp) {
@@ -59,7 +59,12 @@ test("@required vertical navigation ignores revealed Markdown marker geometry", 
       return;
     }
 
-    const keyCode = key === "ArrowDown" ? 40 : 38;
+    const keyCode = {
+      ArrowDown: 40,
+      ArrowUp: 38,
+      End: 35,
+      Home: 36,
+    }[key];
     for (const type of ["rawKeyDown", "keyUp"] as const) {
       await cdp.send("Input.dispatchKeyEvent", {
         code: key,
@@ -75,7 +80,7 @@ test("@required vertical navigation ignores revealed Markdown marker geometry", 
   const navigate = async (
     markdown: string,
     occurrence: number,
-    key: "ArrowDown" | "ArrowUp",
+    key: "ArrowDown" | "ArrowUp" | "End" | "Home",
     extend: boolean,
     needle = "abcde",
   ) => {
@@ -93,19 +98,19 @@ test("@required vertical navigation ignores revealed Markdown marker geometry", 
     await clearEditorEvents(labPage, id);
     await editor.evaluate((element) => {
       const targetWindow = window as Window & {
-        __markoraVerticalKey?: {
+        __markoraVisualLineKey?: {
           defaultPrevented: boolean;
           isTrusted: boolean;
           key: string;
         };
       };
-      delete targetWindow.__markoraVerticalKey;
+      delete targetWindow.__markoraVisualLineKey;
       const onKeyDown = (rawEvent: Event) => {
         const event = rawEvent as KeyboardEvent;
-        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+        if (!["ArrowDown", "ArrowUp", "End", "Home"].includes(event.key)) return;
         element.removeEventListener("keydown", onKeyDown);
         queueMicrotask(() => {
-          targetWindow.__markoraVerticalKey = {
+          targetWindow.__markoraVisualLineKey = {
             defaultPrevented: event.defaultPrevented,
             isTrusted: event.isTrusted,
             key: event.key,
@@ -114,24 +119,24 @@ test("@required vertical navigation ignores revealed Markdown marker geometry", 
       };
       element.addEventListener("keydown", onKeyDown);
     });
-    await pressVerticalArrow(key, extend);
+    await pressVisualLineKey(key, extend);
     await settleEditor(labPage, id);
     await expect(editor).toBeFocused();
-    await expect(editor).not.toHaveClass(/mdw-native-vertical-motion/);
+    await expect(editor).not.toHaveClass(/mdw-native-visual-line-motion/);
     expect(await getMarkdown(labPage, id)).toBe(normalizedMarkdown);
     const events = await getEditorEvents(labPage, id);
     expect(events.counts.focus).toBe(0);
     expect(events.counts.blur).toBe(0);
     expect(await labPage.evaluate(() => {
       const targetWindow = window as Window & {
-        __markoraVerticalKey?: {
+        __markoraVisualLineKey?: {
           defaultPrevented: boolean;
           isTrusted: boolean;
           key: string;
         };
       };
-      const record = targetWindow.__markoraVerticalKey ?? null;
-      delete targetWindow.__markoraVerticalKey;
+      const record = targetWindow.__markoraVisualLineKey ?? null;
+      delete targetWindow.__markoraVisualLineKey;
       return record;
     })).toEqual({ defaultPrevented: false, isTrusted: true, key });
     return labPage.evaluate((editorId) => ({
@@ -165,6 +170,14 @@ test("@required vertical navigation ignores revealed Markdown marker geometry", 
   }
 
   const wrappedVisible = "0123456789abcdefghijABCDEFGHIJklmnopqrstUVWXYZabcd";
+  const wrappedMarked = [
+    `**${wrappedVisible}**`,
+    `*${wrappedVisible}*`,
+    `\`${wrappedVisible}\``,
+    `~~${wrappedVisible}~~`,
+    `[${wrappedVisible}](/wrapped-line-edge-navigation)`,
+    `[**${wrappedVisible}**](/nested-wrapped-line-edge-navigation)`,
+  ];
   await editor.evaluate((element) => {
     (element as HTMLElement).style.width = "170px";
   });
@@ -188,6 +201,27 @@ test("@required vertical navigation ignores revealed Markdown marker geometry", 
         extend,
         testCase.needle,
       )).toEqual(plainResult);
+    }
+  }
+
+  for (const key of ["Home", "End"] as const) {
+    for (const extend of [false, true]) {
+      const plainResult = await navigate(
+        wrappedVisible,
+        0,
+        key,
+        extend,
+        "klmno",
+      );
+      for (const marked of wrappedMarked) {
+        expect(await navigate(
+          marked,
+          0,
+          key,
+          extend,
+          "klmno",
+        )).toEqual(plainResult);
+      }
     }
   }
 

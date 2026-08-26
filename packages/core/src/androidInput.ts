@@ -43,7 +43,7 @@ type DeletionRange = {
 
 const consumeDeletion = Symbol("consume-deletion");
 const consumePointerWordSelection = Symbol("consume-pointer-word-selection");
-const verticalMotionMarkerSelector = [
+const visualLineMotionMarkerSelector = [
   ".mdw-marker-strong",
   ".mdw-marker-em",
   ".mdw-marker-code",
@@ -981,13 +981,13 @@ export function isWordNavigationShortcut(
     : event.ctrlKey && !event.altKey && !event.metaKey;
 }
 
-function prepareNativeVerticalNavigation(
+function prepareNativeVisualLineNavigation(
   view: EditorView,
   event: KeyboardEvent,
   ownerWindow: BrowserWindow,
 ) {
   if (
-    (event.key !== "ArrowUp" && event.key !== "ArrowDown")
+    !["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)
     || event.altKey
     || event.ctrlKey
     || event.metaKey
@@ -998,18 +998,18 @@ function prepareNativeVerticalNavigation(
     || event.keyCode === 229
     || event.target !== view.dom
     || !(view.state.selection instanceof TextSelection)
-    || !view.dom.querySelector(verticalMotionMarkerSelector)
+    || !view.dom.querySelector(visualLineMotionMarkerSelector)
   ) {
     return;
   }
 
   // Revealed Markdown delimiters participate in inline layout even though
   // they are not document content. Let the browser preserve its native
-  // vertical caret column against the rendered text, then restore the source
+  // visual-line motion against the rendered text, then restore the source
   // affordance after the default action has resolved the new DOM selection.
-  view.dom.classList.add("mdw-native-vertical-motion");
+  view.dom.classList.add("mdw-native-visual-line-motion");
   ownerWindow.requestAnimationFrame(() => {
-    view.dom.classList.remove("mdw-native-vertical-motion");
+    view.dom.classList.remove("mdw-native-visual-line-motion");
   });
 }
 
@@ -1365,7 +1365,7 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
         },
         keydown(view, event) {
           const keyboardEvent = event as KeyboardEvent;
-          prepareNativeVerticalNavigation(view, keyboardEvent, ownerWindow);
+          prepareNativeVisualLineNavigation(view, keyboardEvent, ownerWindow);
           return handleNativeLineEdgeNavigation(view, keyboardEvent)
             || handleNativeHorizontalNavigation(
               view,
