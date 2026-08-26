@@ -808,6 +808,16 @@
   cursor: text;
 }
 
+.mdw-host .ProseMirror.mdw-native-vertical-motion :is(
+  .mdw-marker-strong,
+  .mdw-marker-em,
+  .mdw-marker-code,
+  .mdw-marker-strike,
+  .mdw-marker-link
+) {
+  display: none;
+}
+
 
 .mdw-host .ProseMirror.mdw-has-managed-block-cursor,
 .mdw-host .ProseMirror.mdw-has-managed-block-cursor *,

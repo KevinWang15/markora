@@ -43,6 +43,13 @@ type DeletionRange = {
 
 const consumeDeletion = Symbol("consume-deletion");
 const consumePointerWordSelection = Symbol("consume-pointer-word-selection");
+const verticalMotionMarkerSelector = [
+  ".mdw-marker-strong",
+  ".mdw-marker-em",
+  ".mdw-marker-code",
+  ".mdw-marker-strike",
+  ".mdw-marker-link",
+].join(", ");
 
 type InlineBoundaryDeletionContext = {
   immediateText: string;
@@ -974,6 +981,38 @@ export function isWordNavigationShortcut(
     : event.ctrlKey && !event.altKey && !event.metaKey;
 }
 
+function prepareNativeVerticalNavigation(
+  view: EditorView,
+  event: KeyboardEvent,
+  ownerWindow: BrowserWindow,
+) {
+  if (
+    (event.key !== "ArrowUp" && event.key !== "ArrowDown")
+    || event.altKey
+    || event.ctrlKey
+    || event.metaKey
+    || !view.editable
+    || view.composing
+    || event.defaultPrevented
+    || event.isComposing
+    || event.keyCode === 229
+    || event.target !== view.dom
+    || !(view.state.selection instanceof TextSelection)
+    || !view.dom.querySelector(verticalMotionMarkerSelector)
+  ) {
+    return;
+  }
+
+  // Revealed Markdown delimiters participate in inline layout even though
+  // they are not document content. Let the browser preserve its native
+  // vertical caret column against the rendered text, then restore the source
+  // affordance after the default action has resolved the new DOM selection.
+  view.dom.classList.add("mdw-native-vertical-motion");
+  ownerWindow.requestAnimationFrame(() => {
+    view.dom.classList.remove("mdw-native-vertical-motion");
+  });
+}
+
 function isSingleVisualTextLine(
   view: EditorView,
   selection: TextSelection,
@@ -1326,6 +1365,7 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
         },
         keydown(view, event) {
           const keyboardEvent = event as KeyboardEvent;
+          prepareNativeVerticalNavigation(view, keyboardEvent, ownerWindow);
           return handleNativeLineEdgeNavigation(view, keyboardEvent)
             || handleNativeHorizontalNavigation(
               view,
