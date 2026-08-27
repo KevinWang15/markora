@@ -1331,3 +1331,19 @@ focused pointer/list cases across Chromium, Firefox, and WebKit, and the package
 smoke gate. The packed root entry is 995,916 raw / 272,597 gzip bytes across two
 initial chunks and 162 static modules; minimal remains one eager 141-module
 chunk at 791,562 raw / 220,637 gzip JavaScript bytes.
+
+The final atomic-boundary audit found the shared runtime behavior already
+stable, so it adds certification without changing production code. In root and
+minimal, an inline image can be selected by a direct click or one inward arrow
+from either adjacent caret; Backspace and Delete remove exactly an adjacent or
+selected image, typing replaces a selected image, and either deletion key
+removes a selected horizontal rule. Every mutation remains one ordinary undo
+step. Trusted raw Chromium DevTools Protocol events plus Firefox and WebKit
+production Shadow DOM coverage verify selection state, exact Markdown, focus,
+replacement, deletion, and undo for both package entries.
+Final verification passes `pnpm check` with 86 files and 1,510 tests, the three
+focused production-browser cases across Chromium, Firefox, and WebKit, and the
+package smoke gate. With no runtime change, the packed root remains 995,916 raw
+/ 272,597 gzip bytes across two initial chunks and 162 static modules; minimal
+remains one eager 141-module chunk at 791,562 raw / 220,637 gzip JavaScript
+bytes.

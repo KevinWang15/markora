@@ -611,6 +611,12 @@ shares the same model-owned click completion used to keep revealed Markdown
 markers from swallowing a click; insertion and undo remain ordinary editor
 transactions in root and minimal.
 
+Inline images also retain deterministic atomic editing in both entries. A click
+or one inward horizontal arrow from either adjacent caret selects the image;
+plain Backspace or Delete then removes exactly that image. Either deletion key
+also removes a clicked horizontal rule, while typing over a selected image
+replaces only the image. Each mutation is one ordinary undo step.
+
 ## Typing ergonomics and keymaps
 
 `CreateEditorOptions.typing` is a copied, creation-time policy. `autoPairs` accepts `parentheses`, `square-brackets`, `braces`, `single-quotes`, `double-quotes`, `emphasis-asterisks`, `emphasis-underscores`, `strong-asterisks`, `strong-underscores`, `inline-code`, and `strikethrough`. It defaults to an empty list. `wrapSelection` defaults to `true`; set it to `false` to leave non-empty selections to the browser/editor's ordinary text-input behavior.
