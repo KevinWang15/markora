@@ -570,12 +570,12 @@ Markdown marker assistance is disabled in code marks and code blocks. The lazy C
 - `@markora/core/italic`
 - `@markora/core/inline-code`
 - `@markora/core/strikethrough`
-- `@markora/core/hard-break` (compatibility entry)
+- `@markora/core/hard-break`
 - `@markora/core/table-toolbar` (compatibility entry)
 - `@markora/core/undo`
 - `@markora/core/redo`
 
-Compatibility-entry defaults are bold `Mod-b`, italic `Mod-i`, inline code `Mod-e`, strikethrough `Mod-Shift-x`, hard break `Shift-Enter`, table toolbar `Alt-F10`, undo `Mod-z`, and redo `Shift-Mod-z` plus `Mod-y`. The independently bundled `markora/minimal` contributes the bold, italic, inline-code, undo, and redo defaults; its strikethrough action has no default binding, and it has no hard-break or table-toolbar contribution.
+Compatibility-entry defaults are bold `Mod-b`, italic `Mod-i`, inline code `Mod-e`, strikethrough `Mod-Shift-x`, table toolbar `Alt-F10`, undo `Mod-z`, and redo `Shift-Mod-z` plus `Mod-y`. Root and the independently bundled `markora/minimal` both bind hard break to `Shift-Enter`; minimal also contributes the bold, italic, inline-code, undo, and redo defaults, while its strikethrough action has no default binding and it has no table-toolbar contribution.
 
 An extension keymap's ID is its qualified contribution ID, such as `@acme/editor/toggle-note`. Remapping occurs after extension resolution, retains contribution ordering and first-true chaining, and canonicalizes equivalent modifier spellings. Unknown IDs are retained so one host policy can be assembled before optional extensions are resolved. A remapped or disabled built-in consumes its former default key instead of allowing native contenteditable behavior to leak through. Configured undo/redo bindings also drive active CodeMirror blocks; other action shortcuts remain outer-editor keymaps.
 

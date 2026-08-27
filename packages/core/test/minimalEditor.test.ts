@@ -235,6 +235,50 @@ describe("minimal embedded editor entry", () => {
     expect(composingArrow.defaultPrevented).toBe(false);
   });
 
+  it("inserts, remaps, and disables the shared hard-break shortcut safely", () => {
+    const pressEnter = (editor: MarkdownEditor, init: KeyboardEventInit = {}) => {
+      const event = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "Enter",
+        ...init,
+      });
+      editor.view.dom.dispatchEvent(event);
+      return event;
+    };
+    const original = "alphaomega";
+
+    const defaults = track(createEditor({
+      element: createHost(),
+      markdown: original,
+    }));
+    defaults.focus({ anchor: 6 });
+    expect(pressEnter(defaults, { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(defaults.getMarkdown()).toBe("alpha\\\nomega");
+    expect(defaults.commands.undo()).toBe(true);
+    expect(defaults.getMarkdown()).toBe(original);
+
+    const disabled = track(createEditor({
+      element: createHost(),
+      markdown: original,
+      shortcuts: { "@markora/core/hard-break": false },
+    }));
+    disabled.focus({ anchor: 6 });
+    expect(pressEnter(disabled, { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(disabled.getMarkdown()).toBe(original);
+
+    const remapped = track(createEditor({
+      element: createHost(),
+      markdown: original,
+      shortcuts: { "@markora/core/hard-break": "Alt-Enter" },
+    }));
+    remapped.focus({ anchor: 6 });
+    expect(pressEnter(remapped, { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(remapped.getMarkdown()).toBe(original);
+    expect(pressEnter(remapped, { altKey: true }).defaultPrevented).toBe(true);
+    expect(remapped.getMarkdown()).toBe("alpha\\\nomega");
+  });
+
   it("uses one extension codec, registry, and assembly across document updates", () => {
     const editor = track(createEditor({
       element: createHost(),

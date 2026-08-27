@@ -803,6 +803,11 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     typing,
   });
   const shortcutKeymap = createMarkdownEditorShortcutKeymap([
+    {
+      command: structuralCommandSet.commands.insertHardBreak,
+      defaultKeys: ["Shift-Enter"],
+      id: "@markora/core/hard-break",
+    },
     { command: markCommands.strong, defaultKeys: ["Mod-b"], id: "@markora/core/bold" },
     { command: markCommands.em, defaultKeys: ["Mod-i"], id: "@markora/core/italic" },
     { command: markCommands.code, defaultKeys: ["Mod-e"], id: "@markora/core/inline-code" },

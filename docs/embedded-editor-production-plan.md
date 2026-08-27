@@ -1210,3 +1210,12 @@ without moving the caret, the next insertion stays unmarked, and public active
 state agrees; composition and modified arrows remain native. Raw Chromium
 DevTools Protocol plus Firefox/WebKit production Shadow DOM cases cover nested
 marks and links in both entries.
+
+The subsequent structural-key audit closed minimal's Shift+Enter no-op. Root
+and minimal now bind the same typed hard-break command to the same stable
+shortcut contribution, producing exactly one canonical hard break and one
+ordinary undo step. Remapping or disabling the contribution consumes its old
+default so native contenteditable mutation cannot leak through. Raw Chromium
+DevTools Protocol plus Firefox/WebKit production Shadow DOM coverage exercises
+both entries, while focused minimal tests pin default, remapped, disabled, and
+undo behavior.

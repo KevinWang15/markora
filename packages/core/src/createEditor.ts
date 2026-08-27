@@ -117,7 +117,7 @@ import {
   normalizeMarkdownEditorResources,
   type NormalizedMarkdownEditorResources,
 } from "./resourcePolicy";
-import { convertFenceToCodeBlock, createTypingShortcuts, getImageToolbarState, getLinkToolbarState, getMarkInfo, getToolbarMarkState, insertHardBreak, type EditorCommand } from "./editorCommands";
+import { convertFenceToCodeBlock, createTypingShortcuts, getImageToolbarState, getLinkToolbarState, getMarkInfo, getToolbarMarkState, type EditorCommand } from "./editorCommands";
 import { createCodeBlockOuterSelectionPlugin, createHeadingEditingPlugin, createHorizontalRulePlugin, createImagePlugin, createMarkdownRevealPlugin, createMarkBoundaryPlugin, type RevealMarkConfig } from "./editorPlugins";
 import { createCodeBlockSelectionHelpers } from "./codeBlockSelection";
 import { createPipeTableHelpers } from "./pipeTable";
@@ -1599,7 +1599,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   });
   const shortcutKeymap = createMarkdownEditorShortcutKeymap([
     {
-      command: (state, dispatch) => insertHardBreak(schema, state, dispatch),
+      command: structuralCommandSet.commands.insertHardBreak,
       defaultKeys: ["Shift-Enter"],
       id: "@markora/core/hard-break",
     },
