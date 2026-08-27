@@ -339,6 +339,43 @@ describe("minimal embedded editor entry", () => {
     expect(editor.getMarkdown()).toBe("### title");
   });
 
+  it("runs foundation typing rules without compatibility-only task or strike rules", () => {
+    const editor = track(createEditor({
+      element: createHost(),
+      markdown: "",
+    }));
+    const typeText = (text: string) => {
+      for (const character of text) {
+        const { from, to } = editor.view.state.selection;
+        const handled = editor.view.someProp("handleTextInput", (handler) => (
+          handler(editor.view, from, to, character)
+        ));
+
+        if (!handled) {
+          editor.view.dispatch(editor.view.state.tr.insertText(character, from, to));
+        }
+      }
+    };
+
+    typeText("# ");
+    expect(editor.view.state.doc.firstChild?.type.name).toBe("heading");
+    expect(editor.view.state.doc.firstChild?.attrs.level).toBe(1);
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe("");
+
+    typeText("~~literal~~");
+    expect(editor.view.state.doc.textContent).toBe("~~literal~~");
+    expect(editor.view.state.schema.marks.strike).toBeUndefined();
+
+    editor.commands.resetMarkdown("");
+    typeText("* [x] task");
+    const listItem = editor.view.state.doc.firstChild?.firstChild;
+    expect(editor.view.state.doc.firstChild?.type.name).toBe("bullet_list");
+    expect(listItem?.type.name).toBe("list_item");
+    expect(listItem?.attrs.checked).toBeUndefined();
+    expect(listItem?.textContent).toBe("[x] task");
+  });
+
   it("uses one extension codec, registry, and assembly across document updates", () => {
     const editor = track(createEditor({
       element: createHost(),

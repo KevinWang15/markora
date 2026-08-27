@@ -1228,3 +1228,20 @@ undo step, while read-only state, composition, selections, and modified
 deletion remain untouched. Trusted Chromium DevTools Protocol input plus
 Firefox/WebKit production Shadow DOM cases verify demotion, deepening, exact
 Markdown/DOM output, and undo in both entries.
+
+The following typed-syntax audit closed a wider independent-runtime gap.
+Minimal now shares root's schema-aware foundation rules for headings,
+blockquotes, bullet and ordered lists, fenced code, images, links/autolinks,
+strong, emphasis, and inline code, plus the guarded Enter transforms for
+horizontal rules and fences and standalone-image normalization. Rule assembly
+checks live schema capabilities, so task and strikethrough syntax stays literal
+when minimal omits those compatibility features. Character-by-character
+Chromium DevTools Protocol input plus Firefox/WebKit production Shadow DOM
+coverage verifies canonical Markdown and semantic DOM for both entries;
+focused tests pin undo and the compatibility-feature boundary.
+The packed minimal graph remains isolated in one eager chunk with no UI,
+CodeMirror, table, renderer, or optional-extension path. Its measured
+784,440-byte raw / 218,893-byte gzip JS cost crosses the former byte ceilings,
+so this review raises only the four minimal initial/total failure leaves to
+810,000 raw and 225,000 gzip bytes. Warning thresholds remain unchanged and
+visible; CSS, module-count, lazy-chunk, root, and extension budgets do not move.

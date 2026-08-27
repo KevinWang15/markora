@@ -228,16 +228,16 @@
     },
     "minimal": {
       "initialJs": {
-        "rawBytes": { "warning": 690000, "failure": 770000 },
-        "gzipBytes": { "warning": 194000, "failure": 215000 }
+        "rawBytes": { "warning": 690000, "failure": 810000 },
+        "gzipBytes": { "warning": 194000, "failure": 225000 }
       },
       "lazyJs": {
         "rawBytes": { "warning": 0, "failure": 0 },
         "gzipBytes": { "warning": 0, "failure": 0 }
       },
       "totalJs": {
-        "rawBytes": { "warning": 690000, "failure": 770000 },
-        "gzipBytes": { "warning": 194000, "failure": 215000 }
+        "rawBytes": { "warning": 690000, "failure": 810000 },
+        "gzipBytes": { "warning": 194000, "failure": 225000 }
       },
       "css": {
         "rawBytes": { "warning": 4800, "failure": 11750 },

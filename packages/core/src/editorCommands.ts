@@ -7,7 +7,7 @@ import {
 import type { EditorView } from "prosemirror-view";
 import type MarkdownIt from "markdown-it";
 import { TextSelection, type EditorState } from "prosemirror-state";
-import type { Mark, MarkType, Node as ProseMirrorNode, NodeType, Schema } from "prosemirror-model";
+import type { Mark, MarkType, NodeType, Schema } from "prosemirror-model";
 import {
   normalizeMarkdownEditorResources,
   sanitizeResourceUrl,
@@ -193,16 +193,34 @@ function createHeadingInputRule(level: number, nodeType: NodeType) {
 
 export function createTypingShortcuts(options: {
   schema: Schema;
-  getAncestorInfo: (state: EditorState, nodeType: NodeType) => { node: ProseMirrorNode; pos: number } | null;
   linkify: MarkdownIt["linkify"];
   resources?: NormalizedMarkdownEditorResources;
 }) {
   const {
-    getAncestorInfo,
     linkify,
     resources = normalizeMarkdownEditorResources(undefined),
     schema,
   } = options;
+  const getAncestorInfo = (state: EditorState, nodeType: NodeType) => {
+    const { selection } = state;
+
+    if (!selection.empty) {
+      return null;
+    }
+
+    const { $from } = selection;
+
+    for (let depth = $from.depth; depth > 0; depth -= 1) {
+      if ($from.node(depth).type === nodeType) {
+        return {
+          node: $from.node(depth),
+          pos: $from.before(depth),
+        };
+      }
+    }
+
+    return null;
+  };
 
   const createTaskListInputRule = () => new InputRule(/^\[( |x|X)\]\s$/, (state, match, start, end) => {
     const checked = typeof match[1] === "string" && match[1].toLowerCase() === "x";
@@ -234,35 +252,68 @@ export function createTypingShortcuts(options: {
     return tr;
   });
 
-  return inputRules({
-    rules: [
-      createCodeBlockInputRule(schema),
-      createHeadingInputRule(6, schema.nodes.heading),
-      createHeadingInputRule(5, schema.nodes.heading),
-      createHeadingInputRule(4, schema.nodes.heading),
-      createHeadingInputRule(3, schema.nodes.heading),
-      createHeadingInputRule(2, schema.nodes.heading),
-      createHeadingInputRule(1, schema.nodes.heading),
-      wrappingInputRule(/^>\s$/, schema.nodes.blockquote),
-      createTaskListInputRule(),
-      wrappingInputRule(/^[-*+]\s$/, schema.nodes.bullet_list),
-      wrappingInputRule(
-        /^(\d+)\.\s$/,
-        schema.nodes.ordered_list,
-        (match) => ({ order: Number(match[1]) }),
-        (match, node) => node.childCount + node.attrs.order === Number(match[1]),
-      ),
-      createImageInputRule(schema, resources),
+  const rules: InputRule[] = [];
+  const { marks, nodes } = schema;
+
+  if (nodes.code_block) {
+    rules.push(createCodeBlockInputRule(schema));
+  }
+  if (nodes.heading) {
+    for (let level = 6; level >= 1; level -= 1) {
+      rules.push(createHeadingInputRule(level, nodes.heading));
+    }
+  }
+  if (nodes.blockquote) {
+    rules.push(wrappingInputRule(/^>\s$/, nodes.blockquote));
+  }
+  if (
+    nodes.list_item
+    && nodes.bullet_list
+    && nodes.list_item.spec.attrs
+    && Object.prototype.hasOwnProperty.call(nodes.list_item.spec.attrs, "checked")
+  ) {
+    rules.push(createTaskListInputRule());
+  }
+  if (nodes.bullet_list) {
+    rules.push(wrappingInputRule(/^[-*+]\s$/, nodes.bullet_list));
+  }
+  if (nodes.ordered_list) {
+    rules.push(wrappingInputRule(
+      /^(\d+)\.\s$/,
+      nodes.ordered_list,
+      (match) => ({ order: Number(match[1]) }),
+      (match, node) => node.childCount + node.attrs.order === Number(match[1]),
+    ));
+  }
+  if (nodes.image) {
+    rules.push(createImageInputRule(schema, resources));
+  }
+  if (marks.link) {
+    rules.push(
       createLinkInputRule(schema, resources),
       createBareAutolinkInputRule(schema, resources, linkify),
-      createMarkInputRule(/(?<!`)`([^`]+)`$/, schema.marks.code),
-      createMarkInputRule(/(?<!~)~~([^~]+)~~$/, schema.marks.strike),
-      createMarkInputRule(/(?<!\*)\*\*([^*]+)\*\*$/, schema.marks.strong),
-      createMarkInputRule(/(?<!_)__([^_]+)__$/, schema.marks.strong),
-      createMarkInputRule(/(?<!\*)\*([^*]+)\*(?!\*)$/, schema.marks.em),
-      createMarkInputRule(/(?<!_)_([^_]+)_(?!_)$/, schema.marks.em),
-    ],
-  });
+    );
+  }
+  if (marks.code) {
+    rules.push(createMarkInputRule(/(?<!`)`([^`]+)`$/, marks.code));
+  }
+  if (marks.strike) {
+    rules.push(createMarkInputRule(/(?<!~)~~([^~]+)~~$/, marks.strike));
+  }
+  if (marks.strong) {
+    rules.push(
+      createMarkInputRule(/(?<!\*)\*\*([^*]+)\*\*$/, marks.strong),
+      createMarkInputRule(/(?<!_)__([^_]+)__$/, marks.strong),
+    );
+  }
+  if (marks.em) {
+    rules.push(
+      createMarkInputRule(/(?<!\*)\*([^*]+)\*(?!\*)$/, marks.em),
+      createMarkInputRule(/(?<!_)_([^_]+)_(?!_)$/, marks.em),
+    );
+  }
+
+  return inputRules({ rules });
 }
 
 export function insertHardBreak(schema: Schema, state: EditorState, dispatch?: (tr: import("prosemirror-state").Transaction) => void) {

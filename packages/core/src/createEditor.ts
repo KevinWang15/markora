@@ -117,8 +117,8 @@ import {
   normalizeMarkdownEditorResources,
   type NormalizedMarkdownEditorResources,
 } from "./resourcePolicy";
-import { convertFenceToCodeBlock, createTypingShortcuts, getImageToolbarState, getLinkToolbarState, getMarkInfo, getToolbarMarkState, type EditorCommand } from "./editorCommands";
-import { createCodeBlockOuterSelectionPlugin, createHeadingEditingPlugin, createHorizontalRulePlugin, createImagePlugin, createMarkdownRevealPlugin, createMarkBoundaryPlugin, type RevealMarkConfig } from "./editorPlugins";
+import { createTypingShortcuts, getImageToolbarState, getLinkToolbarState, getMarkInfo, getToolbarMarkState, type EditorCommand } from "./editorCommands";
+import { createCodeBlockOuterSelectionPlugin, createCodeFenceEditingPlugin, createHeadingEditingPlugin, createHorizontalRulePlugin, createImagePlugin, createMarkdownRevealPlugin, createMarkBoundaryPlugin, type RevealMarkConfig } from "./editorPlugins";
 import { createCodeBlockSelectionHelpers } from "./codeBlockSelection";
 import { createPipeTableHelpers } from "./pipeTable";
 import { createTableNavigation, type TableAlignment } from "./tableNavigation";
@@ -1551,7 +1551,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   });
   const builtinTypingShortcuts = createTypingShortcuts({
     schema,
-    getAncestorInfo,
     linkify: codec.tokenizer.linkify,
     resources,
   });
@@ -1611,6 +1610,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       : []),
     ...(autoPairPlugin ? [autoPairPlugin] : []),
     createHeadingEditingPlugin({ schema, convertPipeTable }),
+    createCodeFenceEditingPlugin({ schema }),
     createHorizontalRulePlugin({
       schema,
       createManagedBlockCursor: (doc, blockPos, side) => ManagedBlockCursor.create(doc, blockPos, side, isManagedBlockNode),
@@ -1633,7 +1633,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       imageEditor,
       tableToolbar,
       enableDefaultUi: uiEnabled,
-      convertFenceToCodeBlock: (view) => convertFenceToCodeBlock(schema, view),
       handleNativeTaskControlKeyDown,
       maybeExtendSelectionAcrossCodeBlock,
       handleBoundaryKeyDown,

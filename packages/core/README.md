@@ -562,6 +562,13 @@ typing `#` adds one level through level six. Each change is one ordinary undo
 step; modified deletion, composition, selections, and read-only editors retain
 their normal behavior.
 
+Foundation Markdown typing rules are shared as well. Heading, blockquote,
+bullet/ordered-list, fenced-code, image, link/autolink, strong, emphasis, and
+inline-code syntax transforms in either entry; Enter also converts complete
+horizontal-rule and fence markers. Rules are assembled from the live schema,
+so minimal does not import or emulate compatibility-only tasks or
+strikethrough.
+
 ## Typing ergonomics and keymaps
 
 `CreateEditorOptions.typing` is a copied, creation-time policy. `autoPairs` accepts `parentheses`, `square-brackets`, `braces`, `single-quotes`, `double-quotes`, `emphasis-asterisks`, `emphasis-underscores`, `strong-asterisks`, `strong-underscores`, `inline-code`, and `strikethrough`. It defaults to an empty list. `wrapSelection` defaults to `true`; set it to `false` to leave non-empty selections to the browser/editor's ordinary text-input behavior.

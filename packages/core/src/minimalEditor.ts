@@ -71,7 +71,7 @@ import { MARKORA_VERSION } from "./extensionVersion";
 import { createAssetUploadController } from "./assetUploads";
 import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
 import { createImageViewClass } from "./imageView";
-import { getMarkInfo, type MarkName } from "./editorCommands";
+import { createTypingShortcuts, getMarkInfo, type MarkName } from "./editorCommands";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import { createMinimalMarkdownCodec } from "./minimalMarkdownCodec";
 import { createPlaceholderPlugin } from "./placeholderPlugin";
@@ -105,7 +105,12 @@ import {
   normalizeMarkdownEditorTypingOptions,
 } from "./typingErgonomics";
 import { normalizeMarkdownEditorMessages } from "./editorMessages";
-import { createHeadingEditingPlugin } from "./editorPlugins";
+import {
+  createCodeFenceEditingPlugin,
+  createHeadingEditingPlugin,
+  createHorizontalRulePlugin,
+  createImagePlugin,
+} from "./editorPlugins";
 
 function destroyProseMirrorView(view: EditorView) {
   const input = (view as EditorView & {
@@ -796,10 +801,19 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   };
   const trackedUndo = createTrackedHistoryCommand(undo, "undo");
   const trackedRedo = createTrackedHistoryCommand(redo, "redo");
-  const autoPairPlugin = createAutoPairPlugin({
-    inputRulePlugins: extensionAssembly.contributions.inputRules
+  const builtinTypingShortcuts = createTypingShortcuts({
+    schema: codec.schema,
+    linkify: codec.tokenizer.linkify,
+    resources,
+  });
+  const inputRulePlugins = [
+    builtinTypingShortcuts,
+    ...(extensionAssembly.contributions.inputRules
       ? [extensionAssembly.contributions.inputRules]
-      : [],
+      : []),
+  ];
+  const autoPairPlugin = createAutoPairPlugin({
+    inputRulePlugins,
     schema: codec.schema,
     typing,
   });
@@ -896,11 +910,21 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       ...(extensionAssembly.contributions.clipboard
         ? [extensionAssembly.contributions.clipboard]
         : []),
+      builtinTypingShortcuts,
       ...(extensionAssembly.contributions.inputRules
         ? [extensionAssembly.contributions.inputRules]
         : []),
       ...(autoPairPlugin ? [autoPairPlugin] : []),
       createHeadingEditingPlugin({ schema: codec.schema }),
+      createCodeFenceEditingPlugin({ schema: codec.schema }),
+      createHorizontalRulePlugin({
+        schema: codec.schema,
+        createManagedBlockCursor: (document, blockPos, side) => (
+          ManagedBlockCursor.create(document, blockPos, side, isManagedBlockNode)
+        ),
+        isManagedBlockNode,
+      }),
+      createImagePlugin({ schema: codec.schema, resources }),
       ...extensionAssembly.contributions.plugins,
       createInputRobustnessPlugin(ownerWindow),
       clipboard.plugin,

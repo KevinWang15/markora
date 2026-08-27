@@ -2,7 +2,7 @@ import type { Node as ProseMirrorNode, Schema } from "prosemirror-model";
 import { NodeSelection, Plugin, Selection, TextSelection, type EditorState } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import type { ImageEditorOverlay, LinkEditorOverlay, TableToolbarOverlay } from "./uiTypes";
-import type { MarkInfo, MarkName } from "./editorCommands";
+import { convertFenceToCodeBlock, type MarkInfo, type MarkName } from "./editorCommands";
 import {
   normalizeMarkdownEditorResources,
   sanitizeResourceUrl,
@@ -352,12 +352,27 @@ export function createHeadingEditingPlugin(options: {
   });
 }
 
+export function createCodeFenceEditingPlugin(options: { schema: Schema }) {
+  const { schema } = options;
+
+  return new Plugin({
+    props: {
+      handleKeyDown(view, event) {
+        return (
+          event.key === "Enter"
+          && isPlainStructuralKey(view, event)
+          && convertFenceToCodeBlock(schema, view)
+        );
+      },
+    },
+  });
+}
+
 export function createMarkBoundaryPlugin(options: {
   linkEditor: LinkEditorOverlay;
   imageEditor: ImageEditorOverlay;
   tableToolbar: TableToolbarOverlay;
   enableDefaultUi: boolean;
-  convertFenceToCodeBlock: (view: EditorView) => boolean;
   maybeExtendSelectionAcrossCodeBlock: (view: EditorView, direction: -1 | 1) => boolean;
   handleBoundaryKeyDown: (view: EditorView, event: KeyboardEvent) => boolean;
   handleNativeTaskControlKeyDown: (view: EditorView, event: KeyboardEvent) => boolean;
@@ -373,7 +388,6 @@ export function createMarkBoundaryPlugin(options: {
   onUpdateError: (error: unknown) => void;
 }) {
   const {
-    convertFenceToCodeBlock,
     enableDefaultUi,
     handleBoundaryKeyDown,
     getActiveImageInfo,
@@ -429,10 +443,6 @@ export function createMarkBoundaryPlugin(options: {
       handleKeyDown(view, event) {
         if (!view.editable) {
           return false;
-        }
-
-        if (event.key === "Enter" && isPlainStructuralKey(view, event) && convertFenceToCodeBlock(view)) {
-          return true;
         }
 
         const plainShiftArrow = (
