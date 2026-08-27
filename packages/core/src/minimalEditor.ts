@@ -77,6 +77,7 @@ import { createMinimalMarkdownCodec } from "./minimalMarkdownCodec";
 import { createPlaceholderPlugin } from "./placeholderPlugin";
 import {
   createListItemBackspaceCommand,
+  createListItemDeleteCommand,
   createListItemSplitCommand,
   createStructuralCommandSet,
 } from "./structuralCommands";
@@ -837,6 +838,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const listEditingKeymap = listItemType
     ? keymap({
         Backspace: createListItemBackspaceCommand(listItemType),
+        Delete: createListItemDeleteCommand(listItemType),
         Enter: chainCommands(createListItemSplitCommand(listItemType), liftEmptyBlock),
         Tab: structuralCommandSet.commands.sinkListItem,
         "Shift-Tab": structuralCommandSet.commands.liftListItem,

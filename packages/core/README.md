@@ -559,6 +559,17 @@ press is a separate undo event. Later blocks inside one item keep ordinary
 block-joining behavior, while read-only state and active composition cannot
 trigger the item-level transform.
 
+Plain Delete at the final caret of a list item's textblock performs the
+matching forward edit. A following sibling item or paragraph joins into the
+current item without becoming an indented continuation. An immediate shallow
+nested list joins its first item and hoists any remaining siblings; a branching
+nested list first hoists its immediate items one level while preserving their
+deeper descendants. Deleting again performs the next join, with each press kept
+as a separate undo event. Higher-level siblings join into the current nested
+item, marks and task state are retained, and later blocks inside the same item
+continue to use ordinary block joining. Read-only state and active composition
+cannot trigger these transforms.
+
 Root and minimal also share inline-mark boundary exit. At the visible edge of
 strong, emphasis, inline-code, link, or available strikethrough text, one plain
 physical horizontal-arrow press clears every coincident mark without moving

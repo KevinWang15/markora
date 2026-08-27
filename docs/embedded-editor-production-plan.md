@@ -1290,3 +1290,25 @@ Final verification passes `pnpm check` with 86 files and 1,509 tests, all 12
 focused list-boundary and retained list-fidelity cases across Chromium, Firefox,
 and WebKit, and the package smoke gate. The minimal entry remains one eager
 141-module chunk at 787,931 raw / 219,811 gzip JavaScript bytes.
+
+The forward half of the list-boundary audit then exposed a more destructive
+fallthrough. Plain Delete at an item end could turn the next item into an
+indented continuation, change hierarchy at a depth transition, or corrupt a
+branching nested list into source such as `* * Item 1.1.1`. The shared command
+now joins ordinary siblings and following paragraphs directly, merges a
+higher-level sibling into the current nested item, and treats nested branches
+explicitly: a shallow branch joins its first child and hoists later children,
+while a branching list first hoists its immediate children and retains every
+deeper subtree. Marks and root task state survive, later blocks inside the same
+item retain ordinary joining, and every structural press remains a separate
+undo event. Trusted Chromium DevTools Protocol Delete input plus Firefox and
+WebKit production Shadow DOM coverage exercises root and minimal across the
+same-depth, deeper, higher, branching, marked, ordered, task, adjacent-paragraph,
+and multi-block cases; focused tests pin editability, composition, modifier,
+caret-position, selection, and history guards.
+Final verification passes `pnpm check` with 86 files and 1,510 tests, all 15
+focused forward/backward boundary and retained list-fidelity cases across
+Chromium, Firefox, and WebKit, and the package smoke gate. The packed root
+entry is 994,999 raw / 272,411 gzip bytes across two initial chunks and 162
+static modules; minimal remains one eager 141-module chunk at 790,645 raw /
+220,459 gzip JavaScript bytes.

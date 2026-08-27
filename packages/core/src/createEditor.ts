@@ -151,6 +151,7 @@ import { createTaskListHelpers } from "./taskListUtils";
 import { createTaskListItemViewClass } from "./taskListItemView";
 import {
   createListItemBackspaceCommand,
+  createListItemDeleteCommand,
   createListItemSplitCommand,
   createStructuralCommandSet,
 } from "./structuralCommands";
@@ -1094,6 +1095,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
   const listItemType = schema.nodes.list_item;
   const listBackspaceForInput = createListItemBackspaceCommand(listItemType);
+  const listDeleteForInput = createListItemDeleteCommand(listItemType);
   const splitListItemForInput = createListItemSplitCommand(listItemType);
   const structuralCommandSet = createStructuralCommandSet(schema);
   const createToggleMarkCommand = (name: MarkdownEditorMark): EditorCommand => {
@@ -1678,6 +1680,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     ...(shortcutKeymap ? [shortcutKeymap] : []),
     keymap({
       Backspace: listBackspaceForInput,
+      Delete: listDeleteForInput,
       Enter: chainCommands(splitListItemForInput, liftEmptyBlock),
       Tab: (state, dispatch, view) => moveTableCell(view!, 1) || sinkListItem(listItemType)(state, dispatch, view),
       "Shift-Tab": (state, dispatch, view) => moveTableCell(view!, -1) || liftListItem(listItemType)(state, dispatch, view),

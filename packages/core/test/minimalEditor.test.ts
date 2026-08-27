@@ -264,6 +264,122 @@ describe("minimal embedded editor entry", () => {
     expect(editor.getMarkdown()).toBe("* alpha\n* beta");
   });
 
+  it("joins list items forward without flattening nested branches", () => {
+    const editor = track(createEditor({ element: createHost(), markdown: "" }));
+    const selectTextEnd = (text: string, offset = 0) => {
+      let end: number | undefined;
+
+      editor.view.state.doc.descendants((node, pos) => {
+        if (node.isText && node.text === text) {
+          end = pos + node.nodeSize - offset;
+        }
+      });
+
+      if (end === undefined) {
+        throw new Error(`Missing text ${JSON.stringify(text)}.`);
+      }
+
+      editor.view.dispatch(editor.view.state.tr.setSelection(
+        TextSelection.create(editor.view.state.doc, end),
+      ));
+    };
+    const pressDelete = (init: KeyboardEventInit = {}) => {
+      const event = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "Delete",
+        ...init,
+      });
+      editor.view.dom.dispatchEvent(event);
+      return event;
+    };
+    const branching = [
+      "* Item 1",
+      "  * Item 1.1",
+      "    * Item 1.1.1",
+      "    * Item 1.1.2",
+      "  * Item 1.2",
+      "* Item 2",
+    ].join("\n");
+    const branchingHoisted = [
+      "* Item 1",
+      "* Item 1.1",
+      "  * Item 1.1.1",
+      "  * Item 1.1.2",
+      "* Item 1.2",
+      "* Item 2",
+    ].join("\n");
+    const cases = [
+      ["* alpha\n* beta", "alpha", "* alphabeta"],
+      ["3. alpha\n4. beta", "alpha", "3. alphabeta"],
+      ["* alpha\n* **beta**", "alpha", "* alpha**beta**"],
+      ["* Outer\n  * Inner", "Outer", "* OuterInner"],
+      [
+        "* Outer\n  * Inner 1\n  * Inner 2\n* Next",
+        "Outer",
+        "* OuterInner 1\n* Inner 2\n* Next",
+      ],
+      [branching, "Item 1", branchingHoisted],
+      ["* parent\n  * child\n* after", "child", "* parent\n  * childafter"],
+      ["* parent\n  * alpha\n  * beta", "alpha", "* parent\n  * alphabeta"],
+      ["* alpha\n\nbeta", "alpha", "* alphabeta"],
+      ["* alpha\n* beta\n\nafter", "alpha", "* alphabeta\n\nafter"],
+      ["* alpha\n* beta\n  * child\n* gamma", "alpha", "* alphabeta\n  * child\n* gamma"],
+      ["* alpha\n\n  beta\n\n* gamma", "alpha", "* alphabeta\n\n* gamma"],
+    ] as const;
+
+    for (const [markdown, target, result] of cases) {
+      editor.commands.resetMarkdown(markdown);
+      selectTextEnd(target);
+      expect(pressDelete().defaultPrevented, markdown).toBe(true);
+      expect(editor.getMarkdown(), markdown).toBe(result);
+      expect(editor.view.state.selection, markdown).toBeInstanceOf(TextSelection);
+      expect(editor.commands.undo(), markdown).toBe(true);
+      expect(editor.getMarkdown(), markdown).toBe(markdown);
+    }
+
+    editor.commands.resetMarkdown(branching);
+    selectTextEnd("Item 1");
+    expect(pressDelete().defaultPrevented).toBe(true);
+    expect(pressDelete().defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe([
+      "* Item 1Item 1.1",
+      "  * Item 1.1.1",
+      "  * Item 1.1.2",
+      "* Item 1.2",
+      "* Item 2",
+    ].join("\n"));
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe(branchingHoisted);
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe(branching);
+
+    editor.commands.resetMarkdown("* alpha\n* beta");
+    selectTextEnd("alpha", 1);
+    expect(pressDelete().defaultPrevented).toBe(false);
+    expect(editor.getMarkdown()).toBe("* alpha\n* beta");
+
+    selectTextEnd("alpha");
+    expect(pressDelete({ altKey: true }).defaultPrevented).toBe(false);
+    expect(editor.getMarkdown()).toBe("* alpha\n* beta");
+
+    editor.view.dom.dispatchEvent(new CompositionEvent("compositionstart", {
+      bubbles: true,
+      data: "x",
+    }));
+    expect(editor.view.composing).toBe(true);
+    expect(pressDelete().defaultPrevented).toBe(false);
+    expect(editor.getMarkdown()).toBe("* alpha\n* beta");
+    editor.view.dom.dispatchEvent(new CompositionEvent("compositionend", {
+      bubbles: true,
+      data: "x",
+    }));
+
+    editor.updateOptions({ editable: false });
+    expect(pressDelete().defaultPrevented).toBe(false);
+    expect(editor.getMarkdown()).toBe("* alpha\n* beta");
+  });
+
   it("exits coincident inline marks without moving or retaining active state", () => {
     const editor = track(createEditor({
       element: createHost(),

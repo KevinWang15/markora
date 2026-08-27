@@ -6,11 +6,12 @@ import {
   splitListItem,
   wrapInList,
 } from "prosemirror-schema-list";
-import type {
-  Node as ProseMirrorNode,
-  NodeType,
-  ResolvedPos,
-  Schema,
+import {
+  Fragment,
+  type Node as ProseMirrorNode,
+  type NodeType,
+  type ResolvedPos,
+  type Schema,
 } from "prosemirror-model";
 import {
   NodeSelection,
@@ -188,6 +189,205 @@ export function createListItemBackspaceCommand(itemType: NodeType): Command {
     }
 
     return false;
+  };
+}
+
+function findForwardListJoinPoint(document: ProseMirrorNode, start: number) {
+  const $start = document.resolve(start);
+  let position = start;
+
+  for (let depth = $start.depth; depth >= 0; depth -= 1) {
+    let index = $start.index(depth);
+    let before: ProseMirrorNode | null;
+    let after: ProseMirrorNode | null;
+
+    if (depth === $start.depth) {
+      before = $start.nodeBefore;
+      after = $start.nodeAfter;
+    } else {
+      before = $start.node(depth + 1);
+      index += 1;
+      after = $start.node(depth).maybeChild(index);
+    }
+
+    if (
+      before
+      && after
+      && !before.isTextblock
+      && !before.isLeaf
+      && before.canAppend(after)
+      && $start.node(depth).canReplace(index, index + 1)
+    ) {
+      return position;
+    }
+
+    if (depth > 0) {
+      position = $start.after(depth);
+    }
+  }
+
+  return null;
+}
+
+export function createListItemDeleteCommand(itemType: NodeType): Command {
+  return (state, dispatch, view) => {
+    const { selection } = state;
+
+    if (
+      view?.composing
+      || view?.editable === false
+      || !(selection instanceof TextSelection)
+      || !selection.empty
+      || selection.$from.parentOffset !== selection.$from.parent.content.size
+    ) {
+      return false;
+    }
+
+    const { $from } = selection;
+    let itemDepth = -1;
+
+    for (let depth = $from.depth - 1; depth > 0; depth -= 1) {
+      if ($from.node(depth).type === itemType) {
+        itemDepth = depth;
+        break;
+      }
+    }
+
+    if (itemDepth < 0) {
+      return false;
+    }
+
+    const item = $from.node(itemDepth);
+    const blockIndex = $from.index(itemDepth);
+    const nextChild = item.maybeChild(blockIndex + 1);
+
+    // Hoist an immediate nested branch before joining. Deeper descendants stay
+    // attached to their items instead of being flattened or node-selected.
+    if (nextChild?.firstChild?.type === itemType) {
+      const nestedListPos = $from.after();
+      const insertPos = $from.after(itemDepth);
+      const nestedItems: ProseMirrorNode[] = [];
+
+      nextChild.forEach((child) => nestedItems.push(child));
+
+      if (nestedItems.length > 0) {
+        const branching = nestedItems.some((child) => child.childCount > 1);
+        const transaction = state.tr.delete(
+          nestedListPos,
+          nestedListPos + nextChild.nodeSize,
+        );
+        const mappedInsertPos = transaction.mapping.map(insertPos);
+        transaction.insert(mappedInsertPos, Fragment.fromArray(nestedItems));
+
+        if (!branching) {
+          try {
+            transaction.join(mappedInsertPos, 2);
+          } catch {
+            return false;
+          }
+        }
+
+        transaction.setSelection(selection.map(transaction.doc, transaction.mapping));
+        dispatch?.(closeHistory(transaction).scrollIntoView());
+        return true;
+      }
+    }
+
+    if (nextChild) {
+      return false;
+    }
+
+    const mergeFollowingContent = (
+      nextNode: ProseMirrorNode,
+      nextNodePos: number,
+      content: Fragment,
+    ) => {
+      const target = $from.end(itemDepth);
+      const transaction = state.tr
+        .delete(nextNodePos, nextNodePos + nextNode.nodeSize)
+        .insert(target, content);
+      const $target = transaction.doc.resolve(target);
+      const before = $target.nodeBefore;
+      const after = $target.nodeAfter;
+      const targetIndex = $target.index();
+
+      if (
+        !before
+        || !after
+        || before.isLeaf
+        || !before.canAppend(after)
+        || !$target.parent.canReplace(targetIndex, targetIndex + 1)
+      ) {
+        return false;
+      }
+
+      transaction.join(target);
+      transaction.setSelection(selection.map(transaction.doc, transaction.mapping));
+      dispatch?.(closeHistory(transaction).scrollIntoView());
+      return true;
+    };
+
+    let outermostListDepth = -1;
+    let sameLevelItemFollows = false;
+
+    for (let depth = itemDepth - 1; depth > 0; depth -= 1) {
+      const list = $from.node(depth);
+
+      if (list.firstChild?.type !== itemType) {
+        continue;
+      }
+
+      outermostListDepth = depth;
+      const itemIndex = $from.index(depth);
+
+      if (itemIndex + 1 >= list.childCount) {
+        continue;
+      }
+
+      if (depth === itemDepth - 1) {
+        sameLevelItemFollows = true;
+        break;
+      }
+
+      // The current nested item is last in its list, so merge the next item at
+      // the nearest outer list into this item's final textblock.
+      const nextItem = list.child(itemIndex + 1);
+      return mergeFollowingContent(
+        nextItem,
+        $from.after(depth + 1),
+        nextItem.content,
+      );
+    }
+
+    if (!sameLevelItemFollows && outermostListDepth > 0) {
+      const afterListPos = $from.after(outermostListDepth);
+      const afterList = state.doc.resolve(afterListPos).nodeAfter;
+
+      if (afterList?.isTextblock) {
+        return mergeFollowingContent(
+          afterList,
+          afterListPos,
+          Fragment.from(afterList),
+        );
+      }
+    }
+
+    const joinPoint = findForwardListJoinPoint(state.doc, selection.from);
+
+    if (joinPoint === null) {
+      return false;
+    }
+
+    const transaction = state.tr;
+
+    try {
+      transaction.join(joinPoint, 2);
+    } catch {
+      return false;
+    }
+
+    dispatch?.(closeHistory(transaction).scrollIntoView());
+    return true;
   };
 }
 
