@@ -1273,3 +1273,20 @@ Final verification passes `pnpm check` with 86 files and 1,508 tests, the six
 focused production-browser cases across Chromium, Firefox, and WebKit, and the
 package smoke gate. The packed minimal entry remains one eager 141-module chunk
 at 786,628 raw / 219,428 gzip JavaScript bytes.
+
+The list-boundary audit then removed another ProseMirror fallthrough shared by
+both runtimes. Backspace at the first caret of a later item previously removed
+its marker but retained the text as an indented continuation paragraph inside
+the preceding item (`* alpha\n\n  beta`). The shared list command now lifts the
+active item one level on the first press, splitting a surrounding list when
+needed; a second press from the lifted paragraph merges its text into the
+preceding list's final item. Nested bullet and ordered lists, first/middle/last
+items, multi-block items, adjacent paragraphs, and root task state all retain
+schema-valid Markdown, focus, and separate undo events. Trusted Chromium
+DevTools Protocol Backspace input plus Firefox and WebKit production Shadow DOM
+coverage exercises root and minimal; focused tests pin read-only, composition,
+non-plain-key, caret-position, and history guards.
+Final verification passes `pnpm check` with 86 files and 1,509 tests, all 12
+focused list-boundary and retained list-fidelity cases across Chromium, Firefox,
+and WebKit, and the package smoke gate. The minimal entry remains one eager
+141-module chunk at 787,931 raw / 219,811 gzip JavaScript bytes.

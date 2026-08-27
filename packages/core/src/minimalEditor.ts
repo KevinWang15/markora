@@ -76,6 +76,7 @@ import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import { createMinimalMarkdownCodec } from "./minimalMarkdownCodec";
 import { createPlaceholderPlugin } from "./placeholderPlugin";
 import {
+  createListItemBackspaceCommand,
   createListItemSplitCommand,
   createStructuralCommandSet,
 } from "./structuralCommands";
@@ -835,6 +836,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const listItemType = codec.schema.nodes.list_item;
   const listEditingKeymap = listItemType
     ? keymap({
+        Backspace: createListItemBackspaceCommand(listItemType),
         Enter: chainCommands(createListItemSplitCommand(listItemType), liftEmptyBlock),
         Tab: structuralCommandSet.commands.sinkListItem,
         "Shift-Tab": structuralCommandSet.commands.liftListItem,

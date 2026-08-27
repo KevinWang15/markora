@@ -179,6 +179,91 @@ describe("minimal embedded editor entry", () => {
     expect(editor.getMarkdown()).toBe("plain");
   });
 
+  it("lifts list items before a later Backspace joins their content", () => {
+    const editor = track(createEditor({ element: createHost(), markdown: "" }));
+    const selectTextStart = (text: string, offset = 0) => {
+      let start: number | undefined;
+
+      editor.view.state.doc.descendants((node, pos) => {
+        if (node.isText && node.text === text) {
+          start = pos + offset;
+        }
+      });
+
+      if (start === undefined) {
+        throw new Error(`Missing text ${JSON.stringify(text)}.`);
+      }
+
+      editor.view.dispatch(editor.view.state.tr.setSelection(
+        TextSelection.create(editor.view.state.doc, start),
+      ));
+    };
+    const pressBackspace = (init: KeyboardEventInit = {}) => {
+      const event = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "Backspace",
+        ...init,
+      });
+      editor.view.dom.dispatchEvent(event);
+      return event;
+    };
+    const cases = [
+      ["* alpha", "alpha", "alpha"],
+      ["* alpha\n* beta", "alpha", "alpha\n\n* beta"],
+      ["* alpha\n* beta", "beta", "* alpha\n\nbeta"],
+      ["* alpha\n* beta\n* gamma", "beta", "* alpha\n\nbeta\n\n* gamma"],
+      ["* parent\n  * child", "child", "* parent\n* child"],
+      ["1. parent\n   1. child", "child", "1. parent\n2. child"],
+      ["before\n\n* child", "child", "before\n\nchild"],
+      ["* alpha\n\n  beta", "beta", "* alphabeta"],
+    ] as const;
+
+    for (const [markdown, target, result] of cases) {
+      editor.commands.resetMarkdown(markdown);
+      selectTextStart(target);
+      expect(pressBackspace().defaultPrevented, markdown).toBe(true);
+      expect(editor.getMarkdown(), markdown).toBe(result);
+      expect(editor.commands.undo(), markdown).toBe(true);
+      expect(editor.getMarkdown(), markdown).toBe(markdown);
+    }
+
+    editor.commands.resetMarkdown("* alpha\n* beta");
+    selectTextStart("beta");
+    expect(pressBackspace().defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe("* alpha\n\nbeta");
+    expect(pressBackspace().defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe("* alphabeta");
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe("* alpha\n\nbeta");
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe("* alpha\n* beta");
+
+    selectTextStart("beta", 1);
+    expect(pressBackspace().defaultPrevented).toBe(false);
+    expect(editor.getMarkdown()).toBe("* alpha\n* beta");
+
+    selectTextStart("beta");
+    expect(pressBackspace({ altKey: true }).defaultPrevented).toBe(false);
+    expect(editor.getMarkdown()).toBe("* alpha\n* beta");
+
+    editor.view.dom.dispatchEvent(new CompositionEvent("compositionstart", {
+      bubbles: true,
+      data: "x",
+    }));
+    expect(editor.view.composing).toBe(true);
+    expect(pressBackspace().defaultPrevented).toBe(false);
+    expect(editor.getMarkdown()).toBe("* alpha\n* beta");
+    editor.view.dom.dispatchEvent(new CompositionEvent("compositionend", {
+      bubbles: true,
+      data: "x",
+    }));
+
+    editor.updateOptions({ editable: false });
+    expect(pressBackspace().defaultPrevented).toBe(false);
+    expect(editor.getMarkdown()).toBe("* alpha\n* beta");
+  });
+
   it("exits coincident inline marks without moving or retaining active state", () => {
     const editor = track(createEditor({
       element: createHost(),

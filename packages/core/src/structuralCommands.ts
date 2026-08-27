@@ -1,4 +1,5 @@
 import { lift, setBlockType, wrapIn } from "prosemirror-commands";
+import { closeHistory } from "prosemirror-history";
 import {
   liftListItem as createLiftListItemCommand,
   sinkListItem as createSinkListItemCommand,
@@ -14,6 +15,7 @@ import type {
 import {
   NodeSelection,
   Selection,
+  TextSelection,
   type Command,
   type EditorState,
   type Transaction,
@@ -99,6 +101,93 @@ export function createListItemSplitCommand(itemType: NodeType): Command {
     }
 
     return splitOrdinaryItem(state, dispatch, view);
+  };
+}
+
+export function createListItemBackspaceCommand(itemType: NodeType): Command {
+  const liftItem = createLiftListItemCommand(itemType);
+
+  return (state, dispatch, view) => {
+    const { selection } = state;
+
+    if (
+      view?.composing
+      || view?.editable === false
+      || !(selection instanceof TextSelection)
+      || !selection.empty
+      || selection.$from.parentOffset !== 0
+    ) {
+      return false;
+    }
+
+    const { $from } = selection;
+    const containerDepth = $from.depth - 1;
+    const currentIndex = $from.index(containerDepth);
+
+    // The first Backspace can leave this textblock directly after a
+    // split list. Move it into the final item before joining so the next
+    // Backspace does not simply wrap it back into a new list item.
+    if (currentIndex > 0) {
+      const container = $from.node(containerDepth);
+      const previousList = container.child(currentIndex - 1);
+      const currentBlock = $from.node($from.depth);
+
+      if (previousList.firstChild?.type === itemType && currentBlock.isTextblock) {
+        const currentBlockPos = $from.before($from.depth);
+        const previousListPos = currentBlockPos - previousList.nodeSize;
+        const listItems: Array<{ node: ProseMirrorNode; pos: number }> = [];
+
+        previousList.descendants((node, pos) => {
+          if (node.type === itemType) {
+            listItems.push({ node, pos: previousListPos + 1 + pos });
+          }
+        });
+        const lastItem = listItems[listItems.length - 1];
+
+        if (lastItem) {
+          const target = lastItem.pos + lastItem.node.nodeSize - 1;
+          const transaction = state.tr
+            .delete(currentBlockPos, currentBlockPos + currentBlock.nodeSize)
+            .insert(target, currentBlock);
+
+          const $target = transaction.doc.resolve(target);
+          const before = $target.nodeBefore;
+          const after = $target.nodeAfter;
+          const targetIndex = $target.index();
+
+          if (
+            before
+            && after
+            && !before.isLeaf
+            && before.canAppend(after)
+            && $target.parent.canReplace(targetIndex, targetIndex + 1)
+          ) {
+            transaction.join(target);
+            transaction.setSelection(TextSelection.create(transaction.doc, target - 1));
+            dispatch?.(closeHistory(transaction).scrollIntoView());
+            return true;
+          }
+        }
+      }
+    }
+
+    for (let depth = $from.depth - 1; depth > 0; depth -= 1) {
+      if ($from.node(depth).type !== itemType) {
+        continue;
+      }
+
+      if ($from.index(depth) !== 0) {
+        return false;
+      }
+
+      return liftItem(
+        state,
+        dispatch ? (transaction) => dispatch(closeHistory(transaction)) : undefined,
+        view,
+      );
+    }
+
+    return false;
   };
 }
 

@@ -550,6 +550,15 @@ Each edit participates in normal history. Tab remains native when the selection
 is outside a list; in root tables it retains the table-navigation behavior
 described above, and a focused task checkbox retains native sequential focus.
 
+Plain Backspace at the first caret of a list item's first block lifts exactly
+that item: a nested item outdents one level, a top-level item becomes a
+paragraph, and a middle item splits the surrounding list without turning its
+text into an indented continuation paragraph. A second Backspace from the
+lifted paragraph merges its text into the preceding list's final item. Each
+press is a separate undo event. Later blocks inside one item keep ordinary
+block-joining behavior, while read-only state and active composition cannot
+trigger the item-level transform.
+
 Root and minimal also share inline-mark boundary exit. At the visible edge of
 strong, emphasis, inline-code, link, or available strikethrough text, one plain
 physical horizontal-arrow press clears every coincident mark without moving
