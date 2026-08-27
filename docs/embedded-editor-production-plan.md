@@ -1219,3 +1219,12 @@ default so native contenteditable mutation cannot leak through. Raw Chromium
 DevTools Protocol plus Firefox/WebKit production Shadow DOM coverage exercises
 both entries, while focused minimal tests pin default, remapped, disabled, and
 undo behavior.
+
+The next block-transition audit closed minimal's heading-marker fallthrough.
+Both runtimes now use one heading-editing plugin: plain Backspace at the start
+removes exactly one heading level, level one becomes a paragraph, and typing
+`#` adds exactly one level through level six. Every transform is one ordinary
+undo step, while read-only state, composition, selections, and modified
+deletion remain untouched. Trusted Chromium DevTools Protocol input plus
+Firefox/WebKit production Shadow DOM cases verify demotion, deepening, exact
+Markdown/DOM output, and undo in both entries.

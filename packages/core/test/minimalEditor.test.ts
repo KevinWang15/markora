@@ -279,6 +279,66 @@ describe("minimal embedded editor entry", () => {
     expect(remapped.getMarkdown()).toBe("alpha\\\nomega");
   });
 
+  it("changes heading marker levels with exact editability and key guards", () => {
+    const editor = track(createEditor({
+      element: createHost(),
+      markdown: "### title",
+    }));
+    const pressBackspace = (init: KeyboardEventInit = {}) => {
+      const event = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "Backspace",
+        ...init,
+      });
+      editor.view.dom.dispatchEvent(event);
+      return event;
+    };
+    const typeHash = () => {
+      const { from, to } = editor.view.state.selection;
+      return Boolean(editor.view.someProp("handleTextInput", (handler) => (
+        handler(editor.view, from, to, "#")
+      )));
+    };
+
+    editor.focus({ anchor: 1 });
+    expect(pressBackspace().defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe("## title");
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe("### title");
+
+    expect(typeHash()).toBe(true);
+    expect(editor.getMarkdown()).toBe("#### title");
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe("### title");
+
+    editor.commands.resetMarkdown("# title");
+    editor.focus({ anchor: 1 });
+    expect(pressBackspace().defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe("title");
+
+    editor.commands.resetMarkdown("###### title");
+    editor.focus({ anchor: 1 });
+    expect(typeHash()).toBe(false);
+    expect(editor.getMarkdown()).toBe("###### title");
+
+    editor.commands.resetMarkdown("### title");
+    editor.focus({ anchor: 1 });
+    for (const init of [
+      { ctrlKey: true },
+      { isComposing: true },
+      { shiftKey: true },
+    ]) {
+      expect(pressBackspace(init).defaultPrevented).toBe(false);
+      expect(editor.getMarkdown()).toBe("### title");
+    }
+
+    editor.updateOptions({ editable: false });
+    expect(pressBackspace().defaultPrevented).toBe(false);
+    expect(typeHash()).toBe(false);
+    expect(editor.getMarkdown()).toBe("### title");
+  });
+
   it("uses one extension codec, registry, and assembly across document updates", () => {
     const editor = track(createEditor({
       element: createHost(),

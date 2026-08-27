@@ -634,35 +634,6 @@ function getActiveLineMarker(state: EditorState): ActiveLineMarker | null {
   return null;
 }
 
-function updateHeadingLevel(view: EditorView, nextLevel: number | null) {
-  const { state } = view;
-  const { selection } = state;
-
-  if (!selection.empty) {
-    return false;
-  }
-
-  const { $from } = selection;
-  const parent = $from.parent;
-
-  if (parent.type !== schema.nodes.heading || $from.parentOffset !== 0) {
-    return false;
-  }
-
-  const pos = $from.before();
-  const tr = state.tr;
-
-  if (nextLevel === null) {
-    tr.setNodeMarkup(pos, schema.nodes.paragraph);
-  } else {
-    tr.setNodeMarkup(pos, schema.nodes.heading, { level: nextLevel });
-  }
-
-  tr.setSelection(TextSelection.create(tr.doc, tr.selection.from));
-  view.dispatch(tr);
-  return true;
-}
-
 function getTableCellContext(state: EditorState): TableCellInfo | null {
   return getSharedTableSelectionContext(state, schema);
 }
@@ -849,7 +820,6 @@ const { convertPipeTable } = createPipeTableHelpers({
     getAncestorInfo,
     getActiveListItemInfo,
     getActiveLineMarker,
-    updateHeadingLevel,
     getTableCellContext,
     getTableUiContext,
     selectionTouchesNodeType,
@@ -947,7 +917,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     getAncestorInfo,
     getActiveListItemInfo,
     getActiveLineMarker,
-    updateHeadingLevel,
     getTableCellContext,
     getTableUiContext,
     selectionTouchesNodeType,
@@ -1641,7 +1610,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       ? [extensionAssembly.contributions.inputRules]
       : []),
     ...(autoPairPlugin ? [autoPairPlugin] : []),
-    createHeadingEditingPlugin({ schema, convertPipeTable, updateHeadingLevel }),
+    createHeadingEditingPlugin({ schema, convertPipeTable }),
     createHorizontalRulePlugin({
       schema,
       createManagedBlockCursor: (doc, blockPos, side) => ManagedBlockCursor.create(doc, blockPos, side, isManagedBlockNode),

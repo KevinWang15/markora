@@ -105,6 +105,7 @@ import {
   normalizeMarkdownEditorTypingOptions,
 } from "./typingErgonomics";
 import { normalizeMarkdownEditorMessages } from "./editorMessages";
+import { createHeadingEditingPlugin } from "./editorPlugins";
 
 function destroyProseMirrorView(view: EditorView) {
   const input = (view as EditorView & {
@@ -899,6 +900,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         ? [extensionAssembly.contributions.inputRules]
         : []),
       ...(autoPairPlugin ? [autoPairPlugin] : []),
+      createHeadingEditingPlugin({ schema: codec.schema }),
       ...extensionAssembly.contributions.plugins,
       createInputRobustnessPlugin(ownerWindow),
       clipboard.plugin,

@@ -20,7 +20,8 @@ function hasCommandModifier(event: KeyboardEvent) {
 
 function isPlainStructuralKey(view: EditorView, event: KeyboardEvent) {
   return (
-    !view.composing
+    view.editable
+    && !view.composing
     && !event.isComposing
     && event.keyCode !== 229
     && !hasCommandModifier(event)
@@ -30,11 +31,13 @@ function isPlainStructuralKey(view: EditorView, event: KeyboardEvent) {
 
 function isBackwardDeleteKey(view: EditorView, event: KeyboardEvent) {
   return (
-    event.key === "Backspace"
+    view.editable
+    && event.key === "Backspace"
     && !view.composing
     && !event.isComposing
     && event.keyCode !== 229
     && !hasCommandModifier(event)
+    && !event.shiftKey
   );
 }
 
@@ -251,15 +254,43 @@ export function createImagePlugin(options: {
 
 export function createHeadingEditingPlugin(options: {
   schema: Schema;
-  convertPipeTable: (view: EditorView) => boolean;
-  updateHeadingLevel: (view: EditorView, nextLevel: number | null) => boolean;
+  convertPipeTable?: (view: EditorView) => boolean;
 }) {
-  const { convertPipeTable, schema, updateHeadingLevel } = options;
+  const { schema } = options;
+  const convertPipeTable = options.convertPipeTable ?? (() => false);
+  const updateHeadingLevel = (view: EditorView, nextLevel: number | null) => {
+    const { state } = view;
+    const { selection } = state;
+
+    if (!selection.empty) {
+      return false;
+    }
+
+    const { $from } = selection;
+    const parent = $from.parent;
+
+    if (parent.type !== schema.nodes.heading || $from.parentOffset !== 0) {
+      return false;
+    }
+
+    const pos = $from.before();
+    const tr = state.tr;
+
+    if (nextLevel === null) {
+      tr.setNodeMarkup(pos, schema.nodes.paragraph);
+    } else {
+      tr.setNodeMarkup(pos, schema.nodes.heading, { level: nextLevel });
+    }
+
+    tr.setSelection(TextSelection.create(tr.doc, tr.selection.from));
+    view.dispatch(tr);
+    return true;
+  };
 
   return new Plugin({
     props: {
       handleTextInput(view, from, to, text) {
-        if (text !== "#") {
+        if (!view.editable || view.composing || text !== "#") {
           return false;
         }
 

@@ -556,6 +556,12 @@ physical horizontal-arrow press clears every coincident mark without moving
 the model caret; subsequent text is unmarked and mark/link state queries become
 inactive. Modified arrows and active composition remain browser-owned.
 
+They also share heading-marker editing at the start of a heading. Plain
+Backspace removes one `#` level (with level one becoming a paragraph), while
+typing `#` adds one level through level six. Each change is one ordinary undo
+step; modified deletion, composition, selections, and read-only editors retain
+their normal behavior.
+
 ## Typing ergonomics and keymaps
 
 `CreateEditorOptions.typing` is a copied, creation-time policy. `autoPairs` accepts `parentheses`, `square-brackets`, `braces`, `single-quotes`, `double-quotes`, `emphasis-asterisks`, `emphasis-underscores`, `strong-asterisks`, `strong-underscores`, `inline-code`, and `strikethrough`. It defaults to an empty list. `wrapSelection` defaults to `true`; set it to `false` to leave non-empty selections to the browser/editor's ordinary text-input behavior.
