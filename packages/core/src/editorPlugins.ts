@@ -1,5 +1,12 @@
-import type { Node as ProseMirrorNode, Schema } from "prosemirror-model";
-import { NodeSelection, Plugin, Selection, TextSelection, type EditorState } from "prosemirror-state";
+import { Fragment, type Node as ProseMirrorNode, type Schema } from "prosemirror-model";
+import {
+  NodeSelection,
+  Plugin,
+  Selection,
+  TextSelection,
+  type EditorState,
+  type Transaction,
+} from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import type { ImageEditorOverlay, LinkEditorOverlay, TableToolbarOverlay } from "./uiTypes";
 import { convertFenceToCodeBlock, type MarkInfo, type MarkName } from "./editorCommands";
@@ -527,6 +534,65 @@ function createMarker(doc: Document, className: string, text: string) {
   marker.className = `mdw-marker ${className}`;
   marker.textContent = text;
   return marker;
+}
+
+export function createCodeBlockUnwrapTransaction(
+  state: EditorState,
+  codeBlockPos: number,
+): Transaction | null {
+  const codeBlock = state.doc.nodeAt(codeBlockPos);
+  const codeBlockType = state.schema.nodes.code_block;
+  const paragraphType = state.schema.nodes.paragraph;
+
+  if (!codeBlock || !codeBlockType || !paragraphType || codeBlock.type !== codeBlockType) {
+    return null;
+  }
+
+  const paragraphs = codeBlock.textContent.split("\n").map((line) => (
+    paragraphType.create(null, line ? state.schema.text(line) : null)
+  ));
+  const transaction = state.tr.replaceWith(
+    codeBlockPos,
+    codeBlockPos + codeBlock.nodeSize,
+    Fragment.fromArray(paragraphs),
+  );
+
+  transaction.setSelection(TextSelection.create(transaction.doc, codeBlockPos + 1));
+  return transaction.scrollIntoView();
+}
+
+export function createCodeBlockRecoveryPlugin(options: { schema: Schema }) {
+  const { schema } = options;
+
+  return new Plugin({
+    props: {
+      handleKeyDown(view, event) {
+        const { selection } = view.state;
+
+        if (
+          !isBackwardDeleteKey(view, event)
+          || !(selection instanceof TextSelection)
+          || !selection.empty
+          || selection.$from.parent.type !== schema.nodes.code_block
+          || selection.$from.parentOffset !== 0
+        ) {
+          return false;
+        }
+
+        const transaction = createCodeBlockUnwrapTransaction(
+          view.state,
+          selection.$from.before(selection.$from.depth),
+        );
+
+        if (!transaction) {
+          return false;
+        }
+
+        view.dispatch(transaction);
+        return true;
+      },
+    },
+  });
 }
 
 export function createCodeBlockOuterSelectionPlugin(options: { schema: Schema }) {

@@ -1245,3 +1245,15 @@ CodeMirror, table, renderer, or optional-extension path. Its measured
 so this review raises only the four minimal initial/total failure leaves to
 810,000 raw and 225,000 gzip bytes. Warning thresholds remain unchanged and
 visible; CSS, module-count, lazy-chunk, root, and extension budgets do not move.
+
+The next reversal audit closed a fenced-code trap in minimal and a production
+event-layer miss in the compatibility entry. Plain Backspace at the first code
+caret now unwraps every source line into a paragraph, with an empty fence
+becoming one empty paragraph and the whole replacement remaining one undo step.
+Both runtimes use one schema-aware transaction builder; active CodeMirror owns
+its focus handoff, while minimal handles the same key on the ProseMirror code
+block. Modified keys, active composition, selections, and read-only state remain
+untouched. A trusted Chromium DevTools Protocol click/Home/Backspace path plus
+Firefox and WebKit production Shadow DOM cases cover populated and empty fences
+in root and minimal, and focused unit coverage pins structure, caret, history,
+and guards.

@@ -106,6 +106,7 @@ import {
 } from "./typingErgonomics";
 import { normalizeMarkdownEditorMessages } from "./editorMessages";
 import {
+  createCodeBlockRecoveryPlugin,
   createCodeFenceEditingPlugin,
   createHeadingEditingPlugin,
   createHorizontalRulePlugin,
@@ -917,6 +918,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       ...(autoPairPlugin ? [autoPairPlugin] : []),
       createHeadingEditingPlugin({ schema: codec.schema }),
       createCodeFenceEditingPlugin({ schema: codec.schema }),
+      createCodeBlockRecoveryPlugin({ schema: codec.schema }),
       createHorizontalRulePlugin({
         schema: codec.schema,
         createManagedBlockCursor: (document, blockPos, side) => (

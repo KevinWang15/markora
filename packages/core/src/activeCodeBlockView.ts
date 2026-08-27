@@ -43,6 +43,7 @@ import {
   type NormalizedMarkdownEditorAutoPair,
   type NormalizedMarkdownEditorTypingOptions,
 } from "./typingErgonomics";
+import { createCodeBlockUnwrapTransaction } from "./editorPlugins";
 
 type CodeBlockViewInstance = {
   readonly composing: boolean;
@@ -1306,18 +1307,12 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
       }
 
       const codeBlockPos = this.getPos();
-      const lines = this.node.textContent.split("\n");
-      const paragraphType = this.outerView.state.schema.nodes.paragraph;
-      const paragraphs = lines.length > 0
-        ? lines.map((line) => paragraphType.create(null, line ? this.outerView.state.schema.text(line) : null))
-        : [paragraphType.create()];
-      const tr = this.outerView.state.tr.replaceWith(
-        codeBlockPos,
-        codeBlockPos + this.node.nodeSize,
-        Fragment.fromArray(paragraphs),
-      );
+      const tr = createCodeBlockUnwrapTransaction(this.outerView.state, codeBlockPos);
 
-      tr.setSelection(TextSelection.create(tr.doc, codeBlockPos + 1));
+      if (!tr) {
+        return false;
+      }
+
       const transferVersion = this.beginOuterFocusTransfer();
       const ownerWindow = this.ownerWindow;
 
@@ -1654,6 +1649,26 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
         lineNumbers(),
         drawSelection(),
         CodeMirrorView.domEventHandlers({
+          keydown: (event) => {
+            if (
+              event.key !== "Backspace"
+              || event.altKey
+              || event.ctrlKey
+              || event.metaKey
+              || event.shiftKey
+              || event.isComposing
+              || event.keyCode === 229
+              || this.cm.compositionStarted
+            ) {
+              return false;
+            }
+
+            return (
+              this.forwardManagedBoundaryKey("Backspace")
+              || this.maybeUnwrapCodeBlockAtStart()
+              || deleteGeneratedPair(this.cm, codeAutoPairs)
+            );
+          },
           paste: (event) => this.handleNestedClipboardEvent("paste", event),
           dragover: (event) => rejectFileTransferEvent(event) || !this.canEdit,
           drop: (event) => this.handleNestedClipboardEvent("drop", event),

@@ -569,6 +569,13 @@ horizontal-rule and fence markers. Rules are assembled from the live schema,
 so minimal does not import or emulate compatibility-only tasks or
 strikethrough.
 
+At the first caret of a fenced code block, plain Backspace unwraps each source
+line into its own paragraph in both entries; an empty fence becomes one empty
+paragraph. The replacement is one ordinary undo step. Modified deletion,
+active composition, selections, and read-only state cannot trigger recovery.
+The compatibility entry preserves its CodeMirror-to-ProseMirror focus transfer,
+while minimal performs the same document transform in its plain code block.
+
 ## Typing ergonomics and keymaps
 
 `CreateEditorOptions.typing` is a copied, creation-time policy. `autoPairs` accepts `parentheses`, `square-brackets`, `braces`, `single-quotes`, `double-quotes`, `emphasis-asterisks`, `emphasis-underscores`, `strong-asterisks`, `strong-underscores`, `inline-code`, and `strikethrough`. It defaults to an empty list. `wrapSelection` defaults to `true`; set it to `false` to leave non-empty selections to the browser/editor's ordinary text-input behavior.

@@ -339,6 +339,57 @@ describe("minimal embedded editor entry", () => {
     expect(editor.getMarkdown()).toBe("### title");
   });
 
+  it("unwraps code blocks at the first caret with exact Backspace guards", () => {
+    const original = ["```js", "alpha", "beta", "```"].join("\n");
+    const editor = track(createEditor({
+      element: createHost(),
+      markdown: original,
+    }));
+    const pressBackspace = (init: KeyboardEventInit = {}) => {
+      const event = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "Backspace",
+        ...init,
+      });
+      editor.view.dom.dispatchEvent(event);
+      return event;
+    };
+
+    editor.focus({ anchor: 1 });
+    expect(pressBackspace().defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe("alpha\n\nbeta");
+    expect(editor.view.state.doc.childCount).toBe(2);
+    expect(editor.view.state.doc.firstChild?.type.name).toBe("paragraph");
+    expect(editor.view.state.doc.lastChild?.type.name).toBe("paragraph");
+    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+    expect(editor.view.state.selection.from).toBe(1);
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe(original);
+
+    editor.commands.resetMarkdown(["```js", "", "```"].join("\n"));
+    editor.focus({ anchor: 1 });
+    expect(pressBackspace().defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe("");
+    expect(editor.view.state.doc.childCount).toBe(1);
+    expect(editor.view.state.doc.firstChild?.type.name).toBe("paragraph");
+
+    for (const init of [
+      { ctrlKey: true },
+      { isComposing: true },
+      { shiftKey: true },
+    ]) {
+      editor.commands.resetMarkdown(original);
+      editor.focus({ anchor: 1 });
+      expect(pressBackspace(init).defaultPrevented).toBe(false);
+      expect(editor.getMarkdown()).toBe(original);
+    }
+
+    editor.updateOptions({ editable: false });
+    expect(pressBackspace().defaultPrevented).toBe(false);
+    expect(editor.getMarkdown()).toBe(original);
+  });
+
   it("runs foundation typing rules without compatibility-only task or strike rules", () => {
     const editor = track(createEditor({
       element: createHost(),
