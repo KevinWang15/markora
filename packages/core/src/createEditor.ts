@@ -485,7 +485,11 @@ const {
   maybeOpenLink,
   maybeEditActiveLink,
 } = createMediaActionHelpers({ schema, getMarkInfo, resources, onResourceError });
-const { isEscapedOutsideBoundary, escapeBoundaryMark, createEscapedBoundaryPlugin } = createMarkBoundaryHelpers({ getMarkInfo });
+const {
+  isEscapedOutsideBoundary,
+  handleBoundaryKeyDown,
+  createEscapedBoundaryPlugin,
+} = createMarkBoundaryHelpers({ getMarkInfo });
 
 const revealMarkConfigs: RevealMarkConfig[] = [
   {
@@ -838,7 +842,7 @@ const { convertPipeTable } = createPipeTableHelpers({
     maybeOpenLink,
     maybeEditActiveLink,
     isEscapedOutsideBoundary,
-    escapeBoundaryMark,
+    handleBoundaryKeyDown,
     createEscapedBoundaryPlugin,
     revealMarkConfigs,
     ImageView,
@@ -936,7 +940,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     maybeOpenLink,
     maybeEditActiveLink,
     isEscapedOutsideBoundary,
-    escapeBoundaryMark,
+    handleBoundaryKeyDown,
     createEscapedBoundaryPlugin,
     revealMarkConfigs,
     ImageView,
@@ -1663,7 +1667,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       convertFenceToCodeBlock: (view) => convertFenceToCodeBlock(schema, view),
       handleNativeTaskControlKeyDown,
       maybeExtendSelectionAcrossCodeBlock,
-      escapeBoundaryMark,
+      handleBoundaryKeyDown,
       maybeToggleTaskListItem,
       maybeOpenImage,
       maybeOpenLink,

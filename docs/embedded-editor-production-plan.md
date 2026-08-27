@@ -1201,3 +1201,12 @@ all preserve normal undo history, while Tab outside a list remains native. The
 task-aware split command is shared instead of duplicated. Raw Chromium DevTools
 Protocol key events and Firefox/WebKit keyboard input verify both entries in
 production Shadow DOM.
+
+The following boundary audit found and closed the same kind of minimal-runtime
+gap at inline marks. Root and minimal now use one physical-arrow boundary
+handler and one escaped-boundary state model for strong, emphasis, code, link,
+and available strike marks. A plain outward arrow clears every coincident mark
+without moving the caret, the next insertion stays unmarked, and public active
+state agrees; composition and modified arrows remain native. Raw Chromium
+DevTools Protocol plus Firefox/WebKit production Shadow DOM cases cover nested
+marks and links in both entries.

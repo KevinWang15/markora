@@ -179,6 +179,62 @@ describe("minimal embedded editor entry", () => {
     expect(editor.getMarkdown()).toBe("plain");
   });
 
+  it("exits coincident inline marks without moving or retaining active state", () => {
+    const editor = track(createEditor({
+      element: createHost(),
+      markdown: "pre [***fix***](/target) suffix",
+    }));
+    let markEnd: number | undefined;
+
+    editor.view.state.doc.descendants((node, pos) => {
+      if (node.isText && node.text === "fix") {
+        markEnd = pos + node.nodeSize;
+      }
+    });
+    if (markEnd === undefined) {
+      throw new Error("Missing nested marked text.");
+    }
+
+    editor.view.dispatch(editor.view.state.tr.setSelection(
+      TextSelection.create(editor.view.state.doc, markEnd),
+    ));
+    const arrow = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "ArrowRight",
+    });
+
+    expect(editor.view.dom.dispatchEvent(arrow)).toBe(false);
+    expect(arrow.defaultPrevented).toBe(true);
+    expect(editor.view.state.selection.head).toBe(markEnd);
+    expect(editor.state.isActive.mark("strong")).toBe(false);
+    expect(editor.state.isActive.mark("em")).toBe(false);
+    expect(editor.state.isActive.mark("link")).toBe(false);
+    expect(editor.state.can.removeLink()).toBe(false);
+    expect(editor.getToolbarState()).toMatchObject({
+      bold: { active: false },
+      italic: { active: false },
+      link: { active: false },
+    });
+
+    editor.view.dispatch(editor.view.state.tr.insertText("X"));
+    const inserted = editor.view.state.selection.$from.nodeBefore;
+    expect(inserted?.text).toBe("X");
+    expect(inserted?.marks).toEqual([]);
+    expect(editor.getMarkdown()).toBe("pre ***[fix](/target)***X suffix");
+
+    editor.commands.resetMarkdown("**fix**");
+    editor.focus({ anchor: 4 });
+    const composingArrow = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      isComposing: true,
+      key: "ArrowRight",
+    });
+    expect(editor.view.dom.dispatchEvent(composingArrow)).toBe(true);
+    expect(composingArrow.defaultPrevented).toBe(false);
+  });
+
   it("uses one extension codec, registry, and assembly across document updates", () => {
     const editor = track(createEditor({
       element: createHost(),

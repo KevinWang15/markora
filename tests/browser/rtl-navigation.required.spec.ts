@@ -216,6 +216,82 @@ test("@required one physical arrow exits every coincident mark boundary", async 
   await cdp?.detach();
 });
 
+test("@required root and minimal exit coincident marks before native caret motion", async ({
+  browserName,
+  context,
+  labPage,
+}) => {
+  const cases = [
+    {
+      arrow: "ArrowLeft" as const,
+      expected: "pre X***fix*** suffix",
+      markdown: "pre ***fix*** suffix",
+      mode: "start" as const,
+    },
+    {
+      arrow: "ArrowRight" as const,
+      expected: "pre ***fix***X suffix",
+      markdown: "pre ***fix*** suffix",
+      mode: "end" as const,
+    },
+    {
+      arrow: "ArrowRight" as const,
+      expected: "pre **[fix](/target)**X suffix",
+      markdown: "pre [**fix**](/target) suffix",
+      mode: "end" as const,
+    },
+  ];
+  const cdp = browserName === "chromium"
+    ? await context.newCDPSession(labPage)
+    : null;
+  const pressArrow = async (key: "ArrowLeft" | "ArrowRight") => {
+    if (!cdp) {
+      await labPage.keyboard.press(key);
+      return;
+    }
+
+    const keyCode = key === "ArrowLeft" ? 37 : 39;
+    for (const type of ["rawKeyDown", "keyUp"] as const) {
+      await cdp.send("Input.dispatchKeyEvent", {
+        code: key,
+        key,
+        nativeVirtualKeyCode: keyCode,
+        type,
+        windowsVirtualKeyCode: keyCode,
+      });
+    }
+  };
+
+  for (const entry of ["root", "minimal"] as const) {
+    for (const [index, testCase] of cases.entries()) {
+      const id = `shared-mark-boundary-${entry}-${index}`;
+      await mountEditor(labPage, {
+        entry,
+        id,
+        markdown: testCase.markdown,
+        root: "shadow",
+      });
+      await selectTextBoundary(labPage, id, "fix", testCase.mode);
+      await settleEditor(labPage, id);
+      const boundaryHead = (await snapshotEditor(labPage, id)).selection.head;
+
+      await pressArrow(testCase.arrow);
+      await settleEditor(labPage, id);
+      expect((await snapshotEditor(labPage, id)).selection.head).toBe(boundaryHead);
+
+      if (cdp) {
+        await cdp.send("Input.insertText", { text: "X" });
+      } else {
+        await labPage.keyboard.insertText("X");
+      }
+      await settleEditor(labPage, id);
+      expect(await getMarkdown(labPage, id)).toBe(testCase.expected);
+    }
+  }
+
+  await cdp?.detach();
+});
+
 test("@required bidi mark exits preserve native physical-arrow progression", async ({ labPage }) => {
   const cases = [
     {

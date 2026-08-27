@@ -71,6 +71,8 @@ import { MARKORA_VERSION } from "./extensionVersion";
 import { createAssetUploadController } from "./assetUploads";
 import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
 import { createImageViewClass } from "./imageView";
+import { getMarkInfo, type MarkName } from "./editorCommands";
+import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import { createMinimalMarkdownCodec } from "./minimalMarkdownCodec";
 import { createPlaceholderPlugin } from "./placeholderPlugin";
 import {
@@ -554,6 +556,39 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   assertMarkdownEditorCompatibilityRuntimeActive(extensionResolution, false);
   const codec = createMinimalMarkdownCodec(extensionResolution.extensions, resources);
   const structuralCommandSet = createStructuralCommandSet(codec.schema);
+  const {
+    createEscapedBoundaryPlugin,
+    handleBoundaryKeyDown,
+    isEscapedOutsideBoundary,
+  } = createMarkBoundaryHelpers({ getMarkInfo });
+  const boundaryMarkNames = new Set<MarkName>([
+    "strong",
+    "em",
+    "code",
+    "link",
+    "strike",
+  ]);
+  const isEscapedMarkAtSelection = (state: EditorState, markType: MarkType | undefined) => {
+    if (!markType || !state.selection.empty || !boundaryMarkNames.has(markType.name as MarkName)) {
+      return false;
+    }
+
+    const markName = markType.name as MarkName;
+    const markInfo = getMarkInfo(state, markName);
+    return Boolean(markInfo && isEscapedOutsideBoundary(state, markName, markInfo));
+  };
+  const getActiveMarkRange = (state: EditorState, markType: MarkType | undefined) => {
+    const range = getMarkRange(state, markType);
+    return range && !isEscapedMarkAtSelection(state, markType) ? range : null;
+  };
+  const isMarkActiveAtSelection = (state: EditorState, markType: MarkType | undefined) => (
+    markIsActive(state, markType) && !isEscapedMarkAtSelection(state, markType)
+  );
+  const markBoundaryKeyPlugin = new Plugin({
+    props: {
+      handleKeyDown: handleBoundaryKeyDown,
+    },
+  });
   const doc = runInitialMarkdownParse(
     () => codec.parse(options.markdown ?? ""),
   );
@@ -837,6 +872,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       codec.createImportedContentSanitizerPlugin(),
       createPlaceholderPlugin(() => runtimeOptions.placeholder),
       createResourceOpenPlugin({ onError: handleResourceError, resources }),
+      createEscapedBoundaryPlugin(),
       createManagedBlockBoundaryPlugin({
         isManagedBlockNode,
         getTableBoundaryEscapeInfo: managedBlockBoundaries.getTableBoundaryEscapeInfo,
@@ -850,6 +886,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         removeManagedBlockAtBoundary:
           managedBlockBoundaries.removeManagedBlockAtBoundary,
       }),
+      markBoundaryKeyPlugin,
       ...(extensionAssembly.contributions.clipboard
         ? [extensionAssembly.contributions.clipboard]
         : []),
@@ -1220,7 +1257,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }
 
     const { selection } = view.state;
-    const activeRange = getMarkRange(view.state, linkType);
+    const activeRange = getActiveMarkRange(view.state, linkType);
 
     if (!activeRange && (
       selection.empty
@@ -1252,7 +1289,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }
 
     const linkType = codec.schema.marks.link;
-    const range = getMarkRange(view.state, linkType);
+    const range = getActiveMarkRange(view.state, linkType);
 
     if (!linkType || !range) {
       return false;
@@ -1325,7 +1362,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const getMarkButtonState = (mark: MarkdownEditorMark): ToolbarButtonState => {
     const markType = codec.schema.marks[mark];
     return {
-      active: markIsActive(view.state, markType),
+      active: isMarkActiveAtSelection(view.state, markType),
       enabled: Boolean(runtimeOptions.editable && markType && markCommands[mark](view.state)),
     };
   };
@@ -1454,7 +1491,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         return Boolean(
           canRunInteractiveCommand()
           && codec.schema.marks.link
-          && (getMarkRange(view.state, codec.schema.marks.link) || (
+          && (getActiveMarkRange(view.state, codec.schema.marks.link) || (
             !selection.empty
             && selection.$from.parent.inlineContent
             && selection.$to.parent.inlineContent
@@ -1465,7 +1502,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         return runStateQuery(
           "query whether a link can be removed",
           () => canRunInteractiveCommand() && Boolean(
-            getMarkRange(view.state, codec.schema.marks.link),
+            getActiveMarkRange(view.state, codec.schema.marks.link),
           ),
         );
       },
@@ -1634,10 +1671,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       mark(mark: MarkdownEditorActiveMark) {
         assertActive("query an active mark");
         if (mark === "link") {
-          return Boolean(getMarkRange(view.state, codec.schema.marks.link));
+          return Boolean(getActiveMarkRange(view.state, codec.schema.marks.link));
         }
 
-        return markIsActive(view.state, codec.schema.marks[mark]);
+        return isMarkActiveAtSelection(view.state, codec.schema.marks[mark]);
       },
       node(node) {
         assertActive("query an active node");
@@ -1725,7 +1762,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   };
   const getToolbarState = (): ToolbarState => {
     assertActive("read toolbar state");
-    const linkRange = getMarkRange(view.state, codec.schema.marks.link);
+    const linkRange = getActiveMarkRange(view.state, codec.schema.marks.link);
     const imageActive = isNodeActive("image");
 
     return {

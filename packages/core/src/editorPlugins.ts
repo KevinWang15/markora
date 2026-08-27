@@ -328,7 +328,7 @@ export function createMarkBoundaryPlugin(options: {
   enableDefaultUi: boolean;
   convertFenceToCodeBlock: (view: EditorView) => boolean;
   maybeExtendSelectionAcrossCodeBlock: (view: EditorView, direction: -1 | 1) => boolean;
-  escapeBoundaryMark: (view: EditorView, direction: "left" | "right") => boolean;
+  handleBoundaryKeyDown: (view: EditorView, event: KeyboardEvent) => boolean;
   handleNativeTaskControlKeyDown: (view: EditorView, event: KeyboardEvent) => boolean;
   maybeToggleTaskListItem: (view: EditorView, pos: number, event: MouseEvent) => boolean;
   maybeOpenImage: (view: EditorView, event: MouseEvent) => boolean;
@@ -344,7 +344,7 @@ export function createMarkBoundaryPlugin(options: {
   const {
     convertFenceToCodeBlock,
     enableDefaultUi,
-    escapeBoundaryMark,
+    handleBoundaryKeyDown,
     getActiveImageInfo,
     getMarkInfo,
     handleNativeTaskControlKeyDown,
@@ -420,17 +420,7 @@ export function createMarkBoundaryPlugin(options: {
           return true;
         }
 
-        const plainHorizontalArrow = isPlainStructuralKey(view, event);
-
-        if (plainHorizontalArrow && event.key === "ArrowLeft") {
-          return escapeBoundaryMark(view, "left");
-        }
-
-        if (plainHorizontalArrow && event.key === "ArrowRight") {
-          return escapeBoundaryMark(view, "right");
-        }
-
-        return false;
+        return handleBoundaryKeyDown(view, event);
       },
       handleClick(view, pos, event) {
         return (

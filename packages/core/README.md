@@ -550,6 +550,12 @@ Each edit participates in normal history. Tab remains native when the selection
 is outside a list; in root tables it retains the table-navigation behavior
 described above, and a focused task checkbox retains native sequential focus.
 
+Root and minimal also share inline-mark boundary exit. At the visible edge of
+strong, emphasis, inline-code, link, or available strikethrough text, one plain
+physical horizontal-arrow press clears every coincident mark without moving
+the model caret; subsequent text is unmarked and mark/link state queries become
+inactive. Modified arrows and active composition remain browser-owned.
+
 ## Typing ergonomics and keymaps
 
 `CreateEditorOptions.typing` is a copied, creation-time policy. `autoPairs` accepts `parentheses`, `square-brackets`, `braces`, `single-quotes`, `double-quotes`, `emphasis-asterisks`, `emphasis-underscores`, `strong-asterisks`, `strong-underscores`, `inline-code`, and `strikethrough`. It defaults to an empty list. `wrapSelection` defaults to `true`; set it to `false` to leave non-empty selections to the browser/editor's ordinary text-input behavior.

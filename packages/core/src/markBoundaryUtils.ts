@@ -133,6 +133,31 @@ export function createMarkBoundaryHelpers(options: {
     return true;
   }
 
+  function handleBoundaryKeyDown(view: EditorView, event: KeyboardEvent) {
+    if (
+      !view.editable
+      || view.composing
+      || event.isComposing
+      || event.keyCode === 229
+      || event.altKey
+      || event.ctrlKey
+      || event.metaKey
+      || event.shiftKey
+    ) {
+      return false;
+    }
+
+    if (event.key === "ArrowLeft") {
+      return escapeBoundaryMark(view, "left");
+    }
+
+    if (event.key === "ArrowRight") {
+      return escapeBoundaryMark(view, "right");
+    }
+
+    return false;
+  }
+
   function createEscapedBoundaryPlugin() {
     return new Plugin<EscapedBoundary | null>({
       key: escapedBoundaryKey,
@@ -166,6 +191,7 @@ export function createMarkBoundaryHelpers(options: {
     getEscapedBoundary,
     isEscapedOutsideBoundary,
     escapeBoundaryMark,
+    handleBoundaryKeyDown,
     createEscapedBoundaryPlugin,
   };
 }
