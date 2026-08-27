@@ -1312,3 +1312,22 @@ Chromium, Firefox, and WebKit, and the package smoke gate. The packed root
 entry is 994,999 raw / 272,411 gzip bytes across two initial chunks and 162
 static modules; minimal remains one eager 141-module chunk at 790,645 raw /
 220,459 gzip JavaScript bytes.
+
+The next pointer audit found that the marked-text geometry correction itself
+had an empty-block blind spot. `posAtCoords` can snap a click on a visibly empty
+list row to nearby text; the owned click completion then made that approximation
+authoritative. In both runtimes, clicking the second row of `* alpha\n* ` put
+the model caret at the start of `alpha`, so the next insertion or Enter changed
+the wrong item. The shared pointer layer now resolves an empty textblock from
+the clicked DOM target, validates that the mapped model parent is still empty,
+and carries that exact position through ordinary click completion without
+changing drag, modifier, multi-click, or revealed-marker handling. Trusted raw
+Chromium DevTools Protocol clicks and typing plus Firefox and WebKit production
+Shadow DOM coverage insert and undo text in root and minimal across trailing,
+middle, nested, bullet, ordered, empty-heading, and empty-blockquote targets.
+The retained marked-text click oracle and list-editing matrix pass beside it.
+Final verification passes `pnpm check` with 86 files and 1,510 tests, all 15
+focused pointer/list cases across Chromium, Firefox, and WebKit, and the package
+smoke gate. The packed root entry is 995,916 raw / 272,597 gzip bytes across two
+initial chunks and 162 static modules; minimal remains one eager 141-module
+chunk at 791,562 raw / 220,637 gzip JavaScript bytes.

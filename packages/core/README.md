@@ -603,6 +603,14 @@ active composition, selections, and read-only state cannot trigger recovery.
 The compatibility entry preserves its CodeMirror-to-ProseMirror focus transfer,
 while minimal performs the same document transform in its plain code block.
 
+Unmodified primary clicks resolve empty textblocks from their actual DOM target
+instead of borrowing the nearest non-empty text coordinate. Loaded empty bullet
+or ordered items—including nested and middle items—empty headings, and empty
+blockquotes therefore receive the caret exactly where they are drawn. This
+shares the same model-owned click completion used to keep revealed Markdown
+markers from swallowing a click; insertion and undo remain ordinary editor
+transactions in root and minimal.
+
 ## Typing ergonomics and keymaps
 
 `CreateEditorOptions.typing` is a copied, creation-time policy. `autoPairs` accepts `parentheses`, `square-brackets`, `braces`, `single-quotes`, `double-quotes`, `emphasis-asterisks`, `emphasis-underscores`, `strong-asterisks`, `strong-underscores`, `inline-code`, and `strikethrough`. It defaults to an empty list. `wrapSelection` defaults to `true`; set it to `false` to leave non-empty selections to the browser/editor's ordinary text-input behavior.

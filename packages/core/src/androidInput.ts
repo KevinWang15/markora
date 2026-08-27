@@ -175,6 +175,44 @@ function resolveOwnedPointerDragPosition(
   })?.pos ?? null;
 }
 
+function readPointerEmptyTextBlockPosition(view: EditorView, event: MouseEvent) {
+  let target = event.target as Node | null;
+
+  while (target && target !== view.dom) {
+    try {
+      const position = view.posAtDOM(target, 0);
+      const $position = view.state.doc.resolve(position);
+
+      if ($position.parent.isTextblock && $position.parent.content.size === 0) {
+        return position;
+      }
+
+      if ($position.nodeAfter?.isTextblock && $position.nodeAfter.content.size === 0) {
+        const insidePosition = position + 1;
+
+        if (isEmptyTextBlockPosition(view.state, insidePosition)) {
+          return insidePosition;
+        }
+      }
+    } catch {
+      // Decorative DOM may not have a document position. Its parent still can.
+    }
+
+    target = target.parentNode;
+  }
+
+  return null;
+}
+
+function isEmptyTextBlockPosition(state: EditorState, position: number) {
+  if (!Number.isInteger(position) || position < 0 || position > state.doc.content.size) {
+    return false;
+  }
+
+  const parent = state.doc.resolve(position).parent;
+  return parent.isTextblock && parent.content.size === 0;
+}
+
 function captureFallbackState(state: EditorState): FallbackState {
   return {
     doc: state.doc,
@@ -1448,6 +1486,21 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
       return;
     }
 
+    const emptyTextBlockPosition = readPointerEmptyTextBlockPosition(view, mouseEvent);
+
+    if (emptyTextBlockPosition !== null) {
+      // posAtCoords can snap an empty row to nearby text. The DOM target still
+      // maps to the exact empty textblock, so retain that position for click.
+      pointerBlockIntent = {
+        doc: view.state.doc,
+        position: emptyTextBlockPosition,
+        timeStamp: mouseEvent.timeStamp,
+        x: mouseEvent.clientX,
+        y: mouseEvent.clientY,
+      };
+      return;
+    }
+
     const coordinates = view.posAtCoords({
       left: mouseEvent.clientX,
       top: mouseEvent.clientY,
@@ -1508,10 +1561,13 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
       mouseEvent.detail !== 1
       || !intent
       || !matchesPointerIntent(intent, view, mouseEvent)
-      || !readTextBlockAtPosition(
-        view.state,
-        intent.position,
-        false,
+      || (
+        !readTextBlockAtPosition(
+          view.state,
+          intent.position,
+          false,
+        )
+        && !isEmptyTextBlockPosition(view.state, intent.position)
       )
     ) {
       return;
@@ -2119,7 +2175,10 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
           || event.detail !== 1
           || !matchesPointerIntent(intent, view, event)
           || !isOwnedUnmodifiedPrimaryPointerEvent(view, event, true)
-          || !readTextBlockAtPosition(view.state, intent.position, false)
+          || (
+            !readTextBlockAtPosition(view.state, intent.position, false)
+            && !isEmptyTextBlockPosition(view.state, intent.position)
+          )
         ) {
           return;
         }
