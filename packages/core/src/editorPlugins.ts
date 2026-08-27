@@ -2,6 +2,7 @@ import { Fragment, type Node as ProseMirrorNode, type Schema } from "prosemirror
 import {
   NodeSelection,
   Plugin,
+  PluginKey,
   Selection,
   TextSelection,
   type EditorState,
@@ -46,6 +47,110 @@ function isBackwardDeleteKey(view: EditorView, event: KeyboardEvent) {
     && !hasCommandModifier(event)
     && !event.shiftKey
   );
+}
+
+type InputRuleUndoable = Readonly<{
+  from: number;
+  text: string;
+  to: number;
+  transform: Transaction;
+}>;
+
+const inputRuleRecoveryKey = new PluginKey<InputRuleUndoable | null>(
+  "markoraInputRuleRecovery",
+);
+const inputRuleRecoveryUndoMeta = "markoraInputRuleRecoveryUndo";
+
+function readInputRuleUndoable(
+  transaction: Transaction,
+  inputRulePlugins: readonly Plugin[],
+): InputRuleUndoable | null {
+  for (const inputRulePlugin of [inputRuleRecoveryKey, ...inputRulePlugins]) {
+    const candidate = transaction.getMeta(inputRulePlugin) as Partial<InputRuleUndoable> | undefined;
+
+    if (
+      candidate
+      && typeof candidate.from === "number"
+      && typeof candidate.to === "number"
+      && typeof candidate.text === "string"
+      && candidate.transform
+    ) {
+      return candidate as InputRuleUndoable;
+    }
+  }
+
+  return null;
+}
+
+export function createInputRuleUndoTransaction(state: EditorState): Transaction | null {
+  const undoable = inputRuleRecoveryKey.getState(state);
+
+  if (!undoable || !state.selection.eq(undoable.transform.selection)) {
+    return null;
+  }
+
+  const transaction = state.tr;
+
+  for (let index = undoable.transform.steps.length - 1; index >= 0; index -= 1) {
+    transaction.step(
+      undoable.transform.steps[index].invert(undoable.transform.docs[index]),
+    );
+  }
+
+  if (undoable.text) {
+    const marks = transaction.doc.resolve(undoable.from).marks();
+    transaction.replaceWith(
+      undoable.from,
+      undoable.to,
+      state.schema.text(undoable.text, marks),
+    );
+  } else {
+    transaction.delete(undoable.from, undoable.to);
+  }
+
+  return transaction.setMeta(inputRuleRecoveryUndoMeta, true);
+}
+
+export function createInputRuleRecoveryPlugin(options: {
+  inputRulePlugins: readonly Plugin[];
+}) {
+  const { inputRulePlugins } = options;
+
+  return new Plugin<InputRuleUndoable | null>({
+    key: inputRuleRecoveryKey,
+    state: {
+      init: () => null,
+      apply(transaction, previous) {
+        const applied = readInputRuleUndoable(transaction, inputRulePlugins);
+
+        if (applied) {
+          return applied;
+        }
+
+        if (transaction.docChanged) {
+          return null;
+        }
+
+        return previous;
+      },
+    },
+    props: {
+      handleKeyDown(view, event) {
+        if (!isBackwardDeleteKey(view, event)) {
+          return false;
+        }
+
+        const transaction = createInputRuleUndoTransaction(view.state);
+
+        if (!transaction) {
+          return false;
+        }
+
+        view.dispatch(transaction);
+        return true;
+      },
+    },
+  });
 }
 
 function getHorizontalRuleMarkup(text: string) {
@@ -213,6 +318,10 @@ export function createImagePlugin(options: {
         return null;
       }
 
+      if (transactions.some((transaction) => transaction.getMeta(inputRuleRecoveryUndoMeta))) {
+        return null;
+      }
+
       if (transactions.some((transaction) => transaction.getMeta("composition") !== undefined)) {
         return null;
       }
@@ -254,6 +363,12 @@ export function createImagePlugin(options: {
       const paragraphPos = $from.before();
       const tr = newState.tr.replaceWith(paragraphPos + 1, paragraphPos + 1 + parent.content.size, image);
       tr.setSelection(Selection.near(tr.doc.resolve(paragraphPos + 1), 1));
+      tr.setMeta(inputRuleRecoveryKey, {
+        from: paragraphPos + 1,
+        text: "",
+        to: paragraphPos + 1,
+        transform: tr,
+      } satisfies InputRuleUndoable);
       return tr;
     },
   });

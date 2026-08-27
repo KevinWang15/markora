@@ -17,7 +17,7 @@ import {
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import { indentOnInput, syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import { Fragment, type Node as ProseMirrorNode, type Schema } from "prosemirror-model";
-import { Selection, TextSelection, type Command } from "prosemirror-state";
+import { Selection, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import { ManagedBlockCursor } from "./managedBlockCursor";
 import {
@@ -43,7 +43,10 @@ import {
   type NormalizedMarkdownEditorAutoPair,
   type NormalizedMarkdownEditorTypingOptions,
 } from "./typingErgonomics";
-import { createCodeBlockUnwrapTransaction } from "./editorPlugins";
+import {
+  createCodeBlockUnwrapTransaction,
+  createInputRuleUndoTransaction,
+} from "./editorPlugins";
 
 type CodeBlockViewInstance = {
   readonly composing: boolean;
@@ -1313,6 +1316,30 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
         return false;
       }
 
+      return this.dispatchCodeBlockReplacement(tr);
+    }
+
+    private maybeUndoInputRuleAtStart() {
+      if (!this.canEdit) {
+        return false;
+      }
+
+      const selection = this.cm.state.selection.main;
+
+      if (!selection.empty || selection.from !== 0) {
+        return false;
+      }
+
+      const tr = createInputRuleUndoTransaction(this.outerView.state);
+
+      if (!tr) {
+        return false;
+      }
+
+      return this.dispatchCodeBlockReplacement(tr);
+    }
+
+    private dispatchCodeBlockReplacement(tr: Transaction) {
       const transferVersion = this.beginOuterFocusTransfer();
       const ownerWindow = this.ownerWindow;
 
@@ -1665,6 +1692,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
 
             return (
               this.forwardManagedBoundaryKey("Backspace")
+              || this.maybeUndoInputRuleAtStart()
               || this.maybeUnwrapCodeBlockAtStart()
               || deleteGeneratedPair(this.cm, codeAutoPairs)
             );
@@ -1719,6 +1747,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
             key: "Backspace",
             run: () => (
               this.forwardManagedBoundaryKey("Backspace")
+              || this.maybeUndoInputRuleAtStart()
               || this.maybeUnwrapCodeBlockAtStart()
               || deleteGeneratedPair(this.cm, codeAutoPairs)
             ),

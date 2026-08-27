@@ -569,6 +569,13 @@ horizontal-rule and fence markers. Rules are assembled from the live schema,
 so minimal does not import or emulate compatibility-only tasks or
 strikethrough.
 
+Immediately after one of those typing rules transforms source, plain Backspace
+restores the literal Markdown markers while the caret remains at the transform.
+This includes extension-provided input rules, standalone-image normalization,
+and a fence whose compatibility-entry focus has already moved into CodeMirror.
+Modified deletion, composition, read-only state, a moved caret, or any later
+document edit cannot trigger the reversal.
+
 At the first caret of a fenced code block, plain Backspace unwraps each source
 line into its own paragraph in both entries; an empty fence becomes one empty
 paragraph. The replacement is one ordinary undo step. Modified deletion,

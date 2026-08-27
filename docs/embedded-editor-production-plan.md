@@ -1257,3 +1257,19 @@ untouched. A trusted Chromium DevTools Protocol click/Home/Backspace path plus
 Firefox and WebKit production Shadow DOM cases cover populated and empty fences
 in root and minimal, and focused unit coverage pins structure, caret, history,
 and guards.
+
+The immediate-transform reversal audit then closed the matching literal-source
+escape hatch. Root and minimal retain the most recent schema-aware input-rule
+transaction, and plain Backspace at its resulting caret restores the typed
+Markdown markers instead of deleting transformed content. The contract covers
+all foundation block and inline rules, extension-provided rules, the browser
+fallback used for standalone images, and a fence after root has transferred
+focus into active CodeMirror. Any later document edit invalidates recovery;
+the exact modified-key, composition, selection, and read-only guards remain in
+force. Character-by-character trusted Chromium DevTools Protocol input plus
+Firefox and WebKit production Shadow DOM cases exercise ten transform families
+in both entries, while focused tests cover extension integration and guards.
+Final verification passes `pnpm check` with 86 files and 1,508 tests, the six
+focused production-browser cases across Chromium, Firefox, and WebKit, and the
+package smoke gate. The packed minimal entry remains one eager 141-module chunk
+at 786,628 raw / 219,428 gzip JavaScript bytes.

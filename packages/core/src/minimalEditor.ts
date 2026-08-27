@@ -111,6 +111,7 @@ import {
   createHeadingEditingPlugin,
   createHorizontalRulePlugin,
   createImagePlugin,
+  createInputRuleRecoveryPlugin,
 } from "./editorPlugins";
 
 function destroyProseMirrorView(view: EditorView) {
@@ -915,6 +916,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       ...(extensionAssembly.contributions.inputRules
         ? [extensionAssembly.contributions.inputRules]
         : []),
+      createInputRuleRecoveryPlugin({ inputRulePlugins }),
       ...(autoPairPlugin ? [autoPairPlugin] : []),
       createHeadingEditingPlugin({ schema: codec.schema }),
       createCodeFenceEditingPlugin({ schema: codec.schema }),

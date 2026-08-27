@@ -118,7 +118,7 @@ import {
   type NormalizedMarkdownEditorResources,
 } from "./resourcePolicy";
 import { createTypingShortcuts, getImageToolbarState, getLinkToolbarState, getMarkInfo, getToolbarMarkState, type EditorCommand } from "./editorCommands";
-import { createCodeBlockOuterSelectionPlugin, createCodeFenceEditingPlugin, createHeadingEditingPlugin, createHorizontalRulePlugin, createImagePlugin, createMarkdownRevealPlugin, createMarkBoundaryPlugin, type RevealMarkConfig } from "./editorPlugins";
+import { createCodeBlockOuterSelectionPlugin, createCodeFenceEditingPlugin, createHeadingEditingPlugin, createHorizontalRulePlugin, createImagePlugin, createInputRuleRecoveryPlugin, createMarkdownRevealPlugin, createMarkBoundaryPlugin, type RevealMarkConfig } from "./editorPlugins";
 import { createCodeBlockSelectionHelpers } from "./codeBlockSelection";
 import { createPipeTableHelpers } from "./pipeTable";
 import { createTableNavigation, type TableAlignment } from "./tableNavigation";
@@ -1608,6 +1608,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     ...(extensionAssembly.contributions.inputRules
       ? [extensionAssembly.contributions.inputRules]
       : []),
+    createInputRuleRecoveryPlugin({ inputRulePlugins }),
     ...(autoPairPlugin ? [autoPairPlugin] : []),
     createHeadingEditingPlugin({ schema, convertPipeTable }),
     createCodeFenceEditingPlugin({ schema }),

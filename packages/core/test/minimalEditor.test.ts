@@ -427,6 +427,86 @@ describe("minimal embedded editor entry", () => {
     expect(listItem?.textContent).toBe("[x] task");
   });
 
+  it("restores literal Markdown with Backspace immediately after every foundation input rule", () => {
+    const editor = track(createEditor({ element: createHost(), markdown: "" }));
+    const typeText = (text: string) => {
+      for (const character of text) {
+        const { from, to } = editor.view.state.selection;
+        const handled = editor.view.someProp("handleTextInput", (handler) => (
+          handler(editor.view, from, to, character)
+        ));
+
+        if (!handled) {
+          editor.view.dispatch(editor.view.state.tr.insertText(character, from, to));
+        }
+      }
+    };
+    const pressBackspace = (init: KeyboardEventInit = {}) => {
+      const event = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "Backspace",
+        ...init,
+      });
+      editor.view.dom.dispatchEvent(event);
+      return event;
+    };
+    const cases = [
+      ["# ", "\\# ", "heading"],
+      ["> ", "\\> ", "blockquote"],
+      ["* ", "\\* ", "bullet_list"],
+      ["3. ", "3\\. ", "ordered_list"],
+      ["*em*", "\\*em\\*", "em"],
+      ["**bold**", "\\*\\*bold\\*\\*", "strong"],
+      ["`code`", "\\`code\\`", "code"],
+      ["[link](/target)", "\\[link\\](/target)", "link"],
+      ["![alt](/image.png)", "!\\[alt\\](/image.png)", "image"],
+      ["```js ", "\\`\\`\\`js ", "code_block"],
+    ] as const;
+
+    for (const [source, literal, transformedType] of cases) {
+      editor.commands.resetMarkdown("");
+      typeText(source);
+      let transformed = false;
+      editor.view.state.doc.descendants((node) => {
+        if (node.type.name === transformedType || node.marks.some((mark) => mark.type.name === transformedType)) {
+          transformed = true;
+          return false;
+        }
+        return true;
+      });
+      expect(transformed, source).toBe(true);
+      expect(pressBackspace().defaultPrevented, source).toBe(true);
+      expect(editor.getMarkdown(), source).toBe(literal);
+    }
+
+    editor.commands.resetMarkdown("");
+    typeText("# ");
+    expect(pressBackspace({ ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(pressBackspace({ isComposing: true }).defaultPrevented).toBe(false);
+    expect(editor.view.state.doc.firstChild?.type.name).toBe("heading");
+
+    editor.commands.resetMarkdown("");
+    typeText("*em*");
+    editor.view.dispatch(editor.view.state.tr.setSelection(
+      TextSelection.create(editor.view.state.doc, 1),
+    ));
+    expect(pressBackspace().defaultPrevented).toBe(false);
+    expect(editor.view.state.doc.firstChild?.firstChild?.marks[0]?.type.name).toBe("em");
+
+    editor.commands.resetMarkdown("");
+    typeText("# ");
+    editor.view.dispatch(editor.view.state.tr.insertText("later"));
+    expect(pressBackspace().defaultPrevented).toBe(false);
+    expect(editor.getMarkdown()).toBe("# later");
+
+    editor.commands.resetMarkdown("");
+    typeText("# ");
+    editor.updateOptions({ editable: false });
+    expect(pressBackspace().defaultPrevented).toBe(false);
+    expect(editor.view.state.doc.firstChild?.type.name).toBe("heading");
+  });
+
   it("uses one extension codec, registry, and assembly across document updates", () => {
     const editor = track(createEditor({
       element: createHost(),
@@ -555,6 +635,24 @@ describe("minimal embedded editor entry", () => {
     expect(calls).toEqual(["keymap"]);
     expect(editor.view.dom.querySelector("[data-minimal-node-view=true]")).not.toBeNull();
     expect(activity.getState(editor.view.state)).toBeGreaterThan(0);
+
+    editor.commands.resetMarkdown("");
+    for (const character of "!!") {
+      const { from, to } = editor.view.state.selection;
+      const handled = editor.view.someProp("handleTextInput", (handler) => (
+        handler(editor.view, from, to, character)
+      ));
+      if (!handled) editor.view.dispatch(editor.view.state.tr.insertText(character, from, to));
+    }
+    expect(editor.view.state.doc.textContent).toBe("important");
+    const recovery = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Backspace",
+    });
+    editor.view.dom.dispatchEvent(recovery);
+    expect(recovery.defaultPrevented).toBe(true);
+    expect(editor.getMarkdown()).toBe("!!");
   });
 
   it("enforces read-only, URL, file-transfer, and dynamic option policies", () => {
