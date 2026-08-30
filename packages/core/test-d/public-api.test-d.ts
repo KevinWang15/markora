@@ -15,7 +15,6 @@ import {
   type MarkdownEditorActiveNode,
   type MarkdownEditorBuiltinChangeOrigin,
   type MarkdownEditorChangeContext,
-  type MarkdownEditorChangeMode,
   type MarkdownEditorChangeOrigin,
   type MarkdownEditorCodeBlockOptions,
   type MarkdownEditorCodeBlockRuntimeErrorEvent,
@@ -49,7 +48,6 @@ import {
   type MarkdownEditorUnsubscribe,
   type OpaqueMarkdownEditRequest,
   type OpaqueMarkdownKind,
-  type ToolbarState,
   type UpdateEditorOptions,
 } from "../src/index";
 import type { EditorView } from "prosemirror-view";
@@ -128,16 +126,12 @@ const typedEditor: MarkdownEditor = editor;
 const view: EditorView = editor.view;
 const commands: MarkdownEditorCommands = editor.commands;
 const stateApi: MarkdownEditorState = editor.state;
-const toolbarState: ToolbarState = editor.getToolbarState();
 const editorUi: MarkdownEditorUi | null = editor.ui;
 const destroyed: boolean = editor.isDestroyed;
 const builtinOrigin: MarkdownEditorBuiltinChangeOrigin = "external";
 const extensionOrigin: MarkdownEditorExtensionOrigin = "extension:collaboration";
 const changeOrigin: MarkdownEditorChangeOrigin = extensionOrigin;
 const changeContext: MarkdownEditorChangeContext = { origin: builtinOrigin };
-const idleChangeMode: MarkdownEditorChangeMode = "idle";
-const animationFrameChangeMode: MarkdownEditorChangeMode = "animationFrame";
-const immediateChangeMode: MarkdownEditorChangeMode = "immediate";
 
 editor.focus("end");
 editor.focus({ anchor: 1 });
@@ -149,7 +143,6 @@ const updateOptions: UpdateEditorOptions = {
   attributes: null,
   editable: false,
   onChange: null,
-  onChangeMode: idleChangeMode,
   onEditOpaqueMarkdown: null,
   onTransaction: null,
   placeholder: null,
@@ -244,7 +237,6 @@ commands.toggleMark(mark);
 const markdownUpdateOptions: MarkdownEditorMarkdownUpdateOptions = { emitChange: true };
 const reconciled: boolean = commands.reconcileMarkdown("# Reconciled", markdownUpdateOptions);
 const resetResult: void = commands.resetMarkdown("# Reset", markdownUpdateOptions);
-const compatibilityResetResult: void = commands.setMarkdown("# Compatible reset", markdownUpdateOptions);
 const pastedMarkdown: boolean = commands.pasteMarkdown("# Pasted");
 const pastedPlainText: boolean = commands.pastePlainText("# Literal");
 const canPasteMarkdown: boolean = stateApi.can.pasteMarkdown();
@@ -448,7 +440,7 @@ const optionsWithChangeContexts: CreateEditorOptions = {
   },
 };
 
-const legacyCallbackOptions: CreateEditorOptions = {
+const shortCallbackOptions: CreateEditorOptions = {
   element: hostElement,
   onChange(markdown) {
     void markdown;
@@ -473,7 +465,7 @@ const updateOptionsWithChangeContexts: UpdateEditorOptions = {
   },
 };
 
-const legacyCallbackUpdateOptions: UpdateEditorOptions = {
+const shortCallbackUpdateOptions: UpdateEditorOptions = {
   onChange(markdown) {
     void markdown;
   },
@@ -485,30 +477,26 @@ const legacyCallbackUpdateOptions: UpdateEditorOptions = {
 
 void typedEditor;
 void view;
-void toolbarState;
 void editorUi;
 void destroyed;
 void changeOrigin;
 void changeContext;
-void animationFrameChangeMode;
 void pastedMarkdown;
 void pastedPlainText;
 void canPasteMarkdown;
 void canPastePlainText;
-void immediateChangeMode;
 void eventMap;
 void reconciled;
 void resetResult;
-void compatibilityResetResult;
 void taggedOrigin;
 void untaggedOrigin;
 void optionsWithUi;
 void opaqueKind;
 void optionsWithOpaqueEditor;
 void optionsWithChangeContexts;
-void legacyCallbackOptions;
+void shortCallbackOptions;
 void updateOptionsWithChangeContexts;
-void legacyCallbackUpdateOptions;
+void shortCallbackUpdateOptions;
 
 const destroyedError = new MarkdownEditorDestroyedError("focus the editor");
 const destroyedOperation: string = destroyedError.operation;
@@ -557,11 +545,6 @@ void invalidExtensionOrigin;
 // @ts-expect-error DOM attribute values must be strings
 editor.updateOptions({ attributes: { tabindex: 0 } });
 
-// @ts-expect-error change delivery modes are a closed public set
-editor.updateOptions({ onChangeMode: "debounce" });
-
-// @ts-expect-error flat aliases were removed from the public API
-editor.setMarkdown("next");
 // @ts-expect-error flat aliases were removed from the public API
 editor.toggleBold();
 // @ts-expect-error flat aliases were removed from the public API

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 
 function strikeTexts(markdown: string) {
-  const codec = createCompatibilityMarkdownCodec();
+  const codec = createMarkdownCodec();
   const document = codec.parse(markdown)!;
   const texts: string[] = [];
 

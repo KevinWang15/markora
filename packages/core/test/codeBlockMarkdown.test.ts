@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 import { createMinimalMarkdownCodec } from "../src/minimalMarkdownCodec";
 import { codeBlockDomAttrs } from "../src/schemaContributionOrder";
 
 const codecFactories = [
-  ["compatibility", createCompatibilityMarkdownCodec],
+  ["compatibility", createMarkdownCodec],
   ["minimal", createMinimalMarkdownCodec],
 ] as const;
 

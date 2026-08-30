@@ -193,7 +193,6 @@ describe("reconciled external Markdown updates", () => {
       onChange(_markdown, context) {
         changeOrigins.push(context.origin);
       },
-      onChangeMode: "immediate",
       onTransaction(_transaction, _view, context) {
         transactionOrigins.push(context.origin);
       },
@@ -201,17 +200,20 @@ describe("reconciled external Markdown updates", () => {
     editor.subscribe("update", (event) => updateOrigins.push(event.origin));
 
     editor.view.dispatch(editor.view.state.tr.insertText("!", 6));
+    editor.flushChange();
     editor.view.dispatch(
       editor.view.state.tr.setSelection(TextSelection.create(editor.view.state.doc, 1, 6)),
     );
     transactionOrigins.length = 0;
 
     expect(editor.commands.toggleMark("strong")).toBe(true);
+    editor.flushChange();
     const extensionTransaction = setMarkdownEditorTransactionOrigin(
       editor.view.state.tr.insertText("?", editor.view.state.doc.content.size - 1),
       "extension:comments",
     );
     editor.view.dispatch(extensionTransaction);
+    editor.flushChange();
 
     expect(transactionOrigins).toEqual(["command", "extension:comments"]);
     expect(changeOrigins).toEqual(["user", "command", "extension:comments"]);
@@ -249,7 +251,6 @@ describe("reconciled external Markdown updates", () => {
       onChange(markdown, context) {
         changes.push({ markdown, origin: context.origin });
       },
-      onChangeMode: "immediate",
       onTransaction(_transaction, _view, context) {
         transactionOrigins.push(context.origin);
       },
@@ -266,6 +267,7 @@ describe("reconciled external Markdown updates", () => {
     expect(updateOrigins).toEqual(["external"]);
 
     expect(editor.commands.reconcileMarkdown("final", { emitChange: true })).toBe(true);
+    editor.flushChange();
     expect(changes).toEqual([{ markdown: "final", origin: "external" }]);
     expect(transactionOrigins).toEqual(["external", "external"]);
     expect(selectionOrigins.every((origin) => origin === "external")).toBe(true);
@@ -282,7 +284,6 @@ describe("reconciled external Markdown updates", () => {
       onChange(markdown, context) {
         changes.push({ markdown, origin: context.origin });
       },
-      onChangeMode: "immediate",
       onTransaction: transactions,
     }));
     const selectionOrigins: string[] = [];
@@ -298,6 +299,7 @@ describe("reconciled external Markdown updates", () => {
     updateOrigins.length = 0;
 
     editor.commands.resetMarkdown("beta", { emitChange: true });
+    editor.flushChange();
 
     expect(editor.getMarkdown()).toBe("beta");
     expect(editor.view.state.selection.from).toBe(1);
@@ -307,17 +309,6 @@ describe("reconciled external Markdown updates", () => {
     expect(transactions).not.toHaveBeenCalled();
     expect(selectionOrigins).toEqual(["reset"]);
     expect(updateOrigins).toEqual(["reset"]);
-  });
-
-  it("keeps setMarkdown as a hard-reset compatibility alias", () => {
-    const editor = track(createEditor({ element: createHost(), markdown: "alpha" }));
-    editor.view.dispatch(editor.view.state.tr.insertText("!", editor.view.state.doc.content.size - 1));
-    expect(editor.state.can.undo()).toBe(true);
-
-    editor.commands.setMarkdown("beta");
-
-    expect(editor.getMarkdown()).toBe("beta");
-    expect(editor.state.can.undo()).toBe(false);
   });
 
   it("hard-resets state and history even when the parsed document is unchanged", () => {
@@ -364,10 +355,9 @@ describe("reconciled external Markdown updates", () => {
     expect(updateOrigins).toEqual(["external", "reset"]);
   });
 
-  it.each(["immediate", "animationFrame"] as const)(
-    "terminates a controlled onChange echo in %s mode",
-    (onChangeMode) => {
-      const animationFrames = installAnimationFrameStub();
+  it(
+    "terminates a controlled onChange echo",
+    () => {
       const changes: Array<{ markdown: string; origin: string }> = [];
       const echoResults: boolean[] = [];
       let editor!: MarkdownEditor;
@@ -378,12 +368,10 @@ describe("reconciled external Markdown updates", () => {
           changes.push({ markdown, origin: context.origin });
           echoResults.push(editor.commands.reconcileMarkdown(markdown));
         },
-        onChangeMode,
       }));
 
       editor.view.dispatch(editor.view.state.tr.insertText("!", editor.view.state.doc.content.size - 1));
-      animationFrames.flush();
-      animationFrames.flush();
+      editor.flushChange();
 
       expect(editor.getMarkdown()).toBe("alpha!");
       expect(changes).toEqual([{ markdown: "alpha!", origin: "user" }]);
@@ -391,8 +379,7 @@ describe("reconciled external Markdown updates", () => {
     },
   );
 
-  it("does not cancel a pending local animation-frame change for an equal echo", () => {
-    const animationFrames = installAnimationFrameStub();
+  it("does not cancel a pending local change for an equal echo", () => {
     const changes: Array<{ markdown: string; origin: string }> = [];
     const editor = track(createEditor({
       element: createHost(),
@@ -400,24 +387,22 @@ describe("reconciled external Markdown updates", () => {
       onChange(markdown, context) {
         changes.push({ markdown, origin: context.origin });
       },
-      onChangeMode: "animationFrame",
     }));
 
     editor.view.dispatch(editor.view.state.tr.insertText("!", editor.view.state.doc.content.size - 1));
     expect(editor.commands.reconcileMarkdown("alpha!\n")).toBe(false);
-    animationFrames.flush();
+    editor.flushChange();
 
     expect(changes).toEqual([{ markdown: "alpha!", origin: "user" }]);
   });
 
-  it("cancels a pending local animation-frame change when a different external value wins", () => {
+  it("cancels a pending local change when a different external value wins", () => {
     const animationFrames = installAnimationFrameStub();
     const changes = vi.fn();
     const editor = track(createEditor({
       element: createHost(),
       markdown: "alpha",
       onChange: changes,
-      onChangeMode: "animationFrame",
     }));
 
     editor.view.dispatch(editor.view.state.tr.insertText("!", editor.view.state.doc.content.size - 1));
@@ -459,7 +444,6 @@ describe("reconciled external Markdown updates", () => {
   it.each([
     ["reconcileMarkdown", "reconcile Markdown"],
     ["resetMarkdown", "reset Markdown"],
-    ["setMarkdown", "set Markdown"],
   ] as const)(
     "preserves the stable %s lifecycle error after destroy",
     (commandName, operation) => {

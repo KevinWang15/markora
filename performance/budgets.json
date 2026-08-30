@@ -15,7 +15,7 @@
       "sampling": { "warmups": 1, "timingSamples": 5, "memorySamples": 3 },
       "timingIsolation": "fresh-page-shared-browser-process",
       "hotPathIsolation": "fresh-page-per-scenario-shared-browser-process",
-      "defaultChangeMode": "idle",
+      "changeDelivery": "idle-coalesced",
       "codeBlockActivation": {
         "capacityPressureShells": 9,
         "maxSettledEditors": 8,
@@ -31,8 +31,7 @@
         "burstIntervalMaximumMs": 120,
         "burstSchedule": "absolute-page-deadlines",
         "snapshotDeadlineMs": 8000,
-        "controlChangeMode": "immediate",
-        "candidateChangeMode": "omitted-default-idle"
+        "changeDelivery": "idle-coalesced"
       },
       "memoryIsolation": "fresh-browser-process-per-sample"
     },
@@ -76,14 +75,12 @@
       "512000": {
         "defaultIdleSynchronousProcessingMs": { "statistic": "maximum", "warning": 50, "failure": 100 },
         "defaultIdleKeydownToPresentationProxyMs": { "statistic": "maximum", "warning": 120, "failure": 200 },
-        "defaultIdleSnapshotLatencyMs": { "statistic": "maximum", "warning": 1200, "failure": 2500 },
-        "synchronousProcessingRatio": { "statistic": "maximum", "warning": 0.35, "failure": 0.5 }
+        "defaultIdleSnapshotLatencyMs": { "statistic": "maximum", "warning": 1200, "failure": 2500 }
       },
       "1048576": {
         "defaultIdleSynchronousProcessingMs": { "statistic": "maximum", "warning": 90, "failure": 180 },
         "defaultIdleKeydownToPresentationProxyMs": { "statistic": "maximum", "warning": 200, "failure": 350 },
-        "defaultIdleSnapshotLatencyMs": { "statistic": "maximum", "warning": 2000, "failure": 4000 },
-        "synchronousProcessingRatio": { "statistic": "maximum", "warning": 0.35, "failure": 0.5 }
+        "defaultIdleSnapshotLatencyMs": { "statistic": "maximum", "warning": 2000, "failure": 4000 }
       }
     },
     "memory": {

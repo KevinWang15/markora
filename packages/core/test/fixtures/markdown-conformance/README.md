@@ -10,7 +10,7 @@ The specification content is licensed under [CC BY-SA 4.0](https://creativecommo
 `commonmark-0.31.2.json` additionally retains the Markdown input and section
 metadata for all 652 examples from the attributed CommonMark 0.31.2
 `spec.json`. The full audit requires semantic and serializer stability for all
-652 examples in both the root compatibility and minimal codecs, with no
+652 examples in both the root and minimal codecs, with no
 exception list. This is a robustness boundary, not a claim that every stable
 example belongs to Markora's supported dialect.
 

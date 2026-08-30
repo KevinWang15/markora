@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { NodeSelection, TextSelection } from "prosemirror-state";
 import {
   createEditor,
-  createMinimalMarkdownEditorPreset,
   getMarkdownEditorTransactionOrigin,
   MarkdownEditorDestroyedError,
   type MarkdownEditor,
@@ -527,29 +526,21 @@ describe("public command and state surface", () => {
     editor.destroy();
   });
 
-  it("exposes the same safe surface in both minimal runtime paths", () => {
-    for (const editor of [
-      createMinimalEditor({ element: createHost(), markdown: "alpha" }),
-      createEditor({
-        element: createHost(),
-        extensionPreset: createMinimalMarkdownEditorPreset(),
-        markdown: "alpha",
-      }),
-    ]) {
-      selectText(editor, "alpha", "end");
-      expect(editor.state.can.setHeading(2)).toBe(true);
-      expect(editor.commands.setHeading(2)).toBe(true);
-      expect(editor.state.isActive.heading(2)).toBe(true);
-      expect(editor.commands.setParagraph()).toBe(true);
-      expect(editor.state.can.toggleTaskList()).toBe(false);
-      expect(editor.commands.toggleTaskList()).toBe(false);
-      expect(editor.state.isActive.taskList()).toBe(false);
-      expect(editor.state.can.insertTable()).toBe(false);
-      expect(editor.commands.insertTable()).toBe(false);
-      expect(editor.state.isActive.table()).toBe(false);
-      expect(editor.state.isActive.tableColumnAlignment(null)).toBe(false);
-      editor.destroy();
-    }
+  it("exposes the safe command surface in the minimal entry", () => {
+    const editor = createMinimalEditor({ element: createHost(), markdown: "alpha" });
+    selectText(editor, "alpha", "end");
+    expect(editor.state.can.setHeading(2)).toBe(true);
+    expect(editor.commands.setHeading(2)).toBe(true);
+    expect(editor.state.isActive.heading(2)).toBe(true);
+    expect(editor.commands.setParagraph()).toBe(true);
+    expect(editor.state.can.toggleTaskList()).toBe(false);
+    expect(editor.commands.toggleTaskList()).toBe(false);
+    expect(editor.state.isActive.taskList()).toBe(false);
+    expect(editor.state.can.insertTable()).toBe(false);
+    expect(editor.commands.insertTable()).toBe(false);
+    expect(editor.state.isActive.table()).toBe(false);
+    expect(editor.state.isActive.tableColumnAlignment(null)).toBe(false);
+    editor.destroy();
   });
 
   it("routes native history input through synchronized undo and redo state", () => {

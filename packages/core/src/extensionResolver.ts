@@ -44,48 +44,6 @@ function resolutionError(options: {
   });
 }
 
-function isCompatibilityAdapterConfiguration(value: unknown) {
-  return (
-    typeof value === "object"
-    && value !== null
-    && !Array.isArray(value)
-    && (value as Readonly<Record<string, unknown>>).adapter
-      === "compatibility-foundation"
-  );
-}
-
-/** @internal Reject definitions whose declared runtime is not being compiled. */
-export function assertMarkdownEditorCompatibilityRuntimeActive(
-  resolution: MarkdownEditorExtensionResolution,
-  rootDefaultRuntimeActive: boolean,
-) {
-  if (rootDefaultRuntimeActive) {
-    return;
-  }
-
-  const inactive = resolution.extensions
-    .filter(({ definition }) => {
-      return (
-        definition.compatibility.runtime === "root-default"
-        || (
-          definition.name.startsWith("@markora/")
-          && isCompatibilityAdapterConfiguration(definition.configuration)
-        )
-      );
-    })
-    .map(({ definition }) => definition.name);
-
-  if (inactive.length > 0) {
-    resolutionError({
-      code: "EXTENSION_INCOMPATIBLE",
-      message: `Extensions requiring the compatibility runtime must use the root entry's exact default preset: ${inactive.join(", ")}.`,
-      ...(inactive.length === 1
-        ? { extension: inactive[0] }
-        : { participants: inactive }),
-    });
-  }
-}
-
 function targetName(target: MarkdownEditorExtensionOrderTarget) {
   return typeof target === "string" ? target : target.name;
 }

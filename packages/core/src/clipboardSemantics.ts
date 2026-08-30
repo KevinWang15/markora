@@ -5,7 +5,6 @@ import type { EditorView } from "prosemirror-view";
 import type { MarkdownEditorCodec } from "./markdownCodec";
 
 const MARKDOWN_MIME = "text/markdown";
-const LEGACY_MARKDOWN_MIME = "text/x-markdown";
 
 type ClipboardSemanticsOptions = {
   codec: MarkdownEditorCodec;
@@ -34,7 +33,7 @@ function readData(data: DataTransfer, type: string) {
 }
 
 function readMarkdown(data: DataTransfer) {
-  return readData(data, MARKDOWN_MIME) || readData(data, LEGACY_MARKDOWN_MIME);
+  return readData(data, MARKDOWN_MIME);
 }
 
 function childText(node: ProseMirrorNode, separator: string, depth: number) {

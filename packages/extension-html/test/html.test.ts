@@ -129,7 +129,7 @@ describe("HTML exact-source codec", () => {
     expect(reparsed.getMarkdown()).toBe(expected);
   });
 
-  it("leaves malformed HTML literal and preserves the compatibility fallback when absent", () => {
+  it("leaves malformed HTML literal and preserves root opaque source when absent", () => {
     const extension = createHtmlExtension();
     const malformed = track(createRootEditor({
       element: host(),
@@ -201,7 +201,6 @@ describe("HTML exact-source codec", () => {
       compatibility: {
         extensionApi: "^1.3.0",
         markora: "^0.0.1",
-        runtime: "root-default",
       },
       markdown: {
         tokenizerRules: [{
@@ -235,7 +234,7 @@ describe("HTML exact-source codec", () => {
   });
 });
 
-it("rejects minimal and custom runtimes before claiming or changing their hosts", () => {
+it("requires the full codec anchors and works with every root preset", () => {
   const extension = createHtmlExtension();
   const minimalChild = document.createElement("span");
   minimalChild.textContent = "minimal sentinel";
@@ -250,39 +249,30 @@ it("rejects minimal and custom runtimes before claiming or changing their hosts"
     extensions: [extension],
     markdown: "<div>unsafe fallback</div>",
   })).toThrow(expect.objectContaining({
-    code: "EXTENSION_INCOMPATIBLE",
+    code: "EXTENSION_MISSING_DEPENDENCY",
     extension: "markora-extension-html",
-    phase: "resolve",
+    phase: "tokenizer",
   }));
-  expect(() => createRootEditor({
+  const customEditor = track(createRootEditor({
     element: customHost,
     extensionPreset: customPreset,
     markdown: "<div>unsafe fallback</div>",
-  })).toThrow(expect.objectContaining({
-    code: "EXTENSION_INCOMPATIBLE",
-    extension: "markora-extension-html",
-    phase: "resolve",
   }));
 
   expect(minimalHost.childNodes).toEqual(expect.objectContaining({ length: 1 }));
-  expect(customHost.childNodes).toEqual(expect.objectContaining({ length: 1 }));
   expect(minimalHost.firstChild).toBe(minimalChild);
-  expect(customHost.firstChild).toBe(customChild);
   expect(minimalHost.classList.contains("mdw-host")).toBe(false);
-  expect(customHost.classList.contains("mdw-host")).toBe(false);
+  expect(customHost.classList.contains("mdw-host")).toBe(true);
+  expect(customEditor.getMarkdown()).toBe("<div>unsafe fallback</div>");
 
   const rootMinimalHost = host(document.createTextNode("root minimal sentinel"));
-  expect(() => createRootEditor({
+  const rootMinimalEditor = track(createRootEditor({
     element: rootMinimalHost,
     extensionPreset: createMinimalMarkdownEditorPreset(),
     extensions: [createHtmlExtension()],
-  })).toThrow(expect.objectContaining({
-    code: "EXTENSION_INCOMPATIBLE",
-    extension: "markora-extension-html",
-    phase: "resolve",
   }));
-  expect(rootMinimalHost.textContent).toBe("root minimal sentinel");
-  expect(rootMinimalHost.classList.contains("mdw-host")).toBe(false);
+  expect(rootMinimalHost.classList.contains("mdw-host")).toBe(true);
+  expect(rootMinimalEditor.extensions.has("markora-extension-html")).toBe(true);
 });
 
 it("updates, removes, undoes, and rejects stale or read-only source operations", () => {

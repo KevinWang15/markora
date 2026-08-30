@@ -179,7 +179,7 @@ describe("production editor options", () => {
     editor.updateOptions({ placeholder: "Updated guidance" });
     expect(editor.view.dom.querySelector(".mdw-placeholder")).toBeNull();
 
-    editor.commands.setMarkdown("");
+    editor.commands.resetMarkdown("");
     expect(editor.view.dom.querySelector(".mdw-placeholder")?.getAttribute("data-placeholder"))
       .toBe("Updated guidance");
   });
@@ -215,7 +215,7 @@ describe("production editor options", () => {
     editor.view.dispatch(attempted);
     expect(editor.getMarkdown()).toBe("alpha");
 
-    editor.commands.setMarkdown("external");
+    editor.commands.resetMarkdown("external");
     expect(editor.getMarkdown()).toBe("external");
     expect(updates).toHaveBeenCalledTimes(1);
 
@@ -245,7 +245,6 @@ describe("production editor options", () => {
       element: createHost(),
       markdown: "alpha",
       onChange: oldChanges,
-      onChangeMode: "animationFrame",
     }));
 
     editor.view.dispatch(editor.view.state.tr.insertText("!", editor.view.state.doc.content.size - 1));
@@ -256,7 +255,6 @@ describe("production editor options", () => {
       attributes: { "bad name": "rejected" },
       editable: false,
       onChange: nextChanges,
-      onChangeMode: "immediate",
     })).toThrow("invalid");
 
     expect(editor.view.state).toBe(stateBeforeInvalidUpdate);
@@ -271,7 +269,6 @@ describe("production editor options", () => {
       attributes: { "data-mode": "review" },
       editable: false,
       onChange: nextChanges,
-      onChangeMode: "immediate",
     });
     expect(oldChanges).toHaveBeenCalledOnce();
     expect(editor.view.state).toBe(stateBeforeInvalidUpdate);
@@ -280,6 +277,7 @@ describe("production editor options", () => {
 
     editor.updateOptions({ editable: true });
     editor.view.dispatch(editor.view.state.tr.insertText("?", editor.view.state.doc.content.size - 1));
+    editor.flushChange();
     expect(nextChanges).toHaveBeenCalledWith("alpha!?", { origin: "user" });
   });
 
@@ -352,7 +350,6 @@ describe("production editor options", () => {
       element: createHost(),
       markdown: "alpha",
       onChange: oldChanges,
-      onChangeMode: "animationFrame",
       onTransaction: oldTransactions,
     }));
 
@@ -360,13 +357,13 @@ describe("production editor options", () => {
     expect(oldChanges).not.toHaveBeenCalled();
     editor.updateOptions({
       onChange: nextChanges,
-      onChangeMode: "immediate",
       onTransaction: nextTransactions,
     });
     expect(oldChanges).toHaveBeenCalledOnce();
     expect(oldChanges).toHaveBeenLastCalledWith("alpha!", { origin: "user" });
 
     editor.view.dispatch(editor.view.state.tr.insertText("?", editor.view.state.doc.content.size - 1));
+    editor.flushChange();
     expect(nextChanges).toHaveBeenCalledWith("alpha!?", { origin: "user" });
     expect(oldTransactions).toHaveBeenCalledTimes(1);
     expect(nextTransactions).toHaveBeenCalledTimes(1);
@@ -377,18 +374,16 @@ describe("production editor options", () => {
     expect(nextTransactions).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps queued batching when a host reapplies the identical callback or mode", () => {
+  it("keeps queued batching when a host reapplies the identical callback", () => {
     const changes = vi.fn();
     const editor = track(createEditor({
       element: createHost(),
       markdown: "alpha",
       onChange: changes,
-      onChangeMode: "animationFrame",
     }));
 
     editor.view.dispatch(editor.view.state.tr.insertText("!", editor.view.state.doc.content.size - 1));
     editor.updateOptions({ onChange: changes });
-    editor.updateOptions({ onChangeMode: "animationFrame" });
     expect(changes).not.toHaveBeenCalled();
 
     editor.flushChange();
@@ -408,7 +403,6 @@ describe("production editor options", () => {
           placeholder: "Inner preview guidance",
         });
       },
-      onChangeMode: "animationFrame",
     }));
 
     editor.view.dispatch(editor.view.state.tr.insertText("!", editor.view.state.doc.content.size - 1));
@@ -535,7 +529,7 @@ describe("production editor options", () => {
       },
     };
 
-    expect(() => editor.commands.setMarkdown("replacement", options)).toThrow(MarkdownEditorDestroyedError);
+    expect(() => editor.commands.resetMarkdown("replacement", options)).toThrow(MarkdownEditorDestroyedError);
     expect(editor.isDestroyed).toBe(true);
     expect(editor.getMarkdown()).toBe("alpha");
     expect(editor.view.state.doc.textContent).toBe("alpha");
@@ -543,7 +537,7 @@ describe("production editor options", () => {
 });
 
 describe("typed editor subscriptions", () => {
-  it("emits selection and lazy update events independently, including silent setMarkdown", () => {
+  it("emits selection and lazy update events independently, including silent resetMarkdown", () => {
     const editor = track(createEditor({ element: createHost(), markdown: "alpha" }));
     const selections: Array<{ from: number; to: number }> = [];
     const updates: string[] = [];
@@ -561,7 +555,7 @@ describe("typed editor subscriptions", () => {
     editor.view.dispatch(editor.view.state.tr.insertText("!", editor.view.state.doc.content.size - 1));
     expect(updates).toEqual(["alpha!"]);
 
-    editor.commands.setMarkdown("replacement");
+    editor.commands.resetMarkdown("replacement");
     expect(updates).toEqual(["alpha!", "replacement"]);
   });
 
@@ -599,108 +593,6 @@ describe("typed editor subscriptions", () => {
     expect(editor.isDestroyed).toBe(true);
   });
 
-  it("suppresses superseded transaction events after immediate onChange replaces the document", () => {
-    let editor!: MarkdownEditor;
-    let shouldReplace = true;
-    const selections: number[] = [];
-    const updates: string[] = [];
-
-    editor = track(createEditor({
-      element: createHost(),
-      markdown: "alpha",
-      onChangeMode: "immediate",
-      onChange() {
-        if (shouldReplace) {
-          shouldReplace = false;
-          editor.commands.setMarkdown("replacement");
-        }
-      },
-    }));
-    editor.subscribe("selection", ({ selection }) => selections.push(selection.from));
-    editor.subscribe("update", ({ editor: currentEditor }) => updates.push(currentEditor.getMarkdown()));
-
-    editor.view.dispatch(editor.view.state.tr.insertText("!", 1));
-
-    expect(editor.getMarkdown()).toBe("replacement");
-    expect(selections).toEqual([1]);
-    expect(updates).toEqual(["replacement"]);
-  });
-
-  it("suppresses a superseded setMarkdown event after its immediate onChange reenters", () => {
-    let editor!: MarkdownEditor;
-    let shouldReplace = true;
-    const updates: string[] = [];
-
-    editor = track(createEditor({
-      element: createHost(),
-      markdown: "alpha",
-      onChangeMode: "immediate",
-      onChange() {
-        if (shouldReplace) {
-          shouldReplace = false;
-          editor.commands.setMarkdown("replacement");
-        }
-      },
-    }));
-    editor.subscribe("update", ({ editor: currentEditor }) => updates.push(currentEditor.getMarkdown()));
-
-    editor.commands.setMarkdown("outer", { emitChange: true });
-
-    expect(editor.getMarkdown()).toBe("replacement");
-    expect(updates).toEqual(["replacement"]);
-  });
-
-  it("emits one current update when immediate onChange only reenters to move selection", () => {
-    let editor!: MarkdownEditor;
-    let shouldMove = true;
-    const events: string[] = [];
-
-    editor = track(createEditor({
-      element: createHost(),
-      markdown: "alpha",
-      onChangeMode: "immediate",
-      onChange() {
-        if (shouldMove) {
-          shouldMove = false;
-          editor.focus("end");
-        }
-      },
-    }));
-    editor.subscribe("selection", ({ selection }) => events.push(`selection:${selection.from}`));
-    editor.subscribe("update", ({ editor: currentEditor }) => events.push(`update:${currentEditor.getMarkdown()}`));
-
-    editor.view.dispatch(editor.view.state.tr.insertText("!", editor.view.state.doc.content.size - 1));
-
-    expect(events).toEqual(["selection:7", "update:alpha!"]);
-  });
-
-  it("delivers accepted typed events before rethrowing an immediate onChange failure", () => {
-    const failure = new Error("save failed");
-    const calls: string[] = [];
-    const editor = track(createEditor({
-      element: createHost(),
-      markdown: "alpha",
-      onChangeMode: "immediate",
-      onChange() {
-        calls.push("change");
-        throw failure;
-      },
-    }));
-    editor.subscribe("selection", () => calls.push("selection"));
-    editor.subscribe("update", ({ editor: currentEditor }) => {
-      calls.push(`update:${currentEditor.getMarkdown()}`);
-    });
-
-    expect(() => editor.view.dispatch(editor.view.state.tr.insertText("!", 1))).toThrow(failure);
-    expect(calls).toEqual(["change", "selection", "update:!alpha"]);
-    expect(editor.getMarkdown()).toBe("!alpha");
-
-    calls.length = 0;
-    expect(() => editor.commands.setMarkdown("replacement", { emitChange: true })).toThrow(failure);
-    expect(calls).toEqual(["change", "selection", "update:replacement"]);
-    expect(editor.getMarkdown()).toBe("replacement");
-  });
-
   it("does not swallow an undefined value thrown by onTransaction", () => {
     let caught = false;
     const updates = vi.fn();
@@ -733,7 +625,7 @@ describe("typed editor subscriptions", () => {
       calls.push(`first:${markdown}`);
 
       if (markdown === "alpha!") {
-        currentEditor.commands.setMarkdown("nested");
+        currentEditor.commands.resetMarkdown("nested");
       }
     });
     editor.subscribe("update", ({ editor: currentEditor }) => {
@@ -777,10 +669,10 @@ describe("typed editor subscriptions", () => {
     }));
     editor.subscribe("error", (event) => {
       errors.push(event.error);
-      editor.commands.setMarkdown("nested");
+      editor.commands.resetMarkdown("nested");
     });
 
-    editor.commands.setMarkdown("```broken\ncode\n```");
+    editor.commands.resetMarkdown("```broken\ncode\n```");
     expect(errors).toEqual([]);
     expect(editor.getMarkdown()).toBe("```broken\ncode\n```");
     expect(editor.view.dom.querySelector(".cm-editor")).toBeNull();
@@ -798,7 +690,7 @@ describe("typed editor subscriptions", () => {
     const loader = vi.fn(() => {
       if (reenter) {
         reenter = false;
-        editor.commands.setMarkdown("nested");
+        editor.commands.resetMarkdown("nested");
       }
 
       return [];
@@ -809,7 +701,7 @@ describe("typed editor subscriptions", () => {
       markdown: "alpha",
     }));
 
-    editor.commands.setMarkdown("```custom\ncode\n```");
+    editor.commands.resetMarkdown("```custom\ncode\n```");
     expect(loader).not.toHaveBeenCalled();
     expect(editor.getMarkdown()).toBe("```custom\ncode\n```");
 
@@ -827,7 +719,7 @@ describe("typed editor subscriptions", () => {
     const extension = ViewPlugin.define(() => {
       if (reenter) {
         reenter = false;
-        editor.commands.setMarkdown("nested");
+        editor.commands.resetMarkdown("nested");
       }
 
       return {};
@@ -838,7 +730,7 @@ describe("typed editor subscriptions", () => {
       markdown: "alpha",
     }));
 
-    editor.commands.setMarkdown("```custom\ncode\n```");
+    editor.commands.resetMarkdown("```custom\ncode\n```");
     expect(editor.getMarkdown()).toBe("```custom\ncode\n```");
 
     intersectionObservers.emitAll(true);
@@ -859,7 +751,7 @@ describe("typed editor subscriptions", () => {
     }));
     editor.subscribe("error", (event) => errors.push(event.error));
 
-    editor.commands.setMarkdown("```broken\ncode\n```");
+    editor.commands.resetMarkdown("```broken\ncode\n```");
     expect(errors).toEqual([]);
     expect(editor.view.dom.querySelector(".cm-editor")).toBeNull();
 
@@ -920,7 +812,6 @@ describe("typed editor subscriptions", () => {
       element: createHost(),
       markdown: "alpha",
       onChange: () => calls.push("change"),
-      onChangeMode: "immediate",
       onTransaction: () => calls.push("transaction"),
       ui: createUiFactory({
         imageClose,
@@ -936,13 +827,15 @@ describe("typed editor subscriptions", () => {
     editor.subscribe("update", () => calls.push("update"));
 
     expect(() => editor.view.dispatch(editor.view.state.tr.insertText("!", 1))).toThrow(failure);
-    expect(calls).toEqual(["transaction", "change", "selection", "update"]);
+    expect(calls).toEqual(["transaction", "selection", "update"]);
     expect(imageClose).toHaveBeenCalledOnce();
     expect(tableUpdate).toHaveBeenCalledOnce();
     expect(editor.getMarkdown()).toBe("!alpha");
+    editor.flushChange();
+    expect(calls).toEqual(["transaction", "selection", "update", "change"]);
   });
 
-  it("reports custom UI plugin-view reinitialization failure from setMarkdown", () => {
+  it("reports custom UI plugin-view reinitialization failure from resetMarkdown", () => {
     const failure = new Error("table reinitialization failed");
     const calls: string[] = [];
     let tableUpdates = 0;
@@ -950,7 +843,6 @@ describe("typed editor subscriptions", () => {
       element: createHost(),
       markdown: "alpha",
       onChange: () => calls.push("change"),
-      onChangeMode: "immediate",
       ui: createUiFactory({
         tableUpdate: vi.fn(() => {
           tableUpdates += 1;
@@ -963,10 +855,12 @@ describe("typed editor subscriptions", () => {
     }));
     editor.subscribe("update", () => calls.push("update"));
 
-    expect(() => editor.commands.setMarkdown("replacement", { emitChange: true })).toThrow(failure);
-    expect(calls).toEqual(["change", "update"]);
+    expect(() => editor.commands.resetMarkdown("replacement", { emitChange: true })).toThrow(failure);
+    expect(calls).toEqual(["update"]);
     expect(editor.getMarkdown()).toBe("replacement");
     expect(tableUpdates).toBe(2);
+    editor.flushChange();
+    expect(calls).toEqual(["update", "change"]);
   });
 
   it.each(["dispatch", "updateOptions"] as const)(
@@ -1232,15 +1126,15 @@ describe("editor lifecycle", () => {
     }));
     const actions = retainedActions!;
     const beforeActiveMutation = editor.view.state.doc;
-    actions.appendTableRow(editor.view);
+    actions.addTableRow(editor.view, "after");
     expect(editor.view.state.doc.eq(beforeActiveMutation)).toBe(false);
 
     editor.destroy();
     const destroyedDoc = editor.view.state.doc;
 
     expect(() => {
-      actions.appendTableColumn(editor.view);
-      actions.appendTableRow(editor.view);
+      actions.addTableColumn(editor.view, "after");
+      actions.addTableRow(editor.view, "after");
       actions.removeTableColumn(editor.view);
       actions.removeTableRow(editor.view);
       actions.setTableColumnAlignment(editor.view, "center");
@@ -1296,11 +1190,10 @@ describe("editor lifecycle", () => {
       () => editor.blur(),
       () => editor.updateOptions({ editable: false }),
       () => editor.subscribe("update", vi.fn()),
-      () => editor.commands.setMarkdown("next"),
+      () => editor.commands.resetMarkdown("next"),
       () => editor.commands.toggleMark("strong"),
       () => editor.state.can.undo(),
       () => editor.state.isActive.mark("strong"),
-      () => editor.getToolbarState(),
     ]) {
       expect(operation).toThrow(MarkdownEditorDestroyedError);
     }
@@ -1321,7 +1214,6 @@ describe("editor lifecycle", () => {
       onChange() {
         throw failure;
       },
-      onChangeMode: "animationFrame",
       ui: createUiFactory(spies),
     }));
     editor.view.dispatch(editor.view.state.tr.insertText("!", editor.view.state.doc.content.size - 1));
@@ -1482,7 +1374,7 @@ describe("editor lifecycle", () => {
       expect(editor.view.dom.querySelector('[data-fragile-widget="mounted"]')).not.toBeNull();
     });
 
-    expect(() => editor.commands.setMarkdown("plain")).toThrow(failure);
+    expect(() => editor.commands.resetMarkdown("plain")).toThrow(failure);
     expect(editor.getMarkdown()).toBe("plain");
     expect(editor.isDestroyed).toBe(false);
     expect(() => editor.destroy()).not.toThrow();
@@ -1671,7 +1563,6 @@ describe("editor lifecycle", () => {
       element: createHost(),
       markdown: "alpha",
       onChange: changes,
-      onChangeMode: "animationFrame",
       onTransaction(transaction) {
         if (transaction.docChanged) {
           editor?.destroy();

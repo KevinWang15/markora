@@ -51,7 +51,7 @@ afterEach(() => {
 });
 
 describe("minimal embedded editor entry", () => {
-  it("mounts the CommonMark foundation without compatibility-only surfaces", () => {
+  it("mounts the CommonMark foundation without full-runtime surfaces", () => {
     const ui = vi.fn(() => {
       throw new Error("the minimal entry must not create default UI");
     });
@@ -77,10 +77,10 @@ describe("minimal embedded editor entry", () => {
     expect(editor.view.dom.getAttribute("aria-placeholder")).toBe("Start writing");
     expect(editor.getMarkdown()).toContain("# Hello");
     expect(editor.commands.toggleMark("strike")).toBe(false);
-    expect(editor.getToolbarState().strike).toEqual({ active: false, enabled: false });
+    expect(editor.state.can.toggleMark("strike")).toBe(false);
   });
 
-  it("keeps the compatibility command and state facade useful for foundation features", () => {
+  it("keeps the command and state APIs useful for foundation features", () => {
     const editor = track(createEditor({
       element: createHost(),
       markdown: "link target",
@@ -412,11 +412,9 @@ describe("minimal embedded editor entry", () => {
     expect(editor.state.isActive.mark("em")).toBe(false);
     expect(editor.state.isActive.mark("link")).toBe(false);
     expect(editor.state.can.removeLink()).toBe(false);
-    expect(editor.getToolbarState()).toMatchObject({
-      bold: { active: false },
-      italic: { active: false },
-      link: { active: false },
-    });
+    expect(editor.state.isActive.mark("strong")).toBe(false);
+    expect(editor.state.isActive.mark("em")).toBe(false);
+    expect(editor.state.isActive.mark("link")).toBe(false);
 
     editor.view.dispatch(editor.view.state.tr.insertText("X"));
     const inserted = editor.view.state.selection.$from.nodeBefore;
@@ -591,7 +589,7 @@ describe("minimal embedded editor entry", () => {
     expect(editor.getMarkdown()).toBe(original);
   });
 
-  it("runs foundation typing rules without compatibility-only task or strike rules", () => {
+  it("runs foundation typing rules without full-runtime-only task or strike rules", () => {
     const editor = track(createEditor({
       element: createHost(),
       markdown: "",

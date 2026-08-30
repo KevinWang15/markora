@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "lexicalGuarantees": [
-    "Top-level valid CommonMark link-reference definition source is retained exactly inside each root-compatibility source block."
+    "Top-level valid CommonMark link-reference definition source is retained exactly inside each root source block."
   ],
   "sources": [
     {

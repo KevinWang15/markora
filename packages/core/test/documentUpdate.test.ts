@@ -1,7 +1,7 @@
 import { EditorState } from "prosemirror-state";
 import { describe, expect, it, vi } from "vitest";
 import { buildReconciledDocumentTransaction } from "../src/documentUpdate";
-import { parseMarkdown } from "../src/markdownCodec";
+import { parseMarkdown } from "./support/currentMarkdownCodec";
 
 function createState(markdown: string) {
   return EditorState.create({ doc: parseMarkdown(markdown) });

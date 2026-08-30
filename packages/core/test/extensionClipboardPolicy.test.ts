@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Fragment, Slice } from "prosemirror-model";
 import { Plugin } from "prosemirror-state";
 import {
-  createEditor as createCompatibilityEditor,
+  createEditor as createRootEditor,
   defineMarkdownEditorExtension,
   type MarkdownEditor,
 } from "../src";
@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 const entries = [
-  ["compatibility", createCompatibilityEditor],
+  ["root", createRootEditor],
   ["minimal", createMinimalEditor],
 ] as const;
 

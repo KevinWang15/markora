@@ -696,11 +696,6 @@ function assertBundleIsolation(rootReport, minimalReport) {
     "/node_modules/@lezer/",
   ];
   const forbiddenMinimalSourceSignatures = [
-    "@markora/code-mirror",
-    "@markora/opaque",
-    "@markora/strike",
-    "@markora/table",
-    "@markora/task-list",
     "createCodeBlockViewClass",
     "createOpaqueNodeViewClass",
     "createPipeTableHelpers",
@@ -745,7 +740,7 @@ function assertBundleIsolation(rootReport, minimalReport) {
   if (!rootReport.staticModuleIds.some((moduleId) => (
     normalizeModuleId(moduleId).endsWith("/node_modules/markora/dist/index.js")
   ))) {
-    throw new Error("The compatibility bundle did not resolve the packed markora root entry.");
+    throw new Error("The root bundle did not resolve the packed markora entry.");
   }
 
   const rootStaticCodeMirrorModules = rootReport.staticModuleIds.filter((moduleId) => (
@@ -755,7 +750,7 @@ function assertBundleIsolation(rootReport, minimalReport) {
   ));
 
   if (rootStaticCodeMirrorModules.length > 0) {
-    throw new Error(`The compatibility entry eagerly included CodeMirror runtime modules:\n${rootStaticCodeMirrorModules
+    throw new Error(`The root entry eagerly included CodeMirror runtime modules:\n${rootStaticCodeMirrorModules
       .map((moduleId) => `- ${moduleId}`)
       .join("\n")}`);
   }
@@ -775,7 +770,7 @@ function assertBundleIsolation(rootReport, minimalReport) {
 
   if (missingLazyCodeMirrorFragments.length > 0) {
     throw new Error(
-      `The compatibility bundle omitted lazy CodeMirror runtime modules: ${missingLazyCodeMirrorFragments.join(", ")}.`,
+      `The root bundle omitted lazy CodeMirror runtime modules: ${missingLazyCodeMirrorFragments.join(", ")}.`,
     );
   }
 
@@ -1178,8 +1173,8 @@ function writeMeasurementReport({
     },
     invariants: {
       initialAndLazyPartitionTotal: true,
-      compatibilityInitialExcludesCodeMirror: true,
-      compatibilityLazyIncludesCodeMirror: true,
+      rootInitialExcludesCodeMirror: true,
+      rootLazyIncludesCodeMirror: true,
       minimalExcludesCodeMirror: true,
       minimalHasNoLazyChunks: measurements.minimal.lazyJs.chunkCount === 0,
       optionalExtensionsAbsentFromBaseline: true,
@@ -1343,10 +1338,10 @@ import { createDefaultUi } from "markora-ui";
 import "markora/styles.css";
 import "markora-ui/styles.css";
 
-export function mountCompatibilityEditor(element) {
+export function mountRootEditor(element) {
   return createEditor({
     element,
-    markdown: "# Packed compatibility editor",
+    markdown: "# Packed root editor",
     resources: {
       images: { referrerPolicy: "no-referrer" },
       links: { allowedProtocols: ["https:"] },
@@ -1355,7 +1350,7 @@ export function mountCompatibilityEditor(element) {
   });
 }
 
-export const packedCompatibilitySurface = [
+export const packedRootSurface = [
   typeof createEditor,
   typeof createDefaultCodeBlockLanguageRegistry,
   typeof getMarkdownEditorTransactionOrigin,
@@ -1808,7 +1803,6 @@ writeFileSync(join(smokeAppDir, "src/api.ts"), `import {
   setMarkdownEditorTransactionOrigin,
   type CreateEditorOptions,
   type MarkdownEditorActiveNode,
-  type MarkdownEditorChangeMode,
   type MarkdownEditorChangeOrigin,
   type MarkdownEditorCodeBlockOptions,
   type MarkdownEditorCommands,
@@ -1824,7 +1818,6 @@ writeFileSync(join(smokeAppDir, "src/api.ts"), `import {
 import {
   createEditor as createMinimalEditor,
   type MarkdownEditorActiveNode as MinimalMarkdownEditorActiveNode,
-  type MarkdownEditorChangeMode as MinimalMarkdownEditorChangeMode,
   type MarkdownEditorCodeBlockOptions as MinimalMarkdownEditorCodeBlockOptions,
   type MarkdownEditorCommands as MinimalMarkdownEditorCommands,
   type MarkdownEditorHeadingLevel as MinimalMarkdownEditorHeadingLevel,
@@ -2189,7 +2182,6 @@ const minimalEditor = createMinimalEditor({
   element,
   extensions: externalExtensions,
   markdown: ":::note\\nPacked ==extension== consumer.\\n:::",
-  onChangeMode: "idle",
   resources: { links: { allowRelative: false } },
 });
 const headingLevel: MarkdownEditorHeadingLevel = 3;
@@ -2197,8 +2189,6 @@ const codeBlockOptions: MarkdownEditorCodeBlockOptions = { language: "ts" };
 const tableAlignment: MarkdownEditorTableAlignment = null;
 const tableInsertOptions: MarkdownEditorTableInsertOptions = { columns: 3, rows: 2 };
 const activeNode: MarkdownEditorActiveNode = "paragraph";
-const idleChangeMode: MarkdownEditorChangeMode = "idle";
-const minimalIdleChangeMode: MinimalMarkdownEditorChangeMode = idleChangeMode;
 const minimalHeadingLevel: MinimalMarkdownEditorHeadingLevel = headingLevel;
 const minimalCodeBlockOptions: MinimalMarkdownEditorCodeBlockOptions = codeBlockOptions;
 const minimalTableAlignment: MinimalMarkdownEditorTableAlignment = tableAlignment;
@@ -2622,7 +2612,7 @@ const staticDefinition = defineMarkdownEditorExtension({
   version: "1.0.0",
   compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
 });
-const legacyCreateOptions: CreateEditorOptions = {
+const callbackOptions: CreateEditorOptions = {
   element,
   onChange(markdown) {
     void markdown;
@@ -2634,7 +2624,6 @@ const legacyCreateOptions: CreateEditorOptions = {
 };
 const options: UpdateEditorOptions = {
   editable: false,
-  onChangeMode: idleChangeMode,
   onChange(markdown) {
     void markdown;
   },
@@ -2675,7 +2664,6 @@ const unsubscribeAsset = editor.subscribe("asset", (event: MarkdownEditorEventMa
 editor.assets.getUploads();
 const reconciled: boolean = editor.commands.reconcileMarkdown("# Reconciled");
 editor.commands.resetMarkdown("# Reset", { emitChange: true });
-editor.commands.setMarkdown("# Compatibility reset");
 const extensionOrigin: MarkdownEditorExtensionOrigin = "extension:pack-smoke";
 const taggedTransaction = setMarkdownEditorTransactionOrigin(
   editor.view.state.tr,
@@ -2697,8 +2685,7 @@ const unavailableSourceSlice: string | null =
   sliceMarkdownEditorOriginalSourceLines({}, 0, 1);
 void new MarkdownEditorDestroyedError("focus the editor");
 void staticDefinition;
-void legacyCreateOptions;
-void minimalIdleChangeMode;
+void callbackOptions;
 void reconciled;
 void transactionOrigin;
 void unavailableSourceSlice;
@@ -3265,9 +3252,9 @@ try {
   minimalHtmlError = error;
 }
 if (
-  minimalHtmlError?.code !== "EXTENSION_INCOMPATIBLE"
+  minimalHtmlError?.code !== "EXTENSION_MISSING_DEPENDENCY"
   || minimalHtmlError?.extension !== "markora-extension-html"
-  || minimalHtmlError?.phase !== "resolve"
+  || minimalHtmlError?.phase !== "tokenizer"
   || minimalHtmlElement.firstChild !== minimalHtmlSentinel
   || minimalHtmlElement.childNodes.length !== 1
   || minimalHtmlElement.classList.contains("mdw-host")
@@ -3554,12 +3541,11 @@ run("node", ["--input-type=module", "-e", `
   });
   if (
     htmlDefinition.name !== "markora-extension-html"
-    || htmlDefinition.compatibility?.runtime !== "root-default"
     || html.htmlDisplays.join(":") !== "block:inline"
     || html.htmlSourceKinds.join(":") !== "html-block:inline-html:html-comment"
     || typeof html.defaultHtmlMessages.sourceLabel("html-block") !== "string"
   ) {
-    throw new Error("HTML package factory returned the wrong identity, compatibility, or surface");
+    throw new Error("HTML package factory returned the wrong identity or surface");
   }
   if (
     typeof toc.createTocExtension !== "function"

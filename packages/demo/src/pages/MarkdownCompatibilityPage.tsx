@@ -47,7 +47,7 @@ export function MarkdownCompatibilityPage() {
           {" "}not retain original source spelling, whitespace, markers, or reference-definition layout.
         </p>
         <p>
-          With the root entry&apos;s exact default compatibility preset, conservatively recognized front matter,
+          The root entry conservatively retains recognized front matter,
           {" "}display math, HTML, comments, and directives are retained as inert exact-source atoms. Optional extension definitions can claim documented
           {" "}forms and add semantic editing without increasing the default bundle.
         </p>

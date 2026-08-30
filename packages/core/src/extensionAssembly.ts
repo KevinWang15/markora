@@ -1188,7 +1188,7 @@ export function createMarkdownEditorExtensionAssembly(
     );
     const nodeViews: Record<string, NodeViewConstructor> = {};
     const nodeViewOwners = new Map(
-      (options.reservedNodeViews ?? []).map((node) => [node, "@markora/compatibility"]),
+      (options.reservedNodeViews ?? []).map((node) => [node, "@markora/core"]),
     );
 
     for (const item of orderedNodeViews) {

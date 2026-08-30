@@ -1,4 +1,4 @@
-import { markdownSerializer, parseMarkdown } from '../../src/markdownCodec';
+import { markdownSerializer, parseMarkdown } from './currentMarkdownCodec';
 
 export interface MarkdownLexicalGuarantee {
   /** A stable label shown in failure diagnostics. */

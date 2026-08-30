@@ -13,12 +13,12 @@ import {
 } from '../src/extension-api';
 import { resolveMarkdownEditorExtensions } from '../src/extensionResolver';
 import { MARKORA_VERSION } from '../src/extensionVersion';
+import { createMarkdownCodec } from '../src/markdownCodec';
 import {
-  createCompatibilityMarkdownCodec,
   markdownSerializer,
   parseMarkdown,
   schema,
-} from '../src/markdownCodec';
+} from './support/currentMarkdownCodec';
 
 type OpaqueClassification = 'opaque-block' | 'opaque-inline' | 'negative';
 
@@ -114,7 +114,7 @@ describe('opaque token exact-source API', () => {
     expect(sourceReads).toBe(0);
   });
 
-  it('exposes hydrated block and inline HTML spans with exact legacy line endings', () => {
+  it('exposes hydrated block and inline HTML spans with exact authored line endings', () => {
     const captured: string[] = [];
     const probe = defineMarkdownEditorExtension({
       name: 'acme-opaque-source-probe',
@@ -122,7 +122,6 @@ describe('opaque token exact-source API', () => {
       compatibility: {
         extensionApi: '^1.3.0',
         markora: '^0.0.1',
-        runtime: 'root-default',
       },
       markdown: {
         tokenizerRules: [{
@@ -150,7 +149,7 @@ describe('opaque token exact-source API', () => {
       extensions: [probe],
       markoraVersion: MARKORA_VERSION,
     });
-    const codec = createCompatibilityMarkdownCodec(resolution.extensions);
+    const codec = createMarkdownCodec(resolution.extensions);
     const block = '<div data-kind="exact">\r\nblock\r\n</div>';
     const inline = '<!-- inline\r\ncomment -->';
 

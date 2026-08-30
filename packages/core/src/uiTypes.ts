@@ -66,8 +66,7 @@ export type EditorUiControllers = {
   enabled: boolean;
   clearSelectionAnchor: () => void;
   createSelectionAnchor: (view: EditorView) => HTMLElement | null;
-  /** Optional so existing custom UI factories remain source-compatible. */
-  codeBlockLanguageEditor?: CodeBlockLanguageEditorOverlay;
+  codeBlockLanguageEditor: CodeBlockLanguageEditorOverlay;
   imageEditor: ImageEditorOverlay;
   linkEditor: LinkEditorOverlay;
   tableToolbar: TableToolbarOverlay;
@@ -76,10 +75,6 @@ export type EditorUiControllers = {
 export type EditorUiFactory = (options: {
   addTableColumn: (view: EditorView, side: "before" | "after") => boolean;
   addTableRow: (view: EditorView, side: "before" | "after") => boolean;
-  /** @deprecated Use addTableColumn(view, "after"). */
-  appendTableColumn: (view: EditorView) => boolean;
-  /** @deprecated Use addTableRow(view, "after"). */
-  appendTableRow: (view: EditorView) => boolean;
   getTableContext: (state: EditorView["state"]) => TableUiContext | null;
   hostElement: HTMLElement;
   insertTable: (view: EditorView, dimensions: { rows: number; columns: number }) => boolean;
@@ -109,6 +104,14 @@ const noopImageEditor: ImageEditorOverlay = {
   destroy() {},
 };
 
+const noopCodeBlockLanguageEditor: CodeBlockLanguageEditorOverlay = {
+  open() {
+    return false;
+  },
+  close() {},
+  destroy() {},
+};
+
 const noopTableToolbar: TableToolbarOverlay = {
   update() {},
   focus() {
@@ -124,6 +127,7 @@ export function createNoopUiControllers(): EditorUiControllers {
     createSelectionAnchor() {
       return null;
     },
+    codeBlockLanguageEditor: noopCodeBlockLanguageEditor,
     imageEditor: noopImageEditor,
     linkEditor: noopLinkEditor,
     tableToolbar: noopTableToolbar,

@@ -6,14 +6,14 @@ import {
 import { MARKORA_VERSION } from "../src/extensionVersion";
 import { resolveMarkdownEditorExtensions } from "../src/extensionResolver";
 import {
-  createCompatibilityMarkdownCodec,
+  createMarkdownCodec,
   type MarkdownEditorCodec,
 } from "../src/markdownCodec";
 import { createMinimalMarkdownCodec } from "../src/minimalMarkdownCodec";
 import { createMarkdownEditorSourceEnvironment } from "../src/markdownSource";
 
 const codecBuilders = [
-  ["compatibility", createCompatibilityMarkdownCodec],
+  ["compatibility", createMarkdownCodec],
   ["minimal", createMinimalMarkdownCodec],
 ] as const;
 

@@ -156,13 +156,12 @@ afterEach(() => {
 });
 
 describe('editor runtime', () => {
-  it('cancels a queued user change when setMarkdown replaces the document silently', () => {
+  it('cancels a queued user change when resetMarkdown replaces the document silently', () => {
     const changes: string[] = [];
     const animationFrames = installAnimationFrameStub();
     const editor = createEditor({
       element: createHost(),
       markdown: 'alpha',
-      onChangeMode: 'animationFrame',
       onChange(markdown) {
         changes.push(markdown);
       },
@@ -170,7 +169,7 @@ describe('editor runtime', () => {
 
     const insertPos = editor.view.state.doc.content.size - 1;
     editor.view.dispatch(editor.view.state.tr.insertText('!', insertPos));
-    editor.commands.setMarkdown('fresh');
+    editor.commands.resetMarkdown('fresh');
     animationFrames.flush();
 
     expect(changes).toEqual([]);
@@ -179,11 +178,9 @@ describe('editor runtime', () => {
 
   it('replaces a queued user change with the new API update when emitChange is enabled', () => {
     const changes: string[] = [];
-    const animationFrames = installAnimationFrameStub();
     const editor = createEditor({
       element: createHost(),
       markdown: 'alpha',
-      onChangeMode: 'animationFrame',
       onChange(markdown) {
         changes.push(markdown);
       },
@@ -191,15 +188,15 @@ describe('editor runtime', () => {
 
     const insertPos = editor.view.state.doc.content.size - 1;
     editor.view.dispatch(editor.view.state.tr.insertText('!', insertPos));
-    editor.commands.setMarkdown('fresh', { emitChange: true });
-    animationFrames.flush();
+    editor.commands.resetMarkdown('fresh', { emitChange: true });
+    editor.flushChange();
 
     expect(changes).toEqual(['fresh']);
   });
 
-  it.each(['immediate', 'animationFrame'] as const)(
-    'does not emit a stale transaction after a reentrant silent setMarkdown in %s mode',
-    (onChangeMode) => {
+  it(
+    'does not emit a stale transaction after a reentrant silent reset',
+    () => {
       const changes: string[] = [];
       const animationFrames = installAnimationFrameStub();
       let editor: ReturnType<typeof createEditor> | null = null;
@@ -207,13 +204,12 @@ describe('editor runtime', () => {
       editor = createEditor({
         element: createHost(),
         markdown: 'alpha',
-        onChangeMode,
         onChange(markdown) {
           changes.push(markdown);
         },
         onTransaction(transaction) {
           if (transaction.docChanged) {
-            editor?.commands.setMarkdown('replacement');
+            editor?.commands.resetMarkdown('replacement');
           }
         },
       });
@@ -227,32 +223,6 @@ describe('editor runtime', () => {
       editor.destroy();
     },
   );
-
-  it('uses the host window requestAnimationFrame for scheduled updates', () => {
-    const globalAnimationFrames = installAnimationFrameStub();
-    const foreignWindow = createForeignWindow();
-    const foreignAnimationFrames = installAnimationFrameStub(foreignWindow);
-    const changes: string[] = [];
-    const editor = createEditor({
-      element: createHost(foreignWindow.document),
-      markdown: 'alpha',
-      onChangeMode: 'animationFrame',
-      onChange(markdown) {
-        changes.push(markdown);
-      },
-    });
-
-    const insertPos = editor.view.state.doc.content.size - 1;
-    editor.view.dispatch(editor.view.state.tr.insertText('!', insertPos));
-    globalAnimationFrames.flush();
-
-    expect(changes).toEqual([]);
-
-    foreignAnimationFrames.flush();
-
-    expect(changes).toEqual(['alpha!']);
-    editor.destroy();
-  });
 
   it('renders passive code block node views in the host document', () => {
     const foreignWindow = createForeignWindow();
@@ -353,7 +323,7 @@ describe('editor runtime', () => {
     expect(editor.commands.toggleMark('strong')).toBe(true);
     expect(editor.state.isActive.mark('strong')).toBe(true);
 
-    editor.commands.setMarkdown('[docs](https://example.com)');
+    editor.commands.resetMarkdown('[docs](https://example.com)');
     const range = findMarkedTextRange(editor, 'link');
     editor.view.dispatch(editor.view.state.tr.setSelection(TextSelection.create(editor.view.state.doc, range.start + 1)));
 
@@ -600,8 +570,8 @@ describe('editor runtime', () => {
 
     expect(actions.addTableColumn(editor.view, 'after')).toBe(false);
     expect(actions.addTableRow(editor.view, 'after')).toBe(false);
-    expect(actions.appendTableColumn(editor.view)).toBe(false);
-    expect(actions.appendTableRow(editor.view)).toBe(false);
+    expect(actions.addTableColumn(editor.view)).toBe(false, "after");
+    expect(actions.addTableRow(editor.view)).toBe(false, "after");
     expect(actions.insertTable(editor.view, { columns: 3, rows: 3 })).toBe(false);
     expect(actions.moveTableColumn(editor.view, 'right')).toBe(false);
     expect(actions.moveTableRow(editor.view, 'down')).toBe(false);
@@ -664,7 +634,7 @@ describe('editor runtime', () => {
       ui,
     });
 
-    editor.commands.setMarkdown('replacement');
+    editor.commands.resetMarkdown('replacement');
     expect(lifecycle).not.toContain('table:destroy');
 
     editor.destroy();

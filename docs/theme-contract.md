@@ -9,7 +9,7 @@ import "markora/styles.css"; // or "markora/minimal.css"
 import "markora-ui/styles.css"; // only with createDefaultUi()
 ```
 
-Every visual value in those styles is read through a namespaced `--mdw-*` custom property with its legacy value as the fallback. Existing consumers therefore keep the same light presentation when they set no tokens. A host can override one token, a component family, or the complete palette without copying Markora selectors.
+Every visual value in those styles is read through a namespaced `--mdw-*` custom property with a component default. A host can override one token, a component family, or the complete palette without copying Markora selectors.
 
 ## Reference themes
 
@@ -75,7 +75,7 @@ Do not encode meaning only in a custom color. The supplied DOM keeps checked sta
 
 ## Public typography, spacing, and geometry tokens
 
-Defaults shown here are the compatibility fallbacks. Zeroes, percentages, viewport-coordinate positioning, and visually-hidden clipping remain structural invariants rather than theme choices.
+Defaults shown here are the component defaults. Zeroes, percentages, viewport-coordinate positioning, and visually-hidden clipping remain structural invariants rather than theme choices.
 
 ### Editor and common controls
 
@@ -94,7 +94,7 @@ Defaults shown here are the compatibility fallbacks. Zeroes, percentages, viewpo
 | `--mdw-radius-pill` | `999px` |
 | `--mdw-font-mono` | `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` |
 | `--mdw-label-font-size`, `--mdw-label-font-weight`, `--mdw-label-letter-spacing` | `0.75rem`, `600`, `0.06em` |
-| `--mdw-disabled-opacity` | component legacy value (`0.7` or `0.72`) |
+| `--mdw-disabled-opacity` | component default (`0.7` or `0.72`) |
 | `--mdw-layer-selection`, `--mdw-layer-content`, `--mdw-layer-cursor` | `1`, `2`, `3` (internal relative stack) |
 | `--mdw-visually-hidden-size` | `1px` (accessibility invariant; do not override) |
 

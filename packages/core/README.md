@@ -20,7 +20,7 @@ Write Markdown at the speed of thought, inside your product.
 
 ## Markdown compatibility
 
-`markdown`, `editor.commands.reconcileMarkdown()`, and `editor.commands.resetMarkdown()` are parsing boundaries. `editor.getMarkdown()` and `onChange` return normalized serialization, not the original document bytes. With the root entry's exact default compatibility preset, Markora retains valid CommonMark link-reference definitions plus conservatively recognized front matter, standalone display math, HTML, comments, and directives as inert source atoms. Reference uses still normalize to inline links, while unused and duplicate definition source no longer disappears. Other unsupported extensions may still be reinterpreted without an error. Official extension packages claim their documented forms and give them semantic behavior. Deprecated `setMarkdown()` has the same hard-reset behavior as `resetMarkdown()`.
+`markdown`, `editor.commands.reconcileMarkdown()`, and `editor.commands.resetMarkdown()` are parsing boundaries. `editor.getMarkdown()` and `onChange` return normalized serialization, not the original document bytes. The root entry retains valid CommonMark link-reference definitions plus conservatively recognized front matter, standalone display math, HTML, comments, and directives as inert source atoms. Reference uses still normalize to inline links, while unused and duplicate definition source no longer disappears. Other unsupported extensions may still be reinterpreted without an error. Official extension packages claim their documented forms and give them semantic behavior.
 
 Read the complete [Markdown dialect and fidelity contract](./MARKDOWN_COMPATIBILITY.md), which is also included in the published package.
 
@@ -112,7 +112,7 @@ const editor = createEditor({
 });
 ```
 
-The omitted `onChangeMode` uses the production default, `"idle"`: rapid document changes coalesce, and full Markdown serialization does not run in the synchronous input path. Use `"animationFrame"` only for the prior once-per-frame behavior or `"immediate"` when an integration deliberately requires same-stack serialization and callback delivery.
+Rapid document changes coalesce through idle scheduling, so full Markdown serialization does not run in the synchronous input path.
 
 ## Clipboard semantics
 
@@ -265,16 +265,17 @@ Subscribe to `"asset"` for reasons `"started"`, `"progress"`, `"failed"`, `"retr
 
 A multi-file transfer waits until every remaining member succeeds, then inserts all results in original transfer order through one `"user"` transaction and one undo step. Async completion does not steal focus. The insertion anchor maps through intervening editor and reconciliation transactions. If one member fails, successful members remain pending; retry the failure, or cancel it to allow the remaining ready members to commit together. Invalid results and anchors that no longer accept the returned nodes fail without partially inserting the batch.
 
-Starting a transfer while read-only or during composition produces rejected snapshots and never calls the uploader. If completion is blocked because the editor became read-only or composing, uploads remain failed and can be retried after it becomes editable and non-composing; other insertion-blocked errors can require cancellation or host recovery. `resetMarkdown()` and its deprecated alias abort retained uploads and emit `"cancelled"`; `reconcileMarkdown()` preserves and maps them; `destroy()` aborts them silently before subscriptions are cleared. The outer ProseMirror surface owns this upload flow. Nested CodeMirror blocks always reject files and remain plain-text clipboard surfaces, even when assets are configured.
+Starting a transfer while read-only or during composition produces rejected snapshots and never calls the uploader. If completion is blocked because the editor became read-only or composing, uploads remain failed and can be retried after it becomes editable and non-composing; other insertion-blocked errors can require cancellation or host recovery. `resetMarkdown()` aborts retained uploads and emits `"cancelled"`; `reconcileMarkdown()` preserves and maps them; `destroy()` aborts them silently before subscriptions are cleared. The outer ProseMirror surface owns this upload flow. Nested CodeMirror blocks always reject files and remain plain-text clipboard surfaces, even when assets are configured.
 
 Core is headless: it exposes no upload toast, live region, progress bar, retry button, or confirmation UI. A conforming host must announce meaningful failures/completion, expose labelled cancel/retry controls, avoid noisy announcements for every progress tick, and keep status available without relying on color alone. The host also owns authentication prompts, privacy consent, offline policy, and upload persistence.
 
 ## Extensions and the minimal entry
 
-The root entry uses Markora's compatibility preset, preserving tables, tasks,
-strike-through, opaque source, CodeMirror fences, and the existing optional UI
-adapter. Add public extensions with the `extensions` option; definitions are
-validated and compiled before the host element is claimed.
+The root entry includes tables, tasks, strike-through, opaque source, CodeMirror
+fences, and the optional UI integration. Add public extensions with the
+`extensions` option; definitions are validated and compiled before the host
+element is claimed. Presets select a named extension set; they do not replace
+the root runtime.
 
 ### Official optional extensions
 
@@ -287,10 +288,10 @@ Install only the syntax required by the embedding product. None of these package
 | [`markora-extension-math`](https://github.com/KevinWang15/markora/tree/main/packages/extension-math) | Inline and block math | Root and minimal | Optional host renderer; no TeX engine |
 | [`markora-extension-alerts`](https://github.com/KevinWang15/markora/tree/main/packages/extension-alerts) | GitHub-style alert blockquotes | Root and minimal | None |
 | [`markora-extension-toc`](https://github.com/KevinWang15/markora/tree/main/packages/extension-toc) | Generated heading outline backed by `[TOC]` | Root and minimal | None |
-| [`markora-extension-html`](https://github.com/KevinWang15/markora/tree/main/packages/extension-html) | Exact-source CommonMark HTML and bounded block previews | Root default runtime only | No HTML parser; previews require a host renderer and sanitizer |
+| [`markora-extension-html`](https://github.com/KevinWang15/markora/tree/main/packages/extension-html) | Exact-source CommonMark HTML and bounded block previews | Root | No HTML parser; previews require a host renderer and sanitizer |
 | [`markora-extension-diagrams`](https://github.com/KevinWang15/markora/tree/main/packages/extension-diagrams) | Mermaid, GeoJSON, TopoJSON, and STL fences | Root and minimal | Optional host renderers; no diagram engine |
 
-The HTML extension deliberately rejects `markora/minimal` and a root editor using a custom preset. Every other official package in the table supports both entries. Math, HTML, and diagrams stay fully usable in accessible source mode when no renderer callback is supplied.
+The HTML extension requires the root codec's exact HTML tokenizer anchors, so `markora/minimal` rejects it during dependency resolution. Every other official package in the table supports both entries. Math, HTML, and diagrams stay fully usable in accessible source mode when no renderer callback is supplied.
 
 Persist `editor.extensions.manifest` beside Markdown that depends on optional syntax, then restore compatible definitions before parsing that document again. The manifest records compatibility identity and ordering; host callbacks, messages, parsers, sanitizers, and renderer engines remain runtime configuration and are not serialized.
 
@@ -350,20 +351,14 @@ console.log(editor.extensions.manifest);
 document foundation, basic editing, lifecycle policy, events, history, links,
 images, and the extension kernel, while omitting tables, tasks, strike-through,
 opaque source, CodeMirror, and the default UI. Fenced code remains editable as a
-plain ProseMirror code block. Compatibility-only options such as `ui`,
+plain ProseMirror code block. Full-runtime options such as `ui`,
 `codeBlockLanguages`, and `onEditOpaqueMarkdown` have no built-in surface in
 this entry. Passing `createMinimalMarkdownEditorPreset()` to the root entry
-selects minimal runtime behavior, but only importing `markora/minimal` provides
-the static JavaScript bundle-isolation guarantee. Pair that entry with
-`markora/minimal.css` to omit compatibility-only table, task, opaque-source,
+selects that preset's extension set while retaining root runtime behavior; import
+`markora/minimal` for the smaller runtime and static bundle-isolation guarantee.
+Pair that entry with `markora/minimal.css` to omit full-runtime table, task, opaque-source,
 and CodeMirror selectors as well;
-`markora/styles.css` remains the compatibility-full stylesheet.
-
-The definitions inside `createDefaultMarkdownEditorPreset()` name adapters
-owned by the root compatibility runtime. The exact preset works with the root
-entry; copying those definitions into an anonymous preset or passing them to
-`markora/minimal` throws `EXTENSION_INCOMPATIBLE` instead of publishing a
-manifest for behavior that is not active.
+`markora/styles.css` remains the full stylesheet.
 
 Extension sets are creation-only. Persist `editor.extensions.manifest` beside
 Markdown that depends on non-default syntax, and destroy/recreate the editor to
@@ -449,16 +444,16 @@ A typical integration has four parts:
 Host-facing behavior to keep in mind:
 
 - `ariaLabel` or `ariaLabelledBy` gives the inner editor a host-specific accessible name
-- compatibility task items expose a stable native button with checkbox semantics, a task-text accessible name, separate checked state, exact-once Space/Enter activation, and native disabled behavior in read-only mode
+- task items expose a stable native button with checkbox semantics, a task-text accessible name, separate checked state, exact-once Space/Enter activation, and native disabled behavior in read-only mode
 - `editor.focus()` targets the outer ProseMirror surface; `editor.blur()` blurs whichever owned ProseMirror or CodeMirror surface is active, and lazy activation or boundary-exit work does not reclaim focus after that blur or after a host control takes it
 - `editor.commands.reconcileMarkdown(markdown)` applies an authoritative host snapshot while mapping selection/history and preserving plugin state
-- `editor.commands.resetMarkdown(markdown)` explicitly rebuilds editor state; deprecated `setMarkdown()` remains its hard-reset alias
+- `editor.commands.resetMarkdown(markdown)` explicitly rebuilds editor state
 - `editor.commands.pasteMarkdown(text)` and `pastePlainText(text)` give host-owned clipboard UI an explicit parsing choice without reaching through `editor.view`
-- `editor.subscribe("state", ...)` refreshes host controls for every accepted state transition, including stored-mark-only changes; `update` remains the document-change-only signal and `onTransaction` the ProseMirror-aware compatibility hook
+- `editor.subscribe("state", ...)` refreshes host controls for every accepted state transition, including stored-mark-only changes; `update` remains the document-change-only signal and `onTransaction` the ProseMirror-aware transaction hook
 - `resources` configures stored and runtime URL policy, image loading/privacy, link opening, and optional paste/drop upload; `editor.assets` controls retained upload attempts
 - `editor.subscribe("asset", ...)` drives host-owned progress, cancellation, retry, failure, and completion UI without polling Markdown
 - `onEditOpaqueMarkdown` lets a host provide explicit source editing for otherwise read-only opaque atoms
-- `onChangeMode` defaults to coalesced `"idle"` delivery; `"animationFrame"` and `"immediate"` retain their explicit legacy timing
+- `onChange` uses coalesced idle delivery
 - `editor.getMarkdown()` is a lazy synchronous save/export snapshot, and `editor.flushChange()` forces pending `onChange` work to run immediately
 - the package ships editor base styles, while surrounding layout and product UI remain the host app's responsibility
 
@@ -466,13 +461,9 @@ Host-facing behavior to keep in mind:
 
 `editor.getMarkdown()` is the explicit synchronous snapshot boundary. It serializes the latest document on demand, then reuses that string until the document changes. Calling it from a synchronous `update` listener is supported, but deliberately puts full-document serialization back into the typing path; use the event itself for dirty flags, toolbar state, indexing queues, and other work that does not need Markdown yet.
 
-`onChange(markdown, context)` remains the convenience path for normalized output. Its delivery mode is a `MarkdownEditorChangeMode`:
+`onChange(markdown, context)` is the convenience path for normalized output. It waits for a 300 ms trailing quiet period, coalesces every intervening change, and serializes the latest pending document outside the synchronous state-update path. A five-second deadline measured from the first pending change prevents indefinite starvation during continuous input.
 
-- `"idle"` is the default. It waits for a 300 ms trailing quiet period, coalesces every intervening change, and serializes the latest pending document outside the synchronous state-update path. A five-second deadline measured from the first pending change prevents indefinite starvation during continuous input.
-- `"animationFrame"` preserves the previous once-per-frame batching behavior.
-- `"immediate"` serializes and invokes the callback in the same stack as the accepted change. Use it only when that timing is required.
-
-Pending delivery always keeps the latest document and change origin. A changed authoritative reconciliation or reset cancels stale local output; a semantic reconciliation no-op preserves it. Changing `onChange` or `onChangeMode` through `updateOptions()` first flushes pending output through the old configuration.
+Pending delivery always keeps the latest document and change origin. A changed authoritative reconciliation or reset cancels stale local output; a semantic reconciliation no-op preserves it. Changing `onChange` through `updateOptions()` first flushes pending output through the old listener.
 
 Form submission, an explicit Save action, export, and other boundaries that must observe current data can flush synchronously:
 
@@ -491,7 +482,7 @@ The headless command surface operates on the current model selection; a host doe
 
 | Area | Commands | Activity checks |
 | --- | --- | --- |
-| Host Markdown | `reconcileMarkdown`, `resetMarkdown`, deprecated `setMarkdown` | — |
+| Host Markdown | `reconcileMarkdown`, `resetMarkdown` | — |
 | Clipboard | `pasteMarkdown`, `pastePlainText` | `pasteMarkdown`, `pastePlainText` |
 | Inline and media | `toggleMark`, `setLink`, `removeLink`, `insertImage`, `removeImage` | `mark`, generic `node` |
 | Text and blocks | `setParagraph`, `setHeading`, `toggleBlockquote`, `insertHardBreak`, `insertHorizontalRule`, `setCodeBlock` | `paragraph`, `heading`, `blockquote`, `hardBreak`, `horizontalRule`, `codeBlock`, generic `node` |
@@ -531,7 +522,7 @@ The command contract is designed for toolbar and keyboard integrations:
 - A successful interactive command focuses the outer editor. A successful built-in interactive document-changing command other than undo/redo is one transaction with origin `"command"` and contributes one undoable history step. A successful stored-mark-only command emits `state` with `docChanged: false` and does not emit `update`.
 - A command that returns `false` does not focus the editor, mutate history, or emit state/update/change activity. Invalid programmer arguments still throw instead of returning `false`: heading levels are integers from 1 through 6; table dimensions are integers from 1 through 100; table insertion sides are `"before"` or `"after"`; row directions are `"up"` or `"down"`; column directions are `"left"` or `"right"`; task values are Boolean; alignments are `"left"`, `"center"`, `"right"`, or `null`; and a code-block language is a string or `null`, trimmed on input, with a normalized limit of 128 characters and no NUL or line-break character. Backticks are legal in the complete fence info string; serialization uses a safe tilde fence for them.
 
-The root compatibility preset supports tasks and tables. Ragged pipe-table source is expanded to its widest authored row on import, with blank cells added instead of discarding extra body cells; expansion is bounded at 65,536 synthesized cells. Task items may contain supported additional blocks and nested bullet or task lists. New tasks are unchecked; `sinkListItem()` and `liftListItem()` preserve checked state while an item remains in a list, and `setTaskChecked(checked)` applies only to task items and returns `false` when the item is already in the requested state.
+The root entry supports tasks and tables. Ragged pipe-table source is expanded to its widest authored row on import, with blank cells added instead of discarding extra body cells; expansion is bounded at 65,536 synthesized cells. Task items may contain supported additional blocks and nested bullet or task lists. New tasks are unchecked; `sinkListItem()` and `liftListItem()` preserve checked state while an item remains in a list, and `setTaskChecked(checked)` applies only to task items and returns `false` when the item is already in the requested state.
 
 `insertTable()` defaults to three columns and two total rows, including the header row. Its `rows` and `columns` options accept integers from 1 through 100; a one-row table contains only its header. `addTableRow(side)` and `addTableColumn(side)` default to `"after"`; for a rectangular cell selection they insert before its first row/column or after its last. Deleting, moving, or aligning applies to the selected contiguous rows or columns. Body rows can move without crossing the pinned header row, and columns carry their alignment with them.
 
@@ -586,7 +577,7 @@ Foundation Markdown typing rules are shared as well. Heading, blockquote,
 bullet/ordered-list, fenced-code, image, link/autolink, strong, emphasis, and
 inline-code syntax transforms in either entry; Enter also converts complete
 horizontal-rule and fence markers. Rules are assembled from the live schema,
-so minimal does not import or emulate compatibility-only tasks or
+so minimal does not import or emulate root-only tasks or
 strikethrough.
 
 Immediately after one of those typing rules transforms source, plain Backspace
@@ -600,7 +591,7 @@ At the first caret of a fenced code block, plain Backspace unwraps each source
 line into its own paragraph in both entries; an empty fence becomes one empty
 paragraph. The replacement is one ordinary undo step. Modified deletion,
 active composition, selections, and read-only state cannot trigger recovery.
-The compatibility entry preserves its CodeMirror-to-ProseMirror focus transfer,
+The root entry preserves its CodeMirror-to-ProseMirror focus transfer,
 while minimal performs the same document transform in its plain code block.
 
 Unmodified primary clicks resolve empty textblocks from their actual DOM target
@@ -632,7 +623,7 @@ Markdown marker assistance is disabled in code marks and code blocks. The lazy C
 - `@markora/core/inline-code`
 - `@markora/core/strikethrough`
 - `@markora/core/hard-break`
-- `@markora/core/table-toolbar` (compatibility entry)
+- `@markora/core/table-toolbar` (root entry)
 - `@markora/core/undo`
 - `@markora/core/redo`
 
@@ -652,7 +643,7 @@ The incoming string is parsed before comparison. If its parsed document is seman
 
 Reconciliations are synchronous and ordered by invocation. Each call is a complete, authoritative document snapshot, so the last changed call wins when updates overlap. Markora does not merge snapshots, track revisions, or reject stale responses. Hosts with asynchronous reads or writes must gate stale revisions before calling `reconcileMarkdown()`.
 
-`resetMarkdown(markdown, { emitChange? })` is intentionally stronger: it replaces EditorState, resets the selection to the new document default, clears undo/redo and plugin state, and cancels pending batched output. It bypasses `onTransaction` because state replacement does not create a ProseMirror transaction. A `state` event and any applicable selection/update events report origin `"reset"`, and `{ emitChange: true }` emits normalized Markdown with that origin. Use it for switching documents or deliberately discarding transient state. `setMarkdown()` is deprecated but remains an exact hard-reset alias.
+`resetMarkdown(markdown, { emitChange? })` is intentionally stronger: it replaces EditorState, resets the selection to the new document default, clears undo/redo and plugin state, and cancels pending batched output. It bypasses `onTransaction` because state replacement does not create a ProseMirror transaction. A `state` event and any applicable selection/update events report origin `"reset"`, and `{ emitChange: true }` emits normalized Markdown with that origin. Use it for switching documents or deliberately discarding transient state.
 
 ## Change origins
 
@@ -661,7 +652,7 @@ Markora identifies dispatched and accepted activity with a `MarkdownEditorChange
 - `"user"` for DOM input and otherwise untagged raw transactions;
 - `"command"` for built-in formatting, history, and media commands;
 - `"external"` for `reconcileMarkdown()`;
-- `"reset"` for state replacement through `resetMarkdown()` or its deprecated alias;
+- `"reset"` for state replacement through `resetMarkdown()`;
 - `` `extension:${string}` `` for a transaction deliberately tagged by a host extension.
 
 `onChange(markdown, context)` exposes the origin in its second argument. `onTransaction(transaction, view, context)` exposes it in its third argument and observes dispatch attempts after editor policy has run; inspect the resulting view state or typed events rather than treating the callback alone as proof of a document change. State, selection, and update subscription events have an `origin` field and describe accepted state changes. In idle and animation-frame modes, coalesced output reports the origin of the latest pending document change.
@@ -721,7 +712,7 @@ editor.updateOptions({
 });
 ```
 
-The method accepts `editable`, `placeholder`, `attributes`, `ariaLabel`, `ariaLabelledBy`, `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Nullable fields clear their current value. `onChangeMode` accepts `"idle"` (the default), `"animationFrame"`, or `"immediate"`. Changing `onChange` or `onChangeMode` first flushes pending output once through the previous listener, then installs the new listener/mode. Callback and presentation changes do not rebuild EditorState or emit an `update` event.
+The method accepts `editable`, `placeholder`, `attributes`, `ariaLabel`, `ariaLabelledBy`, `onChange`, `onTransaction`, and `onEditOpaqueMarkdown`. Nullable fields clear their current value. Changing `onChange` first flushes pending output once through the previous listener, then installs the new listener. Callback and presentation changes do not rebuild EditorState or emit an `update` event.
 
 `element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `typing`, `shortcuts`, `codeBlockLanguages`, `resources`, `extensionPreset`, and `extensions` are creation-only. Use `commands.reconcileMarkdown()` for ordinary host snapshots or `commands.resetMarkdown()` for an explicit state replacement.
 
@@ -761,22 +752,21 @@ const stopErrors = editor.subscribe("error", ({ code, context, error, recoverabl
 - Focus and blur events expose `nativeEvent`. The focus boundary includes the outer ProseMirror surface and nested CodeMirror editors, so moving between them does not create a false blur/focus pair. Both events cross one microtask boundary: focus waits for the browser and nested editor's focus stack to finish, while blur waits until the next focused element can be checked.
 - State events fire synchronously for every accepted state transition, including stored-mark-only formatting and hard resets. They expose `origin`, the current `selection`, `docChanged`, and `selectionChanged`; subscribe to this event to keep host toolbars current.
 - Selection events provide `previousSelection`, `selection`, and `origin`. Each host snapshot contains `anchor`, `head`, `from`, `to`, `empty`, and `kind`.
-- State, selection, and update events are ordered state first, then selection when the selection changed, then update when the document changed. Update events contain the accepted change's `origin` and current selection, neither Markdown nor a ProseMirror transaction, and are not affected by `onChangeMode`; call `event.editor.getMarkdown()` only when that subscriber intentionally needs a synchronous snapshot.
+- State, selection, and update events are ordered state first, then selection when the selection changed, then update when the document changed. Update events contain the accepted change's `origin` and current selection, neither Markdown nor a ProseMirror transaction; call `event.editor.getMarkdown()` only when that subscriber intentionally needs a synchronous snapshot.
 - Asset events report upload lifecycle independently of ProseMirror state; only successful batch insertion subsequently produces ordinary state/update/change activity.
 - Error events report recoverable code-runtime-load, code-language-load, resource-callback, and table-clipboard rejections plus attributed extension runtime failures. A rejected merged or over-limit table transfer uses `"table-operation-rejected"` with clipboard phase and leaves the document unchanged. A code-runtime failure leaves the exact static source shell usable and reports phase `"runtime"`. Resource events use code `"resource-callback-failed"` with a resolve/open/load/cleanup phase. Extension events use an `EXTENSION_*` code plus `context.phase` and, when known, `context.extension`, `context.contribution`, or `context.participants`. Runtime activation, language loaders, and extensions run outside the current editor state update, so deferred failures use the same event path without re-entering that update.
 
 If a recoverable runtime failure has no error subscriber, Markora forwards it to the editor window's global error reporting path rather than silently swallowing it.
 
-Migration note: hosts with exhaustive `MarkdownEditorErrorCode` switches must
-handle the new `"code-block-runtime-load-failed"` case. It means advanced code
-editing could not activate; the Markdown document and static code source remain
-available.
+Hosts with exhaustive `MarkdownEditorErrorCode` switches must handle
+`"code-block-runtime-load-failed"`. It means advanced code editing could not
+activate; the Markdown document and static code source remain available.
 
 `onChange` and `onTransaction` remain supported. Use the default idle `onChange(markdown, context)` for coalesced normalized Markdown output, `state` for host UI, `update` for a cheap document-only signal, and `onTransaction(transaction, view, context)` only when an advanced integration needs ProseMirror transaction details.
 
 ## Destruction and post-destroy behavior
 
-`destroy()` synchronously serializes and caches the latest document, flushes one pending idle or animation-frame `onChange`, aborts image loads and uploads, runs accepted image-result cleanup, tears down the editor, nested code editors, optional UI, listeners, and subscriptions, and completes cleanup even when a teardown callback reports an error. Upload cancellation is silent during teardown. It is idempotent.
+`destroy()` synchronously serializes and caches the latest document, flushes one pending `onChange`, aborts image loads and uploads, runs accepted image-result cleanup, tears down the editor, nested code editors, optional UI, listeners, and subscriptions, and completes cleanup even when a teardown callback reports an error. Upload cancellation is silent during teardown. It is idempotent.
 
 After destruction:
 
@@ -789,14 +779,6 @@ After destruction:
 ## Advanced `view` escape hatch
 
 `editor.view` remains available for version-coupled integrations. State/DOM inspection and `view.dispatch()` are supported as advanced usage. Direct `view.setProps()`, `view.updateState()`, DOM mutation, or `view.destroy()` can bypass lifecycle guards, configuration, and typed events; those operations and ProseMirror internals are outside Markora's semver compatibility boundary.
-
-### Migration note
-
-Existing one-argument `onChange` and two-argument `onTransaction` callbacks remain source-compatible because the context parameters are trailing. Omitted `onChangeMode` now selects `"idle"`; integrations that require the previous same-stack callback and exception behavior must set `onChangeMode: "immediate"`, while those requiring the prior once-per-frame batching can set `"animationFrame"`. `setMarkdown()` remains callable but is deprecated; replace it with `resetMarkdown()` when the hard reset was intentional, or with `reconcileMarkdown()` for ordinary controlled/external updates. Prefer `editor.focus()`, `editor.blur()`, `editor.updateOptions()`, and typed subscriptions over direct view mutation. Integrations that hand-build structural `MarkdownEditor` mocks must add the new commands and lifecycle members or type the mock as `Pick<MarkdownEditor, ...>`.
-
-EE-019 leaves existing typing behavior unchanged when `typing` and `shortcuts` are omitted: auto-pairs remain off and the established default key bindings remain active. Existing `EditorUiControllers` implementations remain source-compatible because `codeBlockLanguageEditor` is optional, while structural `MarkdownEditorUi` mocks must add `editCodeBlockLanguage()`. Code-block info commands now accept backticks; serialization may lengthen the fence or choose a tilde fence to preserve the complete info string safely.
-
-The unified resource policy preserves the prior rejection of protocol-relative and unlisted schemes while intentionally tightening other URL behavior. Existing documents or commands that depend on embedded credentials, backslashes, embedded whitespace/control characters, unrestricted image `data:` forms, or data payloads above the published limits now lose the unsafe link mark or image at an import/insertion boundary. Configure explicit custom protocols, credential opt-in, MIME types, and limits only after reviewing the host threat model. `javascript:` and `vbscript:` remain impossible to enable. Integrations that structurally mock `MarkdownEditor` must also add `assets`, and event-name switches must handle `"asset"` plus resource callback errors.
 
 ## Exports
 
@@ -845,7 +827,6 @@ import type {
   MarkdownEditorAssetUploadStatus,
   MarkdownEditorBlurEvent,
   MarkdownEditorBuiltinChangeOrigin,
-  MarkdownEditorChangeMode,
   MarkdownEditorChangeContext,
   MarkdownEditorChangeOrigin,
   MarkdownEditorCodeBlockOptions,
@@ -892,17 +873,15 @@ import type {
   MarkdownEditorUrlPolicy,
   OpaqueMarkdownEditRequest,
   OpaqueMarkdownKind,
-  ToolbarButtonState,
-  ToolbarState,
   UpdateEditorOptions,
 } from "markora";
 ```
 
 ## Code block languages
 
-The compatibility entry initially renders every fence as an exact, lightweight source-text shell with its language label and line numbers. This permanent shell stays selectable, copyable, searchable, and synchronized with the ProseMirror document without loading CodeMirror. A shared per-editor viewport observer keeps the settled CodeMirror pool bounded to eight editors near the viewport. Placing a caret or starting an edit in an inactive fence also activates it; a native range selection remains on the shell so drag selection and copy are not disrupted. An offscreen editor returns to its shell after a short idle delay when it no longer owns focus, selection, or composition. Browsers without `IntersectionObserver` retain the shell and activate on caret or edit interaction.
+The root entry initially renders every fence as an exact, lightweight source-text shell with its language label and line numbers. This permanent shell stays selectable, copyable, searchable, and synchronized with the ProseMirror document without loading CodeMirror. A shared per-editor viewport observer keeps the settled CodeMirror pool bounded to eight editors near the viewport. Placing a caret or starting an edit in an inactive fence also activates it; a native range selection remains on the shell so drag selection and copy are not disrupted. An offscreen editor returns to its shell after a short idle delay when it no longer owns focus, selection, or composition. Browsers without `IntersectionObserver` retain the shell and activate on caret or edit interaction.
 
-The inactive shell deliberately presents plain source rather than running a second syntax engine. Syntax highlighting and advanced code editing begin when the CodeMirror runtime activates. The runtime is outside the compatibility entry's initial JavaScript graph, and the built-in grammars for JavaScript, TypeScript, JSON, CSS, HTML, XML, Markdown, Python, C/C++, Java, Rust, and shell remain separate on-demand chunks. You can add or override a grammar with `codeBlockLanguages`:
+The inactive shell deliberately presents plain source rather than running a second syntax engine. Syntax highlighting and advanced code editing begin when the CodeMirror runtime activates. The runtime is outside the root entry's initial JavaScript graph, and the built-in grammars for JavaScript, TypeScript, JSON, CSS, HTML, XML, Markdown, Python, C/C++, Java, Rust, and shell remain separate on-demand chunks. You can add or override a grammar with `codeBlockLanguages`:
 
 ```ts
 import { createDefaultCodeBlockLanguageRegistry, createEditor } from "markora";
@@ -926,15 +905,14 @@ With `markora-ui`, the language label is an accessible button and `editor.ui?.ed
 ## API highlights
 
 - `editor.getMarkdown()` returns the current normalized Markdown serialization
-- `onChangeMode` defaults to coalesced `"idle"` delivery; `"animationFrame"` and `"immediate"` remain explicit alternatives
+- `onChange` uses coalesced idle delivery
 - `editor.flushChange()` synchronously drains pending callback output for submit/save boundaries and teardown does so automatically
 - `editor.commands.reconcileMarkdown(markdown, { emitChange })` applies an authoritative snapshot while mapping selection/history and preserving plugin state
-- `editor.commands.resetMarkdown(markdown, { emitChange })` explicitly rebuilds EditorState; `setMarkdown()` remains a deprecated hard-reset alias
+- `editor.commands.resetMarkdown(markdown, { emitChange })` explicitly rebuilds EditorState
 - change callbacks, transaction callbacks, and state/selection/update events expose a typed origin
 - `onEditOpaqueMarkdown` receives an opaque atom's `kind`, exact `source`, and guarded `update(nextSource)` function
 - `editor.commands` covers inline/media editing, paragraphs and headings, blockquotes, ordinary and task lists, breaks and rules, code blocks, tables, and undo/redo
 - `editor.state.can.*` and `editor.state.isActive.*` expose host-friendly capability and activity checks
-- `editor.getToolbarState()` remains available for toolbar integrations that prefer a compatibility snapshot
 - `editor.ui?.editLink()`, `editImage()`, and `editCodeBlockLanguage()` are optional namespaced UI entry points when overlays are attached
 - `CreateEditorOptions.resources` owns URL/image/navigation/upload policy and `editor.assets` exposes upload cancellation, retry, and snapshots
 - `editor.subscribe(...)` exposes typed focus, blur, state, selection, update, asset, and recoverable error events

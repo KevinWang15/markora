@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { markdownSerializer, parseMarkdown } from '../src/markdownCodec';
+import { markdownSerializer, parseMarkdown } from './support/currentMarkdownCodec';
 
 function normalizeMarkdown(markdown: string) {
   return markdownSerializer.serialize(parseMarkdown(markdown));

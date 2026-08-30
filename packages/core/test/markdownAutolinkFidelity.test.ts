@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { DOMParser as ProseMirrorDOMParser, DOMSerializer } from "prosemirror-model";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 import { normalizeMarkdownEditorResources } from "../src/resourcePolicy";
 
 function linkSnapshots(markdown: string) {
-  const codec = createCompatibilityMarkdownCodec();
+  const codec = createMarkdownCodec();
   const document = codec.parse(markdown)!;
   const links: Array<{ autolink: boolean; href: string; text: string }> = [];
 
@@ -65,7 +65,7 @@ describe("Markdown bare-autolink fidelity", () => {
   });
 
   it("falls back to an explicit link when edited text no longer matches its stored destination", () => {
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const imported = codec.parse("www.example.com")!;
     const originalLink = imported.firstChild!.firstChild!.marks.find((mark) => mark.type.name === "link")!;
     const edited = codec.schema.nodes.doc.create(null, codec.schema.nodes.paragraph.create(
@@ -77,7 +77,7 @@ describe("Markdown bare-autolink fidelity", () => {
   });
 
   it("retains validated bare-link provenance through rich HTML", () => {
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const autolink = codec.parse("www.example.com")!;
     const container = document.createElement("div");
     container.append(DOMSerializer.fromSchema(codec.schema).serializeFragment(autolink.content));
@@ -92,7 +92,7 @@ describe("Markdown bare-autolink fidelity", () => {
   });
 
   it("escapes literal URL-shaped text so reset cannot silently promote it", () => {
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const text = "Literal www.example.com, https://example.com, and person@example.com.";
     const document = codec.schema.nodes.doc.create(null, codec.schema.nodes.paragraph.create(
       null,
@@ -117,7 +117,7 @@ describe("Markdown bare-autolink fidelity", () => {
   });
 
   it("applies the editor URL policy before retaining automatic link marks", () => {
-    const codec = createCompatibilityMarkdownCodec([], normalizeMarkdownEditorResources({
+    const codec = createMarkdownCodec([], normalizeMarkdownEditorResources({
       links: { allowedProtocols: ["https:"] },
     }));
     const document = codec.parse("http://blocked.example https://allowed.example")!;

@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
-  createCompatibilityMarkdownCodec,
+  createMarkdownCodec,
   type MarkdownEditorCodec,
 } from "../src/markdownCodec";
 import { createMinimalMarkdownCodec } from "../src/minimalMarkdownCodec";
@@ -81,7 +81,7 @@ describe("full CommonMark 0.31.2 semantic-stability audit", () => {
   });
 
   it("keeps every root result semantically stable and serialization-idempotent", () => {
-    expect(audit(createCompatibilityMarkdownCodec())).toEqual([]);
+    expect(audit(createMarkdownCodec())).toEqual([]);
   });
 
   it("keeps every minimal result semantically stable and serialization-idempotent", () => {

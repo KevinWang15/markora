@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
-  createCompatibilityMarkdownCodec,
+  createMarkdownCodec,
   type MarkdownEditorCodec,
 } from "../src/markdownCodec";
 import { createMinimalMarkdownCodec } from "../src/minimalMarkdownCodec";
@@ -88,7 +88,7 @@ describe("full GFM 0.29 semantic-stability audit", () => {
   });
 
   it("keeps every root result semantically stable and serialization-idempotent", () => {
-    expect(audit(createCompatibilityMarkdownCodec(), fixture.cases)).toEqual([]);
+    expect(audit(createMarkdownCodec(), fixture.cases)).toEqual([]);
   });
 
   it("keeps every non-extension minimal result stable and idempotent", () => {

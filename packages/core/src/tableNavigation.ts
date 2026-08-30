@@ -227,8 +227,6 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
     createEmptyTableRow,
     addTableRow,
     addTableColumn,
-    appendTableRow: (view: EditorView) => addTableRow(view, "after"),
-    appendTableColumn: (view: EditorView) => addTableColumn(view, "after"),
     moveTableRow,
     moveTableColumn,
     removeTableRow,

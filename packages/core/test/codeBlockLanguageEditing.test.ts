@@ -47,7 +47,7 @@ type LanguageUiHarness = {
   views: MarkdownEditor["view"][];
 };
 
-function createUiHarness(options: { includeLanguageEditor?: boolean } = {}) {
+function createUiHarness() {
   const harness: LanguageUiHarness = {
     close: vi.fn<(refocusTrigger: boolean) => void>(),
     composing: false,
@@ -76,9 +76,7 @@ function createUiHarness(options: { includeLanguageEditor?: boolean } = {}) {
     createSelectionAnchor() {
       return null;
     },
-    ...(options.includeLanguageEditor === false
-      ? {}
-      : { codeBlockLanguageEditor: languageEditor }),
+    codeBlockLanguageEditor: languageEditor,
     imageEditor: {
       open() {},
       close() {},
@@ -184,21 +182,6 @@ afterEach(() => {
 });
 
 describe("code-block language editing", () => {
-  it("keeps custom UI factories without the optional controller backward-compatible", () => {
-    const { ui } = createUiHarness({ includeLanguageEditor: false });
-    const editor = track(createEditor({
-      element: createHost(),
-      markdown: ["before", "", "```ts", "const value = 1", "```"].join("\n"),
-      ui,
-    }));
-    const badge = editor.view.dom.querySelector<HTMLElement>(".mdw-code-block-language");
-
-    expect(editor.ui).not.toBeNull();
-    expect(badge?.tagName).toBe("DIV");
-    expect(badge?.textContent).toBe("ts");
-    expect(editor.ui?.editCodeBlockLanguage()).toBe(false);
-  });
-
   it("opens from a passive button with the exact fenced-code info", () => {
     const { harness, ui } = createUiHarness();
     const info = "lang`variant metadata=true";

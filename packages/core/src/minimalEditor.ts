@@ -25,7 +25,6 @@ import {
 import { EditorView } from "prosemirror-view";
 import { createChangeEmitter } from "./changeEmitter";
 import { createClipboardSemantics } from "./clipboardSemantics";
-import { normalizeMarkdownEditorChangeMode } from "./changeMode";
 import { createHostIdleScheduler } from "./idleScheduler";
 import { createInputRobustnessPlugin } from "./androidInput";
 import { createNativeHistoryPlugin } from "./nativeHistory";
@@ -39,7 +38,6 @@ import type {
   MarkdownEditorActiveMark,
   MarkdownEditorActiveNode,
   MarkdownEditorCodeBlockOptions,
-  MarkdownEditorChangeMode,
   MarkdownEditorCommands,
   MarkdownEditorDomAttributes,
   MarkdownEditorHeadingLevel,
@@ -49,8 +47,6 @@ import type {
   MarkdownEditorState,
   MarkdownEditorTableAlignment,
   MarkdownEditorTableInsertOptions,
-  ToolbarButtonState,
-  ToolbarState,
   UpdateEditorOptions,
 } from "./editorApi";
 import {
@@ -63,10 +59,7 @@ import { MarkdownEditorExtensionError } from "./extensionApi";
 import { runInitialMarkdownParse } from "./extensionErrorBoundary";
 import { createMarkdownEditorExtensionAssembly } from "./extensionAssembly";
 import { createMinimalMarkdownEditorPreset } from "./minimalExtensionPreset";
-import {
-  assertMarkdownEditorCompatibilityRuntimeActive,
-  resolveMarkdownEditorExtensions,
-} from "./extensionResolver";
+import { resolveMarkdownEditorExtensions } from "./extensionResolver";
 import { MARKORA_VERSION } from "./extensionVersion";
 import { createAssetUploadController } from "./assetUploads";
 import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
@@ -141,7 +134,6 @@ type EditorRuntimeOptions = {
   attributes: Record<string, string>;
   editable: boolean;
   onChange: CreateEditorOptions["onChange"];
-  onChangeMode: MarkdownEditorChangeMode;
   onTransaction: CreateEditorOptions["onTransaction"];
   placeholder: string | null;
 };
@@ -554,7 +546,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     attributes: copyEditorAttributes(options.attributes, element.ownerDocument),
     editable: options.editable ?? true,
     onChange: options.onChange,
-    onChangeMode: normalizeMarkdownEditorChangeMode(options.onChangeMode),
     onTransaction: options.onTransaction,
     placeholder: normalizePlaceholder(options.placeholder),
   };
@@ -563,7 +554,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     preset: options.extensionPreset ?? createMinimalMarkdownEditorPreset(),
     extensions: options.extensions,
   });
-  assertMarkdownEditorCompatibilityRuntimeActive(extensionResolution, false);
   const codec = createMinimalMarkdownCodec(extensionResolution.extensions, resources);
   const structuralCommandSet = createStructuralCommandSet(codec.schema);
   const {
@@ -626,12 +616,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const resolvedInitialSelection = options.initialSelection
     ? resolveSelectionTarget(doc, options.initialSelection)
     : undefined;
-  const requestFrame = typeof ownerWindow.requestAnimationFrame === "function"
-    ? ownerWindow.requestAnimationFrame.bind(ownerWindow)
-    : ((callback: FrameRequestCallback) => ownerWindow.setTimeout(() => callback(Date.now()), 16));
-  const cancelFrame = typeof ownerWindow.cancelAnimationFrame === "function"
-    ? ownerWindow.cancelAnimationFrame.bind(ownerWindow)
-    : ((frameId: number) => ownerWindow.clearTimeout(frameId));
   const idleScheduler = createHostIdleScheduler(ownerWindow);
   let lifecycle: "constructing" | "active" | "destroyed" | "destroying" = "constructing";
   let view!: EditorView;
@@ -755,7 +739,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }
   };
   const changeEmitter = createChangeEmitter<ProseMirrorNode, MarkdownEditorChangeContext>({
-    cancelFrame,
     initialDoc: doc,
     initialMarkdown,
     isDeliveryValid: (targetDoc) => (
@@ -763,7 +746,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       && !view.isDestroyed
       && view.state.doc === targetDoc
     ),
-    mode: runtimeOptions.onChangeMode,
     onChange: runtimeOptions.onChange,
     reportAsyncError(error) {
       if (
@@ -774,7 +756,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       }
       reportUnhandled(error);
     },
-    requestFrame,
     scheduleIdle: idleScheduler.schedule,
     serialize: (targetDoc) => runReportedExtensionOperation(
       () => codec.serialize(targetDoc),
@@ -1398,13 +1379,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     view.dispatch(transaction);
     return true;
   };
-  const getMarkButtonState = (mark: MarkdownEditorMark): ToolbarButtonState => {
-    const markType = codec.schema.marks[mark];
-    return {
-      active: isMarkActiveAtSelection(view.state, markType),
-      enabled: Boolean(runtimeOptions.editable && markType && markCommands[mark](view.state)),
-    };
-  };
   const isNodeActive = (node: MarkdownEditorActiveNode) => {
     return structuralCommandSet.isActive.node(view.state, node);
   };
@@ -1427,7 +1401,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const commands: MarkdownEditorCommands = {
     reconcileMarkdown,
     resetMarkdown,
-    setMarkdown: resetMarkdown,
     pasteMarkdown(markdown) {
       return runReportedExtensionOperation(
         () => runCommand(clipboard.pasteMarkdown(markdown)),
@@ -1799,28 +1772,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       },
     },
   };
-  const getToolbarState = (): ToolbarState => {
-    assertActive("read toolbar state");
-    const linkRange = getActiveMarkRange(view.state, codec.schema.marks.link);
-    const imageActive = isNodeActive("image");
-
-    return {
-      bold: getMarkButtonState("strong"),
-      italic: getMarkButtonState("em"),
-      code: getMarkButtonState("code"),
-      strike: getMarkButtonState("strike"),
-      link: {
-        active: Boolean(linkRange),
-        enabled: state.can.setLink(),
-      },
-      image: {
-        active: imageActive,
-        enabled: runtimeOptions.editable && (imageActive || state.can.insertImage()),
-      },
-      undo: { enabled: runtimeOptions.editable && undo(view.state) },
-      redo: { enabled: runtimeOptions.editable && redo(view.state) },
-    };
-  };
   let compositeFocused = false;
   let pendingBlurVersion = 0;
   const handleFocusIn = (nativeEvent: FocusEvent) => {
@@ -1909,10 +1860,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       runtimePatch.onChange = nextOptions.onChange ?? undefined;
     }
 
-    if (nextOptions.onChangeMode !== undefined) {
-      runtimePatch.onChangeMode = normalizeMarkdownEditorChangeMode(nextOptions.onChangeMode);
-    }
-
     if (nextOptions.onTransaction !== undefined) {
       runtimePatch.onTransaction = nextOptions.onTransaction ?? undefined;
     }
@@ -1922,11 +1869,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }
 
     const shouldFlushOldChange = (
-      ("onChange" in runtimePatch && runtimePatch.onChange !== runtimeOptions.onChange)
-      || (
-        "onChangeMode" in runtimePatch
-        && runtimePatch.onChangeMode !== runtimeOptions.onChangeMode
-      )
+      "onChange" in runtimePatch && runtimePatch.onChange !== runtimeOptions.onChange
     );
 
     if (shouldFlushOldChange) {
@@ -1951,19 +1894,15 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       || nextRuntimeOptions.placeholder !== runtimeOptions.placeholder
     );
     const changesOnChange = nextRuntimeOptions.onChange !== runtimeOptions.onChange;
-    const changesOnChangeMode = (
-      nextRuntimeOptions.onChangeMode !== runtimeOptions.onChangeMode
-    );
     const domAttributes = changesView
       ? buildEditorDomAttributes(nextRuntimeOptions)
       : null;
 
     Object.assign(runtimeOptions, nextRuntimeOptions);
 
-    if (changesOnChange || changesOnChangeMode) {
+    if (changesOnChange) {
       changeEmitter.update({
-        ...(changesOnChange ? { onChange: runtimeOptions.onChange ?? null } : {}),
-        ...(changesOnChangeMode ? { mode: runtimeOptions.onChangeMode } : {}),
+        onChange: runtimeOptions.onChange ?? null,
       });
     }
 
@@ -2023,7 +1962,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         changeEmitter.flush();
       }
     },
-    getToolbarState,
     subscribe(type, listener) {
       assertActive("subscribe to editor events");
       return eventDispatcher.subscribe(type, listener);

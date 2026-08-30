@@ -399,7 +399,6 @@ export function createHtmlExtension(options?: HtmlExtensionOptions) {
     compatibility: {
       extensionApi: "^1.3.0",
       markora: "^0.0.1",
-      runtime: "root-default",
     },
     schema: {
       nodes: [

@@ -3,7 +3,7 @@
 - Status: Accepted design for `EE-009`
 - Extension API version: `1.3.0`
 - Accepted: 2026-07-15
-- Implemented: `EE-010`; host resource boundary integrated by `EE-012`; additive source, tokenizer-anchor, serializer literal-escape, exact opaque-token source, and root-runtime compatibility contracts integrated for `EE-021`
+- Implemented: `EE-010`; host resource boundary integrated by `EE-012`; additive source, tokenizer-anchor, serializer literal-escape, and exact opaque-token source contracts integrated for `EE-021`
 
 ## Decision summary
 
@@ -11,7 +11,7 @@ Markora will compile an immutable extension set into a per-editor assembly conta
 
 The first extension API is creation-time only. It supports additive schema nodes and marks, Markdown-it rules, parser and serializer handlers, commands, state queries, storage, plugins, keymaps, input rules, NodeViews, synchronous paste/drop hooks, and headless UI actions. It does not support installing, removing, or reordering extensions on a live editor.
 
-`createEditor()` without extension options must retain today's behavior through a default compatibility preset. A minimal preset omits optional and expensive behavior, and a separate `markora/minimal` entry keeps the default graph out of minimal bundles. Optional syntax and renderers live in separately imported, tree-shakable packages; there is no global registry or auto-discovery.
+`createEditor()` uses the full root runtime and a named default extension preset. A separate `markora/minimal` entry provides a smaller runtime and keeps the full graph out of minimal bundles. Optional syntax and renderers live in separately imported, tree-shakable packages; there is no global registry or auto-discovery.
 
 This document approved the contract before implementation. The private prototype that originally lived under `packages/extension-rfc-prototype` was executable design evidence, not a supported Markora extension package; EE-010 replaced and removed it after the real public kernel gained equivalent package-consumer coverage.
 
@@ -23,7 +23,7 @@ This document approved the contract before implementation. The private prototype
 - Keep commands, state, storage, setup, and cleanup scoped to their owning extension.
 - Preserve Markdown fidelity, read-only policy, lifecycle guarantees, accessibility, and error attribution.
 - Keep the base editor small and allow optional features and renderers to remain out of the bundle.
-- Preserve the current embedded-editor API through compatibility adapters.
+- Keep built-in behavior on the same command, state, event, and lifecycle contracts as extensions.
 
 ## Non-goals for extension API v1
 
@@ -100,8 +100,6 @@ export type MarkdownEditorExtensionDependency = Readonly<{
 export type MarkdownEditorExtensionCompatibility = Readonly<{
   extensionApi: string;
   markora: string;
-  // Omit for definitions supported by both compiled runtimes.
-  runtime?: "root-default";
 }>;
 
 declare const markdownEditorExtensionBrand: unique symbol;
@@ -225,7 +223,7 @@ callout.state.isActive();
 callout.storage;
 ```
 
-Lookup by the definition object preserves generic command, state, and storage types. Lookup by string returns the untyped base handle. `editor.commands`, `editor.state`, and `getToolbarState()` remain compatibility façades for built-in behavior.
+Lookup by the definition object preserves generic command, state, and storage types. Lookup by string returns the untyped base handle. Built-in behavior is exposed through `editor.commands` and `editor.state`.
 
 Object lookup is nominal and uses the exact definition identity installed in that editor; a clone is not equivalent. Looking up a definition that was not installed throws `MarkdownEditorExtensionError` with code `EXTENSION_NOT_INSTALLED`. The registry also exposes `has(definitionOrName)` for guarded lookup and a read-only compiled `manifest` described below.
 
@@ -350,11 +348,6 @@ Local contribution IDs use lowercase letters, digits, dots, dashes, or underscor
 - `version` is the extension definition's SemVer.
 - `compatibility.extensionApi` is a SemVer range for `MARKORA_EXTENSION_API_VERSION`.
 - `compatibility.markora` is a SemVer range for the tested `markora` package.
-- `compatibility.runtime: "root-default"` declares a dependency on the root
-  entry's exact default compatibility runtime. Omitting it declares no
-  runtime-specific requirement. A root-default definition passed to
-  `markora/minimal`, or to the root entry with any other preset object, fails
-  with an attributed `EXTENSION_INCOMPATIBLE` error before the host is claimed.
 - Required dependencies must be installed and satisfy their declared ranges.
 - Optional dependencies add a dependency and ordering edge only when present; an installed but incompatible optional dependency is still an error.
 - Markora validates metadata and ranges; it never installs a dependency.
@@ -425,7 +418,7 @@ type MarkdownEditorSchemaContribution = Readonly<{
 
 Entries are inserted in resolved extension order unless locally positioned relative to another schema name. A required target must exist; an explicitly optional target contributes no edge when absent. Node/mark replacement, removal, and arbitrary mutation of existing specs are rejected.
 
-The Markora foundation schema must expose ordinary groups (`block`, `inline`) and stable attrs needed by compatibility features. During `EE-010`, current one-off mutations—heading inline content, code-block selection behavior, and task-item attrs—must move into that foundation or an explicitly internal compatibility adapter. Internal privileges are not a public override precedent.
+The Markora foundation schema exposes ordinary groups (`block`, `inline`) and stable attrs needed by built-in features. Heading inline content, code-block selection behavior, and task-item attrs belong directly to that foundation. Internal privileges are not a public override precedent.
 
 `managedBlocks` opts block node types into Markora's outer cursor and boundary-navigation contract. The compiler verifies that each entry is a contributed block node with compatible selection behavior.
 
@@ -473,20 +466,19 @@ Tokenizer rules declare:
 - optional fully qualified contribution-level `before`/`after` edges, each of which may be explicitly optional;
 - a synchronous pure `createRule({ token })` factory.
 
-Markora publishes virtual IDs for the foundation anchors extensions need: `@markora/foundation/block/fence`, `@markora/foundation/block/blockquote`, `@markora/foundation/block/hr`, `@markora/foundation/block/reference`, `@markora/foundation/block/paragraph`, `@markora/foundation/inline/text`, `@markora/foundation/inline/emphasis`, `@markora/foundation/core/block`, and `@markora/foundation/core/inline`. The compatibility codec also publishes optional `@markora/table/table`, `@markora/opaque/frontmatter`, `@markora/opaque/display-math`, `@markora/opaque/directive`, `@markora/opaque/inline-directive`, `@markora/opaque/html-source`, and `@markora/opaque/inline-source` anchors. These IDs follow their underlying Markdown-it order and are stable even if the internal rule names change. Optional built-in anchors must be targeted with `{ id, optional: true }` by extensions that also support the minimal codec. Adding an anchor is additive, but removing or changing an anchor's ordering semantics is an extension API major change.
+Markora publishes virtual IDs for the foundation anchors extensions need: `@markora/foundation/block/fence`, `@markora/foundation/block/blockquote`, `@markora/foundation/block/hr`, `@markora/foundation/block/reference`, `@markora/foundation/block/paragraph`, `@markora/foundation/inline/text`, `@markora/foundation/inline/emphasis`, `@markora/foundation/core/block`, and `@markora/foundation/core/inline`. The root codec also publishes optional `@markora/table/table`, `@markora/opaque/frontmatter`, `@markora/opaque/display-math`, `@markora/opaque/directive`, `@markora/opaque/inline-directive`, `@markora/opaque/html-source`, and `@markora/opaque/inline-source` anchors. These IDs follow their underlying Markdown-it order and are stable even if the internal rule names change. Optional built-in anchors must be targeted with `{ id, optional: true }` by extensions that also support the minimal codec. Adding an anchor is additive, but removing or changing an anchor's ordering semantics is an extension API major change.
 
-`sliceMarkdownEditorOriginalSourceLines(environment, startLine, endLine)` exposes an exact, half-open, zero-based line slice to tokenizer callbacks without exposing mutable source bookkeeping. It retains authored BOMs and CRLF/CR/LF line endings between the selected lines, returns `null` for a foreign environment or invalid/out-of-bounds range, and is available in both compatibility and minimal codec parses. Markora keeps the original source metadata private rather than adding writable fields to the Markdown-it environment; extensions may continue to use their own namespaced environment entries.
+`sliceMarkdownEditorOriginalSourceLines(environment, startLine, endLine)` exposes an exact, half-open, zero-based line slice to tokenizer callbacks without exposing mutable source bookkeeping. It retains authored BOMs and CRLF/CR/LF line endings between the selected lines, returns `null` for a foreign environment or invalid/out-of-bounds range, and is available in both root and minimal codec parses. Markora keeps the original source metadata private rather than adding writable fields to the Markdown-it environment; extensions may continue to use their own namespaced environment entries.
 
 `readMarkdownEditorOpaqueTokenSource(token)` exposes the exact source attached
-by the compatibility codec's opaque-source hydration rules without publishing
+by the root codec's opaque-source hydration rules without publishing
 their private token metadata keys. It returns `null` for tokens without that
 own string data field, inherited or accessor-backed metadata, non-object input,
 and unreadable proxy values; it never invokes token or metadata accessors. A
 root-only extension uses it from a core rule ordered after
 `@markora/opaque/html-source` or `@markora/opaque/inline-source`. The minimal
-codec has no corresponding hydration contract, so such an extension also
-declares `compatibility.runtime: "root-default"` rather than silently accepting
-normalized token content.
+codec has no corresponding hydration contract, so an extension requiring these
+anchors fails dependency resolution when installed with the minimal entry.
 
 `markora/extension-api` also re-exports ProseMirror history's `closeHistory()` helper. Extension commands use it when successive host-driven source replacements must remain distinct undo steps; this preserves constructor identity without requiring a second `prosemirror-history` installation.
 
@@ -511,9 +503,9 @@ digits, non-ASCII characters, duplicates, and punctuation already handled by
 foundation or contextual escaping are rejected. In particular, an extension
 must not contribute `` ` * \\ ~ [ ] _ + - > # . | ``; applying the extra pass
 after the foundation or table pass would otherwise double-escape those
-characters in some contexts. Both the root compatibility codec and the minimal
-codec combine the character sets from every installed extension into a fresh
-global expression; the compatibility codec also retains its foundation
+characters in some contexts. Both the root codec and the minimal codec combine
+the character sets from every installed extension into a fresh global
+expression; the root codec also retains its foundation
 literal-text escapes. This deliberately narrow grammar cannot express
 zero-width matches, captures, backreferences, or multi-character replacements,
 and one extension cannot replace or weaken another extension's requirement.
@@ -540,7 +532,7 @@ Markdown fidelity policy still applies. An extension must document its accepted 
 - State contributions call `getState()` when invoked so they always query the current `EditorState`; they cannot dispatch directly or through `runCommand()`, and should not mutate captured storage.
 - Per-editor mutable data is created synchronously by `createStorage()` in resolved dependency order.
 - Persistent transactional state belongs in a ProseMirror plugin state field, not ordinary storage.
-- Storage is not serialized, migrated, cleared by `resetMarkdown()`, or shared between editors.
+- Storage is not serialized, transformed, cleared by `resetMarkdown()`, or shared between editors.
 - Host access to storage is typed but read-only at the API boundary; the owning extension controls mutation.
 
 Commands and state remain extension-local to avoid name collisions and impossible global TypeScript augmentation. Dependencies access each other only through declared dependency handles. The single runtime factory is also the TypeScript inference boundary: storage is known before command/state closures are contextually checked. The kernel enforces the editor-state boundary for queries, including nested calls, and attributes attempted dispatch to the innermost query. Storage purity remains an extension-author rule because neither TypeScript nor the runtime can reliably detect mutation through an arbitrary captured object graph.
@@ -559,7 +551,7 @@ The compiler uses fixed lanes so extensions cannot precede kernel policy:
 6. Ordered extension and built-in keymaps.
 7. Base ProseMirror keymap.
 
-The stable tokenizer anchors and optional tokenizer rule IDs are published above. `EE-010` keeps the default table/task/CodeMirror/opaque runtime behavior in named compatibility adapters rather than pretending their legacy plugin fragments are additive public contributions. They therefore expose no false runtime contribution IDs: their kernel lanes remain fixed, while public extension contributions order against one another inside the documented lanes. A later adapter migration must publish stable IDs before allowing third-party edges to target it. Structured key bindings form a first-`true` chain. A contribution that needs internal fallback, such as table `Tab` before list indentation, should declare one command that performs that chain rather than relying on accidental plugin order.
+The stable tokenizer anchors and optional tokenizer rule IDs are published above. Built-in table, task, CodeMirror, and opaque behavior occupies fixed kernel lanes, while public extension contributions order against one another inside the documented lanes. Structured key bindings form a first-`true` chain. A contribution that needs internal fallback, such as table `Tab` before list indentation, should declare one command that performs that chain rather than relying on accidental plugin order.
 
 One NodeView owner is allowed per node type. The kernel validates each returned NodeView and its callback surface, wraps constructor and callback failures with extension/contribution attribution, and isolates `destroy()` failures so one broken view cannot prevent sibling cleanup. NodeView constructors receive the lifecycle/error context, must clean DOM and async work in `destroy()`, and must not create global listeners without returning owned cleanup. Lazy resources must use versioned cancellation like the existing CodeMirror language loader.
 
@@ -603,7 +595,7 @@ type MarkdownEditorUiActionContribution<
 }>;
 ```
 
-The editor exposes ordered, fully qualified actions to a host or UI adapter. Core renders nothing. `markora-ui` may consume the built-in action set, and the existing `ui: createDefaultUi()` option remains a compatibility adapter.
+The editor exposes ordered, fully qualified actions to a host or UI adapter. Core renders nothing. `markora-ui` may consume the built-in action set through `ui: createDefaultUi()`.
 
 Every action requires a non-empty default accessible label and may reference only a zero-argument boolean command/query. An extension that needs parameters must expose a configured zero-argument wrapper before advertising it as an action. Syntax and commands must work when every UI contribution is ignored. Custom framework render functions, icons, translations, toolbar layout, theming, RTL, and high-contrast behavior are deferred to the UI contract in `EE-020`. Custom document rendering belongs in a NodeView, not a UI action.
 
@@ -673,16 +665,14 @@ Resolution, schema, tokenizer, codec, initial-parse, storage, assembly, view, an
 
 The typed `error` subscription gains extension failure codes and context. Non-throwing browser pipelines use the existing global reporting fallback only when no listener exists; synchronously thrown creation/host-call errors do not also use that fallback. Teardown errors aggregate without preventing later cleanup.
 
-## Presets and compatibility adapters
+## Presets and runtime entries
 
-- Omitting `extensionPreset` uses the default compatibility preset and preserves current Markdown, commands, events, UI, and browser behavior.
-- The definitions inside the default preset advertise root-only compatibility adapters. They are accepted only when the exact default preset drives the root compatibility runtime; copying them into an anonymous preset or passing them to `markora/minimal` fails with `EXTENSION_INCOMPATIBLE` rather than emitting a false persistence manifest.
+- Omitting `extensionPreset` uses the named default preset. Presets select extension definitions and do not alter the root runtime.
 - The minimal preset contains the stable document foundation, basic paragraphs/text, lifecycle policy, and base editing behavior, but omits tables, tasks, CodeMirror, optional UI, and optional syntax.
-- Tables, tasks, strike, CodeMirror fences, opaque source, and default UI become named built-in definitions where practical.
-- Current schema-spec adjustments that cannot use the additive public contract remain in the foundation or a documented internal compatibility adapter.
+- Tables, tasks, strike, CodeMirror fences, and opaque source are root runtime behavior.
 - Existing `codeBlockLanguages` configures the CodeMirror definition and keeps its lazy, cached, recoverable behavior.
-- Existing `ui` configures the built-in UI adapter.
-- Existing top-level commands/state, toolbar snapshot, Markdown update APIs, events, origins, and `editor.view` remain supported.
+- `ui` configures the optional UI integration.
+- Top-level commands/state, Markdown update APIs, events, origins, and `editor.view` are the current host API.
 
 Extensions cannot be reconfigured through `updateOptions()`. A host must destroy and recreate the editor when changing its schema/extension set, and must decide how to preserve selection and pending output across that remount.
 
@@ -706,30 +696,30 @@ type MarkdownEditorExtensionManifest = Readonly<{
 }>;
 ```
 
-Entries appear in resolved order. A named preset has a stable name and SemVer; an advanced anonymous host preset omits the preset field. Hosts that persist non-default syntax must store this manifest with the Markdown and compare it before editing or migration. The manifest contains no ProseMirror JSON, plugin state, storage, or executable configuration.
+Entries appear in resolved order. A named preset has a stable name and SemVer; an advanced anonymous host preset omits the preset field. Hosts that persist non-default syntax must store this manifest with the Markdown and compare it before editing. The manifest contains no ProseMirror JSON, plugin state, storage, or executable configuration.
 
 ## Packaging and tree-shaking
 
-- `markora` remains the compatibility entry. Its synchronous `createEditor()` imports and selects the default preset, so existing applications retain today's behavior.
-- `markora/minimal` is a separate public entry exposing a same-shaped `createEditor()` that defaults to the minimal preset. It must share the kernel modules but must not import the root compatibility entry, default preset, CodeMirror renderer, UI, or optional syntax.
+- `markora` is the full root entry. Its synchronous `createEditor()` imports and selects the default preset.
+- `markora/minimal` is a separate public entry exposing a same-shaped `createEditor()` that defaults to the minimal preset. It shares kernel modules but does not import the root entry, default preset, CodeMirror renderer, UI, or optional syntax.
 - `markora/extension-api` exposes branded definitions, supported contribution contracts, and the exact ProseMirror/Markdown-it constructors/types needed by extension authors. It must not import either preset.
-- Optional extensions and renderers ship as independent side-effect-free ESM packages or explicit package subpaths. The minimal kernel never imports them; the compatibility wrapper may import documented built-ins required by the default preset.
+- Optional extensions and renderers ship as independent side-effect-free ESM packages or explicit package subpaths. Neither runtime auto-imports them.
 - There is no global registry, package-name lookup, or side-effect registration.
 - CSS is a separate explicit import and the only permitted declared side effect.
 - Expensive renderers load through dynamic import from their optional package and remain governed by host security policy.
 - Extension packages peer-depend on compatible `markora`.
 - If an extension imports ProseMirror packages directly instead of `markora/extension-api`, it must use compatible peer dependencies so constructors and plugin keys are not duplicated in the runtime graph.
 
-Passing `createMinimalMarkdownEditorPreset()` to the root entry produces minimal runtime behavior but does not promise that a bundler can remove the statically referenced default graph. The bundle-size guarantee belongs to `markora/minimal`. Packed-consumer tests must prove that the minimal entry has no static path to default-only dependencies, and both entry points are measured independently under the budgets introduced in `EE-013`.
+Passing `createMinimalMarkdownEditorPreset()` to the root entry selects that preset's extensions but retains full root runtime behavior. The bundle-size guarantee belongs to `markora/minimal`. Packed-consumer tests must prove that the minimal entry has no static path to root-only dependencies, and both entry points are measured independently under the budgets introduced in `EE-013`.
 
-## SemVer and migration policy
+## SemVer and persistence policy
 
 The extension API version is independent from the `markora` package version.
 
 - Extension API patch: clarifications and corrections without observable contract changes.
 - Extension API minor: additive optional fields, contexts, or contribution kinds.
 - Extension API major: changed ordering, collision, lifecycle, callback, persistence, or failure semantics.
-- Markora may support more than one extension API major temporarily, but never coerces an unsupported definition silently.
+- Markora rejects extension definitions outside the current extension API range.
 
 For an extension package:
 
@@ -737,7 +727,7 @@ For an extension package:
 - minor releases add behavior that does not capture previously valid prose/opaque input or invalidate stored Markdown;
 - changing token precedence, capturing new existing input, node/mark identity, attrs, content expressions, canonical spelling, command signatures, public state, or storage shape requires an extension major.
 
-Markdown plus the host's extension manifest is the stable persistence/interchange boundary in v1. ProseMirror JSON, plugin state, and extension storage are not portable across extension sets. Hosts migrate stored Markdown before it enters Markora. Automatic migration registries are deferred.
+Markdown plus the host's extension manifest is the stable persistence/interchange boundary in v1. ProseMirror JSON, plugin state, and extension storage are not portable across extension sets. Hosts must transform unsupported input before it enters Markora.
 
 ## Security and accessibility rules
 
@@ -774,7 +764,6 @@ Core-owned async image results follow their own lifecycle: stale loads receive a
 - Public schema replacement, mutation, removal, or whole-codec replacement.
 - Async codecs and extension-defined file/asset contribution workflows. The separate host `resources` workflow is supported.
 - Collaboration, presence, comments, and persistence of runtime state.
-- Automatic state or Markdown migrations.
 - Untrusted-code sandboxing and auto-discovery.
 - Framework render slots and the complete theme/localization/UI contract.
 
@@ -801,9 +790,9 @@ The prototype intentionally could not install these definitions into the pre-EE-
 6. Compile policy lanes, clipboard pipelines, input rules, plugins, history, keymaps, NodeViews, managed-block roles, and UI actions deterministically.
 7. Add the inferred `createRuntime()` boundary, branded type-erased carrier, exact typed handles, lifecycle-safe command dispatch, state queries, and per-editor storage.
 8. Add setup rollback, reverse cleanup, async invalidation, and `MarkdownEditorExtensionError` reporting.
-9. Build the default and minimal presets; migrate tables, tasks, strike, CodeMirror, opaque source, and default UI where practical; prove the minimal entry has no static default-feature path.
+9. Build the default and minimal presets; integrate tables, tasks, strike, CodeMirror, opaque source, and default UI; prove the minimal entry has no static root-feature path.
 10. Replace the private prototype with public-package examples and consumer tests.
-11. Preserve every existing default-preset test and add conflict, ordering, cleanup, minimal-bundle, and external block/inline tests.
+11. Cover the default preset plus conflict, ordering, cleanup, minimal-bundle, and external block/inline behavior.
 
 ## Acceptance mapping
 

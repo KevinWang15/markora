@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEditor as createRootEditor } from "../src/createEditor";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 import { createEditor as createMinimalEditor } from "../src/minimalEditor";
 import { createMinimalMarkdownCodec } from "../src/minimalMarkdownCodec";
 
@@ -12,7 +12,7 @@ function nestedList(depth: number) {
 }
 
 describe.each([
-  ["root", createCompatibilityMarkdownCodec],
+  ["root", createMarkdownCodec],
   ["minimal", createMinimalMarkdownCodec],
 ] as const)("%s Markdown nesting", (_name, createCodec) => {
   it("round-trips the deepest supported nested list without losing content", () => {

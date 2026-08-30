@@ -37,7 +37,7 @@ Write Markdown at the speed of thought, inside your product.
 
 ## Markdown compatibility
 
-Markora is not a byte-for-byte source editor. Supported syntax is serialized to a canonical form. With the root entry's exact default compatibility preset, Markora preserves valid CommonMark link-reference definitions plus conservatively recognized front matter, standalone display math, HTML, comments, and directives as inert source atoms. Reference uses still normalize to inline links, while unused definitions no longer disappear. Other unsupported extensions are not guaranteed to be preserved or rejected. Official extension packages claim their documented forms and give them semantic editing behavior. Review the [Markdown dialect and fidelity contract](./packages/core/MARKDOWN_COMPATIBILITY.md) before importing existing or generated documents.
+Markora is not a byte-for-byte source editor. Supported syntax is serialized to a canonical form. The root entry preserves valid CommonMark link-reference definitions plus conservatively recognized front matter, standalone display math, HTML, comments, and directives as inert source atoms. Reference uses still normalize to inline links, while unused definitions no longer disappear. Other unsupported extensions are not guaranteed to be preserved or rejected. Official extension packages claim their documented forms and give them semantic editing behavior. Review the [Markdown dialect and fidelity contract](./packages/core/MARKDOWN_COMPATIBILITY.md) before importing existing or generated documents.
 
 Opaque HTML is shown as text and never executed inside the editor, but serialized Markdown still contains its source. Hosts must sanitize any downstream HTML rendering independently. They can provide source editing for opaque atoms through `onEditOpaqueMarkdown`.
 
@@ -267,11 +267,11 @@ editor.updateOptions({
 });
 ```
 
-`updateOptions()` also accepts `onChange`, `onTransaction`, `onChangeMode`, and `onEditOpaqueMarkdown`. Replacing `onChange` or its batching mode first flushes pending output once through the previous listener, then installs the new configuration. `onChangeMode` is `"idle"` by default; `"animationFrame"` retains once-per-frame delivery, and `"immediate"` is the explicit compatibility mode for same-stack serialization and callback delivery. `element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `typing`, `shortcuts`, `codeBlockLanguages`, `messages`, `resources`, and extension configuration are creation-only.
+`updateOptions()` also accepts `onChange`, `onTransaction`, and `onEditOpaqueMarkdown`. Replacing `onChange` first flushes pending output once through the previous listener, then installs the new configuration. `element`, `markdown`, `initialSelection`, the autofocus action, `ui`, `typing`, `shortcuts`, `codeBlockLanguages`, `messages`, `resources`, and extension configuration are creation-only.
 
 `focus`, `blur`, `state`, `selection`, `update`, `asset`, and `error` subscriptions return idempotent unsubscribe functions. State, selection, and update events are synchronous and expose host-facing selection snapshots plus a change `origin`; `state` fires for every accepted state transition and adds `docChanged` and `selectionChanged`, while `selection` and `update` are limited to those respective changes. Focus and blur each cross one microtask boundary so host callbacks run outside nested editor focus internals and movement within the composite surface does not produce a false boundary. Asset events describe upload lifecycle without requiring Markdown serialization or a document transaction. Update events do not serialize Markdown. Use the default idle `onChange(markdown, context)` for coalesced normalized output, or call `getMarkdown()` synchronously only when a save/export boundary needs the latest snapshot. `onTransaction(transaction, view, context)` remains available for advanced ProseMirror-aware integrations.
 
-`editor.flushChange()` synchronously delivers the latest pending idle or animation-frame `onChange`; `editor.getMarkdown()` synchronously serializes the current document on demand and reuses that result until the document changes. `editor.destroy()` performs the same final flush, caches the latest Markdown, releases all owned resources even if teardown reports an error, and is safe to call more than once. After destruction, `editor.isDestroyed` is `true`, `getMarkdown()` returns the cached final value, and `flushChange()`, `destroy()`, and previously returned unsubscribe functions are no-ops. Other high-level calls throw `MarkdownEditorDestroyedError`; `editor.view` is then a destroyed raw view and must not be used.
+`editor.flushChange()` synchronously delivers the latest pending `onChange`; `editor.getMarkdown()` synchronously serializes the current document on demand and reuses that result until the document changes. `editor.destroy()` performs the same final flush, caches the latest Markdown, releases all owned resources even if teardown reports an error, and is safe to call more than once. After destruction, `editor.isDestroyed` is `true`, `getMarkdown()` returns the cached final value, and `flushChange()`, `destroy()`, and previously returned unsubscribe functions are no-ops. Other high-level calls throw `MarkdownEditorDestroyedError`; `editor.view` is then a destroyed raw view and must not be used.
 
 ## Architecture notes
 
@@ -279,9 +279,9 @@ editor.updateOptions({
 - `markora-ui` adds the repo's default link, image, and code-fence metadata editors plus the table creation/dimension dialog and table toolbar overlays
 - Code fences keep an exact selectable/searchable source shell in the document; CodeMirror activates near the viewport or for caret/edit interactions, while native range selection can remain on the shell and host-extensible `codeBlockLanguages` loaders run only after activation
 - `editor.commands.reconcileMarkdown(markdown)` is the ordinary authoritative host-update path; it preserves editor state and is silent by default
-- `editor.commands.resetMarkdown(markdown)` is an explicit hard reset that resets selection and clears history/plugin state; deprecated `setMarkdown()` remains a hard-reset alias
+- `editor.commands.resetMarkdown(markdown)` is an explicit hard reset that resets selection and clears history/plugin state
 - `onEditOpaqueMarkdown` lets the host open its own source editor for protected opaque atoms; its guarded update function rejects stale writes
-- `onChangeMode` defaults to coalesced `"idle"` delivery; `"animationFrame"` and `"immediate"` preserve their explicit legacy timing
+- `onChange` uses coalesced idle delivery
 - `editor.getMarkdown()` is the synchronous lazy save/export snapshot, and `editor.flushChange()` forces pending `onChange` delivery
 - `editor.view` is a version-coupled advanced escape hatch. Inspection and `dispatch()` are supported for advanced integrations; direct `setProps()`, `updateState()`, DOM mutation, or `destroy()` can bypass Markora invariants and events and are outside the public semver contract
 - `resources` configures per-editor stored-URL policy, runtime URL resolution/opening, async image loading, privacy attributes, and optional file upload; `editor.assets` controls retained uploads
@@ -302,17 +302,15 @@ if (changed) {
 }
 ```
 
-A changed reconciliation cancels any pending idle or animation-frame `onChange`, so stale local output cannot fire after the authoritative snapshot. A semantic no-op does not cancel that pending output. Calls are synchronous and resolve in invocation order: every incoming string is a complete authoritative snapshot, so the last changed call wins. Markora does not merge snapshots or compare revisions; a host receiving out-of-order responses must reject stale revisions before calling the editor.
+A changed reconciliation cancels any pending `onChange`, so stale local output cannot fire after the authoritative snapshot. A semantic no-op does not cancel that pending output. Calls are synchronous and resolve in invocation order: every incoming string is a complete authoritative snapshot, so the last changed call wins. Markora does not merge snapshots or compare revisions; a host receiving out-of-order responses must reject stale revisions before calling the editor.
 
-Use `resetMarkdown()` only when switching documents or deliberately discarding transient editor state. A reset rebuilds EditorState, clears undo/redo and plugin state, moves selection to the new document default, and bypasses `onTransaction` because no ProseMirror transaction exists. State and any applicable selection/update events, plus an explicitly requested `onChange`, carry origin `"reset"`. `setMarkdown()` is retained as a deprecated hard-reset alias for compatibility.
+Use `resetMarkdown()` only when switching documents or deliberately discarding transient editor state. A reset rebuilds EditorState, clears undo/redo and plugin state, moves selection to the new document default, and bypasses `onTransaction` because no ProseMirror transaction exists. State and any applicable selection/update events, plus an explicitly requested `onChange`, carry origin `"reset"`.
 
 Document activity is classified as `"user"`, `"command"`, `"external"`, `"reset"`, or an extension-owned `"extension:name"`. `onChange` receives the context as its second argument, `onTransaction` as its third, and state/selection/update subscriptions expose `origin`. `onTransaction` observes dispatch attempts; `onChange` and typed state events reflect accepted state changes. Advanced extensions can tag a transaction with `setMarkdownEditorTransactionOrigin(transaction, "extension:my-plugin")` and inspect it with `getMarkdownEditorTransactionOrigin(transaction)`.
 
-## Production status
+## Production contracts
 
-The [embedded editor production plan](./docs/embedded-editor-production-plan.md) is complete through EE-021 and remains the implementation and verification record for the production-minded embedded editor work.
-
-The implemented [extension system RFC](./docs/extension-system-rfc.md) defines the creation-time composition, lifecycle, compatibility, and packaging contract. Package-level examples and minimal-entry guidance live in the [`markora` README](./packages/core/README.md#extensions-and-the-minimal-entry).
+The implemented [extension system RFC](./docs/extension-system-rfc.md) defines creation-time composition, lifecycle, version validation, and packaging. The [performance budgets](./docs/performance-budgets.md) define the packed runtime and bundle gates. Package-level examples and minimal-entry guidance live in the [`markora` README](./packages/core/README.md#extensions-and-the-minimal-entry).
 
 Hosts preparing a release should also review the [embedded input and accessibility contract](./docs/input-accessibility-certification.md) and run the [assistive-technology checklist](./docs/assistive-technology-checklist.md) on their supported platform matrix.
 
@@ -369,15 +367,14 @@ Notes:
 
 ## API notes
 
-- `onChangeMode` defaults to `"idle"`, coalescing Markdown serialization away from synchronous input; `"animationFrame"` and `"immediate"` are explicit alternatives
+- `onChange` coalesces Markdown serialization away from synchronous input
 - `editor.getMarkdown()` returns the latest normalized snapshot synchronously, while `editor.flushChange()` forces pending callback delivery for form submission or another save boundary
 - `createEditor()` is headless by default; pass `ui: createDefaultUi()` from `markora-ui` for the built-in overlays
 - `createDefaultUi({ portalRoot })` helps when the editor lives inside a Shadow DOM host
 - `editor.updateOptions(...)` changes editable state, placeholder, attributes, and accessible naming without rebuilding editor state or emitting a document update
 - `editor.subscribe(...)` exposes typed focus, blur, state, selection, update, asset-lifecycle, and recoverable runtime error events
 - `editor.commands.reconcileMarkdown(...)` applies ordinary authoritative host updates while mapping selection/history and preserving plugin state
-- `editor.commands.resetMarkdown(...)` performs an explicit state reset; `setMarkdown(...)` remains a deprecated alias
+- `editor.commands.resetMarkdown(...)` performs an explicit state reset
 - change callbacks and state/selection/update events expose `user`, `command`, `external`, `reset`, or namespaced extension origins
 - built-in code block languages cover JavaScript, TypeScript, JSON, CSS, HTML, XML, Markdown, Python, C/C++, Java, Rust, and shell
 - `editor.state.can.*` and `editor.state.isActive.*` expose host-friendly capability and activity checks
-- `editor.getToolbarState()` remains available for toolbar integrations that prefer a compatibility snapshot

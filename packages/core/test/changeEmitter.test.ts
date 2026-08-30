@@ -6,14 +6,11 @@ type TestDoc = { value: string };
 type TestContext = { origin: string };
 
 function createHarness(options: {
-  mode?: "idle" | "immediate" | "animationFrame";
   onChange?: (markdown: string, context: TestContext) => void;
   serialize?: (doc: TestDoc) => string;
 } = {}) {
   const initialDoc = { value: "initial" };
   let currentDoc = initialDoc;
-  let nextFrame = 1;
-  const frames = new Map<number, FrameRequestCallback>();
   const idleCallbacks: Array<{
     active: boolean;
     callback: () => void;
@@ -23,20 +20,11 @@ function createHarness(options: {
   const serialize = vi.fn(options.serialize ?? ((doc: TestDoc) => doc.value));
   const onChange = vi.fn(options.onChange ?? (() => undefined));
   const emitter = createChangeEmitter<TestDoc, TestContext>({
-    cancelFrame(frameId) {
-      frames.delete(frameId);
-    },
     initialDoc,
     initialMarkdown: "initial",
     isDeliveryValid: (doc) => doc === currentDoc,
-    mode: options.mode ?? "idle",
     onChange,
     reportAsyncError,
-    requestFrame(callback) {
-      const frameId = nextFrame++;
-      frames.set(frameId, callback);
-      return frameId;
-    },
     scheduleIdle(callback) {
       const pending = { active: true, callback, postponeCalls: 0 };
       idleCallbacks.push(pending);
@@ -54,7 +42,6 @@ function createHarness(options: {
 
   return {
     emitter,
-    frames,
     idleCallbacks,
     initialDoc,
     onChange,
@@ -174,14 +161,11 @@ describe("change emitter", () => {
       const onChange = vi.fn();
       const idleScheduler = createHostIdleScheduler(idleWindow);
       const emitter = createChangeEmitter<TestDoc, TestContext>({
-        cancelFrame: (handle) => idleWindow.cancelAnimationFrame(handle),
         initialDoc,
         initialMarkdown: "initial",
         isDeliveryValid: (doc) => doc === currentDoc,
-        mode: "idle",
         onChange,
         reportAsyncError: vi.fn(),
-        requestFrame: (callback) => idleWindow.requestAnimationFrame(callback),
         scheduleIdle: idleScheduler.schedule,
         serialize,
       });
@@ -296,22 +280,5 @@ describe("change emitter", () => {
     expect(harness.reportAsyncError).toHaveBeenCalledOnce();
     expect(harness.reportAsyncError).toHaveBeenCalledWith(failure);
     expect(harness.onChange).toHaveBeenCalledOnce();
-  });
-
-  it("preserves explicit immediate and animation-frame modes", () => {
-    const immediate = createHarness({ mode: "immediate" });
-    const immediateDoc = { value: "immediate" };
-    immediate.setCurrentDoc(immediateDoc);
-    immediate.emitter.schedule(immediateDoc, { origin: "user" });
-    expect(immediate.onChange).toHaveBeenCalledWith("immediate", { origin: "user" });
-
-    const framed = createHarness({ mode: "animationFrame" });
-    const frameDoc = { value: "frame" };
-    framed.setCurrentDoc(frameDoc);
-    framed.emitter.schedule(frameDoc, { origin: "command" });
-    expect(framed.serialize).not.toHaveBeenCalled();
-    const frame = [...framed.frames.values()][0]!;
-    frame(0);
-    expect(framed.onChange).toHaveBeenCalledWith("frame", { origin: "command" });
   });
 });

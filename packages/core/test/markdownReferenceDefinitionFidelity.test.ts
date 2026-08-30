@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 
 describe("reference-definition fidelity", () => {
   it("preserves used and unused definitions while resolving reference links", () => {
@@ -21,7 +21,7 @@ describe("reference-definition fidelity", () => {
       "",
       "Use [label](/target \"title\").",
     ].join("\n");
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const document = codec.parse(markdown)!;
     const definitions = document.content.content.filter((node) => (
       node.type.name === "raw_block" && node.attrs.kind === "reference-definition"
@@ -44,7 +44,7 @@ describe("reference-definition fidelity", () => {
       "",
       "[multi]",
     ].join("\r\n");
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const document = codec.parse(markdown)!;
     const definitions = document.content.content.filter((node) => node.type.name === "raw_block");
 
@@ -57,7 +57,7 @@ describe("reference-definition fidelity", () => {
   });
 
   it("keeps invalid definition-looking text ordinary", () => {
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const document = codec.parse("[label]:\n\n[label]")!;
 
     expect(document.content.content.some((node) => node.type.name === "raw_block")).toBe(false);
@@ -87,7 +87,7 @@ describe("reference-definition fidelity", () => {
       "",
       "  [nested](/n)",
     ].join("\n");
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const document = codec.parse(markdown)!;
     const definitions: string[] = [];
     document.descendants((node) => {
@@ -101,7 +101,7 @@ describe("reference-definition fidelity", () => {
 
   it("keeps an unsafe definition inert while stripping its resolved link mark", () => {
     const markdown = "[bad]: javascript:alert(1)\n\n[bad]";
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const document = codec.parse(markdown)!;
     const definition = document.firstChild!;
     const label = document.lastChild!.firstChild!;

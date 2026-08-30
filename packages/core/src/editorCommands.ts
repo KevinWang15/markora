@@ -432,7 +432,7 @@ export function getMarkInfo(state: EditorState, markName: MarkName): MarkInfo | 
   };
 }
 
-function isMarkActiveForToolbar(
+export function isMarkActive(
   state: EditorState,
   markName: MarkName,
   markType: MarkType,
@@ -452,44 +452,11 @@ function isMarkActiveForToolbar(
   return !!markType.isInSet(marks);
 }
 
-export function getToolbarMarkState(
-  state: EditorState,
-  markName: MarkName,
-  markType: MarkType,
-  command: EditorCommand,
-  isEscapedOutsideBoundary: (state: EditorState, markName: MarkName, markInfo: MarkInfo) => boolean,
-) {
-  return {
-    active: isMarkActiveForToolbar(state, markName, markType, isEscapedOutsideBoundary),
-    enabled: command(state),
-  };
-}
-
-export function getLinkToolbarState(options: {
+export function isLinkActive(options: {
   state: EditorState;
-  canSetLink: (state: EditorState) => boolean;
   isEscapedOutsideBoundary: (state: EditorState, markName: MarkName, markInfo: MarkInfo) => boolean;
 }) {
-  const { canSetLink, isEscapedOutsideBoundary, state } = options;
+  const { isEscapedOutsideBoundary, state } = options;
   const markInfo = getMarkInfo(state, "link");
-  const active = !!markInfo && !isEscapedOutsideBoundary(state, "link", markInfo);
-
-  return {
-    active,
-    enabled: active || canSetLink(state),
-  };
-}
-
-export function getImageToolbarState(options: {
-  state: EditorState;
-  canInsertImage: (state: EditorState) => boolean;
-  getActiveImageInfo: (state: EditorState) => unknown;
-}) {
-  const { canInsertImage, getActiveImageInfo, state } = options;
-  const active = !!getActiveImageInfo(state);
-
-  return {
-    active,
-    enabled: active || canInsertImage(state),
-  };
+  return !!markInfo && !isEscapedOutsideBoundary(state, "link", markInfo);
 }

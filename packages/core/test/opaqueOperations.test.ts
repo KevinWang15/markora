@@ -276,7 +276,6 @@ describe("opaque Markdown editor operations", () => {
       onChange(markdown) {
         changes.push(markdown);
       },
-      onChangeMode: "immediate",
       onEditOpaqueMarkdown(nextRequest) {
         request = nextRequest;
       },
@@ -292,10 +291,12 @@ describe("opaque Markdown editor operations", () => {
     expect(request.source).toBe(before);
     expect(request.update(after)).toBe(true);
     expect(editor.getMarkdown()).toBe(after + "\n\nBody");
+    editor.flushChange();
     expect(changes).toEqual([after + "\n\nBody"]);
 
     expect(editor.commands.undo()).toBe(true);
     expect(findSingleNode(editor, "raw_block").node.attrs.source).toBe(before);
+    editor.flushChange();
     expect(changes).toEqual([
       after + "\n\nBody",
       before + "\n\nBody",
@@ -303,6 +304,7 @@ describe("opaque Markdown editor operations", () => {
 
     expect(editor.commands.redo()).toBe(true);
     expect(findSingleNode(editor, "raw_block").node.attrs.source).toBe(after);
+    editor.flushChange();
     expect(changes).toEqual([
       after + "\n\nBody",
       before + "\n\nBody",
@@ -310,7 +312,7 @@ describe("opaque Markdown editor operations", () => {
     ]);
   });
 
-  it("rejects a stale source-edit request after setMarkdown replaces its node", () => {
+  it("rejects a stale source-edit request after resetMarkdown replaces its node", () => {
     let request: OpaqueMarkdownEditRequest | null = null;
     const editor = createTestEditor({
       markdown: "---\ntitle: Before\n---\n\nBody",
@@ -325,7 +327,7 @@ describe("opaque Markdown editor operations", () => {
       throw new Error("Expected the source edit hook to receive a request.");
     }
 
-    editor.commands.setMarkdown("Replacement");
+    editor.commands.resetMarkdown("Replacement");
 
     expect(request.update("---\ntitle: Stale\n---")).toBe(false);
     expect(editor.getMarkdown()).toBe("Replacement");

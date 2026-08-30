@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEditor } from '../src/createEditor';
 import { defaultMarkdownEditorMessages } from '../src/editorMessages';
 import { createImageViewClass } from '../src/imageView';
-import { schema } from '../src/markdownCodec';
+import { schema } from './support/currentMarkdownCodec';
 import type { MarkdownEditorImageLoadRequest } from '../src/resourceApi';
 import { normalizeMarkdownEditorResources } from '../src/resourcePolicy';
 
@@ -140,7 +140,7 @@ describe('image node view', () => {
 
     expect(editor.view.dom.querySelector('.mdw-image')?.classList.contains('mdw-image-standalone')).toBe(true);
 
-    editor.commands.setMarkdown('Text before ![inline](https://example.com/inline.png)');
+    editor.commands.resetMarkdown('Text before ![inline](https://example.com/inline.png)');
 
     expect(editor.view.dom.querySelector('.mdw-image')?.classList.contains('mdw-image-standalone')).toBe(false);
     editor.destroy();
@@ -157,7 +157,7 @@ describe('image node view', () => {
     image!.dispatchEvent(new Event('error'));
     expect(editor.view.dom.querySelector('.mdw-image')?.textContent).toContain('Old fallback');
 
-    editor.commands.setMarkdown('![New fallback](https://example.com/missing.png)');
+    editor.commands.resetMarkdown('![New fallback](https://example.com/missing.png)');
 
     expect(editor.view.dom.querySelector('.mdw-image')?.textContent).toContain('New fallback');
     expect(editor.view.dom.querySelector('.mdw-image')?.textContent).not.toContain('Old fallback');
@@ -172,7 +172,7 @@ describe('image node view', () => {
     const image = editor.view.dom.querySelector('img');
 
     expect(image).not.toBeNull();
-    editor.commands.setMarkdown('![New fallback](https://example.com/loading.png)');
+    editor.commands.resetMarkdown('![New fallback](https://example.com/loading.png)');
     image!.dispatchEvent(new Event('error'));
 
     expect(editor.view.dom.querySelector('.mdw-image')?.textContent).toContain('New fallback');

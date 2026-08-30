@@ -21,7 +21,7 @@ ships.
    default preset, imported by `markora`, or discovered through a registry.
 2. Every package works with both `markora` and `markora/minimal`, except
    `markora-extension-html`, which is deliberately root-only because it depends
-   on the compatibility codec's exact opaque-HTML token hydration.
+   on the root codec's exact opaque-HTML token hydration.
 3. Syntax and source representation never depend on a preview renderer. The
    editor can parse, edit, copy, serialize, reset, reconcile, and undo every
    installed syntax with no renderer configured.
@@ -70,10 +70,10 @@ The public definition identity deliberately matches the unscoped package name.
 Public packages do not use the kernel-reserved `markora/*` or `@markora/*`
 extension namespaces.
 
-`markora-extension-html` declares root-only compatibility and must fail with an
-attributed `EXTENSION_INCOMPATIBLE` error before the host is claimed when used
-with `markora/minimal`. It must not silently accept normalized or reconstructed
-HTML in place of the compatibility codec's exact top-level and inline source
+`markora-extension-html` requires root-only tokenizer anchors and must fail with
+an attributed `EXTENSION_MISSING_DEPENDENCY` error before the host is claimed
+when used with `markora/minimal`. It must not accept normalized or reconstructed
+HTML in place of the root codec's exact top-level and inline source
 spans.
 
 ## Source-claim foundation
@@ -93,14 +93,14 @@ the fallback when no package claims the source.
 
 The front-matter, footnote, math, alert, TOC, and diagram claims must be
 available in the shared root/minimal kernel. Exact HTML token hydration remains
-in the compatibility codec and is the only root-only claim in `EE-021`.
+in the root codec and is the only root-only claim in `EE-021`.
 
 ## Fidelity and absent-extension behavior
 
 | Feature | Installed-package fidelity | Renderer absent or failed | Package absent |
 | --- | --- | --- | --- |
 | Front matter | Exact source island, including BOM, delimiter spelling, indentation, comments, whitespace, and internal line endings | Exact source shell remains editable and serializes unchanged | Root retains its conservative opaque front-matter atom; minimal retains its existing unsupported/unreported behavior |
-| Footnotes | Semantic round-trip with canonical reference and definition layout | Semantic reference/definition DOM remains; Markdown is unchanged | Unsupported/unreported without the package: root compatibility can reinterpret references as ordinary links but retains valid definition source inertly; minimal has no definition-source guarantee |
+| Footnotes | Semantic round-trip with canonical reference and definition layout | Semantic reference/definition DOM remains; Markdown is unchanged | Unsupported/unreported without the package: root can reinterpret references as ordinary links but retains valid definition source inertly; minimal has no definition-source guarantee |
 | Math | Canonical `$...$` or `$$` shell with expression source retained as node content | Source shell remains readable/editable and serializes canonically | Root preserves recognized standalone display math opaquely; inline math and minimal behavior remain unsupported/unreported |
 | Alerts | Semantic round-trip with canonical GitHub blockquote markers and uppercase kind | Editable alert DOM remains; Markdown is unchanged | Existing ordinary-blockquote fallback; the alert marker may be escaped or folded |
 | TOC | Canonical standalone `[TOC]` marker; generated outline is never serialized | Generated outline uses the package's built-in source-safe DOM and needs no external renderer | Existing unsupported/unreported literal-text behavior; the marker normally escapes on output |
@@ -303,7 +303,7 @@ with no headings renders a localized empty state while retaining the marker.
 
 ### Raw HTML — CommonMark/GitHub form
 
-The package claims the compatibility codec's currently recognized CommonMark
+The package claims the root codec's currently recognized CommonMark
 HTML blocks, inline HTML, and comments. It retains the exact hydrated source
 span and never reparses preview DOM back into Markdown.
 

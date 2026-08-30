@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 import { createMinimalMarkdownCodec } from "../src/minimalMarkdownCodec";
 
 describe.each([
-  ["root", createCompatibilityMarkdownCodec],
+  ["root", createMarkdownCodec],
   ["minimal", createMinimalMarkdownCodec],
 ] as const)("%s Markdown list fidelity", (name, createCodec) => {
   it.each([

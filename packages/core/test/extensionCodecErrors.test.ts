@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MarkdownEditorExtensionError,
-  createEditor as createCompatibilityEditor,
+  createEditor as createRootEditor,
   defineMarkdownEditorExtension,
   type MarkdownEditor,
   type MarkdownEditorErrorEvent,
@@ -306,7 +306,7 @@ afterEach(() => {
 });
 
 const entries = [
-  ["compatibility", createCompatibilityEditor],
+  ["root", createRootEditor],
   ["minimal", createMinimalEditor],
 ] as const;
 
@@ -607,7 +607,6 @@ describe.each(entries)("%s editor extension codec errors", (_entryName, createEd
       extensions: [extension],
       markdown: "marked",
       onChange,
-      onChangeMode: "animationFrame",
     }));
     const fallback = vi.fn();
     (window as Window & { reportError?: (error: unknown) => void }).reportError = fallback;

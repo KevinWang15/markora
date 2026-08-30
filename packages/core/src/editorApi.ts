@@ -36,8 +36,6 @@ export type MarkdownEditorMarkdownUpdateOptions = {
   emitChange?: boolean;
 };
 
-export type MarkdownEditorChangeMode = "idle" | "immediate" | "animationFrame";
-
 export type CreateEditorOptions = {
   ariaLabel?: string;
   ariaLabelledBy?: string;
@@ -58,7 +56,6 @@ export type CreateEditorOptions = {
     context: MarkdownEditorChangeContext,
   ) => void;
   onChange?: (markdown: string, context: MarkdownEditorChangeContext) => void;
-  onChangeMode?: MarkdownEditorChangeMode;
   onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
   placeholder?: string;
   resources?: MarkdownEditorResourceOptions;
@@ -75,7 +72,6 @@ export type UpdateEditorOptions = {
   attributes?: MarkdownEditorDomAttributes | null;
   editable?: boolean;
   onChange?: CreateEditorOptions["onChange"] | null;
-  onChangeMode?: MarkdownEditorChangeMode;
   onEditOpaqueMarkdown?: ((request: OpaqueMarkdownEditRequest) => void) | null;
   onTransaction?: CreateEditorOptions["onTransaction"] | null;
   placeholder?: string | null;
@@ -130,8 +126,6 @@ export type MarkdownEditorTableIssue = Readonly<{
 export type MarkdownEditorCommands = {
   reconcileMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => boolean;
   resetMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => void;
-  /** @deprecated Use resetMarkdown() for an explicit hard reset, or reconcileMarkdown() for ordinary host updates. */
-  setMarkdown: (markdown: string, options?: MarkdownEditorMarkdownUpdateOptions) => void;
   pasteMarkdown: (markdown: string) => boolean;
   pastePlainText: (text: string) => boolean;
   toggleMark: (mark: MarkdownEditorMark) => boolean;
@@ -227,22 +221,6 @@ export type MarkdownEditorUi = {
   editTable: () => boolean;
 };
 
-export type ToolbarButtonState = {
-  active: boolean;
-  enabled: boolean;
-};
-
-export type ToolbarState = {
-  bold: ToolbarButtonState;
-  italic: ToolbarButtonState;
-  code: ToolbarButtonState;
-  strike: ToolbarButtonState;
-  link: ToolbarButtonState;
-  image: ToolbarButtonState;
-  undo: { enabled: boolean };
-  redo: { enabled: boolean };
-};
-
 export type MarkdownEditor = {
   readonly isDestroyed: boolean;
   readonly view: EditorView;
@@ -255,7 +233,6 @@ export type MarkdownEditor = {
   focus: (selection?: MarkdownEditorSelectionTarget) => void;
   getMarkdown: () => string;
   flushChange: () => void;
-  getToolbarState: () => ToolbarState;
   subscribe: <TType extends MarkdownEditorEventName>(
     type: TType,
     listener: MarkdownEditorEventListener<TType>,

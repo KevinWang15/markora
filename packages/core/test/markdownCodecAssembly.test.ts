@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 
 describe("Markdown codec assemblies", () => {
   it("builds an isolated but behaviorally compatible graph per editor", () => {
-    const first = createCompatibilityMarkdownCodec();
-    const second = createCompatibilityMarkdownCodec();
+    const first = createMarkdownCodec();
+    const second = createMarkdownCodec();
 
     expect(first).not.toBe(second);
     expect(first.schema).not.toBe(second.schema);
@@ -21,7 +21,7 @@ describe("Markdown codec assemblies", () => {
   });
 
   it("keeps parse, serializer, and imported-content policy on one schema", () => {
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const doc = codec.parse("[unsafe](javascript:alert(1)) ![image](javascript:alert(2))");
     let unsafeSemanticNode = false;
 

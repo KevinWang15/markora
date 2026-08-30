@@ -493,14 +493,9 @@ function releaseCodec() {
 
 function normalizeSnapshotMode(mode) {
   const normalized = mode ?? "none";
-  if (
-    normalized !== "none"
-    && normalized !== "default"
-    && normalized !== "immediate"
-    && normalized !== "animationFrame"
-  ) {
+  if (normalized !== "none" && normalized !== "default") {
     throw new TypeError(
-      'snapshotMode must be "none", "default", "immediate", or "animationFrame".',
+      'snapshotMode must be "none" or "default".',
     );
   }
   return normalized;
@@ -560,9 +555,6 @@ function mount(input) {
         // latency boundaries have been captured.
         recordSnapshot(mountRecord, markdown, context);
       },
-      // "default" deliberately omits onChangeMode so the packed benchmark
-      // exercises the mode shipped to ordinary consumers.
-      ...(snapshotMode === "default" ? {} : { onChangeMode: snapshotMode }),
     }),
   };
 
@@ -1044,8 +1036,8 @@ function disableSnapshots() {
   if (pendingKeystroke) {
     throw new Error("Await the pending keystroke before disabling snapshots.");
   }
-  // updateOptions flushes any pending animation-frame snapshot through the
-  // previous callback before removing it. The current document therefore
+  // updateOptions flushes any pending snapshot through the previous callback
+  // before removing it. The current document therefore
   // remains the serialization cache baseline; the next change becomes dirty.
   activeMount.editor.updateOptions({ onChange: null });
   activeMount.snapshotMode = "none";
@@ -1518,7 +1510,7 @@ const schema = deepFreeze({
   mountInput: {
     fixtureId: "string",
     hotPathProbe: "boolean",
-    snapshotMode: ["none", "default", "immediate", "animationFrame"],
+    snapshotMode: ["none", "default"],
   },
   name: "markora-packed-performance-consumer",
   teardownModes: ["clean", "dirty"],

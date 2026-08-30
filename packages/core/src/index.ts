@@ -13,7 +13,6 @@ export type {
   MarkdownEditorActiveMark,
   MarkdownEditorActiveNode,
   MarkdownEditorCodeBlockOptions,
-  MarkdownEditorChangeMode,
   MarkdownEditorCommands,
   MarkdownEditorHeadingLevel,
   MarkdownEditorMark,
@@ -29,8 +28,6 @@ export type {
   MarkdownEditorTableRowMoveDirection,
   MarkdownEditorSelectionTarget,
   MarkdownEditorUi,
-  ToolbarButtonState,
-  ToolbarState,
   UpdateEditorOptions,
 } from "./createEditor";
 export {

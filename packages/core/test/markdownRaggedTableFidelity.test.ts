@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 
 function tableRows(markdown: string) {
-  const codec = createCompatibilityMarkdownCodec();
+  const codec = createMarkdownCodec();
   const document = codec.parse(markdown)!;
   const table = document.firstChild!;
 
@@ -51,7 +51,7 @@ describe("ragged pipe-table fidelity", () => {
       "> | --- | --- | --- |",
       "> | A | B | C |",
     ].join("\n");
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const document = codec.parse(markdown)!;
     const table = document.firstChild!.firstChild!;
 
@@ -95,7 +95,7 @@ describe("ragged pipe-table fidelity", () => {
       "| --- | --- |",
       `| ${widestRow.join(" | ")} |`,
     ].join("\n");
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const document = codec.parse(markdown)!;
     let hasTable = false;
     document.descendants((node) => {

@@ -47,12 +47,11 @@ const handle = editor.extensions.get(html);
 const snapshot = handle.state.getSnapshot();
 ```
 
-## Compatibility and source contract
+## Source contract
 
-This package is deliberately compatible only with the root `markora` entry's
-exact default runtime. `markora/minimal`, and the root entry with a custom
-preset, reject it with an attributed `EXTENSION_INCOMPATIBLE` error before
-claiming the editor host.
+This package requires the root `markora` entry's exact HTML tokenizer anchors.
+`markora/minimal` rejects it with an attributed `EXTENSION_MISSING_DEPENDENCY`
+error before claiming the editor host. Root presets do not change those anchors.
 
 The extension claims only HTML block, inline HTML, and comment tokens already
 recognized by Markora's CommonMark tokenizer. Top-level and inline hydrated

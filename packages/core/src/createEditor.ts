@@ -20,21 +20,17 @@ import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
 import { createCodeBlockViewClass } from "./codeBlockView";
 import { createChangeEmitter } from "./changeEmitter";
 import { createClipboardSemantics } from "./clipboardSemantics";
-import { normalizeMarkdownEditorChangeMode } from "./changeMode";
 import { createHostIdleScheduler } from "./idleScheduler";
 import { createInputRobustnessPlugin } from "./androidInput";
 import { createNativeHistoryPlugin } from "./nativeHistory";
 import { createAssetUploadController } from "./assetUploads";
 import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
 import {
-  createCompatibilityMarkdownCodec,
+  createMarkdownCodec,
   normalizeTableAlignment,
   type MarkdownEditorCodec,
 } from "./markdownCodec";
-import {
-  assertMarkdownEditorCompatibilityRuntimeActive,
-  resolveMarkdownEditorExtensions,
-} from "./extensionResolver";
+import { resolveMarkdownEditorExtensions } from "./extensionResolver";
 import {
   MARKORA_VERSION,
   createDefaultMarkdownEditorPreset,
@@ -42,7 +38,6 @@ import {
 import { createMarkdownEditorExtensionAssembly } from "./extensionAssembly";
 import { MarkdownEditorExtensionError } from "./extensionApi";
 import { runInitialMarkdownParse } from "./extensionErrorBoundary";
-import { createMinimalMarkdownCodec } from "./minimalMarkdownCodec";
 import { normalizeCodeBlockInfo } from "./codeBlockMarkdown";
 import type {
   CreateEditorOptions,
@@ -50,7 +45,6 @@ import type {
   MarkdownEditorActiveMark,
   MarkdownEditorActiveNode,
   MarkdownEditorCodeBlockOptions,
-  MarkdownEditorChangeMode,
   MarkdownEditorCommands,
   MarkdownEditorDomAttributes,
   MarkdownEditorHeadingLevel,
@@ -61,8 +55,6 @@ import type {
   MarkdownEditorTableAlignment,
   MarkdownEditorTableInsertOptions,
   MarkdownEditorUi,
-  ToolbarButtonState,
-  ToolbarState,
   UpdateEditorOptions,
 } from "./editorApi";
 export type {
@@ -71,7 +63,6 @@ export type {
   MarkdownEditorActiveMark,
   MarkdownEditorActiveNode,
   MarkdownEditorCodeBlockOptions,
-  MarkdownEditorChangeMode,
   MarkdownEditorCommands,
   MarkdownEditorDomAttributes,
   MarkdownEditorHeadingLevel,
@@ -88,8 +79,6 @@ export type {
   MarkdownEditorTableResizeOptions,
   MarkdownEditorTableRowMoveDirection,
   MarkdownEditorUi,
-  ToolbarButtonState,
-  ToolbarState,
   UpdateEditorOptions,
 } from "./editorApi";
 export type {
@@ -117,7 +106,7 @@ import {
   normalizeMarkdownEditorResources,
   type NormalizedMarkdownEditorResources,
 } from "./resourcePolicy";
-import { createTypingShortcuts, getImageToolbarState, getLinkToolbarState, getMarkInfo, getToolbarMarkState, type EditorCommand } from "./editorCommands";
+import { createTypingShortcuts, getMarkInfo, isLinkActive, isMarkActive as isMarkdownMarkActive, type EditorCommand } from "./editorCommands";
 import { createCodeBlockOuterSelectionPlugin, createCodeFenceEditingPlugin, createHeadingEditingPlugin, createHorizontalRulePlugin, createImagePlugin, createInputRuleRecoveryPlugin, createMarkdownRevealPlugin, createMarkBoundaryPlugin, type RevealMarkConfig } from "./editorPlugins";
 import { createCodeBlockSelectionHelpers } from "./codeBlockSelection";
 import { createPipeTableHelpers } from "./pipeTable";
@@ -230,7 +219,6 @@ type EditorRuntimeOptions = {
   attributes: Record<string, string>;
   editable: boolean;
   onChange: ((markdown: string, context: MarkdownEditorChangeContext) => void) | undefined;
-  onChangeMode: MarkdownEditorChangeMode;
   onEditOpaqueMarkdown: ((request: OpaqueMarkdownEditRequest) => void) | undefined;
   onTransaction: CreateEditorOptions["onTransaction"];
   placeholder: string | null;
@@ -774,8 +762,6 @@ const {
   createEmptyTableRow,
   addTableRow,
   addTableColumn,
-  appendTableRow,
-  appendTableColumn,
   moveTableRow,
   moveTableColumn,
   removeTableRow,
@@ -837,8 +823,6 @@ const { convertPipeTable } = createPipeTableHelpers({
     createEmptyTableRow,
     addTableRow,
     addTableColumn,
-    appendTableRow,
-    appendTableColumn,
     moveTableRow,
     moveTableColumn,
     removeTableRow,
@@ -879,21 +863,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     phase: MarkdownEditorResourceErrorPhase,
   ) => void = () => undefined;
 
-  const defaultExtensionPreset = createDefaultMarkdownEditorPreset();
-  const selectedExtensionPreset = extensionPreset ?? defaultExtensionPreset;
-  const usesCompatibilityPreset = selectedExtensionPreset === defaultExtensionPreset;
   const extensionResolution = resolveMarkdownEditorExtensions({
     markoraVersion: MARKORA_VERSION,
-    preset: selectedExtensionPreset,
+    preset: extensionPreset ?? createDefaultMarkdownEditorPreset(),
     extensions,
   });
-  assertMarkdownEditorCompatibilityRuntimeActive(
-    extensionResolution,
-    usesCompatibilityPreset,
-  );
-  const codec = usesCompatibilityPreset
-    ? createCompatibilityMarkdownCodec(extensionResolution.extensions, resources, messages)
-    : createMinimalMarkdownCodec(extensionResolution.extensions, resources);
+  const codec = createMarkdownCodec(extensionResolution.extensions, resources, messages);
   const { schema } = codec;
   const {
     handleNativeTaskControlKeyDown,
@@ -933,8 +908,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     getTableBoundaryEscapeInfo,
     addTableRow,
     addTableColumn,
-    appendTableRow,
-    appendTableColumn,
     moveTableRow,
     moveTableColumn,
     removeTableRow,
@@ -950,12 +923,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     resources,
     (error, phase) => handleResourceError(error, phase),
   );
-  const requestFrame = typeof ownerWindow.requestAnimationFrame === "function"
-    ? ownerWindow.requestAnimationFrame.bind(ownerWindow)
-    : ((callback: FrameRequestCallback) => ownerWindow.setTimeout(() => callback(Date.now()), 16));
-  const cancelFrame = typeof ownerWindow.cancelAnimationFrame === "function"
-    ? ownerWindow.cancelAnimationFrame.bind(ownerWindow)
-    : ((frameId: number) => ownerWindow.clearTimeout(frameId));
   const idleScheduler = createHostIdleScheduler(ownerWindow);
   const doc = runInitialMarkdownParse(() => codec.parse(markdown));
 
@@ -974,7 +941,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     attributes: copyEditorAttributes(options.attributes, element.ownerDocument),
     editable: options.editable ?? true,
     onChange: options.onChange,
-    onChangeMode: normalizeMarkdownEditorChangeMode(options.onChangeMode),
     onEditOpaqueMarkdown: options.onEditOpaqueMarkdown,
     onTransaction: options.onTransaction,
     placeholder: normalizePlaceholder(options.placeholder),
@@ -1087,9 +1053,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     codec,
     ownerDocument: element.ownerDocument,
     shortcuts,
-    reservedNodeViews: usesCompatibilityPreset
-      ? ["code_block", "image", "raw_block", "raw_inline"]
-      : ["image"],
+    reservedNodeViews: ["code_block", "image", "raw_block", "raw_inline"],
     reportError: reportExtensionError,
   });
 
@@ -1316,8 +1280,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       hostElement: element,
       addTableColumn: (view, side) => runUiTableMutation(view, () => addTableColumn(view, side)),
       addTableRow: (view, side) => runUiTableMutation(view, () => addTableRow(view, side)),
-      appendTableColumn: (view) => runUiTableMutation(view, () => appendTableColumn(view)),
-      appendTableRow: (view) => runUiTableMutation(view, () => appendTableRow(view)),
       insertTable: (view, dimensions) => {
         const handled = runUiStructuralCommand(
           view,
@@ -1348,7 +1310,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }) ?? createNoopUiControllers();
     uiFactoryReturned = true;
     uiEnabled = Boolean(uiControllers.enabled);
-    codeBlockLanguageEditor = uiControllers.codeBlockLanguageEditor ?? null;
+    codeBlockLanguageEditor = uiControllers.codeBlockLanguageEditor;
     imageEditor = uiControllers.imageEditor;
     linkEditor = uiControllers.linkEditor;
     tableToolbar = uiControllers.tableToolbar;
@@ -1695,7 +1657,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   let compositeFocused = false;
   let pendingBlurVersion = 0;
   const changeEmitter = createChangeEmitter<ProseMirrorNode, MarkdownEditorChangeContext>({
-    cancelFrame,
     initialDoc: doc,
     initialMarkdown,
     isDeliveryValid: (targetDoc) => (
@@ -1703,7 +1664,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       && !view.isDestroyed
       && view.state.doc === targetDoc
     ),
-    mode: runtimeOptions.onChangeMode,
     onChange: runtimeOptions.onChange,
     reportAsyncError(error) {
       if (
@@ -1714,7 +1674,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       }
       reportUnhandled(error);
     },
-    requestFrame,
     scheduleIdle: idleScheduler.schedule,
     serialize: (targetDoc) => runReportedExtensionOperation(
       () => codec.serialize(targetDoc),
@@ -1922,11 +1881,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     nextMarkdown: string,
     setOptions?: MarkdownEditorMarkdownUpdateOptions,
   ) => replaceMarkdownState(nextMarkdown, setOptions, "reset Markdown");
-
-  const setMarkdownValue = (
-    nextMarkdown: string,
-    setOptions?: MarkdownEditorMarkdownUpdateOptions,
-  ) => replaceMarkdownState(nextMarkdown, setOptions, "set Markdown");
 
   const reconcileMarkdownValue = (
     nextMarkdown: string,
@@ -2162,21 +2116,17 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     );
   };
 
-  const getBuiltinMarkState = (
-    name: MarkdownEditorMark,
-    command: EditorCommand,
-  ): ToolbarButtonState => {
+  const getBuiltinMarkState = (name: MarkdownEditorMark) => {
     const markType = schema.marks[name];
 
     if (!markType) {
-      return { active: false, enabled: false };
+      return false;
     }
 
-    return getToolbarMarkState(
+    return isMarkdownMarkActive(
       view.state,
       name,
       markType,
-      command,
       isEscapedOutsideBoundary,
     );
   };
@@ -2184,15 +2134,15 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const isMarkActive = (mark: MarkdownEditorActiveMark) => {
     switch (mark) {
       case "strong":
-        return getBuiltinMarkState("strong", commands.toggleBold).active;
+        return getBuiltinMarkState("strong");
       case "em":
-        return getBuiltinMarkState("em", commands.toggleItalic).active;
+        return getBuiltinMarkState("em");
       case "code":
-        return getBuiltinMarkState("code", commands.toggleCode).active;
+        return getBuiltinMarkState("code");
       case "strike":
-        return getBuiltinMarkState("strike", commands.toggleStrike).active;
+        return getBuiltinMarkState("strike");
       case "link":
-        return getLinkToolbarState({ state: view.state, canSetLink, isEscapedOutsideBoundary }).active;
+        return isLinkActive({ state: view.state, isEscapedOutsideBoundary });
     }
   };
 
@@ -2507,7 +2457,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const editorCommandApi: MarkdownEditorCommands = {
     reconcileMarkdown: reconcileMarkdownValue,
     resetMarkdown: resetMarkdownValue,
-    setMarkdown: setMarkdownValue,
     pasteMarkdown(markdown) {
       return runReportedExtensionOperation(
         () => runCommand(clipboard.pasteMarkdown(markdown)),
@@ -2623,31 +2572,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     },
   };
 
-  const getToolbarState = (): ToolbarState => {
-    assertActive("read toolbar state");
-    const toolbarState: ToolbarState = {
-      bold: getBuiltinMarkState("strong", commands.toggleBold),
-      italic: getBuiltinMarkState("em", commands.toggleItalic),
-      code: getBuiltinMarkState("code", commands.toggleCode),
-      strike: getBuiltinMarkState("strike", commands.toggleStrike),
-      link: getLinkToolbarState({ state: view.state, canSetLink, isEscapedOutsideBoundary }),
-      image: getImageToolbarState({ state: view.state, canInsertImage, getActiveImageInfo }),
-      undo: { enabled: runtimeOptions.editable && commands.undo(view.state) },
-      redo: { enabled: runtimeOptions.editable && commands.redo(view.state) },
-    };
-
-    if (!runtimeOptions.editable) {
-      toolbarState.bold.enabled = false;
-      toolbarState.italic.enabled = false;
-      toolbarState.code.enabled = false;
-      toolbarState.strike.enabled = false;
-      toolbarState.link.enabled = false;
-      toolbarState.image.enabled = false;
-    }
-
-    return toolbarState;
-  };
-
   const hostChildrenBeforeView = new Set(element.childNodes);
 
   const cleanupConstructionFailure = (primaryError: unknown) => {
@@ -2711,27 +2635,21 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       editable: () => runtimeOptions.editable,
       state: initialState,
       nodeViews: {
-        ...(usesCompatibilityPreset ? {
-          list_item(node: ProseMirrorNode, targetView: EditorView) {
-            return new TaskListItemView(node, targetView);
-          },
-        } : {}),
-        ...(usesCompatibilityPreset ? {
-          code_block(node: ProseMirrorNode, targetView: EditorView, getPos: () => number | undefined) {
-            return new CodeBlockView(node, targetView, getPos as () => number);
-          },
-        } : {}),
+        list_item(node: ProseMirrorNode, targetView: EditorView) {
+          return new TaskListItemView(node, targetView);
+        },
+        code_block(node: ProseMirrorNode, targetView: EditorView, getPos: () => number | undefined) {
+          return new CodeBlockView(node, targetView, getPos as () => number);
+        },
         image(node, editorView) {
           return new ImageView(node, editorView.dom.ownerDocument);
         },
-        ...(usesCompatibilityPreset ? {
-          raw_block(node: ProseMirrorNode, editorView: EditorView, getPos: (() => number | undefined) | boolean) {
-            return new RawBlockView(node, editorView, getPos as () => number | undefined);
-          },
-          raw_inline(node: ProseMirrorNode, editorView: EditorView, getPos: (() => number | undefined) | boolean) {
-            return new RawInlineView(node, editorView, getPos as () => number | undefined);
-          },
-        } : {}),
+        raw_block(node: ProseMirrorNode, editorView: EditorView, getPos: (() => number | undefined) | boolean) {
+          return new RawBlockView(node, editorView, getPos as () => number | undefined);
+        },
+        raw_inline(node: ProseMirrorNode, editorView: EditorView, getPos: (() => number | undefined) | boolean) {
+          return new RawInlineView(node, editorView, getPos as () => number | undefined);
+        },
         ...extensionAssembly.contributions.nodeViews,
       },
       dispatchTransaction(this: EditorView, transaction) {
@@ -2808,9 +2726,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     cleanupConstructionFailure(error);
   }
 
-  if (usesCompatibilityPreset) {
-    CodeBlockView.setEditable(runtimeOptions.editable);
-  }
+  CodeBlockView.setEditable(runtimeOptions.editable);
   syncReadonlyControls(view);
 
   const handleFocusIn = (nativeEvent: FocusEvent) => {
@@ -2891,8 +2807,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     assertActive("update editor options");
     const nextOnChange = nextOptions.onChange;
     assertActive("update editor options");
-    const nextOnChangeMode = nextOptions.onChangeMode;
-    assertActive("update editor options");
     const nextOnEditOpaqueMarkdown = nextOptions.onEditOpaqueMarkdown;
     assertActive("update editor options");
     const nextOnTransaction = nextOptions.onTransaction;
@@ -2921,10 +2835,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       runtimePatch.onChange = nextOnChange ?? undefined;
     }
 
-    if (nextOnChangeMode !== undefined) {
-      runtimePatch.onChangeMode = normalizeMarkdownEditorChangeMode(nextOnChangeMode);
-    }
-
     if (nextOnEditOpaqueMarkdown !== undefined) {
       runtimePatch.onEditOpaqueMarkdown = nextOnEditOpaqueMarkdown ?? undefined;
     }
@@ -2940,8 +2850,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     assertActive("update editor options");
 
     const shouldFlushOldChange = (
-      ("onChange" in runtimePatch && runtimePatch.onChange !== runtimeOptions.onChange)
-      || ("onChangeMode" in runtimePatch && runtimePatch.onChangeMode !== runtimeOptions.onChangeMode)
+      "onChange" in runtimePatch && runtimePatch.onChange !== runtimeOptions.onChange
     );
 
     if (shouldFlushOldChange) {
@@ -2963,7 +2872,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     const changesAttributes = nextRuntimeOptions.attributes !== runtimeOptions.attributes;
     const changesEditable = nextRuntimeOptions.editable !== runtimeOptions.editable;
     const changesOnChange = nextRuntimeOptions.onChange !== runtimeOptions.onChange;
-    const changesOnChangeMode = nextRuntimeOptions.onChangeMode !== runtimeOptions.onChangeMode;
     const changesOnEditOpaqueMarkdown = nextRuntimeOptions.onEditOpaqueMarkdown !== runtimeOptions.onEditOpaqueMarkdown;
     const changesPlaceholder = nextRuntimeOptions.placeholder !== runtimeOptions.placeholder;
     const refreshEditorView = changesAriaLabel
@@ -2977,16 +2885,15 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
     Object.assign(runtimeOptions, nextRuntimeOptions);
 
-    if (changesOnChange || changesOnChangeMode) {
+    if (changesOnChange) {
       changeEmitter.update({
-        ...(changesOnChange ? { onChange: nextRuntimeOptions.onChange ?? null } : {}),
-        ...(changesOnChangeMode ? { mode: runtimeOptions.onChangeMode } : {}),
+        onChange: nextRuntimeOptions.onChange ?? null,
       });
     }
 
     const optionErrors: unknown[] = [];
 
-    if (changesEditable && usesCompatibilityPreset) {
+    if (changesEditable) {
       try {
         CodeBlockView.setEditable(runtimeOptions.editable);
       } catch (error) {
@@ -3021,7 +2928,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       }
     }
 
-    if (usesCompatibilityPreset && (changesEditable || changesOnEditOpaqueMarkdown)) {
+    if (changesEditable || changesOnEditOpaqueMarkdown) {
       RawBlockView.refresh();
       RawInlineView.refresh();
     }
@@ -3111,7 +3018,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
       changeEmitter.flush();
     },
-    getToolbarState,
     subscribe(type, listener) {
       assertActive("subscribe to editor events");
       return eventDispatcher.subscribe(type, listener);

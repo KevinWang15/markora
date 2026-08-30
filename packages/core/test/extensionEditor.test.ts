@@ -96,7 +96,7 @@ describe("public editor extensions", () => {
       ":::warning Deploy\nInside ==hot **and bold**==.\n\n:::",
     );
     expect(editor.extensions.manifest.extensions.map((entry) => entry.name)).toEqual(
-      expect.arrayContaining(["@acme/highlight", "@acme/callout", "@markora/table"]),
+      ["@acme/highlight", "@acme/callout"],
     );
   });
 

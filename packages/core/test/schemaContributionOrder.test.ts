@@ -6,7 +6,7 @@ import {
 } from "../src/extensionApi";
 import { MARKORA_VERSION } from "../src/extensionPresets";
 import { resolveMarkdownEditorExtensions } from "../src/extensionResolver";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 import { createMinimalMarkdownCodec } from "../src/minimalMarkdownCodec";
 
 const compatibility = {
@@ -50,7 +50,7 @@ function orderedMarkNames(codec: ReturnType<typeof createMinimalMarkdownCodec>) 
 }
 
 for (const [mode, createCodec] of [
-  ["compatibility", createCompatibilityMarkdownCodec],
+  ["compatibility", createMarkdownCodec],
   ["minimal", createMinimalMarkdownCodec],
 ] as const) {
   describe(`${mode} schema contribution ordering`, () => {

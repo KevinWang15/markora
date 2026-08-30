@@ -62,27 +62,6 @@ const calloutExtension = defineMarkdownEditorExtension({
   }),
 });
 
-defineMarkdownEditorExtension({
-  name: "@example/root-runtime",
-  version: "1.0.0",
-  compatibility: {
-    extensionApi: "^1.3.0",
-    markora: "^0.0.1",
-    runtime: "root-default",
-  },
-});
-
-defineMarkdownEditorExtension({
-  name: "@example/invalid-runtime",
-  version: "1.0.0",
-  compatibility: {
-    extensionApi: "^1.3.0",
-    markora: "^0.0.1",
-    // @ts-expect-error Root-default is the only runtime-specific compatibility value.
-    runtime: "minimal",
-  },
-});
-
 // The configured zero-argument wrapper used by UI metadata is independently
 // inferred, while parameterized commands remain available to hosts.
 const configuredCalloutExtension = defineMarkdownEditorExtension({

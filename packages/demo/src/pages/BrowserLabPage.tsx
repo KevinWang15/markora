@@ -1727,7 +1727,6 @@ export function BrowserLabPage() {
         initialSelection: spec.initialSelection,
         markdown: spec.markdown ?? `# ${mounted.id}\n\nBrowser lab paragraph.`,
         messages: spec.messages,
-        onChangeMode: "animationFrame",
         onChange(markdown) {
           mounted.changeCount += 1;
           mounted.output.dataset.changeCount = String(mounted.changeCount);

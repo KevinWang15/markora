@@ -12,12 +12,10 @@ const apiRows = [
   ["editor.getMarkdown()", "Synchronously returns the latest normalized Markdown, serializing lazily and caching it until the document changes."],
   ["editor.commands.reconcileMarkdown(markdown, { emitChange })", "Applies an authoritative host snapshot while mapping selection/history and preserving plugin state; returns whether the parsed document changed."],
   ["editor.commands.resetMarkdown(markdown, { emitChange })", "Explicitly replaces EditorState, resetting selection and clearing history/plugin state."],
-  ["editor.commands.setMarkdown(...) (deprecated)", "Retains the historical hard-reset behavior as an alias of resetMarkdown()."],
   ["editor.commands.pasteMarkdown(markdown) / pastePlainText(text)", "Invokes the explicit Markdown or literal-text clipboard pipeline as one command transaction."],
-  ["editor.flushChange()", "Synchronously delivers pending idle or animation-frame Markdown output."],
+  ["editor.flushChange()", "Synchronously delivers pending Markdown output."],
   ["editor.extensions.get(...) / has(...) / manifest / uiActions", "Accesses typed extension handles, checks availability, and exposes persistence metadata plus host-renderable actions."],
   ["editor.state.can.* / editor.state.isActive.*", "Lets hosts derive command availability and active structural/formatting state without built-in UI."],
-  ["editor.getToolbarState()", "Returns a compatibility snapshot for toolbar buttons."],
   [`editor.commands.toggleMark("strong" | "em" | "code" | "strike")`, "Applies inline formatting commands."],
   ["editor.commands.setLink(href) / removeLink()", "Creates or removes links without UI assumptions."],
   ["editor.commands.insertImage({ src, alt, title }) / removeImage()", "Creates or removes images without UI assumptions."],
@@ -237,8 +235,6 @@ type MarkdownEditorChangeContext = {
   origin: MarkdownEditorChangeOrigin;
 };
 
-type MarkdownEditorChangeMode = "idle" | "animationFrame" | "immediate";
-
 type MarkdownEditorShortcutBinding = false | string | readonly string[];
 type MarkdownEditorShortcutMap = Readonly<Record<string, MarkdownEditorShortcutBinding>>;
 
@@ -268,7 +264,6 @@ type CreateEditorOptions = {
     view: EditorView,
     context: MarkdownEditorChangeContext,
   ) => void;
-  onChangeMode?: MarkdownEditorChangeMode;
   onEditOpaqueMarkdown?: (request: OpaqueMarkdownEditRequest) => void;
   shortcuts?: MarkdownEditorShortcutMap;
   typing?: MarkdownEditorTypingOptions;
@@ -288,7 +283,6 @@ const updateEditorOptionsType = `type UpdateEditorOptions = {
   ariaLabelledBy?: string | null;
   onChange?: CreateEditorOptions["onChange"] | null;
   onTransaction?: CreateEditorOptions["onTransaction"] | null;
-  onChangeMode?: MarkdownEditorChangeMode;
   onEditOpaqueMarkdown?: ((request: OpaqueMarkdownEditRequest) => void) | null;
 };`;
 
@@ -309,7 +303,6 @@ const markdownEditorType = `type MarkdownEditor = {
   ) => MarkdownEditorUnsubscribe;
   getMarkdown: () => string;
   flushChange: () => void;
-  getToolbarState: () => ToolbarState;
   destroy: () => void;
 };`;
 
@@ -393,11 +386,6 @@ type MarkdownEditorCommands = {
     options?: MarkdownEditorMarkdownUpdateOptions,
   ) => boolean;
   resetMarkdown: (
-    markdown: string,
-    options?: MarkdownEditorMarkdownUpdateOptions,
-  ) => void;
-  /** @deprecated Use resetMarkdown() or reconcileMarkdown(). */
-  setMarkdown: (
     markdown: string,
     options?: MarkdownEditorMarkdownUpdateOptions,
   ) => void;
@@ -566,9 +554,8 @@ export function ApiPage() {
             <li><code>editable</code> defaults to <code>true</code>; read-only mode preserves selection, copy, and host reconciliation/reset while blocking user/UI/format/history mutations.</li>
             <li><code>placeholder</code>, <code>autofocus</code>, and <code>initialSelection</code> configure the initial surface. Object selection targets are in-range integer ProseMirror positions inside text blocks.</li>
             <li><code>attributes</code>, <code>ariaLabel</code>, and <code>ariaLabelledBy</code> configure the inner editor DOM and accessible name.</li>
-            <li><code>onChange</code> receives serialized Markdown output plus its change origin. Omitted <code>onChangeMode</code> defaults to coalesced idle delivery.</li>
+            <li><code>onChange</code> receives coalesced serialized Markdown output plus its change origin.</li>
             <li><code>onTransaction</code> lets hosts observe transaction dispatch attempts and their origin without forcing serialization.</li>
-            <li><code>onChangeMode</code> supports default <code>"idle"</code>, once-per-frame <code>"animationFrame"</code>, and same-stack <code>"immediate"</code> delivery.</li>
             <li><code>onEditOpaqueMarkdown</code> opens a host-owned source editor for inert unsupported syntax.</li>
             <li><code>resources</code> configures stored URL policy, resolution/open/load hooks, image privacy, and optional file uploads. It is creation-only because it defines document validity.</li>
             <li><code>typing</code> opts into generated-delimiter pairing and selection wrapping; <code>shortcuts</code> remaps or disables stable built-in and qualified extension keymap IDs.</li>
@@ -650,7 +637,7 @@ export function ApiPage() {
           <h2>Change options without rebuilding state</h2>
           <p>
             <code>updateOptions()</code> changes editable state, presentation attributes, accessible naming, and callbacks.
-            {" "}It does not reconstruct EditorState or emit a document update. Idle is the default change mode; changing <code>onChange</code> or its mode
+            {" "}It does not reconstruct EditorState or emit a document update. Changing <code>onChange</code>
             {" "}first flushes pending output once through the previous listener. The mount element, initial Markdown,
             {" "}initial focus/selection actions, messages, resources, extension graph, UI factory, and language registry remain creation-only. Use
             {" "}<code>reconcileMarkdown()</code> or <code>resetMarkdown()</code> for later document values.
@@ -680,8 +667,8 @@ export function ApiPage() {
             <code>reconcileMarkdown()</code> is silent by default and returns <code>false</code> for a strict semantic no-op.
             {" "}A changed update maps selection/history and preserves plugin state, including in read-only mode. Disjoint
             {" "}local history remains usable; overlapping entries may map to a no-op or be consumed. It also
-            {" "}cancels pending idle or animation-frame output; a no-op leaves that output alone. <code>resetMarkdown()</code> rebuilds
-            {" "}EditorState and bypasses <code>onTransaction</code>. Deprecated <code>setMarkdown()</code> remains its alias.
+            {" "}cancels pending output; a no-op leaves that output alone. <code>resetMarkdown()</code> rebuilds
+            {" "}EditorState and bypasses <code>onTransaction</code>.
           </p>
           <p>
             Calls run synchronously in invocation order. Each incoming string is a complete authoritative snapshot, so the

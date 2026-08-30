@@ -2,7 +2,7 @@ import { JSDOM } from 'jsdom';
 import { EditorState, type Transaction } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
 import { describe, expect, it, vi } from 'vitest';
-import { schema } from '../src/markdownCodec';
+import { schema } from './support/currentMarkdownCodec';
 import { createTaskListHelpers } from '../src/taskListUtils';
 
 function createFixture(options: {

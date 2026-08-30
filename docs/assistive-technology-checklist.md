@@ -129,7 +129,7 @@ Record exact versions. Add iOS Safari + VoiceOver and Android Chrome + TalkBack 
 - [ ] Repeat the primary flow at 200% and 400% browser zoom without two-dimensional page scrolling for ordinary paragraph content.
 - [ ] With an on-screen keyboard visible, focus each overlay input and verify the complete dialog remains reachable by scroll or repositioning.
 - [ ] Pan/zoom so `visualViewport.offsetLeft` or `offsetTop` is nonzero; overlays remain inside the visible viewport.
-- [ ] Rotate a touch device and confirm controls stay at least 44 CSS pixels and no action fires twice from compatibility mouse events.
+- [ ] Rotate a touch device and confirm controls stay at least 44 CSS pixels and no action fires twice from synthesized mouse events.
 - [ ] Enable platform text scaling and confirm labels, error messages, toolbar controls, and task text do not clip.
 
 ## Completion rule

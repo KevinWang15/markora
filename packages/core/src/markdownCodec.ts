@@ -116,7 +116,7 @@ type MarkdownSerializerStateRuntime = MarkdownSerializerState & {
   pendingBareAutolinkBoundary?: boolean;
   protectBareAutolinkBoundary?: boolean;
 };
-function createCompatibilityMarkdownSerializerState(
+function createMarkdownSerializerState(
   nodes: MarkdownSerializer["nodes"],
   marks: MarkdownSerializer["marks"],
   options: MarkdownSerializer["options"] & { tightLists?: boolean },
@@ -176,7 +176,7 @@ function createCompatibilityMarkdownSerializerState(
   return state;
 }
 
-class CompatibilityMarkdownSerializer extends MarkdownSerializer {
+class MarkoraMarkdownSerializer extends MarkdownSerializer {
   constructor(
     nodes: MarkdownSerializer["nodes"],
     marks: MarkdownSerializer["marks"],
@@ -188,7 +188,7 @@ class CompatibilityMarkdownSerializer extends MarkdownSerializer {
   }
 
   override serialize(content: ProseMirrorNode, options: { tightLists?: boolean } = {}) {
-    const state = createCompatibilityMarkdownSerializerState(
+    const state = createMarkdownSerializerState(
       this.nodes,
       this.marks,
       { ...this.options, ...options },
@@ -609,7 +609,7 @@ function extensionCodecError(options: {
   });
 }
 
-const compatibilityTokenizerFoundationAnchors = [
+const tokenizerFoundationAnchors = [
   {
     id: "@markora/opaque/frontmatter",
     phase: "block",
@@ -698,7 +698,7 @@ export type MarkdownEditorCodec = Readonly<{
 }>;
 
 /** Build the current Markora Markdown dialect as one isolated codec graph. */
-export function createCompatibilityMarkdownCodec(
+export function createMarkdownCodec(
   resolvedExtensions: readonly ResolvedMarkdownEditorExtension[] = [],
   resources: NormalizedMarkdownEditorResources = normalizeMarkdownEditorResources(undefined),
   messages: MarkdownEditorMessages = defaultMarkdownEditorMessages,
@@ -899,7 +899,7 @@ markdownTokenizer.core.ruler.after("inline", "markora_task_list_items", (state) 
 registerMarkdownEditorTokenizerRules(
   markdownTokenizer,
   resolvedExtensions,
-  compatibilityTokenizerFoundationAnchors,
+  tokenizerFoundationAnchors,
 );
 configureMarkdownTokenizerNesting(markdownTokenizer);
 
@@ -1283,7 +1283,7 @@ for (const { definition } of resolvedExtensions) {
   }
 }
 
-const markdownSerializer = new CompatibilityMarkdownSerializer(serializerNodes, serializerMarks, {
+const markdownSerializer = new MarkoraMarkdownSerializer(serializerNodes, serializerMarks, {
   escapeExtraCharacters: combineMarkdownSerializerEscapePatterns([
     /<(?=\/?[A-Za-z]|[!?])/g,
   ], resolvedExtensions.map(({ definition }) => (
@@ -1511,18 +1511,3 @@ function createImportedContentSanitizerPlugin() {
     managedBlocks: createReadonlySet(managedBlocks),
   });
 }
-
-const compatibilityMarkdownCodec = createCompatibilityMarkdownCodec();
-
-/** @deprecated Internal compatibility singleton. Editor runtimes use a codec assembly. */
-export const schema = compatibilityMarkdownCodec.schema;
-/** @deprecated Internal compatibility singleton. Editor runtimes use a codec assembly. */
-export const markdownSerializer = compatibilityMarkdownCodec.serializer;
-/** @deprecated Internal compatibility singleton. Editor runtimes use a codec assembly. */
-export const parseMarkdown = compatibilityMarkdownCodec.parse;
-/** @deprecated Internal compatibility singleton. Editor runtimes use a codec assembly. */
-export const createImportedContentSanitizerPlugin =
-  compatibilityMarkdownCodec.createImportedContentSanitizerPlugin;
-/** @deprecated Internal compatibility singleton. Editor runtimes use a codec assembly. */
-export const createTableCellContentFromMarkdown =
-  compatibilityMarkdownCodec.createTableCellContentFromMarkdown;

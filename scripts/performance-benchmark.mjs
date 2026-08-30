@@ -40,8 +40,7 @@ const HOT_PATH_CONTRACT = Object.freeze({
   burstIntervalMinimumMs: 75,
   burstKeys: 4,
   burstSchedule: "absolute-page-deadlines",
-  candidateChangeMode: "omitted-default-idle",
-  controlChangeMode: "immediate",
+  changeDelivery: "idle-coalesced",
   key: "F8",
   snapshotDeadlineMs: 8_000,
 });
@@ -65,25 +64,10 @@ const timingMetricNames = Object.freeze([
   "dirtyTeardownMs",
 ]);
 const hotPathMetricNames = Object.freeze([
-  "immediateSynchronousProcessingMs",
-  "defaultIdleSynchronousProcessingMs",
-  "defaultIdleKeydownToPresentationProxyMs",
-  "defaultIdleSnapshotLatencyMs",
-  "synchronousProcessingSavingsMs",
-  "synchronousProcessingRatio",
-]);
-const budgetedHotPathMetricNames = Object.freeze([
   "defaultIdleSynchronousProcessingMs",
   "defaultIdleKeydownToPresentationProxyMs",
   "defaultIdleSnapshotLatencyMs",
 ]);
-
-function requiredHotPathBudgetMetricNames(targetBytes) {
-  return targetBytes >= 512_000
-    ? [...budgetedHotPathMetricNames, "synchronousProcessingRatio"]
-    : budgetedHotPathMetricNames;
-}
-
 function flatContractEquals(actual, expected) {
   if (!actual || typeof actual !== "object" || Array.isArray(actual)) {
     return false;
@@ -560,15 +544,15 @@ async function withPageDeadline(page, label, timeoutMs, operation) {
   }
 }
 
-async function runImmediateControlSample(context, baseUrl, fixture) {
+async function runTimingSample(context, baseUrl, fixture) {
   const benchmarkPage = await openBenchmarkPage(context, baseUrl, fixture);
   const { page } = benchmarkPage;
   try {
-    return await withPageDeadline(page, "Immediate control timing sample", 120_000, async () => {
+    return await withPageDeadline(page, "Current timing sample", 120_000, async () => {
       const mounted = await page.evaluate((fixtureId) => (
         window.__MARKORA_PERFORMANCE__.mountAndSettle({
           fixtureId,
-          snapshotMode: "immediate",
+          snapshotMode: "default",
         })
       ), fixture.id);
       await page.evaluate(async () => {
@@ -654,104 +638,6 @@ function assertHotPathKeydowns(keydowns, expectedSnapshotCounts, label) {
     ))
   ) {
     throw new Error(`${label} keydown telemetry assertion failed: ${JSON.stringify(keydowns)}.`);
-  }
-}
-
-async function runImmediateHotPathControlSample(context, baseUrl, fixture) {
-  const benchmarkPage = await openBenchmarkPage(context, baseUrl, fixture);
-  const { page } = benchmarkPage;
-  try {
-    return await withPageDeadline(page, "Immediate hot-path control sample", 120_000, async () => {
-      await page.evaluate((fixtureId) => (
-        window.__MARKORA_PERFORMANCE__.mountAndSettle({
-          fixtureId,
-          hotPathProbe: true,
-          snapshotMode: "immediate",
-        })
-      ), fixture.id);
-      await page.evaluate(async () => {
-        const api = window.__MARKORA_PERFORMANCE__;
-        api.focusTypingTarget("middle");
-        await api.settle();
-      });
-      for (let index = 0; index < HOT_PATH_CONTRACT.burstKeys; index += 1) {
-        await page.keyboard.press(HOT_PATH_CONTRACT.key);
-      }
-      const preconditioned = await page.evaluate(() => (
-        window.__MARKORA_PERFORMANCE__.hotPathTelemetry()
-      ));
-      assertHotPathKeydowns(
-        preconditioned.keydowns,
-        Array.from({ length: HOT_PATH_CONTRACT.burstKeys }, (_, index) => index),
-        "Immediate hot-path preconditioning",
-      );
-      if (preconditioned.snapshotCount !== HOT_PATH_CONTRACT.burstKeys) {
-        throw new Error(`Immediate hot-path preconditioning snapshot assertion failed: ${JSON.stringify(preconditioned)}.`);
-      }
-      await page.evaluate(
-        (timeoutMs) => window.__MARKORA_PERFORMANCE__.armKeystroke({ timeoutMs }),
-        HOT_PATH_CONTRACT.snapshotDeadlineMs,
-      );
-      await page.keyboard.press(HOT_PATH_CONTRACT.key);
-      const telemetry = await page.evaluate(() => (
-        window.__MARKORA_PERFORMANCE__.hotPathTelemetry()
-      ));
-      const keystroke = await page.evaluate(() => (
-        window.__MARKORA_PERFORMANCE__.awaitKeystroke()
-      ));
-      const destroyed = await page.evaluate(() => (
-        window.__MARKORA_PERFORMANCE__.destroy("clean")
-      ));
-      const snapshot = await page.evaluate(() => window.__MARKORA_PERFORMANCE__.editorSnapshot());
-
-      if (
-        keystroke.trusted !== true
-        || keystroke.updateCount !== 1
-        || keystroke.updateOrigin !== "user"
-        || keystroke.snapshot?.count !== 1
-        || keystroke.snapshot.origin !== "user"
-        || keystroke.snapshot.beforeDocumentBubble !== true
-        || keystroke.snapshot.delayedAfterKeydown !== false
-      ) {
-        throw new Error(`Immediate hot-path control assertion failed: ${JSON.stringify(keystroke)}.`);
-      }
-      assertHotPathKeydowns(
-        telemetry.keydowns,
-        Array.from({ length: HOT_PATH_CONTRACT.burstKeys + 1 }, (_, index) => index),
-        "Immediate measured hot path",
-      );
-      if (telemetry.snapshotCount !== HOT_PATH_CONTRACT.burstKeys + 1) {
-        throw new Error(`Immediate measured hot-path snapshot assertion failed: ${JSON.stringify(telemetry)}.`);
-      }
-      if (
-        destroyed.snapshotCounts.beforeDestroy !== HOT_PATH_CONTRACT.burstKeys + 1
-        || destroyed.snapshotCounts.afterDestroy !== HOT_PATH_CONTRACT.burstKeys + 1
-        || destroyed.snapshotCounts.afterSettle !== HOT_PATH_CONTRACT.burstKeys + 1
-      ) {
-        throw new Error(`Immediate hot-path control emitted a late snapshot: ${JSON.stringify(destroyed.snapshotCounts)}.`);
-      }
-      if (snapshot.active || Object.entries(snapshot.dom).some(
-        ([name, value]) => name !== "animations" && value !== 0,
-      )) {
-        throw new Error(`Editor DOM remained after immediate hot-path teardown: ${JSON.stringify(snapshot)}.`);
-      }
-      benchmarkPage.assertClean();
-      return Object.freeze({
-        evidence: Object.freeze({
-          destroyed: destroyed.snapshotCounts,
-          keystroke,
-          preconditioning: Object.freeze({
-            keydowns: Object.freeze(preconditioned.keydowns),
-            keys: HOT_PATH_CONTRACT.burstKeys,
-            snapshotCount: preconditioned.snapshotCount,
-          }),
-          telemetry,
-        }),
-        synchronousProcessingMs: keystroke.synchronousProcessingMs,
-      });
-    });
-  } finally {
-    await page.close();
   }
 }
 
@@ -952,11 +838,11 @@ async function runDefaultIdleHotPathSample(context, baseUrl, fixture) {
   }
 }
 
-async function runTimingPair(
+async function runTimingSamples(
   context,
   baseUrl,
   fixture,
-  { defaultFirst, onScenarioComplete, onScenarioStart },
+  { hotPathFirst, onScenarioComplete, onScenarioStart },
 ) {
   const runScenario = async (scenario, operation) => {
     onScenarioStart?.(scenario);
@@ -965,52 +851,31 @@ async function runTimingPair(
     return result;
   };
 
-  const control = await runScenario(
-    "historical-immediate-control",
-    () => runImmediateControlSample(context, baseUrl, fixture),
-  );
-  let immediateHotPath;
+  let timing;
   let hotPath;
-  if (defaultFirst) {
+  if (hotPathFirst) {
     hotPath = await runScenario(
-      "default-idle-hot-path",
+      "current-hot-path",
       () => runDefaultIdleHotPathSample(context, baseUrl, fixture),
     );
-    immediateHotPath = await runScenario(
-      "immediate-hot-path-control",
-      () => runImmediateHotPathControlSample(context, baseUrl, fixture),
+    timing = await runScenario(
+      "current-timing",
+      () => runTimingSample(context, baseUrl, fixture),
     );
   } else {
-    immediateHotPath = await runScenario(
-      "immediate-hot-path-control",
-      () => runImmediateHotPathControlSample(context, baseUrl, fixture),
+    timing = await runScenario(
+      "current-timing",
+      () => runTimingSample(context, baseUrl, fixture),
     );
     hotPath = await runScenario(
-      "default-idle-hot-path",
+      "current-hot-path",
       () => runDefaultIdleHotPathSample(context, baseUrl, fixture),
     );
-  }
-
-  const immediate = immediateHotPath.synchronousProcessingMs;
-  const deferred = hotPath.metrics.defaultIdleSynchronousProcessingMs;
-  if (!Number.isFinite(immediate) || immediate <= 0 || !Number.isFinite(deferred) || deferred < 0) {
-    throw new Error(`Invalid paired synchronous processing durations: immediate=${immediate}, default=${deferred}.`);
   }
 
   return Object.freeze({
-    control,
-    hotPath: Object.freeze({
-      evidence: Object.freeze({
-        defaultIdle: hotPath.evidence,
-        immediate: immediateHotPath.evidence,
-      }),
-      metrics: Object.freeze({
-        ...hotPath.metrics,
-        immediateSynchronousProcessingMs: immediate,
-        synchronousProcessingRatio: deferred / immediate,
-        synchronousProcessingSavingsMs: immediate - deferred,
-      }),
-    }),
+    hotPath,
+    timing,
   });
 }
 
@@ -1135,11 +1000,11 @@ async function collectTiming(context, baseUrl, fixtures, sampling, progress) {
   const { hotPath: hotPathProgress, timing: timingProgress } = progress.runtime;
   const { samples, warmups } = timingProgress;
 
-  const collectTarget = async ({ defaultFirst, phase, round, targetBytes }) => {
+  const collectTarget = async ({ hotPathFirst, phase, round, targetBytes }) => {
     const timingRecords = phase === "warmup" ? warmups : samples;
     const hotPathRecords = phase === "warmup" ? hotPathProgress.warmups : hotPathProgress.samples;
-    const pair = await runTimingPair(context, baseUrl, fixtures.get(targetBytes), {
-      defaultFirst,
+    const result = await runTimingSamples(context, baseUrl, fixtures.get(targetBytes), {
+      hotPathFirst,
       onScenarioComplete(scenario, result) {
         progress.runtime.scenarios.push(Object.freeze({
           phase,
@@ -1148,7 +1013,7 @@ async function collectTiming(context, baseUrl, fixtures, sampling, progress) {
           scenario,
           targetBytes,
         }));
-        if (scenario === "historical-immediate-control") {
+        if (scenario === "current-timing") {
           timingRecords.push(Object.freeze({ ...result, round, targetBytes }));
         }
       },
@@ -1156,7 +1021,7 @@ async function collectTiming(context, baseUrl, fixtures, sampling, progress) {
         progress.current = Object.freeze({ phase, round, scenario, targetBytes });
       },
     });
-    hotPathRecords.push(Object.freeze({ ...pair.hotPath, round, targetBytes }));
+    hotPathRecords.push(Object.freeze({ ...result.hotPath, round, targetBytes }));
     progress.current = null;
   };
 
@@ -1165,7 +1030,7 @@ async function collectTiming(context, baseUrl, fixtures, sampling, progress) {
     for (const [targetIndex, targetBytes] of targets.entries()) {
       console.log(`Timing warmup ${round + 1}/${sampling.warmups}: ${targetBytes} bytes`);
       await collectTarget({
-        defaultFirst: (round + targetIndex) % 2 === 1,
+        hotPathFirst: (round + targetIndex) % 2 === 1,
         phase: "warmup",
         round,
         targetBytes,
@@ -1177,7 +1042,7 @@ async function collectTiming(context, baseUrl, fixtures, sampling, progress) {
     for (const [targetIndex, targetBytes] of targets.entries()) {
       console.log(`Timing sample ${round + 1}/${sampling.samples}: ${targetBytes} bytes`);
       await collectTarget({
-        defaultFirst: (round + sampling.warmups + targetIndex) % 2 === 1,
+        hotPathFirst: (round + sampling.warmups + targetIndex) % 2 === 1,
         phase: "sample",
         round,
         targetBytes,
@@ -1382,7 +1247,7 @@ function loadPerformanceBudgetConfig(options) {
     || contract.timingIsolation !== "fresh-page-shared-browser-process"
     || contract.hotPathIsolation !== "fresh-page-per-scenario-shared-browser-process"
     || contract.memoryIsolation !== "fresh-browser-process-per-sample"
-    || contract.defaultChangeMode !== "idle"
+    || contract.changeDelivery !== "idle-coalesced"
     || !flatContractEquals(contract.codeBlockActivation, CODE_BLOCK_ACTIVATION_CONTRACT)
     || !flatContractEquals(contract.hotPath, HOT_PATH_CONTRACT)
     || JSON.stringify(contract.requiredTargets) !== JSON.stringify(options.targets)
@@ -1399,7 +1264,7 @@ function loadPerformanceBudgetConfig(options) {
   for (const targetBytes of options.targets) {
     for (const [category, metricNames] of [
       ["timing", timingMetricNames],
-      ["hotPath", requiredHotPathBudgetMetricNames(targetBytes)],
+      ["hotPath", hotPathMetricNames],
       ["memory", budgetedMemoryMetricNames],
     ]) {
       const categoryBudgets = requireRuntimeBudgets(config, targetBytes, category);
@@ -1429,7 +1294,7 @@ function evaluateRuntimeBudgets(runtime, budgets, targets, sampling) {
   for (const targetBytes of targets) {
     for (const [category, metricNames] of [
       ["timing", timingMetricNames],
-      ["hotPath", requiredHotPathBudgetMetricNames(targetBytes)],
+      ["hotPath", hotPathMetricNames],
       ["memory", budgetedMemoryMetricNames],
     ]) {
       const categoryBudgets = requireRuntimeBudgets(budgets, targetBytes, category);

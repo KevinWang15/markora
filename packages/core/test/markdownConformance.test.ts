@@ -137,9 +137,9 @@ describe('versioned Markdown conformance manifest', () => {
     const compatibilityContract = readFileSync(join(testDirectory, '..', 'MARKDOWN_COMPATIBILITY.md'), 'utf8');
 
     expect(manifest.lexicalGuarantees).toEqual([
-      'Top-level valid CommonMark link-reference definition source is retained exactly inside each root-compatibility source block.',
+      'Top-level valid CommonMark link-reference definition source is retained exactly inside each root source block.',
     ]);
-    expect(compatibilityContract).toContain('| Lexical round-trip | Original bytes, markers, escapes, whitespace, and reference definitions survive. | Valid top-level CommonMark link-reference definitions in the root compatibility entry');
+    expect(compatibilityContract).toContain('| Lexical round-trip | Original bytes, markers, escapes, whitespace, and reference definitions survive. | Valid top-level CommonMark link-reference definitions in the root entry');
   });
 });
 

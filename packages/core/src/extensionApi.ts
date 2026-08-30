@@ -33,7 +33,7 @@ import {
 export const MARKORA_EXTENSION_API_VERSION = "1.3.0" as const;
 
 /**
- * Read exact source attached by the compatibility codec's opaque-source
+ * Read exact source attached by the Markdown codec's opaque-source
  * hydration pass without exposing private Markdown-it token metadata. Only
  * own data properties are inspected, so hostile accessors are never invoked.
  */
@@ -91,8 +91,6 @@ export type MarkdownEditorExtensionDependency = Readonly<{
 export type MarkdownEditorExtensionCompatibility = Readonly<{
   extensionApi: string;
   markora: string;
-  /** Require the exact compatibility runtime selected by the root entry. */
-  runtime?: "root-default";
 }>;
 
 export type MarkdownEditorContributionOrderTarget =
@@ -1244,16 +1242,6 @@ function validateDefinition(
     owner,
   );
   validateRange(value.compatibility.markora, "compatibility.markora", owner);
-
-  if (
-    value.compatibility.runtime !== undefined
-    && value.compatibility.runtime !== "root-default"
-  ) {
-    invalidDefinition(
-      'compatibility.runtime must be "root-default" when provided.',
-      { extension: owner },
-    );
-  }
 
   if (value.dependencies !== undefined) {
     if (!Array.isArray(value.dependencies)) {

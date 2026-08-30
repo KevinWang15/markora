@@ -161,7 +161,7 @@ saveButton.addEventListener("click", () => {
 const recipes = [
   {
     heading: "Apply host state intentionally",
-    body: "Use `reconcileMarkdown()` for ordinary authoritative snapshots; it maps selection/history and preserves plugin state (overlapping undo entries can become no-ops). Use `resetMarkdown()` only when switching documents or deliberately clearing transient state. `setMarkdown()` is a deprecated reset alias.",
+    body: "Use `reconcileMarkdown()` for ordinary authoritative snapshots; it maps selection/history and preserves plugin state (overlapping undo entries can become no-ops). Use `resetMarkdown()` only when switching documents or deliberately clearing transient state.",
   },
   {
     heading: "Observe editor behavior",
@@ -352,8 +352,8 @@ export function ExamplesPage() {
         <p>
           Markora is framework-agnostic. These snippets show the idiomatic way to
           {" "}create and destroy an editor instance in React, Vue, and Svelte. They leave
-          {" "}<code>onChangeMode</code> unset to use the coalesced idle default, keep dirty-state
-          {" "}notifications serialization-free, and flush a synchronous snapshot for form submission.
+          {" "}use coalesced change delivery, keep dirty-state notifications serialization-free,
+          {" "}and flush a synchronous snapshot for form submission.
         </p>
       </section>
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 
 describe("Markdown task-prefix fidelity", () => {
   it.each([
@@ -7,7 +7,7 @@ describe("Markdown task-prefix fidelity", () => {
     ["escaped unchecked prefix", "* \\[ \\] literal", "* \\[ \\] literal"],
     ["entity-decoded prefix", "* &#91;x] entity", "* \\[x\\] entity"],
   ])("keeps a %s as ordinary list text", (_label, input, expected) => {
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const document = codec.parse(input)!;
     const item = document.firstChild!.firstChild!;
     const serialized = codec.serialize(document);
@@ -28,7 +28,7 @@ describe("Markdown task-prefix fidelity", () => {
     ["tab-separated", "* [x]\tgenuine", true, "* [x] genuine"],
     ["continued", "* [x]\n  genuine", true, "* [x] genuine"],
   ])("round-trips a %s task semantically", (_label, input, checked, expected) => {
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const document = codec.parse(input)!;
     const item = document.firstChild!.firstChild!;
     const serialized = codec.serialize(document);
@@ -62,7 +62,7 @@ describe("Markdown task-prefix fidelity", () => {
       "* [x] first\n\n  ```\n  code\n  ```",
     ],
   ])("round-trips a task containing %s", (_label, input, expected) => {
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const document = codec.parse(input)!;
     const serialized = codec.serialize(document);
     const reparsed = codec.parse(serialized)!;

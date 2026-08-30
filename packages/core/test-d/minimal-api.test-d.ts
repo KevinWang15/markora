@@ -9,7 +9,6 @@ import {
   setMarkdownEditorTransactionOrigin,
   type CreateEditorOptions,
   type MarkdownEditor,
-  type MarkdownEditorChangeMode,
   type MarkdownEditorChangeOrigin,
   type MarkdownEditorCodeBlockRuntimeErrorEvent,
   type MarkdownEditorExtensionHandle,
@@ -17,7 +16,6 @@ import {
   type MarkdownEditorMessages,
   type MarkdownEditorShortcutMap,
   type MarkdownEditorTypingOptions,
-  type ToolbarState,
   type UpdateEditorOptions,
 } from "../src/minimal";
 // @ts-expect-error Compiler-only definition records are not part of the minimal public entry.
@@ -55,7 +53,6 @@ const options: CreateEditorOptions = {
   extensions: [extension],
   markdown: "minimal",
   messages: minimalMessages,
-  onChangeMode: "idle",
   onChange(markdown, context) {
     const origin: MarkdownEditorChangeOrigin = context.origin;
     void markdown;
@@ -81,14 +78,12 @@ const options: CreateEditorOptions = {
 };
 void minimalDefaultMessages;
 const editor: MarkdownEditor = createEditor(options);
-const changeMode: MarkdownEditorChangeMode = "idle";
 const view: EditorView = editor.view;
 const handle: MarkdownEditorExtensionHandle<
   { increment: () => boolean },
   { count: () => number },
   { count: number }
 > = editor.extensions.get(extension);
-const toolbar: ToolbarState = editor.getToolbarState();
 const sharedRuntimeErrorType = null as unknown as MarkdownEditorCodeBlockRuntimeErrorEvent;
 editor.subscribe("asset", ({ reason, upload }) => {
   const status = upload.status;
@@ -142,8 +137,6 @@ const destroyedError: MarkdownEditorDestroyedError =
   new MarkdownEditorDestroyedError("test the editor");
 
 void count;
-void changeMode;
-void toolbar;
 void sharedRuntimeErrorType;
 void origin;
 void destroyedError;

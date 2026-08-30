@@ -63,36 +63,6 @@ afterEach(() => {
 });
 
 describe.each(entries)("%s idle Markdown changes", (_entry, createEditor: EditorFactory) => {
-  it("rejects invalid modes without claiming the host or flushing pending output", () => {
-    const invalidHost = createHost();
-
-    expect(() => createEditor({
-      element: invalidHost,
-      onChangeMode: "later" as never,
-    })).toThrow(TypeError);
-    expect(invalidHost.classList.contains("mdw-host")).toBe(false);
-
-    const oldChanges = vi.fn();
-    const nextChanges = vi.fn();
-    const editor = track(createEditor({
-      element: invalidHost,
-      markdown: "alpha",
-      onChange: oldChanges,
-    }));
-    editor.view.dispatch(editor.view.state.tr.insertText("!", 6));
-
-    expect(() => editor.updateOptions({
-      onChange: nextChanges,
-      onChangeMode: "later" as never,
-    })).toThrow(TypeError);
-    expect(oldChanges).not.toHaveBeenCalled();
-    expect(nextChanges).not.toHaveBeenCalled();
-
-    editor.flushChange();
-    expect(oldChanges).toHaveBeenCalledWith("alpha!", { origin: "user" });
-    expect(nextChanges).not.toHaveBeenCalled();
-  });
-
   it("retains plugin-view construction dispatches without pre-return host callbacks", () => {
     const extension = defineMarkdownEditorExtension({
       name: `acme-construction-dispatch-${_entry}`,
@@ -118,7 +88,6 @@ describe.each(entries)("%s idle Markdown changes", (_entry, createEditor: Editor
       extensions: [extension],
       markdown: "alpha",
       onChange: changes,
-      onChangeMode: "immediate",
       onTransaction: transactions,
     }));
 

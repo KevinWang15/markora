@@ -80,7 +80,7 @@ function splitSelectorList(prelude) {
   return selectors;
 }
 
-function isCompatibilityOnlySelector(selector) {
+function isRootOnlySelector(selector) {
   return (
     selector.includes(".cm-")
     || selector.includes(".mdw-code-block")
@@ -93,7 +93,7 @@ function isCompatibilityOnlySelector(selector) {
 
 function filterMinimalSelectors(prelude) {
   const selectors = splitSelectorList(prelude).filter((selector) => (
-    !isCompatibilityOnlySelector(selector)
+    !isRootOnlySelector(selector)
   ));
 
   return selectors.length > 0 ? selectors.join(",") : null;
@@ -142,9 +142,9 @@ const minimalStyles = createMinimalStyles(styles);
 if (
   minimalStyles
     .split("{")
-    .some((prelude) => isCompatibilityOnlySelector(prelude.slice(prelude.lastIndexOf("}") + 1)))
+    .some((prelude) => isRootOnlySelector(prelude.slice(prelude.lastIndexOf("}") + 1)))
 ) {
-  throw new Error("Minimal Markora styles unexpectedly retain compatibility-only selectors.");
+  throw new Error("Minimal Markora styles unexpectedly retain root-only selectors.");
 }
 
 for (const requiredSelector of [

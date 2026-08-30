@@ -6,7 +6,7 @@ import {
   normalizeMarkdownEditorMessages,
   type MarkdownEditorMessageOverrides,
 } from "../src/editorMessages";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 import { normalizeMarkdownEditorResources } from "../src/resourcePolicy";
 
 const editors: Array<ReturnType<typeof createEditor>> = [];
@@ -144,7 +144,7 @@ describe("core editor messages", () => {
     expect(element.querySelector(".mdw-opaque-edit")?.getAttribute("aria-label"))
       .toBe("Editar fuente Bloque HTML");
 
-    const codec = createCompatibilityMarkdownCodec(
+    const codec = createMarkdownCodec(
       [],
       normalizeMarkdownEditorResources(undefined),
       messages,

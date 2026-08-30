@@ -18,7 +18,7 @@
     {
       "id": "reference-definitions-used-and-unused",
       "classification": "opaque-block",
-      "note": "The root compatibility entry retains every valid CommonMark definition as exact inert source while ordinary reference uses resolve to canonical inline links.",
+      "note": "The root entry retains every valid CommonMark definition as exact inert source while ordinary reference uses resolve to canonical inline links.",
       "input": "[unused]: https://example.com \"kept\"\n\n[used]: /target 'title'\n\nUse [label][used].\n",
       "expected": "[unused]: https://example.com \"kept\"\n\n[used]: /target 'title'\n\nUse [label](/target \"title\").",
       "opaqueNodes": [
@@ -60,7 +60,7 @@
     {
       "id": "display-math-multiline",
       "classification": "opaque-block",
-      "note": "A top-level opaque block after supported content retains legacy CR line endings internally while serializer-owned separators normalize to LF.",
+      "note": "A top-level opaque block after supported content retains authored CR line endings internally while serializer-owned separators normalize to LF.",
       "input": "Before\r\r$$\rx + y\\\\\rz = 3\r$$\r\rAfter\r",
       "expected": "Before\n\n$$\rx + y\\\\\rz = 3\r$$\n\nAfter",
       "opaqueNodes": [

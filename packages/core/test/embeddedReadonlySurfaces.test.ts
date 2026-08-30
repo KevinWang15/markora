@@ -84,7 +84,7 @@ describe("embedded read-only surfaces", () => {
     codeMirror?.dispatch({ changes: { from: 0, insert: "blocked" } });
     expect(codeMirror?.state.doc.toString()).toBe("const value = 1");
 
-    editor.commands.setMarkdown("```ts\nconst value = 2\n```");
+    editor.commands.resetMarkdown("```ts\nconst value = 2\n```");
     expect(codeMirror?.state.doc.toString()).toBe("const value = 2");
 
     editor.updateOptions({ editable: true });
@@ -118,7 +118,7 @@ describe("embedded read-only surfaces", () => {
 
     await activateCodeBlocks(editor);
     await vi.waitFor(() => expect(staleLoader).toHaveBeenCalledTimes(1));
-    editor.commands.setMarkdown("```current\nnew\n```");
+    editor.commands.resetMarkdown("```current\nnew\n```");
     await vi.waitFor(() => expect(currentLoader).toHaveBeenCalledTimes(1));
     const staleError = new Error("stale language failure");
     stale.reject(staleError);

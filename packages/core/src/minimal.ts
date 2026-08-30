@@ -13,7 +13,6 @@ export type {
   MarkdownEditorActiveMark,
   MarkdownEditorActiveNode,
   MarkdownEditorCodeBlockOptions,
-  MarkdownEditorChangeMode,
   MarkdownEditorCommands,
   MarkdownEditorDomAttributes,
   MarkdownEditorHeadingLevel,
@@ -30,8 +29,6 @@ export type {
   MarkdownEditorTableResizeOptions,
   MarkdownEditorTableRowMoveDirection,
   MarkdownEditorUi,
-  ToolbarButtonState,
-  ToolbarState,
   UpdateEditorOptions,
 } from "./editorApi";
 export {

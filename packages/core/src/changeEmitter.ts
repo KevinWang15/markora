@@ -1,13 +1,9 @@
-import type { MarkdownEditorChangeMode } from "./editorApi";
 import type { HostIdleTask } from "./idleScheduler";
 
 export type ChangeEmitterOptions<TDoc, TContext> = {
   initialDoc: TDoc;
   initialMarkdown?: string;
-  mode: MarkdownEditorChangeMode;
   onChange?: (markdown: string, context: TContext) => void;
-  requestFrame: (callback: FrameRequestCallback) => number;
-  cancelFrame: (frameId: number) => void;
   isDeliveryValid: (doc: TDoc) => boolean;
   scheduleIdle: (callback: () => void) => HostIdleTask;
   reportAsyncError: (error: unknown) => void;
@@ -15,7 +11,6 @@ export type ChangeEmitterOptions<TDoc, TContext> = {
 };
 
 export type ChangeEmitterRuntimeOptions<TContext> = {
-  mode?: MarkdownEditorChangeMode;
   onChange?: ((markdown: string, context: TContext) => void) | null;
 };
 
@@ -28,21 +23,17 @@ type PendingChange<TDoc, TContext> = {
 
 export function createChangeEmitter<TDoc, TContext>(options: ChangeEmitterOptions<TDoc, TContext>) {
   const {
-    cancelFrame,
     initialDoc,
     isDeliveryValid,
     reportAsyncError,
-    requestFrame,
     scheduleIdle,
     serialize,
   } = options;
-  let mode = options.mode;
   let onChange = options.onChange;
   let lastSerializedDoc = initialDoc;
   let lastSerializedMarkdown = options.initialMarkdown ?? serialize(initialDoc);
   let invalidationEpoch = 0;
   let pending: PendingChange<TDoc, TContext> | null = null;
-  let pendingFrame: number | null = null;
   let pendingIdleTask: HostIdleTask | null = null;
 
   const getMarkdown = (targetDoc: TDoc) => {
@@ -57,10 +48,6 @@ export function createChangeEmitter<TDoc, TContext>(options: ChangeEmitterOption
   };
 
   const cancelScheduledWork = () => {
-    if (pendingFrame !== null) {
-      cancelFrame(pendingFrame);
-      pendingFrame = null;
-    }
     if (pendingIdleTask) {
       const idleTask = pendingIdleTask;
       pendingIdleTask = null;
@@ -157,24 +144,7 @@ export function createChangeEmitter<TDoc, TContext>(options: ChangeEmitterOption
       listener,
     };
 
-    if (mode === "immediate") {
-      deliver(delivery, false, false);
-      return;
-    }
-
     pending = delivery;
-
-    if (mode === "animationFrame") {
-      if (pendingFrame !== null) {
-        return;
-      }
-
-      pendingFrame = requestFrame(() => {
-        pendingFrame = null;
-        drainAsync();
-      });
-      return;
-    }
 
     if (pendingIdleTask) {
       pendingIdleTask.postpone();
@@ -194,10 +164,6 @@ export function createChangeEmitter<TDoc, TContext>(options: ChangeEmitterOption
     getMarkdown,
     schedule,
     update(nextOptions: ChangeEmitterRuntimeOptions<TContext>) {
-      if (nextOptions.mode !== undefined) {
-        mode = nextOptions.mode;
-      }
-
       if (nextOptions.onChange !== undefined) {
         onChange = nextOptions.onChange ?? undefined;
       }

@@ -2,7 +2,7 @@ import { TextSelection } from 'prosemirror-state';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   MarkdownEditorDestroyedError,
-  createEditor as createCompatibilityEditor,
+  createEditor as createRootEditor,
   type MarkdownEditor,
   type MarkdownEditorAssetEvent,
   type MarkdownEditorAssetUploadRequest,
@@ -120,7 +120,7 @@ afterEach(() => {
 });
 
 const entries = [
-  ['compatibility', createCompatibilityEditor],
+  ['root', createRootEditor],
   ['minimal', createMinimalEditor],
 ] as const;
 
@@ -253,7 +253,7 @@ describe('asset upload integration policy and lifecycle', () => {
     const requests: MarkdownEditorAssetUploadRequest[] = [];
     const events: MarkdownEditorAssetEvent[] = [];
     const reentrantCancels: boolean[] = [];
-    const editor = track(createCompatibilityEditor({
+    const editor = track(createRootEditor({
       element: createHost(),
       markdown: '',
       resources: {
@@ -292,7 +292,7 @@ describe('asset upload integration policy and lifecycle', () => {
     const pending = deferred<MarkdownEditorAssetUploadResult>();
     const docTransactions: unknown[] = [];
     let request: MarkdownEditorAssetUploadRequest | undefined;
-    const editor = track(createCompatibilityEditor({
+    const editor = track(createRootEditor({
       element: createHost(),
       markdown: 'unchanged',
       onTransaction(transaction) {
@@ -325,7 +325,7 @@ describe('asset upload integration policy and lifecycle', () => {
 
   it('maps a pending insertion anchor through an intervening edit', async () => {
     const pending = deferred<MarkdownEditorAssetUploadResult>();
-    const editor = track(createCompatibilityEditor({
+    const editor = track(createRootEditor({
       element: createHost(),
       markdown: 'tail',
       resources: {
@@ -351,7 +351,7 @@ describe('asset upload integration policy and lifecycle', () => {
 
   it('rejects excessive batches, unsupported MIME types, and oversized files before upload', () => {
     const upload = vi.fn(() => ({ kind: 'image' as const, url: '/unused.png' }));
-    const editor = track(createCompatibilityEditor({
+    const editor = track(createRootEditor({
       element: createHost(),
       markdown: 'safe',
       resources: {
@@ -390,7 +390,7 @@ describe('asset upload integration policy and lifecycle', () => {
   it('retains a failed upload for retry and inserts the successful retry', async () => {
     const attempts: Array<Deferred<MarkdownEditorAssetUploadResult>> = [];
     const requests: MarkdownEditorAssetUploadRequest[] = [];
-    const editor = track(createCompatibilityEditor({
+    const editor = track(createRootEditor({
       element: createHost(),
       markdown: '',
       resources: {
@@ -443,7 +443,7 @@ describe('asset upload integration policy and lifecycle', () => {
     const retry = deferred<MarkdownEditorAssetUploadResult>();
     const requests: MarkdownEditorAssetUploadRequest[] = [];
     let editor!: MarkdownEditor;
-    editor = track(createCompatibilityEditor({
+    editor = track(createRootEditor({
       element: createHost(),
       markdown: '',
       resources: {
@@ -504,7 +504,7 @@ describe('asset upload integration policy and lifecycle', () => {
   it('aborts cancellation and ignores a late successful resolution', async () => {
     const pending = deferred<MarkdownEditorAssetUploadResult>();
     let request: MarkdownEditorAssetUploadRequest | undefined;
-    const editor = track(createCompatibilityEditor({
+    const editor = track(createRootEditor({
       element: createHost(),
       markdown: 'stable',
       resources: {
@@ -537,7 +537,7 @@ describe('asset upload integration policy and lifecycle', () => {
     const reentrantCancels: boolean[] = [];
     let request!: MarkdownEditorAssetUploadRequest;
     let editor!: MarkdownEditor;
-    editor = track(createCompatibilityEditor({
+    editor = track(createRootEditor({
       element: createHost(),
       markdown: 'stable',
       resources: {
@@ -568,7 +568,7 @@ describe('asset upload integration policy and lifecycle', () => {
     const reentrantCancels: boolean[] = [];
     let request!: MarkdownEditorAssetUploadRequest;
     let editor!: MarkdownEditor;
-    editor = track(createCompatibilityEditor({
+    editor = track(createRootEditor({
       element: createHost(),
       markdown: 'stable',
       resources: {
@@ -596,7 +596,7 @@ describe('asset upload integration policy and lifecycle', () => {
   });
 
   it('uses a non-empty fallback for a link uploaded from an unnamed file', async () => {
-    const editor = track(createCompatibilityEditor({
+    const editor = track(createRootEditor({
       element: createHost(),
       markdown: '',
       messages: { uploadedFileLabel: 'Fichier téléversé' },
@@ -621,7 +621,7 @@ describe('asset upload integration policy and lifecycle', () => {
   it('cancels pending uploads on reset and ignores their late resolution', async () => {
     const pending = deferred<MarkdownEditorAssetUploadResult>();
     let request: MarkdownEditorAssetUploadRequest | undefined;
-    const editor = track(createCompatibilityEditor({
+    const editor = track(createRootEditor({
       element: createHost(),
       markdown: 'before',
       resources: {
@@ -651,7 +651,7 @@ describe('asset upload integration policy and lifecycle', () => {
   it('silently aborts pending uploads during destroy', async () => {
     const pending = deferred<MarkdownEditorAssetUploadResult>();
     let request: MarkdownEditorAssetUploadRequest | undefined;
-    const editor = track(createCompatibilityEditor({
+    const editor = track(createRootEditor({
       element: createHost(),
       markdown: 'before',
       resources: {
@@ -679,7 +679,7 @@ describe('asset upload integration policy and lifecycle', () => {
 
   it('rejects file transfer while read-only without invoking the host uploader', () => {
     const upload = vi.fn(() => ({ kind: 'image' as const, url: '/unused.png' }));
-    const editor = track(createCompatibilityEditor({
+    const editor = track(createRootEditor({
       editable: false,
       element: createHost(),
       markdown: 'read only',

@@ -101,6 +101,6 @@ The source shell always exposes the localized diagram kind, complete info string
 
 The explicit stylesheet uses logical properties, wraps at narrow embedded widths, and includes forced-colors/reduced-motion behavior. Hosts may override `--mdw-diagram-*` custom properties and own renderer-specific SVG styling, typography, `lang`, and `dir` through the editor embed.
 
-## Migration
+## Activation boundary
 
-Adding the package changes matching fences from core `code_block` nodes to semantic `diagram` nodes, while canonical Markdown stays a generic safe fence. Install it before importing persisted documents and store the extension manifest. Removing it recovers serialized documents as ordinary code blocks; preview state and semantic diagram APIs are intentionally unavailable.
+Installing the package changes matching fences from core `code_block` nodes to semantic `diagram` nodes, while canonical Markdown stays a generic safe fence. Install it before importing documents that use this syntax and store the extension manifest. Without it, serialized documents parse as ordinary code blocks and do not expose preview state or semantic diagram APIs.

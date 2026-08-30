@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { markdownSerializer, parseMarkdown } from '../src/markdownCodec';
+import { markdownSerializer, parseMarkdown } from './support/currentMarkdownCodec';
 
 const fixtureDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'markdown-roundtrip');
 

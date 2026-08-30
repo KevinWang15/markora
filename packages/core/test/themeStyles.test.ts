@@ -58,7 +58,7 @@ describe("public theme styles", () => {
     expect(undocumented).toEqual([]);
   });
 
-  it("keeps a compatibility fallback on every component token use", () => {
+  it("keeps a component default on every token use", () => {
     for (const [name, source] of productionStyles) {
       const missingFallbacks = matchingLines(source, (line) => (
         /var\(--mdw-[\w-]+\)/u.test(line)

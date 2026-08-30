@@ -184,16 +184,6 @@ describe("extension definition contract", () => {
       version: "1.0.0",
       compatibility: { extensionApi: "latest", markora: "^0.0.1" },
     }), "EXTENSION_INVALID_DEFINITION");
-    expectExtensionError(() => defineMarkdownEditorExtension({
-      name: "acme-runtime",
-      version: "1.0.0",
-      compatibility: {
-        extensionApi: "^1.3.0",
-        markora: "^0.0.1",
-        runtime: "minimal" as never,
-      },
-    }), "EXTENSION_INVALID_DEFINITION");
-
     const tokenizerError = expectExtensionError(() => extension("acme-tokenizer", {
       markdown: {
         tokenizerRules: [{

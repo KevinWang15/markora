@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 import { createMinimalMarkdownCodec } from "../src/minimalMarkdownCodec";
 
 function expectStable(
-  codec: ReturnType<typeof createCompatibilityMarkdownCodec>,
+  codec: ReturnType<typeof createMarkdownCodec>,
   input: string,
   expected: string,
 ) {
@@ -17,7 +17,7 @@ function expectStable(
 }
 
 describe.each([
-  ["root", () => createCompatibilityMarkdownCodec()],
+  ["root", () => createMarkdownCodec()],
   ["minimal", () => createMinimalMarkdownCodec()],
 ] as const)("%s remaining CommonMark stability", (_entry, createCodec) => {
   it("retains escaped trailing hashes as heading content", () => {

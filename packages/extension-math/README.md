@@ -78,7 +78,7 @@ Block expression line endings normalize to LF. Source characters otherwise
 remain model data; renderer output is presentation-only and is never written to
 Markdown, clipboard output, history, or extension storage. Code spans, code
 blocks, generic fenced code, and exact raw-HTML source are not reinterpreted as
-math. With this package absent, the compatibility entry retains its existing
+math. With this package absent, the root entry retains its existing
 opaque standalone-display fallback; inline math and the minimal entry have no
 preservation guarantee.
 

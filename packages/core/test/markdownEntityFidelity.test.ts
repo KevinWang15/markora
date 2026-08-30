@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createCompatibilityMarkdownCodec } from "../src/markdownCodec";
+import { createMarkdownCodec } from "../src/markdownCodec";
 import { createMinimalMarkdownCodec } from "../src/minimalMarkdownCodec";
 
 function expectStableMarkdown(
-  codec: ReturnType<typeof createCompatibilityMarkdownCodec>,
+  codec: ReturnType<typeof createMarkdownCodec>,
   input: string,
   expected: string,
 ) {
@@ -17,7 +17,7 @@ function expectStableMarkdown(
 }
 
 describe.each([
-  ["root", () => createCompatibilityMarkdownCodec()],
+  ["root", () => createMarkdownCodec()],
   ["minimal", () => createMinimalMarkdownCodec()],
 ] as const)("%s Markdown entity fidelity", (_entry, createCodec) => {
   it("keeps entity-shaped literal text literal across serialization", () => {
@@ -56,14 +56,14 @@ describe.each([
 describe("root entity boundaries", () => {
   it("does not let decoded entity text extend an adjacent bare autolink after reset", () => {
     expectStableMarkdown(
-      createCompatibilityMarkdownCodec(),
+      createMarkdownCodec(),
       "Boundary www.example.com/?x=&copy; remains split.",
       "Boundary www.example.com/?x=&#169; remains split.",
     );
   });
 
   it("does not turn entity-produced cell line breaks into raw HTML or extra rows", () => {
-    const codec = createCompatibilityMarkdownCodec();
+    const codec = createMarkdownCodec();
     const input = "| h |\n| --- |\n| A&#10;B&#13;C |";
     const expected = "| h |\n| --- |\n| A&#10;B&#13;C |";
     const document = codec.parse(input)!;

@@ -1,6 +1,6 @@
 import { EditorState, Plugin, type Transaction } from "prosemirror-state";
 import { describe, expect, it } from "vitest";
-import { parseMarkdown } from "../src/markdownCodec";
+import { parseMarkdown } from "./support/currentMarkdownCodec";
 import {
   getMarkdownEditorTransactionEmitChange,
   getMarkdownEditorTransactionOrigin,

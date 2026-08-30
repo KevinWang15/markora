@@ -1,6 +1,6 @@
 import type { EditorView } from 'prosemirror-view';
 import { describe, expect, it } from 'vitest';
-import { schema } from '../src/markdownCodec';
+import { schema } from './support/currentMarkdownCodec';
 import { createTaskListItemViewClass } from '../src/taskListItemView';
 
 function paragraph(text = '') {
