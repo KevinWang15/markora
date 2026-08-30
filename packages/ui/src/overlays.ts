@@ -1,3 +1,23 @@
+import {
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  Maximize2,
+  MoveDown,
+  MoveLeft,
+  MoveRight,
+  MoveUp,
+  PanelBottomOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightOpen,
+  PanelTopClose,
+  PanelTopOpen,
+  Trash2,
+  type LucideIconData,
+} from "@lucide/icons";
+import { buildLucideIconElement } from "@lucide/icons/build";
 import type { MarkdownEditor } from "markora";
 import {
   formatDefaultUiMessage,
@@ -1405,27 +1425,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     }
   };
 
-  const createIcon = (paths: string[]) => {
-    const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("fill", "none");
-    svg.setAttribute("stroke", "currentColor");
-    svg.setAttribute("stroke-width", "1.8");
-    svg.setAttribute("stroke-linecap", "round");
-    svg.setAttribute("stroke-linejoin", "round");
-    svg.setAttribute("aria-hidden", "true");
-    svg.classList.add("mdw-table-toolbar-icon");
-
-    for (const d of paths) {
-      const path = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("d", d);
-      svg.append(path);
-    }
-
-    return svg;
-  };
-
-  const createButton = (control: DefaultUiTableControl, paths: string[]) => {
+  const createButton = (control: DefaultUiTableControl, icon: LucideIconData) => {
     const title = formatDefaultUiMessage(
       "messages.tableControlLabel",
       messages.tableControlLabel,
@@ -1437,26 +1437,34 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     button.title = title;
     button.tabIndex = -1;
     button.setAttribute("aria-label", title);
-    button.append(createIcon(paths));
+    button.append(buildLucideIconElement(doc, icon, {
+      className: "mdw-table-toolbar-icon",
+      size: 18,
+      strokeWidth: 1.8,
+      attributes: {
+        "aria-hidden": "true",
+        focusable: "false",
+      },
+    }));
     return button;
   };
 
-  const insertRowBeforeButton = createButton("insert-row-before", ["M5 9h14M5 17h14M12 3v4M9.5 5.5 12 3l2.5 2.5"]);
-  const insertRowAfterButton = createButton("insert-row-after", ["M5 7h14M5 15h14M12 17v4M9.5 18.5 12 21l2.5-2.5"]);
-  const moveRowUpButton = createButton("move-row-up", ["M5 8h14M5 16h14M12 14V3M8.5 6.5 12 3l3.5 3.5"]);
-  const moveRowDownButton = createButton("move-row-down", ["M5 8h14M5 16h14M12 10v11M8.5 17.5 12 21l3.5-3.5"]);
-  const removeRowButton = createButton("delete-row", ["M5 8h14M5 16h14M9 12h6"]);
-  const insertColumnBeforeButton = createButton("insert-column-before", ["M9 5v14M17 5v14M3 12h4M5.5 9.5 3 12l2.5 2.5"]);
-  const insertColumnAfterButton = createButton("insert-column-after", ["M7 5v14M15 5v14M17 12h4M18.5 9.5 21 12l-2.5 2.5"]);
-  const moveColumnLeftButton = createButton("move-column-left", ["M8 5v14M16 5v14M14 12H3M6.5 8.5 3 12l3.5 3.5"]);
-  const moveColumnRightButton = createButton("move-column-right", ["M8 5v14M16 5v14M10 12h11M17.5 8.5 21 12l-3.5 3.5"]);
-  const removeColumnButton = createButton("delete-column", ["M8 5v14M16 5v14M11 12h2"]);
-  const alignAutomaticButton = createButton("automatic-alignment", ["M5 7h14M7 12h10M9 17h6"]);
-  const alignLeftButton = createButton("align-left", ["M5 7h14M5 12h10M5 17h14"]);
-  const alignCenterButton = createButton("align-center", ["M5 7h14M7 12h10M5 17h14"]);
-  const alignRightButton = createButton("align-right", ["M5 7h14M9 12h10M5 17h14"]);
-  const resizeButton = createButton("resize-table", ["M5 9V5h4M15 5h4v4M19 15v4h-4M9 19H5v-4M8 8l8 8M16 8l-8 8"]);
-  const removeButton = createButton("delete-table", ["M9 4.5h6M10 9v7M14 9v7M5 6h14M7 6l1 13h8l1-13"]);
+  const insertRowBeforeButton = createButton("insert-row-before", PanelTopOpen);
+  const insertRowAfterButton = createButton("insert-row-after", PanelBottomOpen);
+  const moveRowUpButton = createButton("move-row-up", MoveUp);
+  const moveRowDownButton = createButton("move-row-down", MoveDown);
+  const removeRowButton = createButton("delete-row", PanelTopClose);
+  const insertColumnBeforeButton = createButton("insert-column-before", PanelLeftOpen);
+  const insertColumnAfterButton = createButton("insert-column-after", PanelRightOpen);
+  const moveColumnLeftButton = createButton("move-column-left", MoveLeft);
+  const moveColumnRightButton = createButton("move-column-right", MoveRight);
+  const removeColumnButton = createButton("delete-column", PanelLeftClose);
+  const alignAutomaticButton = createButton("automatic-alignment", AlignJustify);
+  const alignLeftButton = createButton("align-left", AlignLeft);
+  const alignCenterButton = createButton("align-center", AlignCenter);
+  const alignRightButton = createButton("align-right", AlignRight);
+  const resizeButton = createButton("resize-table", Maximize2);
+  const removeButton = createButton("delete-table", Trash2);
   const toolbarButtons = [
     insertRowBeforeButton,
     insertRowAfterButton,

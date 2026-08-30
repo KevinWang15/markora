@@ -122,6 +122,9 @@ importers:
 
   packages/demo:
     dependencies:
+      '@lucide/icons':
+        specifier: ^1.37.0
+        version: 1.37.0
       markora:
         specifier: workspace:*
         version: link:../core
@@ -221,6 +224,10 @@ importers:
         version: link:../core
 
   packages/ui:
+    dependencies:
+      '@lucide/icons':
+        specifier: ^1.37.0
+        version: 1.37.0
     devDependencies:
       markora:
         specifier: workspace:*
@@ -641,6 +648,9 @@ packages:
 
   '@lezer/xml@1.0.6':
     resolution: {integrity: sha512-CdDwirL0OEaStFue/66ZmFSeppuL6Dwjlk8qk153mSQwiSH/Dlri4GNymrNWnUmPl2Um7QfV1FO9KFUyX3Twww==}
+
+  '@lucide/icons@1.37.0':
+    resolution: {integrity: sha512-8+CVT7P2cLY7hid5jTlnxNsgXoUy5gL52gOoU6a5U1IWt8gUWyEUiVkABlN7Pg4is5rPKL1D/qrOiV/sq5vhdg==}
 
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
@@ -1902,6 +1912,8 @@ snapshots:
       '@lezer/common': 1.5.1
       '@lezer/highlight': 1.2.3
       '@lezer/lr': 1.4.8
+
+  '@lucide/icons@1.37.0': {}
 
   '@marijn/find-cluster-break@1.0.2': {}
 

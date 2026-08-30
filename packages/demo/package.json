@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@lucide/icons": "^1.37.0",
     "markora": "workspace:*",
     "markora-extension-alerts": "workspace:*",
     "markora-extension-diagrams": "workspace:*",

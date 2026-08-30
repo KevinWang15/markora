@@ -372,6 +372,17 @@ describe('createDefaultUi', () => {
     ]);
     expect(tableButtons.map((button) => button.title))
       .toEqual(tableButtons.map((button) => button.getAttribute('aria-label')));
+    const tableIcons = tableButtons.map((button) => button.querySelector<SVGElement>('svg'));
+    expect(tableIcons).toHaveLength(16);
+    for (const icon of tableIcons) {
+      expect(icon).not.toBeNull();
+      expect(icon?.classList.contains('lucide')).toBe(true);
+      expect(icon?.classList.contains('mdw-table-toolbar-icon')).toBe(true);
+      expect(icon?.getAttribute('viewBox')).toBe('0 0 24 24');
+      expect(icon?.getAttribute('aria-hidden')).toBe('true');
+      expect(icon?.getAttribute('focusable')).toBe('false');
+      expect(icon?.childElementCount).toBeGreaterThan(0);
+    }
     expect(toolbar.querySelector('[role="status"]')?.textContent).toBe('ui:selection:3-4:2-3');
     tableButtons[0]!.click();
     expect(toolbar.querySelector('[role="status"]')?.textContent)

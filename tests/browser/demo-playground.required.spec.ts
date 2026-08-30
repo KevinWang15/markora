@@ -449,6 +449,29 @@ test("@required formatting toolbar uses one tab stop and arrow-key navigation", 
   const toolbar = page.getByRole("toolbar", { name: "Formatting" });
   await expect(toolbar).toHaveAttribute("aria-orientation", "horizontal");
 
+  const iconStates = await toolbar.locator(".mdw-toolbar-icon").evaluateAll((icons) => (
+    icons.map((icon) => {
+      const rect = icon.getBoundingClientRect();
+      return {
+        decorative: icon.getAttribute("aria-hidden") === "true"
+          && icon.getAttribute("focusable") === "false",
+        hasGeometry: icon.childElementCount > 0,
+        isLucide: icon.classList.contains("lucide"),
+        size: [rect.width, rect.height],
+        viewBox: icon.getAttribute("viewBox"),
+      };
+    })
+  ));
+  expect(iconStates).toHaveLength(10);
+  expect(iconStates.every((icon) => (
+    icon.decorative
+      && icon.hasGeometry
+      && icon.isLucide
+      && icon.viewBox === "0 0 24 24"
+      && icon.size[0] === 18
+      && icon.size[1] === 18
+  ))).toBe(true);
+
   const tabStops = await toolbar.locator("button").evaluateAll((buttons) => (
     buttons
       .filter((button) => !(button as HTMLButtonElement).disabled && (button as HTMLElement).tabIndex === 0)

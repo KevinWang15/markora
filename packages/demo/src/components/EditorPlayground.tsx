@@ -1,3 +1,17 @@
+import {
+  Bold,
+  Code2,
+  ImageOff,
+  ImagePlus,
+  Italic,
+  Link2,
+  Link2Off,
+  Redo2,
+  Strikethrough,
+  Undo2,
+  type LucideIconData,
+} from "@lucide/icons";
+import { buildLucideIconElement } from "@lucide/icons/build";
 import { createEditor, type MarkdownEditor } from "markora";
 import { createDefaultUi } from "markora-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -57,24 +71,16 @@ function formatShortcut(shortcut: string) {
   return parts.map((part) => (part === "Mod" ? "Ctrl" : part)).join("+");
 }
 
-function createIcon(paths: string[], options: { viewBox?: string; filled?: boolean } = {}) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", options.viewBox ?? "0 0 24 24");
-  svg.setAttribute("fill", options.filled ? "currentColor" : "none");
-  svg.setAttribute("stroke", options.filled ? "none" : "currentColor");
-  svg.setAttribute("stroke-width", "1.8");
-  svg.setAttribute("stroke-linecap", "round");
-  svg.setAttribute("stroke-linejoin", "round");
-  svg.setAttribute("aria-hidden", "true");
-  svg.classList.add("mdw-toolbar-icon");
-
-  for (const d of paths) {
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", d);
-    svg.append(path);
-  }
-
-  return svg;
+function createToolbarIcon(icon: LucideIconData) {
+  return buildLucideIconElement(document, icon, {
+    className: "mdw-toolbar-icon",
+    size: 18,
+    strokeWidth: 1.8,
+    attributes: {
+      "aria-hidden": "true",
+      focusable: "false",
+    },
+  });
 }
 
 function createToolbarTooltip() {
@@ -156,7 +162,7 @@ function createToolbarTooltip() {
 
 function createToolbarButton(
   tooltipController: ReturnType<typeof createToolbarTooltip>,
-  content: string | SVGElement,
+  content: string | Element,
   tooltip: TooltipContent,
   onClick: () => void,
   options: { compact?: boolean } = {},
@@ -587,16 +593,52 @@ export function EditorPlayground() {
       imagePopover.close(refocusEditor);
     };
 
-    const undoButton = createToolbarButton(tooltipController, createIcon(["M9 14 4 9l5-5", "M4 9h10a6 6 0 1 1 0 12h-1"]), { label: "Undo", shortcut: "Mod+Z" }, () => editorRef.current?.commands.undo(), { compact: true });
-    const redoButton = createToolbarButton(tooltipController, createIcon(["m15 14 5-5-5-5", "M20 9H10a6 6 0 1 0 0 12h1"]), { label: "Redo", shortcut: "Shift+Mod+Z" }, () => editorRef.current?.commands.redo(), { compact: true });
-    const boldButton = createToolbarButton(tooltipController, createIcon(["M8 6h6a4 4 0 0 1 0 8H8z", "M8 14h7a4 4 0 0 1 0 8H8z", "M8 6v16"]), { label: "Bold", shortcut: "Mod+B" }, () => editorRef.current?.commands.toggleMark("strong"), { compact: true });
-    const italicButton = createToolbarButton(tooltipController, createIcon(["M14 4h-4", "M10 20H6", "M14 4 10 20"]), { label: "Italic", shortcut: "Mod+I" }, () => editorRef.current?.commands.toggleMark("em"), { compact: true });
-    const codeButton = createToolbarButton(tooltipController, createIcon(["m9 18-6-6 6-6", "m15 6 6 6-6 6", "M14 4 10 20"]), { label: "Inline code", shortcut: "Mod+E" }, () => editorRef.current?.commands.toggleMark("code"), { compact: true });
-    const strikeButton = createToolbarButton(tooltipController, createIcon(["M5 12h14", "M8 6h5a3 3 0 0 1 0 6H11a3 3 0 0 0 0 6h5"]), { label: "Strike", shortcut: "Mod+Shift+X" }, () => editorRef.current?.commands.toggleMark("strike"), { compact: true });
+    const undoButton = createToolbarButton(
+      tooltipController,
+      createToolbarIcon(Undo2),
+      { label: "Undo", shortcut: "Mod+Z" },
+      () => editorRef.current?.commands.undo(),
+      { compact: true },
+    );
+    const redoButton = createToolbarButton(
+      tooltipController,
+      createToolbarIcon(Redo2),
+      { label: "Redo", shortcut: "Shift+Mod+Z" },
+      () => editorRef.current?.commands.redo(),
+      { compact: true },
+    );
+    const boldButton = createToolbarButton(
+      tooltipController,
+      createToolbarIcon(Bold),
+      { label: "Bold", shortcut: "Mod+B" },
+      () => editorRef.current?.commands.toggleMark("strong"),
+      { compact: true },
+    );
+    const italicButton = createToolbarButton(
+      tooltipController,
+      createToolbarIcon(Italic),
+      { label: "Italic", shortcut: "Mod+I" },
+      () => editorRef.current?.commands.toggleMark("em"),
+      { compact: true },
+    );
+    const codeButton = createToolbarButton(
+      tooltipController,
+      createToolbarIcon(Code2),
+      { label: "Inline code", shortcut: "Mod+E" },
+      () => editorRef.current?.commands.toggleMark("code"),
+      { compact: true },
+    );
+    const strikeButton = createToolbarButton(
+      tooltipController,
+      createToolbarIcon(Strikethrough),
+      { label: "Strike", shortcut: "Mod+Shift+X" },
+      () => editorRef.current?.commands.toggleMark("strike"),
+      { compact: true },
+    );
 
     const linkButton = createToolbarButton(
       tooltipController,
-      createIcon(["M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11 4", "M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07L13 19"]),
+      createToolbarIcon(Link2),
       { label: "Add or edit link" },
       () => {
         const editor = editorRef.current;
@@ -610,12 +652,18 @@ export function EditorPlayground() {
       },
       { compact: true },
     );
-    const unlinkButton = createToolbarButton(tooltipController, createIcon(["M4 12h16", "m8 8-8-8", "m8 8-8 8"], { viewBox: "0 0 16 16" }), { label: "Remove link" }, () => editorRef.current?.commands.removeLink(), { compact: true });
+    const unlinkButton = createToolbarButton(
+      tooltipController,
+      createToolbarIcon(Link2Off),
+      { label: "Remove link" },
+      () => editorRef.current?.commands.removeLink(),
+      { compact: true },
+    );
     unlinkButton.classList.add("mdw-toolbar-button-secondary");
 
     const imageButton = createToolbarButton(
       tooltipController,
-      createIcon(["M4 5h16v14H4z", "m4 15 4-4 3 3 5-6 4 5", "M9 9h.01"]),
+      createToolbarIcon(ImagePlus),
       { label: "Insert or edit image" },
       () => {
         const editor = editorRef.current;
@@ -637,7 +685,13 @@ export function EditorPlayground() {
       button.setAttribute("aria-controls", popover.panel.id);
       button.setAttribute("aria-expanded", "false");
     }
-    const removeImageButton = createToolbarButton(tooltipController, createIcon(["M5 6h14", "M9 6V4h6v2", "M8 6l1 12h6l1-12", "M10 10v5", "M14 10v5"]), { label: "Remove image" }, () => editorRef.current?.commands.removeImage(), { compact: true });
+    const removeImageButton = createToolbarButton(
+      tooltipController,
+      createToolbarIcon(ImageOff),
+      { label: "Remove image" },
+      () => editorRef.current?.commands.removeImage(),
+      { compact: true },
+    );
     removeImageButton.classList.add("mdw-toolbar-button-secondary");
 
     toolbarElement.append(
