@@ -943,7 +943,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
         return;
       }
 
-      this.outerView.dom.focus();
+      this.outerView.dom.focus({ preventScroll: true });
     }
 
     private releaseInnerSelectionOwnership() {
@@ -1004,7 +1004,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
         }
 
         if (this.outerView.state.selection instanceof ManagedBlockCursor) {
-          this.outerView.dom.focus();
+          this.outerView.dom.focus({ preventScroll: true });
         } else {
           this.outerView.focus();
         }
@@ -1550,7 +1550,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
       if (selection.from >= codeStart && selection.to <= codeEnd) {
         this.setSelection(selection.from - codeStart, selection.to - codeStart);
       } else {
-        this.outerView.dom.focus();
+        this.outerView.dom.focus({ preventScroll: true });
       }
 
       return true;

@@ -158,7 +158,7 @@ function focusOuterViewForManagedCursor(view: EditorView) {
       return;
     }
 
-    view.dom.focus();
+    view.dom.focus({ preventScroll: true });
 
     debugManagedBlockCursor(() => ({
       phase: "focus-sync:microtask:after",

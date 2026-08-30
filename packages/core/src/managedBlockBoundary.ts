@@ -116,7 +116,7 @@ export function createManagedBlockBoundaryHelpers(options: CreateManagedBlockBou
       }
 
       if (view.state.selection instanceof ManagedBlockCursor) {
-        view.dom.focus();
+        view.dom.focus({ preventScroll: true });
       } else {
         view.focus();
       }

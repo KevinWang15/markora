@@ -222,3 +222,71 @@ test("@required CodeMirror editing and boundary exit stay synchronized", async (
     "!after",
   ].join("\n"));
 });
+
+test("@required code-block focus handoffs and replacement preserve document scroll", async ({ labPage }) => {
+  const id = "code-scroll";
+  const before = Array.from({ length: 18 }, (_, index) => `before-${index}`);
+  const after = Array.from({ length: 18 }, (_, index) => `after-${index}`);
+  const markdown = [
+    before.join("\n\n"),
+    [
+      "```typescript",
+      "const first = 1;",
+      "const second = 2;",
+      "```",
+    ].join("\n"),
+    after.join("\n\n"),
+  ].join("\n\n");
+  await mountEditor(labPage, {
+    id,
+    markdown,
+  });
+  const editor = editorLocator(labPage, id);
+  const codeBlock = editor.locator(".mdw-code-block");
+  const settleFocus = () => labPage.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  const centerCodeBlock = async () => {
+    await codeBlock.evaluate((element) => element.scrollIntoView({ block: "center" }));
+    await settleFocus();
+  };
+  const scrollY = () => labPage.evaluate(() => window.scrollY);
+
+  await centerCodeBlock();
+  await codeBlock.locator(".cm-line").last().click();
+  await labPage.keyboard.press("End");
+  const beforeExit = await scrollY();
+
+  await labPage.keyboard.press("ArrowRight");
+  await settleFocus();
+  const afterExit = await scrollY();
+  expect(Math.abs(afterExit - beforeExit)).toBeLessThanOrEqual(1);
+  expect((await snapshotEditor(labPage, id)).activeElement).toBe("prosemirror");
+
+  await labPage.keyboard.press("ArrowLeft");
+  await settleFocus();
+  expect(Math.abs((await scrollY()) - afterExit)).toBeLessThanOrEqual(1);
+  expect((await snapshotEditor(labPage, id)).activeElement).toBe("code-mirror");
+
+  await labPage.keyboard.press("ArrowRight");
+  await settleFocus();
+  const beforeDeletion = await scrollY();
+  await labPage.keyboard.press("Backspace");
+  await settleFocus();
+  expect(Math.abs((await scrollY()) - beforeDeletion)).toBeLessThanOrEqual(1);
+  await expect(codeBlock).toHaveCount(0);
+  expect((await snapshotEditor(labPage, id)).activeElement).toBe("prosemirror");
+
+  expect(await resetEditor(labPage, id, markdown)).toBe(markdown);
+  await expect(codeBlock).toHaveAttribute("data-mdw-code-block-state", "active");
+  await centerCodeBlock();
+  await codeBlock.locator(".cm-line").first().click();
+  await labPage.keyboard.press("Home");
+  const beforeReplacement = await scrollY();
+
+  await labPage.keyboard.press("Backspace");
+  await settleFocus();
+  expect(Math.abs((await scrollY()) - beforeReplacement)).toBeLessThanOrEqual(1);
+  await expect(codeBlock).toHaveCount(0);
+  expect((await snapshotEditor(labPage, id)).activeElement).toBe("prosemirror");
+});
