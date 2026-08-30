@@ -60,6 +60,33 @@ async function expectForcedColorsFocus(target: Locator) {
   expect(focusStyle.boxShadow).toBe("none");
 }
 
+test("@required playground presents and highlights its TypeScript example", async ({ page }) => {
+  await page.goto("/demo");
+  const codeBlock = page.locator("#editor .mdw-code-block");
+  const language = codeBlock.locator(".mdw-code-block-language");
+
+  await codeBlock.scrollIntoViewIfNeeded();
+  await expect(language).toHaveText("typescript");
+  await expect(language).toHaveAccessibleName("Edit code block language: typescript");
+  await expect(codeBlock).toHaveAttribute("data-mdw-code-block-state", "active");
+  await expect(codeBlock.locator(".cm-content")).toContainText("interface Release");
+  await expect(codeBlock.locator(".cm-content")).toContainText("satisfies Release");
+
+  const highlighting = await codeBlock.locator(".cm-content span").evaluateAll((tokens) => {
+    const tokenColors = tokens.map((token) => getComputedStyle(token).color);
+    const contentColor = tokens[0]?.parentElement
+      ? getComputedStyle(tokens[0].parentElement).color
+      : "";
+    return {
+      coloredTokenCount: tokenColors.filter((color) => color !== contentColor).length,
+      distinctTokenColors: new Set(tokenColors).size,
+    };
+  });
+  expect(highlighting.coloredTokenCount).toBeGreaterThan(0);
+  expect(highlighting.distinctTokenColors).toBeGreaterThan(2);
+  await expect(page.locator("#source")).not.toHaveValue(/title=/);
+});
+
 test("@required playground link popover validates input and preserves native Cancel behavior", async ({ page }) => {
   await page.goto("/demo");
   await page.locator("#source").fill("hello world");
