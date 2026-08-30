@@ -573,11 +573,15 @@ describe('editor runtime', () => {
     expect(actions.addTableColumn(editor.view)).toBe(false, "after");
     expect(actions.addTableRow(editor.view)).toBe(false, "after");
     expect(actions.insertTable(editor.view, { columns: 3, rows: 3 })).toBe(false);
+    expect(actions.insertTableColumnAt(editor.view, 1)).toBe(false);
+    expect(actions.insertTableRowAt(editor.view, 1)).toBe(false);
     expect(actions.moveTableColumn(editor.view, 'right')).toBe(false);
     expect(actions.moveTableRow(editor.view, 'down')).toBe(false);
     expect(actions.removeTableColumn(editor.view)).toBe(false);
     expect(actions.removeTableRow(editor.view)).toBe(false);
     expect(actions.resizeTable(editor.view, { columns: 3, rows: 3 })).toBe(false);
+    expect(actions.selectTableColumn(editor.view, 0)).toBe(false);
+    expect(actions.selectTableRow(editor.view, 0)).toBe(false);
     expect(actions.setTableColumnAlignment(editor.view, 'center')).toBe(false);
     expect(actions.removeActiveTable(editor.view)).toBe(false);
     expect(editor.ui?.editTable()).toBe(false);

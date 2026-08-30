@@ -1,5 +1,6 @@
 import type { Node as ProseMirrorNode, Schema } from "prosemirror-model";
 import { Selection, TextSelection, type EditorState } from "prosemirror-state";
+import { CellSelection } from "prosemirror-tables";
 import type { EditorView } from "prosemirror-view";
 import {
   createEmptyTableRow as createSharedEmptyTableRow,
@@ -42,6 +43,85 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
 
   function addTableColumn(view: EditorView, side: "before" | "after" = "after") {
     return tableCommands.addTableColumn(side)(view.state, (transaction) => view.dispatch(transaction), view);
+  }
+
+  function insertTableRowAt(view: EditorView, index: number) {
+    return tableCommands.insertTableRowAt(index)(
+      view.state,
+      (transaction) => view.dispatch(transaction),
+      view,
+    );
+  }
+
+  function insertTableColumnAt(view: EditorView, index: number) {
+    return tableCommands.insertTableColumnAt(index)(
+      view.state,
+      (transaction) => view.dispatch(transaction),
+      view,
+    );
+  }
+
+  function getCellPosition(
+    info: TableCellInfo,
+    rowIndex: number,
+    columnIndex: number,
+  ) {
+    const row = info.table.maybeChild(rowIndex);
+
+    if (!row || columnIndex < 0 || columnIndex >= row.childCount) {
+      return null;
+    }
+
+    let position = info.tablePos + 1;
+    for (let index = 0; index < rowIndex; index += 1) {
+      position += info.table.child(index).nodeSize;
+    }
+    position += 1;
+    for (let index = 0; index < columnIndex; index += 1) {
+      position += row.child(index).nodeSize;
+    }
+    return position;
+  }
+
+  function selectTableAxis(view: EditorView, axis: "row" | "column", index: number) {
+    const info = getTableCellContext(view.state);
+    const rowCount = info?.table.childCount ?? 0;
+    const columnCount = info?.table.firstChild?.childCount ?? 0;
+
+    if (
+      !info
+      || !Number.isInteger(index)
+      || index < 0
+      || (axis === "row" ? index >= rowCount : index >= columnCount)
+    ) {
+      return false;
+    }
+
+    const anchorRow = axis === "row" ? index : 0;
+    const anchorColumn = axis === "column" ? index : 0;
+    const headRow = axis === "row" ? index : rowCount - 1;
+    const headColumn = axis === "column" ? index : columnCount - 1;
+    const anchorPos = getCellPosition(info, anchorRow, anchorColumn);
+    const headPos = getCellPosition(info, headRow, headColumn);
+
+    if (anchorPos === null || headPos === null) {
+      return false;
+    }
+
+    view.dispatch(view.state.tr.setSelection(CellSelection.create(
+      view.state.doc,
+      anchorPos,
+      headPos,
+    )));
+    return true;
+  }
+
+  function selectTableRow(view: EditorView, index: number) {
+    return selectTableAxis(view, "row", index);
+  }
+
+  function selectTableColumn(view: EditorView, index: number) {
+    return selectTableAxis(view, "column", index);
   }
 
   function moveTableRow(view: EditorView, direction: "up" | "down") {
@@ -227,6 +307,10 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
     createEmptyTableRow,
     addTableRow,
     addTableColumn,
+    insertTableRowAt,
+    insertTableColumnAt,
+    selectTableRow,
+    selectTableColumn,
     moveTableRow,
     moveTableColumn,
     removeTableRow,

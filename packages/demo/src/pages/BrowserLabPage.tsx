@@ -632,7 +632,7 @@ type MountedEditor = {
   transactionCount: number;
 };
 
-const OVERLAY_SELECTOR = ".mdw-link-editor, .mdw-image-editor, .mdw-code-language-editor, .mdw-table-size-editor, .mdw-table-toolbar";
+const OVERLAY_SELECTOR = ".mdw-link-editor, .mdw-image-editor, .mdw-code-language-editor, .mdw-table-size-editor, .mdw-table-toolbar, .mdw-table-edge-controls";
 const EVENT_NAMES: MarkdownEditorEventName[] = ["focus", "blur", "selection", "state", "update", "error", "asset"];
 
 function createEventCounts(): Record<MarkdownEditorEventName, number> {

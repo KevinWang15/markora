@@ -32,6 +32,8 @@ function createControllers(
     },
     hostElement,
     insertTable() { return true; },
+    insertTableColumnAt() { return true; },
+    insertTableRowAt() { return true; },
     moveTableColumn() { return true; },
     moveTableRow() { return true; },
     normalizeTableAlignment() {
@@ -43,6 +45,8 @@ function createControllers(
     removeTableColumn() { return true; },
     removeTableRow() { return true; },
     resizeTable() { return true; },
+    selectTableColumn() { return true; },
+    selectTableRow() { return true; },
     setTableColumnAlignment() { return true; },
     updateActiveImage() { return true; },
     updateLinkHref() { return true; },
@@ -119,12 +123,24 @@ const localizedMessages: DefaultUiMessages = {
       : 'none'}`
   ),
   tableColumnsInputLabel: 'ui:columns',
+  tableColumnInsertionControlsLabel: 'ui:insert-column-between-group',
+  tableColumnSelectionControlsLabel: 'ui:select-column-group',
   tableControlLabel: (control) => `ui:control:${control}`,
   tableDialogLabel: (mode) => `ui:table-dialog:${mode}`,
   tableDimensionsInvalidError: ({ maximum, minimum }) => `ui:dimensions:${minimum}-${maximum}`,
   tableGroupLabel: (group) => `ui:group:${group}`,
+  tableInsertColumnBetweenLabel: ({ columnBefore, columnAfter }) => (
+    `ui:insert-column:${columnBefore}-${columnAfter}`
+  ),
+  tableInsertRowBetweenLabel: ({ rowBefore, rowAfter }) => (
+    `ui:insert-row:${rowBefore}-${rowAfter}`
+  ),
   tableOperationError: (mode) => `ui:table-error:${mode}`,
+  tableRowInsertionControlsLabel: 'ui:insert-row-between-group',
+  tableRowSelectionControlsLabel: 'ui:select-row-group',
   tableRowsInputLabel: 'ui:rows',
+  tableSelectColumnLabel: ({ column }) => `ui:select-column:${column}`,
+  tableSelectRowLabel: ({ row }) => `ui:select-row:${row}`,
   tableSelectionStatus: ({ columnFrom, columnTo, rowFrom, rowTo }) => (
     `ui:selection:${rowFrom}-${rowTo}:${columnFrom}-${columnTo}`
   ),
@@ -223,6 +239,8 @@ describe('createDefaultUi', () => {
       getTableContext() { return null; },
       hostElement,
       insertTable() { return true; },
+      insertTableColumnAt() { return true; },
+      insertTableRowAt() { return true; },
       moveTableColumn() { return true; },
       moveTableRow() { return true; },
       normalizeTableAlignment() { return null; },
@@ -232,6 +250,8 @@ describe('createDefaultUi', () => {
       removeTableColumn() { return true; },
       removeTableRow() { return true; },
       resizeTable() { return true; },
+      selectTableColumn() { return true; },
+      selectTableRow() { return true; },
       setTableColumnAlignment() { return true; },
       updateActiveImage() { return true; },
       updateLinkHref() { return true; },
@@ -384,6 +404,34 @@ describe('createDefaultUi', () => {
       expect(icon?.childElementCount).toBeGreaterThan(0);
     }
     expect(toolbar.querySelector('[role="status"]')?.textContent).toBe('ui:selection:3-4:2-3');
+    const edgeControls = document.querySelector<HTMLElement>('.mdw-table-edge-controls')!;
+    expect(Array.from(edgeControls.querySelectorAll('[role="group"]')).map((group) => (
+      group.getAttribute('aria-label')
+    ))).toEqual([
+      'ui:select-row-group',
+      'ui:select-column-group',
+      'ui:insert-row-between-group',
+      'ui:insert-column-between-group',
+    ]);
+    expect(Array.from(edgeControls.querySelectorAll<HTMLButtonElement>(
+      '.mdw-table-edge-selector[data-mdw-table-axis="row"]',
+    )).map((button) => button.getAttribute('aria-label'))).toEqual([
+      'ui:select-row:1',
+      'ui:select-row:2',
+      'ui:select-row:3',
+      'ui:select-row:4',
+      'ui:select-row:5',
+      'ui:select-row:6',
+    ]);
+    expect(Array.from(edgeControls.querySelectorAll<HTMLButtonElement>(
+      '.mdw-table-edge-insertion[data-mdw-table-axis="column"]',
+    )).map((button) => button.getAttribute('aria-label'))).toEqual([
+      'ui:insert-column:1-2',
+      'ui:insert-column:2-3',
+      'ui:insert-column:3-4',
+      'ui:insert-column:4-5',
+    ]);
+    expect(edgeControls.querySelector('svg.mdw-table-edge-insertion-icon.lucide')).not.toBeNull();
     tableButtons[0]!.click();
     expect(toolbar.querySelector('[role="status"]')?.textContent)
       .toBe('ui:action:insert-row-before:3-4:2-3');
@@ -632,6 +680,7 @@ describe('createDefaultUi', () => {
     const linkEditor = document.querySelector<HTMLElement>('.mdw-link-editor')!;
     const imageEditor = document.querySelector<HTMLElement>('.mdw-image-editor')!;
     const tableToolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
+    const tableEdgeControls = document.querySelector<HTMLElement>('.mdw-table-edge-controls')!;
 
     controllers.linkEditor.open(view, marker, 'https://example.com');
     controllers.imageEditor.open(view, marker, { node: { attrs: { src: '/image.png' } } });
@@ -639,6 +688,7 @@ describe('createDefaultUi', () => {
     expect(linkEditor.hidden).toBe(true);
     expect(imageEditor.hidden).toBe(true);
     expect(tableToolbar.hidden).toBe(true);
+    expect(tableEdgeControls.hidden).toBe(true);
 
     editable = true;
     controllers.linkEditor.open(view, marker, 'https://example.com');
@@ -647,6 +697,7 @@ describe('createDefaultUi', () => {
     expect(linkEditor.hidden).toBe(false);
     expect(imageEditor.hidden).toBe(false);
     expect(tableToolbar.hidden).toBe(false);
+    expect(tableEdgeControls.hidden).toBe(false);
 
     editable = false;
     Array.from(linkEditor.querySelectorAll('button'))
@@ -664,6 +715,7 @@ describe('createDefaultUi', () => {
     expect(linkEditor.hidden).toBe(true);
     expect(imageEditor.hidden).toBe(true);
     expect(tableToolbar.hidden).toBe(true);
+    expect(tableEdgeControls.hidden).toBe(true);
 
     editable = true;
     controllers.linkEditor.open(view, marker, 'https://example.com');

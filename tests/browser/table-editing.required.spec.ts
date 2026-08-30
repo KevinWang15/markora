@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import type { CDPSession, Locator, Page } from "@playwright/test";
 import {
   canRunEditorCommand,
   copyEditorSelection,
@@ -47,6 +47,166 @@ async function selectCellText(page: Page, id: string, text: string) {
     { editorId: id, needle: text },
   )).toBe(true);
 }
+
+async function clickWithCdp(cdp: CDPSession, point: { x: number; y: number }) {
+  await cdp.send("Input.dispatchMouseEvent", {
+    button: "left",
+    buttons: 1,
+    clickCount: 1,
+    type: "mousePressed",
+    x: point.x,
+    y: point.y,
+  });
+  await cdp.send("Input.dispatchMouseEvent", {
+    button: "left",
+    buttons: 0,
+    clickCount: 1,
+    type: "mouseReleased",
+    x: point.x,
+    y: point.y,
+  });
+}
+
+test("@required Chromium table edge controls pass selection, insertion, deletion, focus, and visual acceptance", async ({
+  browserName,
+  context,
+  labPage,
+}, testInfo) => {
+  test.skip(browserName !== "chromium", "This acceptance test drives the Chromium DevTools Protocol.");
+
+  const id = "table-edge-controls";
+  await mountEditor(labPage, { id, markdown: TABLE_MARKDOWN, root: "shadow" });
+  const editor = editorLocator(labPage, id);
+  const table = editor.locator("table");
+  await table.locator("tr").nth(1).locator("td").nth(1).click();
+  await settleEditor(labPage, id);
+  await expect(editor).toBeFocused();
+
+  const controls = ownedOverlay(labPage, id, ".mdw-table-edge-controls");
+  await expect(controls.getByRole("button", { name: /^Select row / })).toHaveCount(3);
+  await expect(controls.getByRole("button", { name: "Select row 2" })).toBeVisible();
+  await expect(controls.getByRole("button", { name: /^Select column / })).toHaveCount(3);
+  await expect(controls.getByRole("button", { name: /^Insert row between/ })).toHaveCount(2);
+  await expect(controls.getByRole("button", { name: /^Insert column between/ })).toHaveCount(2);
+
+  const rowSelector = controls.getByRole("button", { name: "Select row 2" });
+  const columnSelector = controls.getByRole("button", { name: "Select column 2" });
+  const rowInsertion = controls.getByRole("button", { name: "Insert row between rows 2 and 3" });
+  const columnInsertion = controls.getByRole("button", {
+    name: "Insert column between columns 1 and 2",
+  });
+  const [tableBox, secondRowBox, secondHeaderBox, rowSelectorBox, columnSelectorBox, rowInsertionBox, columnInsertionBox] = await Promise.all([
+    table.boundingBox(),
+    table.locator("tr").nth(1).boundingBox(),
+    table.locator("tr").first().locator("th").nth(1).boundingBox(),
+    rowSelector.boundingBox(),
+    columnSelector.boundingBox(),
+    rowInsertion.boundingBox(),
+    columnInsertion.boundingBox(),
+  ]);
+  for (const box of [tableBox, secondRowBox, secondHeaderBox, rowSelectorBox, columnSelectorBox, rowInsertionBox, columnInsertionBox]) {
+    expect(box).not.toBeNull();
+  }
+  expect(Math.abs(rowSelectorBox!.y - secondRowBox!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(rowSelectorBox!.height - secondRowBox!.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(rowSelectorBox!.x + rowSelectorBox!.width - (tableBox!.x + 2))).toBeLessThanOrEqual(1);
+  expect(Math.abs(columnSelectorBox!.x - secondHeaderBox!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(columnSelectorBox!.width - secondHeaderBox!.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(columnSelectorBox!.y + columnSelectorBox!.height - (tableBox!.y + 2))).toBeLessThanOrEqual(1);
+  const secondRowBoundary = secondRowBox!.y + secondRowBox!.height;
+  expect(Math.abs(rowInsertionBox!.y + rowInsertionBox!.height / 2 - secondRowBoundary)).toBeLessThanOrEqual(1);
+  expect(Math.abs(rowInsertionBox!.x + rowInsertionBox!.width / 2 - (tableBox!.x - 6))).toBeLessThanOrEqual(1);
+  const firstColumnBox = await table.locator("tr").first().locator("th").first().boundingBox();
+  expect(firstColumnBox).not.toBeNull();
+  expect(Math.abs(
+    columnInsertionBox!.x + columnInsertionBox!.width / 2
+      - (firstColumnBox!.x + firstColumnBox!.width),
+  )).toBeLessThanOrEqual(1);
+
+  const cdp = await context.newCDPSession(labPage);
+  const scrollBeforeSelection = await labPage.evaluate(() => window.scrollY);
+  try {
+    await clickWithCdp(cdp, await center(rowSelector));
+    await settleEditor(labPage, id);
+    await expect(editor.locator("tr").nth(1).locator(".selectedCell")).toHaveCount(3);
+    await expect(rowSelector).toHaveAttribute("aria-pressed", "true");
+    await expect(editor).toBeFocused();
+    expect(Math.abs((await labPage.evaluate(() => window.scrollY)) - scrollBeforeSelection))
+      .toBeLessThanOrEqual(1);
+
+    const toolbar = ownedOverlay(labPage, id, ".mdw-table-toolbar");
+    await toolbar.getByRole("button", { name: "Delete row" }).click();
+    await settleEditor(labPage, id);
+    await expect(table.locator("tr")).toHaveCount(2);
+    expect(await getMarkdown(labPage, id)).toBe([
+      "| H1 | H2 | H3 |",
+      "| --- | --- | --- |",
+      "| d | e | f |",
+    ].join("\n"));
+
+    expect(await runEditorCommand(labPage, id, { type: "undo" })).toBe(true);
+    await settleEditor(labPage, id);
+    await table.locator("tr").nth(1).locator("td").nth(1).click();
+    await clickWithCdp(cdp, await center(controls.getByRole("button", { name: "Select column 2" })));
+    await settleEditor(labPage, id);
+    await expect(editor.locator(".selectedCell")).toHaveCount(3);
+    await expect(controls.getByRole("button", { name: "Select column 2" }))
+      .toHaveAttribute("aria-pressed", "true");
+    await toolbar.getByRole("button", { name: "Delete column" }).click();
+    await settleEditor(labPage, id);
+    await expect(table.locator("tr").first().locator("th")).toHaveCount(2);
+    expect(await getMarkdown(labPage, id)).toBe([
+      "| H1 | H3 |",
+      "| --- | --- |",
+      "| a | c |",
+      "| d | f |",
+    ].join("\n"));
+
+    await resetEditor(labPage, id, TABLE_MARKDOWN);
+    await table.locator("tr").nth(1).locator("td").nth(1).click();
+    const freshRowInsertion = controls.getByRole("button", { name: "Insert row between rows 2 and 3" });
+    const rowInsertionCenter = await center(freshRowInsertion);
+    await cdp.send("Input.dispatchMouseEvent", {
+      buttons: 0,
+      type: "mouseMoved",
+      x: rowInsertionCenter.x,
+      y: rowInsertionCenter.y,
+    });
+    await expect.poll(() => freshRowInsertion.evaluate((button) => getComputedStyle(button).opacity))
+      .toBe("1");
+    await testInfo.attach("table-edge-row-insertion-hover", {
+      body: await labPage.screenshot(),
+      contentType: "image/png",
+    });
+    await clickWithCdp(cdp, rowInsertionCenter);
+    await settleEditor(labPage, id);
+    await expect(table.locator("tr")).toHaveCount(4);
+    expect(await table.locator("tr").allTextContents()).toEqual(["H1H2H3", "abc", "", "def"]);
+    expect(await runEditorCommand(labPage, id, { type: "undo" })).toBe(true);
+    await settleEditor(labPage, id);
+
+    await table.locator("tr").nth(1).locator("td").nth(1).click();
+    const freshColumnInsertion = controls.getByRole("button", {
+      name: "Insert column between columns 1 and 2",
+    });
+    const columnInsertionCenter = await center(freshColumnInsertion);
+    await cdp.send("Input.dispatchMouseEvent", {
+      buttons: 0,
+      type: "mouseMoved",
+      x: columnInsertionCenter.x,
+      y: columnInsertionCenter.y,
+    });
+    await expect.poll(() => freshColumnInsertion.evaluate((button) => getComputedStyle(button).opacity))
+      .toBe("1");
+    await clickWithCdp(cdp, columnInsertionCenter);
+    await settleEditor(labPage, id);
+    await expect(table.locator("tr").first().locator("th")).toHaveCount(4);
+    expect(await table.locator("tr").first().locator("th").allTextContents())
+      .toEqual(["H1", "", "H2", "H3"]);
+  } finally {
+    await cdp.detach();
+  }
+});
 
 test("@required mature table editing keeps rectangular clipboard and structural changes predictable in Shadow DOM", async ({ labPage }) => {
   const id = "mature-table";

@@ -14,6 +14,7 @@ import {
   PanelRightOpen,
   PanelTopClose,
   PanelTopOpen,
+  Plus,
   Trash2,
   type LucideIconData,
 } from "@lucide/icons";
@@ -58,6 +59,9 @@ type OverlayEnvironment = {
 const CODE_BLOCK_LANGUAGE_MAX_LENGTH = 128;
 const OVERLAY_GAP = 8;
 const TABLE_DIMENSION_MAXIMUM = 100;
+const TABLE_EDGE_INSERTION_SIZE_DEFAULT = 24;
+const TABLE_EDGE_SELECTOR_OVERLAP_DEFAULT = 2;
+const TABLE_EDGE_SELECTOR_SIZE_DEFAULT = 16;
 const TABLE_DIMENSION_MINIMUM = 1;
 const VIEWPORT_MARGIN = 12;
 let nextOverlayMessageId = 0;
@@ -1359,6 +1363,8 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   addTableRow: (view: EditorView, side: "before" | "after") => boolean | void;
   getTableContext: (state: EditorView["state"]) => TableUiContextLike | null;
   insertTable: (view: EditorView, dimensions: TableDimensions) => boolean | void;
+  insertTableColumnAt: (view: EditorView, index: number) => boolean | void;
+  insertTableRowAt: (view: EditorView, index: number) => boolean | void;
   moveTableColumn: (view: EditorView, direction: "left" | "right") => boolean | void;
   moveTableRow: (view: EditorView, direction: "up" | "down") => boolean | void;
   normalizeTableAlignment: (value: unknown) => TableAlignment | null;
@@ -1366,6 +1372,8 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   removeTableColumn: (view: EditorView) => boolean | void;
   removeTableRow: (view: EditorView) => boolean | void;
   resizeTable: (view: EditorView, dimensions: TableDimensions) => boolean | void;
+  selectTableColumn: (view: EditorView, index: number) => boolean | void;
+  selectTableRow: (view: EditorView, index: number) => boolean | void;
   setTableColumnAlignment: (view: EditorView, align: TableAlignment | null) => boolean | void;
 }): TableToolbarOverlay {
   const {
@@ -1374,6 +1382,8 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     doc,
     getTableContext,
     insertTable,
+    insertTableColumnAt,
+    insertTableRowAt,
     messages,
     moveTableColumn,
     moveTableRow,
@@ -1383,6 +1393,8 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     removeTableColumn,
     removeTableRow,
     resizeTable,
+    selectTableColumn,
+    selectTableRow,
     setTableColumnAlignment,
     syncEnvironment,
     win,
@@ -1411,6 +1423,33 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   status.setAttribute("aria-live", "polite");
   status.setAttribute("aria-atomic", "true");
 
+  const edgeDom = doc.createElement("div");
+  edgeDom.className = "mdw-table-edge-controls mdw-ui";
+  edgeDom.hidden = true;
+  edgeDom.style.display = "none";
+
+  const rowSelectors = doc.createElement("div");
+  rowSelectors.className = "mdw-table-edge-group mdw-table-row-edge-selectors";
+  rowSelectors.setAttribute("role", "group");
+  rowSelectors.setAttribute("aria-label", messages.tableRowSelectionControlsLabel);
+
+  const columnSelectors = doc.createElement("div");
+  columnSelectors.className = "mdw-table-edge-group mdw-table-column-edge-selectors";
+  columnSelectors.setAttribute("role", "group");
+  columnSelectors.setAttribute("aria-label", messages.tableColumnSelectionControlsLabel);
+
+  const rowInsertions = doc.createElement("div");
+  rowInsertions.className = "mdw-table-edge-group mdw-table-row-edge-insertions";
+  rowInsertions.setAttribute("role", "group");
+  rowInsertions.setAttribute("aria-label", messages.tableRowInsertionControlsLabel);
+
+  const columnInsertions = doc.createElement("div");
+  columnInsertions.className = "mdw-table-edge-group mdw-table-column-edge-insertions";
+  columnInsertions.setAttribute("role", "group");
+  columnInsertions.setAttribute("aria-label", messages.tableColumnInsertionControlsLabel);
+
+  edgeDom.append(rowSelectors, columnSelectors, rowInsertions, columnInsertions);
+
   let activeView: EditorView | null = null;
   let activeMarker: HTMLElement | null = null;
   let activeContextVersion = 0;
@@ -1418,6 +1457,12 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   let focusRestorationVersion = 0;
   let lastSelectionDescription = "";
   let repositionFrame: number | null = null;
+  let edgeColumnCount = -1;
+  let edgeRowCount = -1;
+  let columnSelectorButtons: HTMLButtonElement[] = [];
+  let rowSelectorButtons: HTMLButtonElement[] = [];
+  let columnInsertionButtons: HTMLButtonElement[] = [];
+  let rowInsertionButtons: HTMLButtonElement[] = [];
 
   const restoreTableEditorFocus = (view: EditorView) => {
     if (restoreEditorFocus(view, dom, doc, win)) {
@@ -1587,15 +1632,280 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     setRovingIndex(preferredIndex, shouldMoveFocus);
   };
 
+  const runEdgeSelection = (
+    action: (view: EditorView) => boolean | void,
+  ) => {
+    const view = activeView;
+
+    if (!view || view.isDestroyed || !view.editable) {
+      close();
+      return;
+    }
+
+    action(view);
+  };
+
+  const createEdgeSelector = (axis: "row" | "column", index: number) => {
+    const oneBasedIndex = index + 1;
+    const label = axis === "row"
+      ? formatDefaultUiMessage(
+          "messages.tableSelectRowLabel",
+          messages.tableSelectRowLabel,
+          Object.freeze({ row: oneBasedIndex }),
+        )
+      : formatDefaultUiMessage(
+          "messages.tableSelectColumnLabel",
+          messages.tableSelectColumnLabel,
+          Object.freeze({ column: oneBasedIndex }),
+        );
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "mdw-table-edge-selector";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-pressed", "false");
+    button.dataset.mdwTableAxis = axis;
+    button.dataset.mdwTableIndex = String(index);
+    button.addEventListener("click", () => runEdgeSelection((view) => (
+      axis === "row" ? selectTableRow(view, index) : selectTableColumn(view, index)
+    )));
+    return button;
+  };
+
+  const createEdgeInsertion = (axis: "row" | "column", index: number) => {
+    const label = axis === "row"
+      ? formatDefaultUiMessage(
+          "messages.tableInsertRowBetweenLabel",
+          messages.tableInsertRowBetweenLabel,
+          Object.freeze({ rowBefore: index, rowAfter: index + 1 }),
+        )
+      : formatDefaultUiMessage(
+          "messages.tableInsertColumnBetweenLabel",
+          messages.tableInsertColumnBetweenLabel,
+          Object.freeze({ columnBefore: index, columnAfter: index + 1 }),
+        );
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "mdw-table-edge-insertion";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.dataset.mdwTableAxis = axis;
+    button.dataset.mdwTableIndex = String(index);
+    button.append(buildLucideIconElement(doc, Plus, {
+      className: "mdw-table-edge-insertion-icon",
+      size: 16,
+      strokeWidth: 2.5,
+      attributes: {
+        "aria-hidden": "true",
+        focusable: "false",
+      },
+    }));
+    button.addEventListener("click", () => {
+      const view = activeView;
+
+      if (!view || view.isDestroyed || !view.editable) {
+        close();
+        return;
+      }
+
+      const handled = axis === "row"
+        ? insertTableRowAt(view, index)
+        : insertTableColumnAt(view, index);
+
+      if (handled !== false) {
+        announce(axis === "row" ? "insert-row-after" : "insert-column-after", view);
+      }
+    });
+    return button;
+  };
+
+  const rebuildEdgeControls = (info: TableUiContextLike) => {
+    if (edgeRowCount === info.rowCount && edgeColumnCount === info.columnCount) {
+      return;
+    }
+
+    edgeRowCount = info.rowCount;
+    edgeColumnCount = info.columnCount;
+    rowSelectors.replaceChildren();
+    columnSelectors.replaceChildren();
+    rowInsertions.replaceChildren();
+    columnInsertions.replaceChildren();
+    rowSelectorButtons = Array.from({ length: info.rowCount }, (_, index) => (
+      createEdgeSelector("row", index)
+    ));
+    columnSelectorButtons = Array.from({ length: info.columnCount }, (_, index) => (
+      createEdgeSelector("column", index)
+    ));
+    rowInsertionButtons = Array.from({ length: Math.max(0, info.rowCount - 1) }, (_, index) => (
+      createEdgeInsertion("row", index + 1)
+    ));
+    columnInsertionButtons = Array.from(
+      { length: Math.max(0, info.columnCount - 1) },
+      (_, index) => createEdgeInsertion("column", index + 1),
+    );
+    rowSelectors.append(...rowSelectorButtons);
+    columnSelectors.append(...columnSelectorButtons);
+    rowInsertions.append(...rowInsertionButtons);
+    columnInsertions.append(...columnInsertionButtons);
+  };
+
+  const updateEdgeControlState = (info: TableUiContextLike) => {
+    const selectedRowFrom = Math.min(info.selectedRowFrom, info.selectedRowTo);
+    const selectedRowTo = Math.max(info.selectedRowFrom, info.selectedRowTo);
+    const selectedColumnFrom = Math.min(info.selectedColumnFrom, info.selectedColumnTo);
+    const selectedColumnTo = Math.max(info.selectedColumnFrom, info.selectedColumnTo);
+    const wholeRowSelected = selectedColumnFrom === 0
+      && selectedColumnTo === info.columnCount - 1;
+    const wholeColumnSelected = selectedRowFrom === 0
+      && selectedRowTo === info.rowCount - 1;
+
+    rowSelectorButtons.forEach((button, index) => {
+      button.setAttribute(
+        "aria-pressed",
+        wholeRowSelected && index >= selectedRowFrom && index <= selectedRowTo ? "true" : "false",
+      );
+    });
+    columnSelectorButtons.forEach((button, index) => {
+      button.setAttribute(
+        "aria-pressed",
+        wholeColumnSelected && index >= selectedColumnFrom && index <= selectedColumnTo ? "true" : "false",
+      );
+    });
+    const insertionDisabled = info.rowCount >= TABLE_DIMENSION_MAXIMUM;
+    rowInsertionButtons.forEach((button) => { button.disabled = insertionDisabled; });
+    const columnInsertionDisabled = info.columnCount >= TABLE_DIMENSION_MAXIMUM;
+    columnInsertionButtons.forEach((button) => { button.disabled = columnInsertionDisabled; });
+  };
+
+  const getRenderedRows = (marker: HTMLElement) => Array.from(
+    marker.querySelectorAll<HTMLTableRowElement>("tr"),
+  ).filter((row) => row.closest("table") === marker);
+
+  const positionEdgeElement = (
+    element: HTMLElement,
+    rect: Readonly<{ height: number; left: number; top: number; width: number }>,
+  ) => {
+    const initialSpace = measurePositionSpace(element);
+    element.style.width = `${Math.max(0, rect.width) / initialSpace.scaleX}px`;
+    element.style.height = `${Math.max(0, rect.height) / initialSpace.scaleY}px`;
+    setViewportPosition(element, rect.left, rect.top, measurePositionSpace(element));
+  };
+
+  const positionEdgeControls = () => {
+    if (!activeMarker) {
+      return;
+    }
+
+    const rows = getRenderedRows(activeMarker);
+    const firstRowCells = rows[0]
+      ? Array.from(rows[0].cells).filter((cell) => cell.closest("table") === activeMarker)
+      : [];
+
+    if (
+      rows.length !== rowSelectorButtons.length
+      || firstRowCells.length !== columnSelectorButtons.length
+    ) {
+      return;
+    }
+
+    const tableRect = activeMarker.getBoundingClientRect();
+    const rtl = win.getComputedStyle(activeMarker).direction === "rtl";
+    const edgeStyle = win.getComputedStyle(edgeDom);
+    const readEdgeSize = (name: string, fallback: number) => {
+      const value = Number.parseFloat(edgeStyle.getPropertyValue(name));
+      return Number.isFinite(value) && value > 0 ? value : fallback;
+    };
+    const selectorSize = readEdgeSize(
+      "--mdw-ui-table-edge-selector-size",
+      TABLE_EDGE_SELECTOR_SIZE_DEFAULT,
+    );
+    const selectorOverlap = Math.min(
+      selectorSize / 2,
+      readEdgeSize(
+        "--mdw-ui-table-edge-selector-overlap",
+        TABLE_EDGE_SELECTOR_OVERLAP_DEFAULT,
+      ),
+    );
+    const insertionSize = readEdgeSize(
+      "--mdw-ui-table-edge-insertion-size",
+      TABLE_EDGE_INSERTION_SIZE_DEFAULT,
+    );
+    const rowSelectorLeft = rtl
+      ? tableRect.right - selectorOverlap
+      : tableRect.left - selectorSize + selectorOverlap;
+    const rowInsertionCenter = rtl
+      ? tableRect.right + selectorSize / 2 - selectorOverlap
+      : tableRect.left - selectorSize / 2 + selectorOverlap;
+    const columnSelectorTop = tableRect.top
+      - selectorSize
+      + selectorOverlap;
+    const columnInsertionCenter = tableRect.top
+      - selectorSize / 2
+      + selectorOverlap;
+
+    rows.forEach((row, index) => {
+      const rowRect = row.getBoundingClientRect();
+      const button = rowSelectorButtons[index];
+      if (button) {
+        positionEdgeElement(button, {
+          height: rowRect.height,
+          left: rowSelectorLeft,
+          top: rowRect.top,
+          width: selectorSize,
+        });
+      }
+    });
+    firstRowCells.forEach((cell, index) => {
+      const cellRect = cell.getBoundingClientRect();
+      const button = columnSelectorButtons[index];
+      if (button) {
+        positionEdgeElement(button, {
+          height: selectorSize,
+          left: cellRect.left,
+          top: columnSelectorTop,
+          width: cellRect.width,
+        });
+      }
+    });
+    rowInsertionButtons.forEach((button, boundaryIndex) => {
+      const previousRect = rows[boundaryIndex]?.getBoundingClientRect();
+      const nextRect = rows[boundaryIndex + 1]?.getBoundingClientRect();
+      if (!previousRect || !nextRect) return;
+      const boundary = (previousRect.bottom + nextRect.top) / 2;
+      positionEdgeElement(button, {
+        height: insertionSize,
+        left: rowInsertionCenter - insertionSize / 2,
+        top: boundary - insertionSize / 2,
+        width: insertionSize,
+      });
+    });
+    columnInsertionButtons.forEach((button, boundaryIndex) => {
+      const previousRect = firstRowCells[boundaryIndex]?.getBoundingClientRect();
+      const nextRect = firstRowCells[boundaryIndex + 1]?.getBoundingClientRect();
+      if (!previousRect || !nextRect) return;
+      const boundary = rtl
+        ? (previousRect.left + nextRect.right) / 2
+        : (previousRect.right + nextRect.left) / 2;
+      positionEdgeElement(button, {
+        height: insertionSize,
+        left: boundary - insertionSize / 2,
+        top: columnInsertionCenter - insertionSize / 2,
+        width: insertionSize,
+      });
+    });
+  };
+
   const reposition = () => {
     if (!activeMarker) return;
     if (activeView) {
       syncEnvironment(dom, activeView, handleEnvironmentInvalidated);
+      syncEnvironment(edgeDom, activeView, handleEnvironmentInvalidated);
       refreshSelectionAnchor(activeMarker, activeView);
     }
     try {
       const rect = activeMarker.getBoundingClientRect();
       positionOverlay(dom, rect, doc, win, "above");
+      positionEdgeControls();
     } catch {
       // Marker may have been detached from the DOM.
     }
@@ -1638,6 +1948,8 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     lastSelectionDescription = "";
     dom.hidden = true;
     dom.style.display = "none";
+    edgeDom.hidden = true;
+    edgeDom.style.display = "none";
 
     if (refocusIfToolbarFocused && hadToolbarFocus && view) {
       restoreTableEditorFocus(view);
@@ -1758,10 +2070,13 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     status,
   );
   portalRoot.append(dom);
+  portalRoot.append(edgeDom);
 
   dom.addEventListener("mousedown", handleMouseDown);
   dom.addEventListener("focusin", handleFocusIn);
   dom.addEventListener("keydown", handleKeyDown);
+  edgeDom.addEventListener("mousedown", handleMouseDown);
+  edgeDom.addEventListener("keydown", handleKeyDown);
   const runTableAction = (
     action: (view: EditorView) => boolean | void,
     actionName: DefaultUiTableAction,
@@ -1908,8 +2223,13 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     activeView = view;
     activeMarker = marker;
     syncEnvironment(dom, view, handleEnvironmentInvalidated);
+    syncEnvironment(edgeDom, view, handleEnvironmentInvalidated);
     dom.hidden = false;
     dom.style.display = "flex";
+    edgeDom.hidden = false;
+    edgeDom.style.display = "block";
+    rebuildEdgeControls(info);
+    updateEdgeControlState(info);
     updateButtonAvailability(info);
     updateAlignmentButtons(
       info.selectedAlignment === undefined
@@ -1958,10 +2278,13 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       dom.removeEventListener("mousedown", handleMouseDown);
       dom.removeEventListener("focusin", handleFocusIn);
       dom.removeEventListener("keydown", handleKeyDown);
+      edgeDom.removeEventListener("mousedown", handleMouseDown);
+      edgeDom.removeEventListener("keydown", handleKeyDown);
       win.removeEventListener("resize", handleWindowChange);
       win.removeEventListener("scroll", handleWindowChange, true);
       removeVisualViewportListeners();
       tableSizeEditor.destroy();
+      edgeDom.remove();
       dom.remove();
     },
   };

@@ -437,7 +437,7 @@ export const test = base.extend<BrowserFixtures>({
     const teardown = await page.evaluate(() => ({
       editors: document.querySelectorAll("[data-e2e-editor], .ProseMirror, .cm-editor").length,
       listeners: window.__MARKORA_BROWSER_LAB__?.listenerSnapshot() ?? { total: -1, byTargetAndType: {} },
-      overlays: document.querySelectorAll(".mdw-link-editor, .mdw-image-editor, .mdw-table-size-editor, .mdw-table-toolbar").length,
+      overlays: document.querySelectorAll(".mdw-link-editor, .mdw-image-editor, .mdw-table-size-editor, .mdw-table-toolbar, .mdw-table-edge-controls").length,
     }));
 
     await attachDiagnostics(testInfo, failures, page);

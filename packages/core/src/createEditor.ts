@@ -762,6 +762,10 @@ const {
   createEmptyTableRow,
   addTableRow,
   addTableColumn,
+  insertTableRowAt,
+  insertTableColumnAt,
+  selectTableRow,
+  selectTableColumn,
   moveTableRow,
   moveTableColumn,
   removeTableRow,
@@ -823,6 +827,10 @@ const { convertPipeTable } = createPipeTableHelpers({
     createEmptyTableRow,
     addTableRow,
     addTableColumn,
+    insertTableRowAt,
+    insertTableColumnAt,
+    selectTableRow,
+    selectTableColumn,
     moveTableRow,
     moveTableColumn,
     removeTableRow,
@@ -908,6 +916,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     getTableBoundaryEscapeInfo,
     addTableRow,
     addTableColumn,
+    insertTableRowAt,
+    insertTableColumnAt,
+    selectTableRow,
+    selectTableColumn,
     moveTableRow,
     moveTableColumn,
     removeTableRow,
@@ -1280,6 +1292,14 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       hostElement: element,
       addTableColumn: (view, side) => runUiTableMutation(view, () => addTableColumn(view, side)),
       addTableRow: (view, side) => runUiTableMutation(view, () => addTableRow(view, side)),
+      insertTableColumnAt: (view, index) => runUiTableMutation(
+        view,
+        () => insertTableColumnAt(view, index),
+      ),
+      insertTableRowAt: (view, index) => runUiTableMutation(
+        view,
+        () => insertTableRowAt(view, index),
+      ),
       insertTable: (view, dimensions) => {
         const handled = runUiStructuralCommand(
           view,
@@ -1299,6 +1319,14 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       resizeTable: (view, dimensions) => runUiStructuralCommand(
         view,
         structuralCommandSet.commands.resizeTable(dimensions),
+      ),
+      selectTableColumn: (view, index) => runUiTableMutation(
+        view,
+        () => selectTableColumn(view, index),
+      ),
+      selectTableRow: (view, index) => runUiTableMutation(
+        view,
+        () => selectTableRow(view, index),
       ),
       setTableColumnAlignment: (view, alignment) => runUiTableMutation(
         view,

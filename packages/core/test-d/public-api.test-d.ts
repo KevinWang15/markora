@@ -358,8 +358,16 @@ if (typeof maybeSupport === "function") {
 const uiFactory: EditorUiFactory = (_options) => {
   const linkUpdated: boolean = _options.updateLinkHref(view, "https://example.com");
   const imageUpdated: boolean = _options.updateActiveImage(view, { src: "/image.png", alt: null, title: null });
+  const insertedColumn: boolean = _options.insertTableColumnAt(view, 1);
+  const insertedRow: boolean = _options.insertTableRowAt(view, 1);
+  const selectedColumn: boolean = _options.selectTableColumn(view, 0);
+  const selectedRow: boolean = _options.selectTableRow(view, 0);
   void linkUpdated;
   void imageUpdated;
+  void insertedColumn;
+  void insertedRow;
+  void selectedColumn;
+  void selectedRow;
 
   const codeBlockLanguageEditor: CodeBlockLanguageEditorOverlay = {
     open(editorView, marker, request: CodeBlockLanguageEditRequest) {

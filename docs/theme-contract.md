@@ -155,11 +155,14 @@ Code surfaces default to LTR independently of the surrounding document, while Un
 | `--mdw-ui-input-padding-block`, `--mdw-ui-input-padding-inline` | `8px`, `10px` |
 | `--mdw-ui-button-padding-block`, `--mdw-ui-button-padding-inline` | `6px`, `10px` |
 | `--mdw-ui-control-radius`, `--mdw-ui-toolbar-control-size`, `--mdw-ui-icon-size` | `8px`, `36px` (`44px` under coarse pointers), `18px` |
+| `--mdw-ui-table-edge-selector-size`, `--mdw-ui-table-edge-selector-overlap`, `--mdw-ui-table-edge-insertion-size` | `16px`, `2px`, `24px` |
+| `--mdw-ui-table-edge-indicator-inset`, `--mdw-ui-table-edge-indicator-thickness` | `3px`, `4px` |
+| `--mdw-ui-table-row-edge-indicator-max-size`, `--mdw-ui-table-column-edge-indicator-max-size` | `20px`, `28px` |
 | `--mdw-ui-error-font-size`, `--mdw-ui-error-line-height` | `0.875rem`, `1.4` |
 
 ## Logical layout and ownership boundaries
 
-Core owns presentation required to understand and operate document nodes: editable-canvas bounds, document rhythm, visible task controls, selected nodes/cells, passive and active code views, preserved-source atoms, and managed cursors. `markora-ui` owns only its dialogs and table toolbar. The host owns all page-level layout, surrounding toolbars, product navigation, modal policy, global typography, portal stacking context, and theme placement.
+Core owns presentation required to understand and operate document nodes: editable-canvas bounds, document rhythm, visible task controls, selected nodes/cells, passive and active code views, preserved-source atoms, and managed cursors. `markora-ui` owns only its dialogs, table toolbar, and table edge controls. The host owns all page-level layout, surrounding toolbars, product navigation, modal policy, global typography, portal stacking context, and theme placement.
 
 The shipped styles use logical inline properties for document indentation, table alignment defaults, code gutters, toolbar grouping, and managed-block cursors. Runtime viewport coordinates remain physical because they describe browser geometry rather than reading order. Explicit Markdown table alignments named `left` and `right` remain content semantics and are not rewritten as `start`/`end`.
 

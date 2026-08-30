@@ -714,6 +714,7 @@ function insertTableCommand(
 function addTableRowCommand(
   schema: Schema,
   side: MarkdownEditorTableInsertSide,
+  insertionIndexOverride?: number,
 ): Command {
   return (state, dispatch) => {
     const info = getTableSelectionContext(state, schema);
@@ -734,7 +735,16 @@ function addTableRowCommand(
     info.table.forEach((row, _offset, rowIndex) => {
       rows.push(normalizeRowWidth(schema, row, rowIndex, columnCount, alignments));
     });
-    const insertionIndex = side === "before" ? info.rowFrom : info.rowTo + 1;
+    const insertionIndex = insertionIndexOverride
+      ?? (side === "before" ? info.rowFrom : info.rowTo + 1);
+
+    if (
+      !Number.isInteger(insertionIndex)
+      || insertionIndex < 0
+      || insertionIndex > info.table.childCount
+    ) {
+      return false;
+    }
 
     if (insertionIndex === 0) {
       nextRow = promoteRowToColumnHeaders(schema, nextRow);
@@ -758,6 +768,7 @@ function addTableRowCommand(
 function addTableColumnCommand(
   schema: Schema,
   side: MarkdownEditorTableInsertSide,
+  insertionIndexOverride?: number,
 ): Command {
   return (state, dispatch) => {
     const info = getTableSelectionContext(state, schema);
@@ -767,9 +778,20 @@ function addTableColumnCommand(
       return false;
     }
 
-    const insertionIndex = side === "before" ? info.columnFrom : info.columnTo + 1;
+    const insertionIndex = insertionIndexOverride
+      ?? (side === "before" ? info.columnFrom : info.columnTo + 1);
+
+    if (
+      !Number.isInteger(insertionIndex)
+      || insertionIndex < 0
+      || insertionIndex > columnCount
+    ) {
+      return false;
+    }
     const alignments = getTableColumnAlignments(info.table);
-    const sourceAlignment = alignments[Math.min(info.columnFrom, alignments.length - 1)] ?? null;
+    const sourceAlignment = alignments[
+      Math.max(0, Math.min(insertionIndex - 1, alignments.length - 1))
+    ] ?? null;
     const rows: ProseMirrorNode[] = [];
     info.table.forEach((rawRow, _offset, rowIndex) => {
       const row = normalizeRowWidth(schema, rawRow, rowIndex, columnCount, alignments);
@@ -1193,6 +1215,12 @@ export function createTableCommandSet(schema: Schema) {
     },
     addTableColumn(side?: MarkdownEditorTableInsertSide) {
       return addTableColumnCommand(schema, normalizeTableInsertSide(side));
+    },
+    insertTableRowAt(index: number) {
+      return addTableRowCommand(schema, "before", index);
+    },
+    insertTableColumnAt(index: number) {
+      return addTableColumnCommand(schema, "before", index);
     },
     resizeTable(options: MarkdownEditorTableResizeOptions) {
       return resizeTableCommand(schema, normalizeTableResizeOptions(options));

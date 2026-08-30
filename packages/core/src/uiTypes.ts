@@ -78,6 +78,10 @@ export type EditorUiFactory = (options: {
   getTableContext: (state: EditorView["state"]) => TableUiContext | null;
   hostElement: HTMLElement;
   insertTable: (view: EditorView, dimensions: { rows: number; columns: number }) => boolean;
+  /** Inserts immediately before the zero-based column boundary. */
+  insertTableColumnAt: (view: EditorView, index: number) => boolean;
+  /** Inserts immediately before the zero-based row boundary. */
+  insertTableRowAt: (view: EditorView, index: number) => boolean;
   moveTableColumn: (view: EditorView, direction: "left" | "right") => boolean;
   moveTableRow: (view: EditorView, direction: "up" | "down") => boolean;
   normalizeTableAlignment: (value: unknown) => TableAlignment | null;
@@ -87,6 +91,10 @@ export type EditorUiFactory = (options: {
   removeTableColumn: (view: EditorView) => boolean;
   removeTableRow: (view: EditorView) => boolean;
   resizeTable: (view: EditorView, dimensions: { rows: number; columns: number }) => boolean;
+  /** Selects the complete zero-based column. */
+  selectTableColumn: (view: EditorView, index: number) => boolean;
+  /** Selects the complete zero-based row. */
+  selectTableRow: (view: EditorView, index: number) => boolean;
   setTableColumnAlignment: (view: EditorView, align: TableAlignment | null) => boolean;
   updateActiveImage: (view: EditorView, attrs: { src: string; alt: string | null; title: string | null }) => boolean;
   updateLinkHref: (view: EditorView, href: string) => boolean;

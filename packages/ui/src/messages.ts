@@ -64,14 +64,26 @@ export type DefaultUiMessages = Readonly<{
   saveButtonLabel: string;
   tableActionStatus: (context: DefaultUiTableActionStatusContext) => string;
   tableColumnsInputLabel: string;
+  tableColumnInsertionControlsLabel: string;
+  tableColumnSelectionControlsLabel: string;
   tableControlLabel: (control: DefaultUiTableControl) => string;
   tableDialogLabel: (mode: DefaultUiTableMode) => string;
   tableDimensionsInvalidError: (
     context: Readonly<{ maximum: number; minimum: number }>,
   ) => string;
   tableGroupLabel: (group: DefaultUiTableGroup) => string;
+  tableInsertColumnBetweenLabel: (
+    context: Readonly<{ columnBefore: number; columnAfter: number }>,
+  ) => string;
+  tableInsertRowBetweenLabel: (
+    context: Readonly<{ rowBefore: number; rowAfter: number }>,
+  ) => string;
   tableOperationError: (mode: DefaultUiTableMode) => string;
+  tableRowInsertionControlsLabel: string;
+  tableRowSelectionControlsLabel: string;
   tableRowsInputLabel: string;
+  tableSelectColumnLabel: (context: Readonly<{ column: number }>) => string;
+  tableSelectRowLabel: (context: Readonly<{ row: number }>) => string;
   tableSelectionStatus: (context: DefaultUiTableSelectionContext) => string;
   tableSubmitButtonLabel: (mode: DefaultUiTableMode) => string;
   tableToolbarLabel: string;
@@ -164,16 +176,28 @@ export const defaultUiMessages: DefaultUiMessages = Object.freeze({
     ? `${tableActionLabels[action]} ${describeTableSelection(selection)}`
     : tableActionLabels[action],
   tableColumnsInputLabel: "Columns",
+  tableColumnInsertionControlsLabel: "Insert table column between columns",
+  tableColumnSelectionControlsLabel: "Select table column",
   tableControlLabel: (control) => tableControlLabels[control],
   tableDialogLabel: (mode) => mode === "create" ? "Create table" : "Resize table",
   tableDimensionsInvalidError: ({ maximum, minimum }) => (
     `Enter whole numbers from ${minimum} through ${maximum}.`
   ),
   tableGroupLabel: (group) => tableGroupLabels[group],
+  tableInsertColumnBetweenLabel: ({ columnBefore, columnAfter }) => (
+    `Insert column between columns ${columnBefore} and ${columnAfter}`
+  ),
+  tableInsertRowBetweenLabel: ({ rowBefore, rowAfter }) => (
+    `Insert row between rows ${rowBefore} and ${rowAfter}`
+  ),
   tableOperationError: (mode) => mode === "create"
     ? "The table could not be inserted at the current selection."
     : "The table could not be resized. Clear content outside the new size and try again.",
+  tableRowInsertionControlsLabel: "Insert table row between rows",
+  tableRowSelectionControlsLabel: "Select table row",
   tableRowsInputLabel: "Rows",
+  tableSelectColumnLabel: ({ column }) => `Select column ${column}`,
+  tableSelectRowLabel: ({ row }) => `Select row ${row}`,
   tableSelectionStatus: describeTableSelection,
   tableSubmitButtonLabel: (mode) => mode === "create" ? "Create" : "Resize",
   tableToolbarLabel: "Table controls",
@@ -223,6 +247,26 @@ function validateFormatterResults(messages: DefaultUiMessages) {
     "messages.tableDimensionsInvalidError",
     messages.tableDimensionsInvalidError,
     Object.freeze({ maximum: 100, minimum: 1 }),
+  );
+  formatDefaultUiMessage(
+    "messages.tableInsertColumnBetweenLabel",
+    messages.tableInsertColumnBetweenLabel,
+    Object.freeze({ columnAfter: 3, columnBefore: 2 }),
+  );
+  formatDefaultUiMessage(
+    "messages.tableInsertRowBetweenLabel",
+    messages.tableInsertRowBetweenLabel,
+    Object.freeze({ rowAfter: 3, rowBefore: 2 }),
+  );
+  formatDefaultUiMessage(
+    "messages.tableSelectColumnLabel",
+    messages.tableSelectColumnLabel,
+    Object.freeze({ column: 2 }),
+  );
+  formatDefaultUiMessage(
+    "messages.tableSelectRowLabel",
+    messages.tableSelectRowLabel,
+    Object.freeze({ row: 2 }),
   );
 
   for (const control of Object.keys(tableControlLabels) as DefaultUiTableControl[]) {
