@@ -43,7 +43,7 @@
     "access": "public"
   },
   "scripts": {
-    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "dev": "node ../../scripts/dev-package.mjs src/styles.css",
     "build": "node ./scripts/cleanDist.mjs && tsc -p tsconfig.json && node ./scripts/copyStyles.mjs && node ../../scripts/fix-node-esm-specifiers.mjs dist",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.api.json --noEmit",
     "prepack": "pnpm run build && pnpm run typecheck && pnpm run smoke:node-esm",

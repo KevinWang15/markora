@@ -13,11 +13,12 @@
     "vitest": "^4.0.18"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter markora --filter './packages/extension-*' --filter markora-ui --filter demo dev",
+    "dev": "pnpm run build:packages && pnpm --parallel --filter markora --filter './packages/extension-*' --filter markora-ui --filter demo dev",
     "dev:demo": "pnpm --filter demo dev",
     "dev:core": "pnpm --filter markora dev",
     "dev:ui": "pnpm --filter markora-ui dev",
-    "build": "pnpm --filter markora build && pnpm run build:extensions && pnpm --filter markora-ui build && pnpm --filter demo build",
+    "build": "pnpm run build:packages && pnpm --filter demo build",
+    "build:packages": "pnpm --filter markora build && pnpm run build:extensions && pnpm --filter markora-ui build",
     "build:core": "pnpm --filter markora build",
     "build:extensions": "pnpm --filter './packages/extension-*' --if-present build",
     "build:ui": "pnpm --filter markora-ui build",

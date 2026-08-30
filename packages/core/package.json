@@ -54,7 +54,7 @@
     "access": "public"
   },
   "scripts": {
-    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "dev": "node ../../scripts/dev-package.mjs src/styles.css src/themes.css",
     "build": "node ./scripts/cleanDist.mjs && tsc -p tsconfig.json && node ./scripts/copyStyles.mjs && node ../../scripts/fix-node-esm-specifiers.mjs dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pack": "npm pack",

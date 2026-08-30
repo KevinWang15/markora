@@ -325,7 +325,7 @@ pnpm dev
 
 Useful scripts:
 
-- `pnpm dev` — run the core, extension, UI, and docs/demo watchers together
+- `pnpm dev` — prepare package outputs, then run the core, extension, UI, and docs/demo watchers together
 - `pnpm dev:core` — watch the `markora` package only
 - `pnpm dev:ui` — watch the `markora-ui` package only
 - `pnpm dev:demo` — run the docs/demo site only

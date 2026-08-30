@@ -921,7 +921,7 @@ With `markora-ui`, the language label is an accessible button and `editor.ui?.ed
 
 ## Development
 
-- `pnpm dev` starts the core, extension, UI, and demo watchers together
+- `pnpm dev` prepares package outputs, then starts the core, extension, UI, and demo watchers together
 - `pnpm pack:smoke` verifies all nine public tarballs plus isolated root, minimal, per-extension, and all-extension consumer graphs
 - `pnpm release:check` dry-runs the core npm tarball and then runs the packed-consumer smoke test
 - `pnpm check` builds the workspace, runs typechecks, executes API type tests, smoke-tests Node ESM imports, and runs the shared test suite
