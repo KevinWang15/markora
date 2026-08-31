@@ -109,13 +109,13 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
   }
   expect(Math.abs(rowSelectorBox!.y - secondRowBox!.y)).toBeLessThanOrEqual(1);
   expect(Math.abs(rowSelectorBox!.height - secondRowBox!.height)).toBeLessThanOrEqual(1);
-  expect(Math.abs(rowSelectorBox!.x + rowSelectorBox!.width - (tableBox!.x + 2))).toBeLessThanOrEqual(1);
+  expect(Math.abs(rowSelectorBox!.x + rowSelectorBox!.width - (tableBox!.x + 1))).toBeLessThanOrEqual(1);
   expect(Math.abs(columnSelectorBox!.x - secondHeaderBox!.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(columnSelectorBox!.width - secondHeaderBox!.width)).toBeLessThanOrEqual(1);
-  expect(Math.abs(columnSelectorBox!.y + columnSelectorBox!.height - (tableBox!.y + 2))).toBeLessThanOrEqual(1);
+  expect(Math.abs(columnSelectorBox!.y + columnSelectorBox!.height - (tableBox!.y + 1))).toBeLessThanOrEqual(1);
   const secondRowBoundary = secondRowBox!.y + secondRowBox!.height;
   expect(Math.abs(rowInsertionBox!.y + rowInsertionBox!.height / 2 - secondRowBoundary)).toBeLessThanOrEqual(1);
-  expect(Math.abs(rowInsertionBox!.x + rowInsertionBox!.width / 2 - (tableBox!.x - 6))).toBeLessThanOrEqual(1);
+  expect(Math.abs(rowInsertionBox!.x + rowInsertionBox!.width / 2 - (tableBox!.x - 5))).toBeLessThanOrEqual(1);
   const firstColumnBox = await table.locator("tr").first().locator("th").first().boundingBox();
   expect(firstColumnBox).not.toBeNull();
   expect(Math.abs(
@@ -126,6 +126,47 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
   const cdp = await context.newCDPSession(labPage);
   const scrollBeforeSelection = await labPage.evaluate(() => window.scrollY);
   try {
+    await expect.poll(() => rowSelector.evaluate((button) => (
+      getComputedStyle(button, "::before").opacity
+    ))).toBe("0");
+    const rowSelectorCenter = await center(rowSelector);
+    await cdp.send("Input.dispatchMouseEvent", {
+      buttons: 0,
+      type: "mouseMoved",
+      x: rowSelectorCenter.x,
+      y: rowSelectorCenter.y,
+    });
+    await expect.poll(() => rowSelector.evaluate((button) => (
+      getComputedStyle(button, "::before").opacity
+    ))).toBe("1");
+    await testInfo.attach("table-row-selector-progressive-disclosure", {
+      body: await labPage.screenshot(),
+      contentType: "image/png",
+    });
+
+    expect(await controls.evaluate((edgeControls, point) => {
+      const root = edgeControls.getRootNode() as Document | ShadowRoot;
+      const cover = document.createElement("div");
+      cover.dataset.testid = "table-edge-cover";
+      Object.assign(cover.style, {
+        background: "white",
+        height: "28px",
+        left: `${point.x - 14}px`,
+        position: "fixed",
+        top: `${point.y - 14}px`,
+        width: "28px",
+        zIndex: "1",
+      });
+      root.append(cover);
+      const hit = root.elementFromPoint(point.x, point.y);
+      const result = {
+        edgeZIndex: getComputedStyle(edgeControls).zIndex,
+        hostLayerWins: hit === cover,
+      };
+      cover.remove();
+      return result;
+    }, rowSelectorCenter)).toEqual({ edgeZIndex: "0", hostLayerWins: true });
+
     await clickWithCdp(cdp, await center(rowSelector));
     await settleEditor(labPage, id);
     await expect(editor.locator("tr").nth(1).locator(".selectedCell")).toHaveCount(3);
@@ -135,9 +176,23 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
       .toBeLessThanOrEqual(1);
 
     const toolbar = ownedOverlay(labPage, id, ".mdw-table-toolbar");
-    await toolbar.getByRole("button", { name: "Delete row" }).click();
+    await expect(toolbar.getByRole("button", { name: "Delete row" }).locator("svg"))
+      .toHaveClass(/lucide-trash-2/);
+    await expect(toolbar.getByRole("button", { name: "Delete column" }).locator("svg"))
+      .toHaveClass(/lucide-trash-2/);
+    const deleteSelectedRow = controls.getByRole("button", { name: "Delete row" });
+    await expect(deleteSelectedRow).toBeVisible();
+    await expect(deleteSelectedRow).toHaveText("Delete row");
+    await testInfo.attach("table-selected-row-direct-action", {
+      body: await labPage.screenshot(),
+      contentType: "image/png",
+    });
+    await deleteSelectedRow.click();
     await settleEditor(labPage, id);
     await expect(table.locator("tr")).toHaveCount(2);
+    await expect(editor).toBeFocused();
+    expect(Math.abs((await labPage.evaluate(() => window.scrollY)) - scrollBeforeSelection))
+      .toBeLessThanOrEqual(1);
     expect(await getMarkdown(labPage, id)).toBe([
       "| H1 | H2 | H3 |",
       "| --- | --- | --- |",
@@ -152,9 +207,19 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
     await expect(editor.locator(".selectedCell")).toHaveCount(3);
     await expect(controls.getByRole("button", { name: "Select column 2" }))
       .toHaveAttribute("aria-pressed", "true");
-    await toolbar.getByRole("button", { name: "Delete column" }).click();
+    const deleteSelectedColumn = controls.getByRole("button", { name: "Delete column" });
+    await expect(deleteSelectedColumn).toBeVisible();
+    await expect(deleteSelectedColumn).toHaveText("Delete column");
+    await testInfo.attach("table-selected-column-direct-action", {
+      body: await labPage.screenshot(),
+      contentType: "image/png",
+    });
+    await deleteSelectedColumn.click();
     await settleEditor(labPage, id);
     await expect(table.locator("tr").first().locator("th")).toHaveCount(2);
+    await expect(editor).toBeFocused();
+    expect(Math.abs((await labPage.evaluate(() => window.scrollY)) - scrollBeforeSelection))
+      .toBeLessThanOrEqual(1);
     expect(await getMarkdown(labPage, id)).toBe([
       "| H1 | H3 |",
       "| --- | --- |",

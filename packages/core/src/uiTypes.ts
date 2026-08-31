@@ -51,6 +51,7 @@ export type TableToolbarOverlay = {
 export type TableUiContext = {
   tablePos: number;
   cell: { attrs: Record<string, unknown> };
+  isCellSelection: boolean;
   selectedAlignment: TableAlignment | null | "mixed";
   rowIndex: number;
   columnIndex: number;

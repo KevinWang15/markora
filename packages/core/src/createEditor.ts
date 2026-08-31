@@ -656,6 +656,7 @@ function getTableUiContext(state: EditorState): TableUiContext | null {
   return {
     tablePos: info.tablePos,
     cell: info.cell,
+    isCellSelection: info.isCellSelection,
     selectedAlignment: selectedAlignment ?? null,
     rowIndex: info.rowIndex,
     columnIndex: info.cellIndex,

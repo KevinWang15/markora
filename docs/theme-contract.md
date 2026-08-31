@@ -155,9 +155,11 @@ Code surfaces default to LTR independently of the surrounding document, while Un
 | `--mdw-ui-input-padding-block`, `--mdw-ui-input-padding-inline` | `8px`, `10px` |
 | `--mdw-ui-button-padding-block`, `--mdw-ui-button-padding-inline` | `6px`, `10px` |
 | `--mdw-ui-control-radius`, `--mdw-ui-toolbar-control-size`, `--mdw-ui-icon-size` | `8px`, `36px` (`44px` under coarse pointers), `18px` |
-| `--mdw-ui-table-edge-selector-size`, `--mdw-ui-table-edge-selector-overlap`, `--mdw-ui-table-edge-insertion-size` | `16px`, `2px`, `24px` |
-| `--mdw-ui-table-edge-indicator-inset`, `--mdw-ui-table-edge-indicator-thickness` | `3px`, `4px` |
-| `--mdw-ui-table-row-edge-indicator-max-size`, `--mdw-ui-table-column-edge-indicator-max-size` | `20px`, `28px` |
+| `--mdw-ui-table-edge-selector-size`, `--mdw-ui-table-edge-selector-overlap`, `--mdw-ui-table-edge-insertion-size` | `12px`, `1px`, `24px` |
+| `--mdw-ui-table-edge-indicator-inset`, `--mdw-ui-table-edge-indicator-thickness` | `2px`, `2px` |
+| `--mdw-ui-table-row-edge-indicator-max-size`, `--mdw-ui-table-column-edge-indicator-max-size` | `12px`, `18px` |
+| `--mdw-ui-table-axis-action-size`, `--mdw-ui-table-axis-action-font-size`, `--mdw-ui-table-axis-action-icon-size` | `28px`, `12px`, `14px` |
+| `--mdw-ui-table-edge-z-index` | `0` (keeps edge controls beneath host overlays) |
 | `--mdw-ui-error-font-size`, `--mdw-ui-error-line-height` | `0.875rem`, `1.4` |
 
 ## Logical layout and ownership boundaries

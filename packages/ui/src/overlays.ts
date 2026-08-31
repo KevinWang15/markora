@@ -9,10 +9,8 @@ import {
   MoveRight,
   MoveUp,
   PanelBottomOpen,
-  PanelLeftClose,
   PanelLeftOpen,
   PanelRightOpen,
-  PanelTopClose,
   PanelTopOpen,
   Plus,
   Trash2,
@@ -60,8 +58,8 @@ const CODE_BLOCK_LANGUAGE_MAX_LENGTH = 128;
 const OVERLAY_GAP = 8;
 const TABLE_DIMENSION_MAXIMUM = 100;
 const TABLE_EDGE_INSERTION_SIZE_DEFAULT = 24;
-const TABLE_EDGE_SELECTOR_OVERLAP_DEFAULT = 2;
-const TABLE_EDGE_SELECTOR_SIZE_DEFAULT = 16;
+const TABLE_EDGE_SELECTOR_OVERLAP_DEFAULT = 1;
+const TABLE_EDGE_SELECTOR_SIZE_DEFAULT = 12;
 const TABLE_DIMENSION_MINIMUM = 1;
 const VIEWPORT_MARGIN = 12;
 let nextOverlayMessageId = 0;
@@ -1347,6 +1345,7 @@ function createTableSizeEditorOverlay(options: OverlayEnvironment & {
 type TableUiContextLike = {
   tablePos: number;
   cell: { attrs: Record<string, unknown> };
+  isCellSelection: boolean;
   selectedAlignment?: TableAlignment | null | "mixed";
   rowIndex: number;
   columnIndex: number;
@@ -1448,7 +1447,31 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   columnInsertions.setAttribute("role", "group");
   columnInsertions.setAttribute("aria-label", messages.tableColumnInsertionControlsLabel);
 
-  edgeDom.append(rowSelectors, columnSelectors, rowInsertions, columnInsertions);
+  const axisDeleteButton = doc.createElement("button");
+  axisDeleteButton.type = "button";
+  axisDeleteButton.className = "mdw-table-axis-delete";
+  axisDeleteButton.hidden = true;
+  axisDeleteButton.style.display = "none";
+  axisDeleteButton.append(
+    buildLucideIconElement(doc, Trash2, {
+      className: "mdw-table-axis-delete-icon",
+      size: 16,
+      strokeWidth: 2,
+      attributes: {
+        "aria-hidden": "true",
+        focusable: "false",
+      },
+    }),
+    doc.createElement("span"),
+  );
+
+  edgeDom.append(
+    rowSelectors,
+    columnSelectors,
+    rowInsertions,
+    columnInsertions,
+    axisDeleteButton,
+  );
 
   let activeView: EditorView | null = null;
   let activeMarker: HTMLElement | null = null;
@@ -1463,9 +1486,11 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   let rowSelectorButtons: HTMLButtonElement[] = [];
   let columnInsertionButtons: HTMLButtonElement[] = [];
   let rowInsertionButtons: HTMLButtonElement[] = [];
+  let activeAxisAction: "row" | "column" | null = null;
+  let preferredAxisAction: "row" | "column" | null = null;
 
-  const restoreTableEditorFocus = (view: EditorView) => {
-    if (restoreEditorFocus(view, dom, doc, win)) {
+  const restoreTableEditorFocus = (view: EditorView, owner = dom) => {
+    if (restoreEditorFocus(view, owner, doc, win)) {
       focusRestorationVersion += 1;
     }
   };
@@ -1498,12 +1523,12 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   const insertRowAfterButton = createButton("insert-row-after", PanelBottomOpen);
   const moveRowUpButton = createButton("move-row-up", MoveUp);
   const moveRowDownButton = createButton("move-row-down", MoveDown);
-  const removeRowButton = createButton("delete-row", PanelTopClose);
+  const removeRowButton = createButton("delete-row", Trash2);
   const insertColumnBeforeButton = createButton("insert-column-before", PanelLeftOpen);
   const insertColumnAfterButton = createButton("insert-column-after", PanelRightOpen);
   const moveColumnLeftButton = createButton("move-column-left", MoveLeft);
   const moveColumnRightButton = createButton("move-column-right", MoveRight);
-  const removeColumnButton = createButton("delete-column", PanelLeftClose);
+  const removeColumnButton = createButton("delete-column", Trash2);
   const alignAutomaticButton = createButton("automatic-alignment", AlignJustify);
   const alignLeftButton = createButton("align-left", AlignLeft);
   const alignCenterButton = createButton("align-center", AlignCenter);
@@ -1666,9 +1691,12 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     button.setAttribute("aria-pressed", "false");
     button.dataset.mdwTableAxis = axis;
     button.dataset.mdwTableIndex = String(index);
-    button.addEventListener("click", () => runEdgeSelection((view) => (
-      axis === "row" ? selectTableRow(view, index) : selectTableColumn(view, index)
-    )));
+    button.addEventListener("click", () => {
+      preferredAxisAction = axis;
+      runEdgeSelection((view) => (
+        axis === "row" ? selectTableRow(view, index) : selectTableColumn(view, index)
+      ));
+    });
     return button;
   };
 
@@ -1758,6 +1786,37 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       && selectedColumnTo === info.columnCount - 1;
     const wholeColumnSelected = selectedRowFrom === 0
       && selectedRowTo === info.rowCount - 1;
+    const rowAxisSelected = info.isCellSelection === true && wholeRowSelected;
+    const columnAxisSelected = info.isCellSelection === true && wholeColumnSelected;
+
+    if (rowAxisSelected && columnAxisSelected) {
+      activeAxisAction = preferredAxisAction;
+    } else if (rowAxisSelected) {
+      activeAxisAction = "row";
+    } else if (columnAxisSelected) {
+      activeAxisAction = "column";
+    } else {
+      activeAxisAction = null;
+      preferredAxisAction = null;
+    }
+
+    if (activeAxisAction) {
+      const label = formatDefaultUiMessage(
+        "messages.tableControlLabel",
+        messages.tableControlLabel,
+        activeAxisAction === "row" ? "delete-row" : "delete-column",
+      );
+      axisDeleteButton.hidden = false;
+      axisDeleteButton.style.display = "inline-flex";
+      axisDeleteButton.dataset.mdwTableAxis = activeAxisAction;
+      axisDeleteButton.title = label;
+      axisDeleteButton.setAttribute("aria-label", label);
+      axisDeleteButton.querySelector("span")!.textContent = label;
+    } else {
+      axisDeleteButton.hidden = true;
+      axisDeleteButton.style.display = "none";
+      delete axisDeleteButton.dataset.mdwTableAxis;
+    }
 
     rowSelectorButtons.forEach((button, index) => {
       button.setAttribute(
@@ -1893,6 +1952,54 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
         width: insertionSize,
       });
     });
+
+    if (!axisDeleteButton.hidden && activeAxisAction) {
+      axisDeleteButton.style.width = "";
+      axisDeleteButton.style.height = "";
+      const axisActionRect = axisDeleteButton.getBoundingClientRect();
+      const actionWidth = axisActionRect.width || axisDeleteButton.offsetWidth;
+      const actionHeight = axisActionRect.height || axisDeleteButton.offsetHeight;
+      const inset = 8;
+
+      if (activeAxisAction === "row") {
+        const selectedRows = rowSelectorButtons.flatMap((button, index) => (
+          button.getAttribute("aria-pressed") === "true" && rows[index] ? [rows[index]!] : []
+        ));
+        const firstSelectedRect = selectedRows[0]?.getBoundingClientRect();
+        const lastSelectedRect = selectedRows[selectedRows.length - 1]?.getBoundingClientRect();
+        if (firstSelectedRect && lastSelectedRect) {
+          positionEdgeElement(axisDeleteButton, {
+            height: actionHeight,
+            left: rtl
+              ? tableRect.left + inset
+              : tableRect.right - actionWidth - inset,
+            top: (firstSelectedRect.top + lastSelectedRect.bottom - actionHeight) / 2,
+            width: actionWidth,
+          });
+        }
+      } else {
+        const selectedCells = columnSelectorButtons.flatMap((button, index) => (
+          button.getAttribute("aria-pressed") === "true" && firstRowCells[index]
+            ? [firstRowCells[index]!]
+            : []
+        ));
+        const selectedRects = selectedCells.map((cell) => cell.getBoundingClientRect());
+        if (selectedRects.length > 0) {
+          const selectedLeft = Math.min(...selectedRects.map((rect) => rect.left));
+          const selectedRight = Math.max(...selectedRects.map((rect) => rect.right));
+          positionEdgeElement(axisDeleteButton, {
+            height: actionHeight,
+            left: clamp(
+              (selectedLeft + selectedRight - actionWidth) / 2,
+              tableRect.left + inset,
+              Math.max(tableRect.left + inset, tableRect.right - actionWidth - inset),
+            ),
+            top: tableRect.bottom - actionHeight - inset,
+            width: actionWidth,
+          });
+        }
+      }
+    }
   };
 
   const reposition = () => {
@@ -1945,6 +2052,8 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     cancelScheduledReposition();
     activeView = null;
     activeMarker = null;
+    activeAxisAction = null;
+    preferredAxisAction = null;
     lastSelectionDescription = "";
     dom.hidden = true;
     dom.style.display = "none";
@@ -2010,7 +2119,10 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       const view = activeView;
 
       if (view) {
-        restoreTableEditorFocus(view);
+        restoreTableEditorFocus(
+          view,
+          event.target instanceof win.Node && edgeDom.contains(event.target) ? edgeDom : dom,
+        );
       }
       return;
     }
@@ -2133,6 +2245,18 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     "move-column-right",
   ));
   removeColumnButton.addEventListener("click", () => runTableAction(removeTableColumn, "delete-column"));
+  axisDeleteButton.addEventListener("click", () => {
+    const view = activeView;
+    const restoreFocus = getDeepActiveElement(edgeDom, doc, win) === axisDeleteButton;
+    if (activeAxisAction === "row") {
+      runTableAction(removeTableRow, "delete-row");
+    } else if (activeAxisAction === "column") {
+      runTableAction(removeTableColumn, "delete-column");
+    }
+    if (restoreFocus && view) {
+      restoreTableEditorFocus(view, edgeDom);
+    }
+  });
   alignAutomaticButton.addEventListener("click", () => runTableAction(
     (view) => setTableColumnAlignment(view, null),
     "automatic-alignment",

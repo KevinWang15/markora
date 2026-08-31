@@ -72,6 +72,7 @@ function createView() {
 function createTableContext(overrides: Partial<{
   tablePos: number;
   cell: { attrs: Record<string, unknown> };
+  isCellSelection: boolean;
   rowIndex: number;
   columnIndex: number;
   rowCount: number;
@@ -84,6 +85,7 @@ function createTableContext(overrides: Partial<{
   return {
     tablePos: 0,
     cell: { attrs: {} },
+    isCellSelection: false,
     rowIndex: 0,
     columnIndex: 0,
     rowCount: 3,
@@ -403,6 +405,10 @@ describe('createDefaultUi', () => {
       expect(icon?.getAttribute('focusable')).toBe('false');
       expect(icon?.childElementCount).toBeGreaterThan(0);
     }
+    expect(toolbar.querySelector('[aria-label="ui:control:delete-row"] svg')?.classList)
+      .toContain('lucide-trash-2');
+    expect(toolbar.querySelector('[aria-label="ui:control:delete-column"] svg')?.classList)
+      .toContain('lucide-trash-2');
     expect(toolbar.querySelector('[role="status"]')?.textContent).toBe('ui:selection:3-4:2-3');
     const edgeControls = document.querySelector<HTMLElement>('.mdw-table-edge-controls')!;
     expect(Array.from(edgeControls.querySelectorAll('[role="group"]')).map((group) => (
@@ -2014,6 +2020,72 @@ describe('createDefaultUi', () => {
     expect(document.activeElement).toBe(deleteRow);
     expect(Array.from(toolbar.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.tabIndex === 0))
       .toEqual([deleteRow]);
+
+    destroyControllers(controllers);
+  });
+
+  it('offers direct, labeled deletion only for a complete selected row or column', () => {
+    const hostElement = document.createElement('div');
+    const marker = document.createElement('table');
+    document.body.append(hostElement, marker);
+    let context = createTableContext({
+      isCellSelection: true,
+      selectedColumnFrom: 0,
+      selectedColumnTo: 2,
+      selectedRowFrom: 1,
+      selectedRowTo: 1,
+    });
+    let rowRemovals = 0;
+    let columnRemovals = 0;
+    const focus = vi.fn();
+    const controllers = createControllers(hostElement, undefined, {
+      getTableContext() {
+        return context;
+      },
+      removeTableColumn() {
+        columnRemovals += 1;
+      },
+      removeTableRow() {
+        rowRemovals += 1;
+      },
+    });
+    const view = {
+      ...createView(),
+      focus,
+      nodeDOM() {
+        return marker;
+      },
+    };
+
+    controllers.tableToolbar.update(view);
+    const edgeControls = document.querySelector<HTMLElement>('.mdw-table-edge-controls')!;
+    const axisDelete = edgeControls.querySelector<HTMLButtonElement>('.mdw-table-axis-delete')!;
+    expect(axisDelete.hidden).toBe(false);
+    expect(axisDelete.getAttribute('aria-label')).toBe('Delete row');
+    expect(axisDelete.textContent).toBe('Delete row');
+    expect(axisDelete.querySelector('svg')?.classList).toContain('lucide-trash-2');
+    axisDelete.focus();
+    axisDelete.click();
+    expect(rowRemovals).toBe(1);
+    expect(columnRemovals).toBe(0);
+    expect(focus).toHaveBeenCalledOnce();
+
+    context = createTableContext({
+      isCellSelection: true,
+      selectedColumnFrom: 1,
+      selectedColumnTo: 1,
+      selectedRowFrom: 0,
+      selectedRowTo: 2,
+    });
+    controllers.tableToolbar.update(view);
+    expect(axisDelete.getAttribute('aria-label')).toBe('Delete column');
+    axisDelete.click();
+    expect(rowRemovals).toBe(1);
+    expect(columnRemovals).toBe(1);
+
+    context = createTableContext();
+    controllers.tableToolbar.update(view);
+    expect(axisDelete.hidden).toBe(true);
 
     destroyControllers(controllers);
   });
