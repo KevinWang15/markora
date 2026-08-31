@@ -4,12 +4,13 @@
 
 Write Markdown at the speed of thought, inside your product.
 
-`markora` is an embedded Markdown editor toolkit built with ProseMirror and CodeMirror. It provides Typora-style editing without becoming a standalone application: the host owns mounting, persistence, product chrome, network access, and security policy, while Markora owns the editor model, interactions, and predictable Markdown conversion.
+`markora` is an embedded Markdown editor toolkit built with ProseMirror and CodeMirror. The library keeps a clear host boundary: the host owns mounting, persistence, product chrome, network access, and security policy, while Markora owns the editor model, interactions, and predictable Markdown conversion. This repository also contains `markora-app`, an NW.js desktop host for people who want a complete local writing application.
 
 ## Packages
 
 - `packages/core` — the npm package published as `markora`, including the `minimal` and `extension-api` entries
 - `packages/ui` — the npm package published as `markora-ui`
+- `packages/app` — the installable NW.js desktop application published as a self-contained distribution
 - `packages/extension-alerts` — GitHub-style alerts
 - `packages/extension-diagrams` — Mermaid, GeoJSON, TopoJSON, and STL fences
 - `packages/extension-footnotes` — GitHub-style footnotes
@@ -329,7 +330,9 @@ Useful scripts:
 - `pnpm dev:core` — watch the `markora` package only
 - `pnpm dev:ui` — watch the `markora-ui` package only
 - `pnpm dev:demo` — run the docs/demo site only
-- `pnpm build` — build `markora`, all seven extension packages, `markora-ui`, and the demo app
+- `pnpm dev:app` — build and launch the desktop application in the NW.js SDK
+- `pnpm build` — build `markora`, all seven extension packages, `markora-ui`, the demo, and the desktop app
+- `pnpm dist:app` — build a self-contained desktop distribution for the current operating system
 - `pnpm check` — build packages, run typechecks, verify API types, smoke-test Node ESM imports, and execute the test suite
 - `pnpm browser:install` — install the pinned Playwright Chromium, Firefox, and WebKit engines
 - `pnpm test:browser:required` — run the compact release-gate browser cases in all three engines

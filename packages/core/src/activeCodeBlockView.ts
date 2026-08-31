@@ -15,7 +15,7 @@ import {
   lineNumbers,
 } from "@codemirror/view";
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
-import { indentOnInput, syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import { indentOnInput, syntaxHighlighting } from "@codemirror/language";
 import { Fragment, type Node as ProseMirrorNode, type Schema } from "prosemirror-model";
 import { Selection, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
@@ -43,6 +43,7 @@ import {
   type NormalizedMarkdownEditorAutoPair,
   type NormalizedMarkdownEditorTypingOptions,
 } from "./typingErgonomics";
+import { markdownEditorCodeHighlightStyle } from "./codeHighlightStyle";
 import {
   createCodeBlockUnwrapTransaction,
   createInputRuleUndoTransaction,
@@ -1710,7 +1711,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
           transaction.docChanged && !this.updating && !this.canEdit ? [] : transaction
         )),
         indentOnInput(),
-        syntaxHighlighting(defaultHighlightStyle),
+        syntaxHighlighting(markdownEditorCodeHighlightStyle),
         this.languageCompartment.of([]),
         this.editableCompartment.of(this.getEditableExtensions(this.editable)),
         ...codeAutoPairExtensions,

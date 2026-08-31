@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Markora
+GenericName=Markdown Editor
+Comment=A calm, local-first Markdown writing application
+Icon=markora
+Exec="@EXEC@" %F
+MimeType=text/markdown;text/plain;
+Categories=Office;TextEditor;
+Keywords=Markdown;Editor;Writing;
+StartupNotify=true
+StartupWMClass=markora-main
+SingleMainWindow=true

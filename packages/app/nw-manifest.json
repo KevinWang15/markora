@@ -1,0 +1,22 @@
+{
+  "name": "markora-app",
+  "version": "0.1.0",
+  "description": "A calm, local-first Markdown writing application.",
+  "author": "Kevin Wang",
+  "license": "MIT",
+  "main": "index.html",
+  "nodejs": true,
+  "product_string": "Markora",
+  "single-instance": true,
+  "window": {
+    "id": "markora-main",
+    "title": "Markora",
+    "width": 1180,
+    "height": 820,
+    "min_width": 760,
+    "min_height": 560,
+    "position": "center",
+    "icon": "icon.svg",
+    "show": true
+  }
+}

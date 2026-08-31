@@ -1,0 +1,32 @@
+{
+  "name": "markora-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The installable NW.js desktop application for Markora.",
+  "type": "module",
+  "main": "dist/index.html",
+  "scripts": {
+    "build": "vite build && node ./scripts/stage-manifest.mjs",
+    "dev": "vite --host 127.0.0.1 --port 5174",
+    "dev:nw": "pnpm run build && node ./scripts/nw.mjs run",
+    "dist:nw": "pnpm run build && node ./scripts/nw.mjs build",
+    "test": "vitest run --root ../.. packages/app/test",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@lucide/icons": "^1.37.0",
+    "markora": "workspace:*",
+    "markora-ui": "workspace:*",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "nw-builder": "4.19.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.4.1"
+  }
+}

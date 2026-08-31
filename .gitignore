@@ -7,3 +7,6 @@ blob-report
 playwright-report
 test-results
 performance-results
+.cache
+packages/app/release
+packages/app/release.tgz

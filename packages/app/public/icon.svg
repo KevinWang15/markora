@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Markora">
+  <defs>
+    <linearGradient id="surface" x1="32" y1="22" x2="226" y2="238" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ef8c61"/>
+      <stop offset="1" stop-color="#c95232"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#surface)"/>
+  <path d="M56 190V66l72 68 72-68v124h-28v-61l-44 42-44-42v61H56Z" fill="#fff"/>
+  <path d="m128 116 18 17-18 39-18-39 18-17Z" fill="#fff"/>
+</svg>
