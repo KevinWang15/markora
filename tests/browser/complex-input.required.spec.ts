@@ -1953,6 +1953,10 @@ test("@required native triple click selects marked text blocks", async ({
       return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     }, marked);
 
+    // Playwright's WebKit mouse.click expands clickCount into that many
+    // press/release pairs. Emit each detail once so this is one triple-click,
+    // not a sequence of six clicks.
+    if (!cdp) await labPage.mouse.move(point.x, point.y);
     for (const clickCount of [1, 2, 3]) {
       if (cdp) {
         await cdp.send("Input.dispatchMouseEvent", {
@@ -1972,7 +1976,8 @@ test("@required native triple click selects marked text blocks", async ({
           y: point.y,
         });
       } else {
-        await labPage.mouse.click(point.x, point.y, { clickCount });
+        await labPage.mouse.down({ clickCount });
+        await labPage.mouse.up({ clickCount });
       }
     }
     await settleEditor(labPage, id);
