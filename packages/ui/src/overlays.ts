@@ -1,22 +1,20 @@
-import {
-  AlignCenter,
-  AlignJustify,
-  AlignLeft,
-  AlignRight,
-  Maximize2,
-  MoveDown,
-  MoveLeft,
-  MoveRight,
-  MoveUp,
-  PanelBottomOpen,
-  PanelLeftOpen,
-  PanelRightOpen,
-  PanelTopOpen,
-  Plus,
-  Trash2,
-  type LucideIconData,
-} from "@lucide/icons";
+import type { LucideIconData } from "@lucide/icons";
 import { buildLucideIconElement } from "@lucide/icons/build";
+import Maximize2 from "@lucide/icons/icons/maximize-2";
+import MoveDown from "@lucide/icons/icons/move-down";
+import MoveLeft from "@lucide/icons/icons/move-left";
+import MoveRight from "@lucide/icons/icons/move-right";
+import MoveUp from "@lucide/icons/icons/move-up";
+import PanelBottomOpen from "@lucide/icons/icons/panel-bottom-open";
+import PanelLeftOpen from "@lucide/icons/icons/panel-left-open";
+import PanelRightOpen from "@lucide/icons/icons/panel-right-open";
+import PanelTopOpen from "@lucide/icons/icons/panel-top-open";
+import Plus from "@lucide/icons/icons/plus";
+import AlignCenter from "@lucide/icons/icons/text-align-center";
+import AlignRight from "@lucide/icons/icons/text-align-end";
+import AlignJustify from "@lucide/icons/icons/text-align-justify";
+import AlignLeft from "@lucide/icons/icons/text-align-start";
+import Trash2 from "@lucide/icons/icons/trash-2";
 import { mdiTableColumnRemove, mdiTableRowRemove } from "@mdi/js";
 import type { MarkdownEditor } from "markora";
 import {

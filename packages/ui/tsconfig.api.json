@@ -1,7 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true
+    "baseUrl": ".",
+    "noEmit": true,
+    "paths": {
+      "@lucide/icons/icons/*": ["src/lucide-icon-data.d.ts"]
+    }
   },
   "include": ["src/index.ts", "test-d/**/*.test-d.ts"]
 }

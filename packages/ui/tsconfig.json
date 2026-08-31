@@ -1,8 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": ".",
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "paths": {
+      "@lucide/icons/icons/*": ["src/lucide-icon-data.d.ts"]
+    }
   },
   "include": ["src/**/*"]
 }

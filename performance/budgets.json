@@ -218,10 +218,10 @@
         "gzipBytes": { "warning": 560000, "failure": 625000 }
       },
       "css": {
-        "rawBytes": { "warning": 16750, "failure": 37000 },
-        "gzipBytes": { "warning": 3300, "failure": 5600 }
+        "rawBytes": { "warning": 16750, "failure": 45000 },
+        "gzipBytes": { "warning": 3300, "failure": 6600 }
       },
-      "staticModuleCount": { "warning": 148, "failure": 165 }
+      "staticModuleCount": { "warning": 148, "failure": 190 }
     },
     "minimal": {
       "initialJs": {

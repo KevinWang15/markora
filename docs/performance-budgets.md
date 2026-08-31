@@ -40,6 +40,14 @@ Raw and gzip JavaScript, CSS, lazy output, total output, and static module count
 are checked against `performance/budgets.json`. Optional advanced-syntax packages
 are also packed and measured without bundling host renderer engines.
 
+The 2026-08-31 root-bundle review measured 41,949 raw / 6,221 gzip CSS bytes
+and 181 static modules after the theme, localization, and table-control work.
+The review also replaced the `@lucide/icons` barrel import, which made the
+consumer traverse 1,958 static modules, with the package's per-icon entry
+points. The root failure ceilings retain approximately 5–7% headroom over the
+reviewed 181-module / 41,949-byte graph; the older warning thresholds remain in
+place so further growth stays visible in CI.
+
 ## Commands
 
 Run the same checked entry point used by CI:
