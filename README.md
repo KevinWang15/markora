@@ -333,6 +333,7 @@ Useful scripts:
 - `pnpm dev:app` — build and launch the desktop application in the NW.js SDK
 - `pnpm build` — build `markora`, all seven extension packages, `markora-ui`, the demo, and the desktop app
 - `pnpm dist:app` — build a self-contained desktop distribution for the current operating system
+- `pnpm dist:app:windows` — cross-build the portable Windows x64 application directory
 - `pnpm check` — build packages, run typechecks, verify API types, smoke-test Node ESM imports, and execute the test suite
 - `pnpm browser:install` — install the pinned Playwright Chromium, Firefox, and WebKit engines
 - `pnpm test:browser:required` — run the compact release-gate browser cases in all three engines

@@ -36,6 +36,14 @@ pnpm --filter markora-app dev
 pnpm dist:app
 ```
 
-The application is written to `packages/app/release`. On Linux, run `./install.sh` from that directory to install Markora for the current user, or launch `Markora` in place. The NW.js runtime is included, so recipients do not need Node.js, pnpm, or NW.js installed.
+The application is written to `packages/app/release/<platform>-<architecture>`. On Linux, run `./install.sh` from that platform directory to install Markora for the current user, or launch `Markora` in place. The NW.js runtime is included, so recipients do not need Node.js, pnpm, or NW.js installed.
+
+To cross-build the portable Windows x64 application from any supported host:
+
+```sh
+pnpm dist:app:windows
+```
+
+The result is `packages/app/release/win-x64/Markora.exe`. Distribute the complete `win-x64` directory because the executable uses the NW.js DLLs and resources beside it. This is a portable application, not an installer.
 
 NW.js is pinned in `scripts/nw.mjs`; upgrading it is an explicit product update rather than an ambient dependency change.

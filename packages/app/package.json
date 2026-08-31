@@ -10,6 +10,7 @@
     "dev": "vite --host 127.0.0.1 --port 5174",
     "dev:nw": "pnpm run build && node ./scripts/nw.mjs run",
     "dist:nw": "pnpm run build && node ./scripts/nw.mjs build",
+    "dist:nw:windows": "pnpm run build && node ./scripts/nw.mjs build win x64",
     "test": "vitest run --root ../.. packages/app/test",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

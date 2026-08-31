@@ -28,6 +28,7 @@
     "check": "pnpm --filter markora build && pnpm --filter markora typecheck && pnpm --filter markora typecheck:api && pnpm --filter markora smoke:node-esm && pnpm run build:extensions && pnpm run typecheck:extensions && pnpm run smoke:extensions && pnpm --filter markora-ui build && pnpm --filter markora-ui typecheck && pnpm --filter markora-ui smoke:node-esm && pnpm --filter demo typecheck && pnpm --filter markora-app typecheck && pnpm --filter markora-app build && pnpm typecheck:browser && pnpm test",
     "dev:app": "pnpm --filter markora-app dev:nw",
     "dist:app": "pnpm run build:packages && pnpm --filter markora-app dist:nw",
+    "dist:app:windows": "pnpm run build:packages && pnpm --filter markora-app dist:nw:windows",
     "pack:core": "node ./scripts/release-core.mjs pack",
     "perf:benchmark": "pnpm build:core && node ./scripts/performance-benchmark.mjs --profile=baseline",
     "perf:ci": "node ./scripts/pack-smoke.mjs --report=performance-results/bundle.json && node ./scripts/performance-benchmark.mjs --profile=ci --check && node ./scripts/advanced-syntax-performance.mjs --check",
