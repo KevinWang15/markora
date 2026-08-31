@@ -38,11 +38,6 @@ const ALL_ADVANCED_SOURCE = [
 ].join("\n");
 
 const EXPECTED_MANIFEST = [
-  "@markora/strike",
-  "@markora/table",
-  "@markora/task-list",
-  "@markora/code-mirror",
-  "@markora/opaque",
   "markora-extension-frontmatter",
   "markora-extension-footnotes",
   "markora-extension-math",

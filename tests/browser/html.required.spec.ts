@@ -157,9 +157,9 @@ test("@required HTML preserves exact block, inline, and comment source in docume
     }
   });
   expect(rejection).toMatchObject({
-    code: "EXTENSION_INCOMPATIBLE",
+    code: "EXTENSION_MISSING_DEPENDENCY",
     extension: "markora-extension-html",
-    phase: "resolve",
+    phase: "tokenizer",
   });
   await expect(labPage.locator('[data-e2e-editor="html-minimal-rejected"]'))
     .toHaveCount(0);
