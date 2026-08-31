@@ -16,6 +16,7 @@ export type DesktopMenuActions = Readonly<{
   saveDocument: () => void;
   saveDocumentAs: () => void;
   toggleSidebar: () => void;
+  toggleSourceMode: () => void;
   toggleTheme: () => void;
 }>;
 
@@ -153,6 +154,7 @@ function createNativeMenu(actions: DesktopMenuActions) {
 
     const view = new runtime.Menu();
     appendItem(view, { label: "Toggle Sidebar", key: "\\", modifiers: "ctrl-shift", click: actions.toggleSidebar });
+    appendItem(view, { label: "Source Mode", key: "/", modifiers: "ctrl", click: actions.toggleSourceMode });
     appendItem(view, { label: "Toggle Theme", click: actions.toggleTheme });
     appendItem(menu, { label: "View", submenu: view });
   }
@@ -162,6 +164,7 @@ function createNativeMenu(actions: DesktopMenuActions) {
 
 export const desktop = {
   isNative: Boolean(getNw()),
+  isMac: getNw()?.process.platform === "darwin",
 
   async openDocument(): Promise<OpenedDocument | null> {
     const file = await pickFile({ accept: ".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain" });
@@ -169,6 +172,14 @@ export const desktop = {
     const path = nativeFilePath(file);
     if (path) return { content: await this.readDocument(path), path };
     return { content: await file.text(), path: null };
+  },
+
+  async openDroppedDocument(file: File): Promise<OpenedDocument> {
+    const path = nativeFilePath(file);
+    return {
+      content: path ? await this.readDocument(path) : await file.text(),
+      path,
+    };
   },
 
   async readDocument(path: string) {

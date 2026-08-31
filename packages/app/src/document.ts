@@ -1,6 +1,7 @@
 export type DocumentOutlineItem = Readonly<{
   id: string;
   level: number;
+  offset: number;
   text: string;
 }>;
 
@@ -38,28 +39,42 @@ export function isMarkdownPath(path: string) {
 export function parseDocumentOutline(markdown: string): readonly DocumentOutlineItem[] {
   const headings: DocumentOutlineItem[] = [];
   let fence: string | null = null;
+  let offset = 0;
 
-  for (const line of markdown.split(/\r?\n/u)) {
+  for (const rawLine of markdown.split("\n")) {
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
     const fenceMatch = /^\s*(`{3,}|~{3,})/u.exec(line);
     if (fenceMatch) {
       const marker = fenceMatch[1][0];
       if (fence === marker) fence = null;
       else if (!fence) fence = marker;
+      offset += rawLine.length + 1;
       continue;
     }
-    if (fence) continue;
+    if (fence) {
+      offset += rawLine.length + 1;
+      continue;
+    }
 
     const match = /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/u.exec(line);
-    if (!match) continue;
+    if (!match) {
+      offset += rawLine.length + 1;
+      continue;
+    }
 
     const text = stripInlineMarkdown(match[2]);
-    if (!text) continue;
+    if (!text) {
+      offset += rawLine.length + 1;
+      continue;
+    }
 
     headings.push({
       id: `heading-${headings.length + 1}`,
       level: match[1].length,
+      offset,
       text,
     });
+    offset += rawLine.length + 1;
   }
 
   return headings;

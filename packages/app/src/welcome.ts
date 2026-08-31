@@ -14,6 +14,7 @@ Everything you type is Markdown, rendered as you write. Use the toolbar or famil
 | --- | --- |
 | Open a document | Ctrl+O |
 | Save | Ctrl+S |
+| Toggle source mode | Ctrl+/ (Cmd+/ on macOS) |
 | Toggle the sidebar | Ctrl+Shift+\\ |
 
 ## Code that reads like code
@@ -23,5 +24,5 @@ const greeting: string = "Hello from Markora";
 console.log(greeting);
 \`\`\`
 
-Drop or paste an image into the document and Markora will keep it next to your Markdown file in a dedicated assets folder.
+Drop a Markdown file anywhere on the window to open it. Drop or paste an image into the document and Markora will keep it next to your Markdown file in a dedicated assets folder.
 `;

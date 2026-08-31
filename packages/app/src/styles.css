@@ -40,6 +40,11 @@ button {
   --app-accent: #d96941;
   --app-accent-soft: #f9e9e2;
   --app-danger: #c9473a;
+  --app-syntax-comment: #6e7781;
+  --app-syntax-keyword: #cf222e;
+  --app-syntax-link: #0550ae;
+  --app-syntax-punctuation: #6e7781;
+  --app-syntax-string: #0a3069;
   --app-shadow: 0 18px 44px rgba(26, 28, 25, 0.14), 0 3px 12px rgba(26, 28, 25, 0.08);
   background: var(--app-bg);
   color: var(--app-text);
@@ -60,6 +65,11 @@ button {
   --app-accent: #e6865f;
   --app-accent-soft: #432f28;
   --app-danger: #ef7468;
+  --app-syntax-comment: #9da7b3;
+  --app-syntax-keyword: #ff7b72;
+  --app-syntax-link: #79c0ff;
+  --app-syntax-punctuation: #9da7b3;
+  --app-syntax-string: #a5d6ff;
   --app-shadow: 0 20px 52px rgba(0, 0, 0, 0.42), 0 3px 12px rgba(0, 0, 0, 0.32);
 }
 
@@ -77,6 +87,11 @@ button {
     --app-accent: #e6865f;
     --app-accent-soft: #432f28;
     --app-danger: #ef7468;
+    --app-syntax-comment: #9da7b3;
+    --app-syntax-keyword: #ff7b72;
+    --app-syntax-link: #79c0ff;
+    --app-syntax-punctuation: #9da7b3;
+    --app-syntax-string: #a5d6ff;
     --app-shadow: 0 20px 52px rgba(0, 0, 0, 0.42), 0 3px 12px rgba(0, 0, 0, 0.32);
   }
 }
@@ -177,6 +192,7 @@ button {
   color: var(--app-text-soft);
   font-size: 12.5px;
   font-weight: 520;
+  margin: 0;
   overflow: hidden;
   text-align: center;
   text-overflow: ellipsis;
@@ -452,12 +468,22 @@ button {
   background-color: var(--app-surface-hover);
 }
 
+.app-block-select:disabled {
+  color: var(--app-text-faint);
+  opacity: 0.48;
+}
+
 .app-document-viewport {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
   position: relative;
+}
+
+.app-document-viewport[data-source-mode="true"] {
+  background: var(--app-bg);
+  overflow: hidden;
 }
 
 .app-editor {
@@ -514,6 +540,84 @@ button {
   max-width: 100%;
 }
 
+.app-source-shell {
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-source-loading {
+  align-items: center;
+  color: var(--app-text-faint);
+  display: flex;
+  font-size: 12px;
+  height: 100%;
+  justify-content: center;
+}
+
+.app-source-editor {
+  background: var(--app-surface);
+  border-left: 1px solid var(--app-border);
+  border-right: 1px solid var(--app-border);
+  height: 100%;
+  margin: 0 auto;
+  max-width: 960px;
+}
+
+.app-source-editor > .cm-editor {
+  background: transparent;
+  color: var(--app-text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+  height: 100%;
+  line-height: 1.72;
+}
+
+.app-source-editor > .cm-editor.cm-focused {
+  outline: 0;
+}
+
+.app-source-editor .cm-scroller {
+  font-family: inherit;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.app-source-editor .cm-content {
+  caret-color: var(--app-accent);
+  min-height: 100%;
+  padding: 46px 30px 160px;
+}
+
+.app-source-editor .cm-line {
+  padding: 0 4px;
+}
+
+.app-source-editor .cm-gutters {
+  background: var(--app-surface-soft);
+  border-right: 1px solid var(--app-border);
+  color: var(--app-text-faint);
+}
+
+.app-source-editor .cm-lineNumbers .cm-gutterElement {
+  min-width: 42px;
+  padding: 0 11px 0 9px;
+}
+
+.app-source-editor .cm-activeLine,
+.app-source-editor .cm-activeLineGutter {
+  background: color-mix(in srgb, var(--app-accent) 7%, transparent);
+}
+
+.app-source-editor .cm-selectionBackground,
+.app-source-editor.cm-focused .cm-selectionBackground,
+.app-source-editor .cm-focused .cm-selectionBackground {
+  background: color-mix(in srgb, var(--app-accent) 24%, transparent);
+}
+
+.app-source-editor .cm-cursor {
+  border-left-color: var(--app-accent);
+}
+
 .app-statusbar {
   align-items: center;
   background: var(--app-surface);
@@ -540,9 +644,72 @@ button {
   text-decoration: underline;
 }
 
+.app-status-leading,
+.app-mode-indicator {
+  align-items: center;
+  display: flex;
+}
+
+.app-status-leading {
+  gap: 7px;
+}
+
+.app-mode-indicator {
+  background: var(--app-accent-soft);
+  border-radius: 999px;
+  color: var(--app-accent);
+  font-weight: 650;
+  gap: 4px;
+  padding: 2px 7px;
+}
+
 .app-document-stats {
   display: flex;
   gap: 13px;
+}
+
+.app-drop-overlay {
+  align-items: center;
+  background: color-mix(in srgb, var(--app-accent) 12%, transparent);
+  backdrop-filter: blur(2px);
+  display: flex;
+  inset: 45px 0 0;
+  justify-content: center;
+  pointer-events: none;
+  position: fixed;
+  z-index: 900;
+}
+
+.app-drop-card {
+  align-items: center;
+  background: var(--app-surface);
+  border: 1px solid color-mix(in srgb, var(--app-accent) 42%, var(--app-border));
+  border-radius: 15px;
+  box-shadow: var(--app-shadow);
+  color: var(--app-text-soft);
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  gap: 5px;
+  min-width: 280px;
+  padding: 24px 32px 22px;
+}
+
+.app-drop-card strong {
+  color: var(--app-text);
+  font-size: 15px;
+  margin-top: 3px;
+}
+
+.app-drop-icon {
+  align-items: center;
+  background: var(--app-accent-soft);
+  border-radius: 10px;
+  color: var(--app-accent);
+  display: flex;
+  height: 45px;
+  justify-content: center;
+  width: 45px;
 }
 
 .app-dialog-backdrop {

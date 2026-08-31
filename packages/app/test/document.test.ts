@@ -21,9 +21,9 @@ describe("desktop document model", () => {
       "```",
       "### Ship",
     ].join("\n"))).toEqual([
-      { id: "heading-1", level: 1, text: "Project plan" },
-      { id: "heading-2", level: 2, text: "Milestones" },
-      { id: "heading-3", level: 3, text: "Ship" },
+      { id: "heading-1", level: 1, offset: 0, text: "Project plan" },
+      { id: "heading-2", level: 2, offset: 20, text: "Milestones" },
+      { id: "heading-3", level: 3, offset: 83, text: "Ship" },
     ]);
   });
 

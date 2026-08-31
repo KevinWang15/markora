@@ -4,8 +4,9 @@ Markora App is the installable, local-first desktop home for the Markora editor.
 
 ## Product features
 
-- Native Markdown open, save, save-as, launch-with-file, and single-instance flows
+- Native Markdown open, save, save-as, launch-with-file, drag-to-open, and single-instance flows
 - Unsaved-change protection for new, open, and close actions
+- Syntax-highlighted whole-document source mode with `Ctrl+/` or `Cmd+/`
 - Outline navigation, recent documents, word and character counts
 - Light, dark, and system appearance modes
 - Native menus and familiar document shortcuts
