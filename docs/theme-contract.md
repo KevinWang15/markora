@@ -158,6 +158,7 @@ Code surfaces default to LTR independently of the surrounding document, while Un
 | `--mdw-ui-table-edge-selector-size`, `--mdw-ui-table-edge-selector-overlap`, `--mdw-ui-table-edge-insertion-size` | `12px`, `1px`, `24px` |
 | `--mdw-ui-table-edge-indicator-inset`, `--mdw-ui-table-edge-indicator-thickness` | `2px`, `2px` |
 | `--mdw-ui-table-row-edge-indicator-max-size`, `--mdw-ui-table-column-edge-indicator-max-size` | `12px`, `18px` |
+| `--mdw-ui-table-reorder-indicator-thickness`, `--mdw-ui-table-reorder-marker-size` | `3px`, `7px` |
 | `--mdw-ui-table-edge-z-index` | `0` (keeps edge controls beneath host overlays) |
 | `--mdw-ui-error-font-size`, `--mdw-ui-error-line-height` | `0.875rem`, `1.4` |
 

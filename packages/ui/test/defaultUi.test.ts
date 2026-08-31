@@ -35,7 +35,9 @@ function createControllers(
     insertTableColumnAt() { return true; },
     insertTableRowAt() { return true; },
     moveTableColumn() { return true; },
+    moveTableColumnTo() { return true; },
     moveTableRow() { return true; },
+    moveTableRowTo() { return true; },
     normalizeTableAlignment() {
       return null;
     },
@@ -244,7 +246,9 @@ describe('createDefaultUi', () => {
       insertTableColumnAt() { return true; },
       insertTableRowAt() { return true; },
       moveTableColumn() { return true; },
+      moveTableColumnTo() { return true; },
       moveTableRow() { return true; },
+      moveTableRowTo() { return true; },
       normalizeTableAlignment() { return null; },
       removeActiveImage() {},
       removeActiveLink() {},

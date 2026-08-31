@@ -925,6 +925,58 @@ function resizeTableCommand(
   };
 }
 
+function moveTableRowsTo(
+  state: EditorState,
+  dispatch: ((transaction: Transaction) => void) | undefined,
+  schema: Schema,
+  info: TableSelectionInfo,
+  targetFrom: number,
+) {
+  const count = info.rowTo - info.rowFrom + 1;
+
+  if (
+    info.rowFrom === 0
+    || !Number.isInteger(targetFrom)
+    || targetFrom < 1
+    || targetFrom > info.table.childCount - count
+    || targetFrom === info.rowFrom
+  ) {
+    return false;
+  }
+
+  const columnCount = getTableColumnCount(info.table);
+  const alignments = getTableColumnAlignments(info.table);
+  const rows: ProseMirrorNode[] = [];
+  info.table.forEach((row, _offset, rowIndex) => {
+    rows.push(normalizeRowWidth(schema, row, rowIndex, columnCount, alignments));
+  });
+  const moved = rows.splice(info.rowFrom, count);
+  rows.splice(targetFrom, 0, ...moved);
+
+  return updateTableWithSelection(
+    state,
+    dispatch,
+    schema,
+    info,
+    rows,
+    targetFrom + (info.rowIndex - info.rowFrom),
+    info.cellIndex,
+    {
+      rowFrom: targetFrom,
+      rowTo: targetFrom + count - 1,
+      columnFrom: info.columnFrom,
+      columnTo: info.columnTo,
+    },
+  );
+}
+
+function moveTableRowToCommand(schema: Schema, targetFrom: number): Command {
+  return (state, dispatch) => {
+    const info = getTableSelectionContext(state, schema);
+    return info ? moveTableRowsTo(state, dispatch, schema, info, targetFrom) : false;
+  };
+}
+
 function moveTableRowCommand(
   schema: Schema,
   direction: MarkdownEditorTableRowMoveDirection,
@@ -940,32 +992,67 @@ function moveTableRowCommand(
       return false;
     }
 
-    const columnCount = getTableColumnCount(info.table);
-    const alignments = getTableColumnAlignments(info.table);
-    const rows: ProseMirrorNode[] = [];
-    info.table.forEach((row, _offset, rowIndex) => {
-      rows.push(normalizeRowWidth(schema, row, rowIndex, columnCount, alignments));
-    });
-    const count = info.rowTo - info.rowFrom + 1;
-    const moved = rows.splice(info.rowFrom, count);
-    const targetFrom = direction === "up" ? info.rowFrom - 1 : info.rowFrom + 1;
-    rows.splice(targetFrom, 0, ...moved);
-
-    return updateTableWithSelection(
+    return moveTableRowsTo(
       state,
       dispatch,
       schema,
       info,
-      rows,
-      targetFrom + (info.rowIndex - info.rowFrom),
-      info.cellIndex,
-      {
-        rowFrom: targetFrom,
-        rowTo: targetFrom + count - 1,
-        columnFrom: info.columnFrom,
-        columnTo: info.columnTo,
-      },
+      direction === "up" ? info.rowFrom - 1 : info.rowFrom + 1,
     );
+  };
+}
+
+function moveTableColumnsTo(
+  state: EditorState,
+  dispatch: ((transaction: Transaction) => void) | undefined,
+  schema: Schema,
+  info: TableSelectionInfo,
+  targetFrom: number,
+) {
+  const columnCount = getTableColumnCount(info.table);
+  const count = info.columnTo - info.columnFrom + 1;
+
+  if (
+    !Number.isInteger(targetFrom)
+    || targetFrom < 0
+    || targetFrom > columnCount - count
+    || targetFrom === info.columnFrom
+  ) {
+    return false;
+  }
+
+  const alignments = getTableColumnAlignments(info.table);
+  const rows: ProseMirrorNode[] = [];
+  info.table.forEach((rawRow, _offset, rowIndex) => {
+    const row = normalizeRowWidth(schema, rawRow, rowIndex, columnCount, alignments);
+    const cells: ProseMirrorNode[] = [];
+    row.forEach((cell) => cells.push(cell));
+    const moved = cells.splice(info.columnFrom, count);
+    cells.splice(targetFrom, 0, ...moved);
+    rows.push(row.type.create(row.attrs, cells, row.marks));
+  });
+
+  return updateTableWithSelection(
+    state,
+    dispatch,
+    schema,
+    info,
+    rows,
+    info.rowIndex,
+    targetFrom + (info.cellIndex - info.columnFrom),
+    {
+      rowFrom: info.rowFrom,
+      rowTo: info.rowTo,
+      columnFrom: targetFrom,
+      columnTo: targetFrom + count - 1,
+    },
+  );
+}
+
+function moveTableColumnToCommand(schema: Schema, targetFrom: number): Command {
+  return (state, dispatch) => {
+    const info = getTableSelectionContext(state, schema);
+    return info ? moveTableColumnsTo(state, dispatch, schema, info, targetFrom) : false;
   };
 }
 
@@ -984,33 +1071,12 @@ function moveTableColumnCommand(
       return false;
     }
 
-    const alignments = getTableColumnAlignments(info.table);
-    const count = info.columnTo - info.columnFrom + 1;
-    const targetFrom = direction === "left" ? info.columnFrom - 1 : info.columnFrom + 1;
-    const rows: ProseMirrorNode[] = [];
-    info.table.forEach((rawRow, _offset, rowIndex) => {
-      const row = normalizeRowWidth(schema, rawRow, rowIndex, columnCount, alignments);
-      const cells: ProseMirrorNode[] = [];
-      row.forEach((cell) => cells.push(cell));
-      const moved = cells.splice(info.columnFrom, count);
-      cells.splice(targetFrom, 0, ...moved);
-      rows.push(row.type.create(row.attrs, cells, row.marks));
-    });
-
-    return updateTableWithSelection(
+    return moveTableColumnsTo(
       state,
       dispatch,
       schema,
       info,
-      rows,
-      info.rowIndex,
-      targetFrom + (info.cellIndex - info.columnFrom),
-      {
-        rowFrom: info.rowFrom,
-        rowTo: info.rowTo,
-        columnFrom: targetFrom,
-        columnTo: targetFrom + count - 1,
-      },
+      direction === "left" ? info.columnFrom - 1 : info.columnFrom + 1,
     );
   };
 }
@@ -1228,8 +1294,14 @@ export function createTableCommandSet(schema: Schema) {
     moveTableRow(direction: MarkdownEditorTableRowMoveDirection) {
       return moveTableRowCommand(schema, normalizeTableRowMoveDirection(direction));
     },
+    moveTableRowTo(index: number) {
+      return moveTableRowToCommand(schema, index);
+    },
     moveTableColumn(direction: MarkdownEditorTableColumnMoveDirection) {
       return moveTableColumnCommand(schema, normalizeTableColumnMoveDirection(direction));
+    },
+    moveTableColumnTo(index: number) {
+      return moveTableColumnToCommand(schema, index);
     },
     deleteTableRow: deleteTableRowCommand(schema, deleteTable),
     deleteTableColumn: deleteTableColumnCommand(schema, deleteTable),

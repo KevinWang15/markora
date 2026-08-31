@@ -84,7 +84,11 @@ export type EditorUiFactory = (options: {
   /** Inserts immediately before the zero-based row boundary. */
   insertTableRowAt: (view: EditorView, index: number) => boolean;
   moveTableColumn: (view: EditorView, direction: "left" | "right") => boolean;
+  /** Moves the selected columns so their first column lands at the zero-based index. */
+  moveTableColumnTo: (view: EditorView, index: number) => boolean;
   moveTableRow: (view: EditorView, direction: "up" | "down") => boolean;
+  /** Moves the selected rows so their first row lands at the zero-based index. */
+  moveTableRowTo: (view: EditorView, index: number) => boolean;
   normalizeTableAlignment: (value: unknown) => TableAlignment | null;
   removeActiveImage: (view: EditorView) => void;
   removeActiveLink: (view: EditorView) => void;

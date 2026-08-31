@@ -158,3 +158,50 @@ describe('ragged table column removal', () => {
     editor.destroy();
   });
 });
+
+describe('direct table axis reordering', () => {
+  const markdown = [
+    '| H1 | H2 | H3 |',
+    '| --- | --- | --- |',
+    '| a | b | c |',
+    '| d | e | f |',
+  ].join('\n');
+
+  it('moves a selected row to its final index atomically while keeping the header pinned', () => {
+    const editor = createEditor({ element: createHost(), markdown });
+    const navigation = createTestTableNavigation(editor);
+    setSelectionInsideTableCell(editor, 1, 0);
+    expect(navigation.selectTableRow(editor.view, 1)).toBe(true);
+    expect(navigation.moveTableRowTo(editor.view, 2)).toBe(true);
+    expect(editor.getMarkdown()).toBe([
+      '| H1 | H2 | H3 |',
+      '| --- | --- | --- |',
+      '| d | e | f |',
+      '| a | b | c |',
+    ].join('\n'));
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe(markdown);
+
+    expect(navigation.selectTableRow(editor.view, 0)).toBe(true);
+    expect(navigation.moveTableRowTo(editor.view, 1)).toBe(false);
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
+  it('moves a selected column directly across multiple positions in one undo step', () => {
+    const editor = createEditor({ element: createHost(), markdown });
+    const navigation = createTestTableNavigation(editor);
+    setSelectionInsideTableCell(editor, 1, 0);
+    expect(navigation.selectTableColumn(editor.view, 0)).toBe(true);
+    expect(navigation.moveTableColumnTo(editor.view, 2)).toBe(true);
+    expect(editor.getMarkdown()).toBe([
+      '| H2 | H3 | H1 |',
+      '| --- | --- | --- |',
+      '| b | c | a |',
+      '| e | f | d |',
+    ].join('\n'));
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+});

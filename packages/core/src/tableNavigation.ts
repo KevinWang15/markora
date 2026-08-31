@@ -128,8 +128,24 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
     return tableCommands.moveTableRow(direction)(view.state, (transaction) => view.dispatch(transaction), view);
   }
 
+  function moveTableRowTo(view: EditorView, index: number) {
+    return tableCommands.moveTableRowTo(index)(
+      view.state,
+      (transaction) => view.dispatch(transaction),
+      view,
+    );
+  }
+
   function moveTableColumn(view: EditorView, direction: "left" | "right") {
     return tableCommands.moveTableColumn(direction)(view.state, (transaction) => view.dispatch(transaction), view);
+  }
+
+  function moveTableColumnTo(view: EditorView, index: number) {
+    return tableCommands.moveTableColumnTo(index)(
+      view.state,
+      (transaction) => view.dispatch(transaction),
+      view,
+    );
   }
 
   function setTableColumnAlignment(view: EditorView, align: TableAlignment | null) {
@@ -312,7 +328,9 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
     selectTableRow,
     selectTableColumn,
     moveTableRow,
+    moveTableRowTo,
     moveTableColumn,
+    moveTableColumnTo,
     removeTableRow,
     removeTableColumn,
     setTableColumnAlignment,

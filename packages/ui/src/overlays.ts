@@ -64,6 +64,8 @@ const CODE_BLOCK_LANGUAGE_MAX_LENGTH = 128;
 const OVERLAY_GAP = 8;
 const TABLE_DIMENSION_MAXIMUM = 100;
 const TABLE_EDGE_INSERTION_SIZE_DEFAULT = 24;
+const TABLE_REORDER_DRAG_THRESHOLD = 5;
+const TABLE_REORDER_INDICATOR_THICKNESS_DEFAULT = 3;
 const TABLE_EDGE_SELECTOR_OVERLAP_DEFAULT = 1;
 const TABLE_EDGE_SELECTOR_SIZE_DEFAULT = 12;
 const TABLE_DIMENSION_MINIMUM = 1;
@@ -1398,7 +1400,9 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   insertTableColumnAt: (view: EditorView, index: number) => boolean | void;
   insertTableRowAt: (view: EditorView, index: number) => boolean | void;
   moveTableColumn: (view: EditorView, direction: "left" | "right") => boolean | void;
+  moveTableColumnTo: (view: EditorView, index: number) => boolean | void;
   moveTableRow: (view: EditorView, direction: "up" | "down") => boolean | void;
+  moveTableRowTo: (view: EditorView, index: number) => boolean | void;
   normalizeTableAlignment: (value: unknown) => TableAlignment | null;
   removeActiveTable: (view: EditorView) => boolean | void;
   removeTableColumn: (view: EditorView) => boolean | void;
@@ -1418,7 +1422,9 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     insertTableRowAt,
     messages,
     moveTableColumn,
+    moveTableColumnTo,
     moveTableRow,
+    moveTableRowTo,
     normalizeTableAlignment,
     portalRoot,
     removeActiveTable,
@@ -1480,11 +1486,17 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   columnInsertions.setAttribute("role", "group");
   columnInsertions.setAttribute("aria-label", messages.tableColumnInsertionControlsLabel);
 
+  const reorderIndicator = doc.createElement("div");
+  reorderIndicator.className = "mdw-table-reorder-indicator";
+  reorderIndicator.hidden = true;
+  reorderIndicator.style.display = "none";
+
   edgeDom.append(
     rowSelectors,
     columnSelectors,
     rowInsertions,
     columnInsertions,
+    reorderIndicator,
   );
 
   let activeView: EditorView | null = null;
@@ -1502,6 +1514,19 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   let rowInsertionButtons: HTMLButtonElement[] = [];
   let activeAxisAction: "row" | "column" | null = null;
   let preferredAxisAction: "row" | "column" | null = null;
+  let reorderDrag: {
+    axis: "row" | "column";
+    boundaryIndex: number;
+    pointerId: number;
+    selector: HTMLButtonElement;
+    sourceIndex: number;
+    started: boolean;
+    startX: number;
+    startY: number;
+    targetIndex: number;
+  } | null = null;
+  let suppressedSelectorClick: HTMLButtonElement | null = null;
+  let suppressedSelectorClickTimer: number | null = null;
 
   const restoreTableEditorFocus = (view: EditorView, owner = dom) => {
     if (restoreEditorFocus(view, owner, doc, win)) {
@@ -1714,10 +1739,19 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     button.className = "mdw-table-edge-selector";
     button.title = label;
     button.setAttribute("aria-label", label);
+    button.setAttribute("aria-grabbed", "false");
     button.setAttribute("aria-pressed", "false");
     button.dataset.mdwTableAxis = axis;
     button.dataset.mdwTableIndex = String(index);
-    button.addEventListener("click", () => {
+    button.dataset.mdwTableReorderable = axis === "column" || index > 0 ? "true" : "false";
+    button.addEventListener("click", (event) => {
+      if (suppressedSelectorClick === button) {
+        event.preventDefault();
+        event.stopPropagation();
+        suppressedSelectorClick = null;
+        return;
+      }
+
       preferredAxisAction = axis;
       runEdgeSelection((view) => (
         axis === "row" ? selectTableRow(view, index) : selectTableColumn(view, index)
@@ -1866,6 +1900,13 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     marker.querySelectorAll<HTMLTableRowElement>("tr"),
   ).filter((row) => row.closest("table") === marker);
 
+  const getRenderedColumns = (marker: HTMLElement) => {
+    const firstRow = getRenderedRows(marker)[0];
+    return firstRow
+      ? Array.from(firstRow.cells).filter((cell) => cell.closest("table") === marker)
+      : [];
+  };
+
   const positionEdgeElement = (
     element: HTMLElement,
     rect: Readonly<{ height: number; left: number; top: number; width: number }>,
@@ -1874,6 +1915,289 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     element.style.width = `${Math.max(0, rect.width) / initialSpace.scaleX}px`;
     element.style.height = `${Math.max(0, rect.height) / initialSpace.scaleY}px`;
     setViewportPosition(element, rect.left, rect.top, measurePositionSpace(element));
+  };
+
+  const hideReorderIndicator = () => {
+    reorderIndicator.hidden = true;
+    reorderIndicator.style.display = "none";
+    delete reorderIndicator.dataset.mdwTableAxis;
+    delete reorderIndicator.dataset.mdwTableBoundaryIndex;
+    delete reorderIndicator.dataset.mdwTableTargetIndex;
+  };
+
+  const positionReorderIndicator = (
+    axis: "row" | "column",
+    boundaryIndex: number,
+    targetIndex: number,
+  ) => {
+    if (!activeMarker) {
+      hideReorderIndicator();
+      return;
+    }
+
+    const tableRect = activeMarker.getBoundingClientRect();
+    const edgeStyle = win.getComputedStyle(edgeDom);
+    const configuredThickness = Number.parseFloat(
+      edgeStyle.getPropertyValue("--mdw-ui-table-reorder-indicator-thickness"),
+    );
+    const thickness = Number.isFinite(configuredThickness) && configuredThickness > 0
+      ? configuredThickness
+      : TABLE_REORDER_INDICATOR_THICKNESS_DEFAULT;
+    reorderIndicator.hidden = false;
+    reorderIndicator.style.display = "block";
+    reorderIndicator.dataset.mdwTableAxis = axis;
+    reorderIndicator.dataset.mdwTableBoundaryIndex = String(boundaryIndex);
+    reorderIndicator.dataset.mdwTableTargetIndex = String(targetIndex);
+
+    if (axis === "row") {
+      const rows = getRenderedRows(activeMarker);
+      const boundary = rows[boundaryIndex]?.getBoundingClientRect().top
+        ?? rows[rows.length - 1]?.getBoundingClientRect().bottom;
+      if (boundary === undefined) {
+        hideReorderIndicator();
+        return;
+      }
+      positionEdgeElement(reorderIndicator, {
+        height: thickness,
+        left: tableRect.left,
+        top: boundary - thickness / 2,
+        width: tableRect.width,
+      });
+      return;
+    }
+
+    const columns = getRenderedColumns(activeMarker);
+    const rtl = win.getComputedStyle(activeMarker).direction === "rtl";
+    const boundaryCell = columns[boundaryIndex]?.getBoundingClientRect();
+    const lastCell = columns[columns.length - 1]?.getBoundingClientRect();
+    const boundary = boundaryCell
+      ? (rtl ? boundaryCell.right : boundaryCell.left)
+      : lastCell
+        ? (rtl ? lastCell.left : lastCell.right)
+        : undefined;
+    if (boundary === undefined) {
+      hideReorderIndicator();
+      return;
+    }
+    positionEdgeElement(reorderIndicator, {
+      height: tableRect.height,
+      left: boundary - thickness / 2,
+      top: tableRect.top,
+      width: thickness,
+    });
+  };
+
+  const getReorderTarget = (
+    axis: "row" | "column",
+    sourceIndex: number,
+    clientX: number,
+    clientY: number,
+  ) => {
+    if (!activeMarker) {
+      return null;
+    }
+
+    if (axis === "row") {
+      const rows = getRenderedRows(activeMarker);
+      if (sourceIndex <= 0 || sourceIndex >= rows.length) {
+        return null;
+      }
+      let boundaryIndex = rows.length;
+      for (let index = 1; index < rows.length; index += 1) {
+        const rect = rows[index]!.getBoundingClientRect();
+        if (clientY < rect.top + rect.height / 2) {
+          boundaryIndex = index;
+          break;
+        }
+      }
+      const targetIndex = clamp(
+        boundaryIndex > sourceIndex ? boundaryIndex - 1 : boundaryIndex,
+        1,
+        rows.length - 1,
+      );
+      return { boundaryIndex, targetIndex };
+    }
+
+    const columns = getRenderedColumns(activeMarker);
+    if (sourceIndex < 0 || sourceIndex >= columns.length) {
+      return null;
+    }
+    const rtl = win.getComputedStyle(activeMarker).direction === "rtl";
+    let boundaryIndex = columns.length;
+    for (let index = 0; index < columns.length; index += 1) {
+      const rect = columns[index]!.getBoundingClientRect();
+      if (rtl ? clientX > rect.left + rect.width / 2 : clientX < rect.left + rect.width / 2) {
+        boundaryIndex = index;
+        break;
+      }
+    }
+    const targetIndex = clamp(
+      boundaryIndex > sourceIndex ? boundaryIndex - 1 : boundaryIndex,
+      0,
+      columns.length - 1,
+    );
+    return { boundaryIndex, targetIndex };
+  };
+
+  const clearSuppressedSelectorClick = () => {
+    if (suppressedSelectorClickTimer !== null) {
+      win.clearTimeout(suppressedSelectorClickTimer);
+      suppressedSelectorClickTimer = null;
+    }
+    suppressedSelectorClick = null;
+  };
+
+  const finishReorderDrag = (suppressClick: boolean) => {
+    const drag = reorderDrag;
+    if (!drag) {
+      return null;
+    }
+
+    reorderDrag = null;
+    drag.selector.classList.remove("is-dragging");
+    drag.selector.setAttribute("aria-grabbed", "false");
+    edgeDom.classList.remove("is-reordering");
+    delete edgeDom.dataset.mdwTableReorderAxis;
+    hideReorderIndicator();
+    if (drag.selector.hasPointerCapture?.(drag.pointerId)) {
+      drag.selector.releasePointerCapture(drag.pointerId);
+    }
+
+    if (suppressClick && drag.started) {
+      clearSuppressedSelectorClick();
+      suppressedSelectorClick = drag.selector;
+      suppressedSelectorClickTimer = win.setTimeout(() => {
+        suppressedSelectorClick = null;
+        suppressedSelectorClickTimer = null;
+      }, 0);
+    }
+    return drag;
+  };
+
+  const handleReorderPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0 || reorderDrag) {
+      return;
+    }
+
+    const target = event.target;
+    const selector = target instanceof win.Element
+      ? target.closest<HTMLButtonElement>(".mdw-table-edge-selector")
+      : null;
+    if (!selector || selector.dataset.mdwTableReorderable !== "true") {
+      return;
+    }
+    const axis = selector.dataset.mdwTableAxis;
+    const sourceIndex = Number.parseInt(selector.dataset.mdwTableIndex ?? "", 10);
+    if ((axis !== "row" && axis !== "column") || !Number.isInteger(sourceIndex)) {
+      return;
+    }
+
+    clearSuppressedSelectorClick();
+    reorderDrag = {
+      axis,
+      boundaryIndex: sourceIndex,
+      pointerId: event.pointerId,
+      selector,
+      sourceIndex,
+      started: false,
+      startX: event.clientX,
+      startY: event.clientY,
+      targetIndex: sourceIndex,
+    };
+    selector.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleReorderPointerMove = (event: PointerEvent) => {
+    const drag = reorderDrag;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    if (!drag.started) {
+      const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+      if (distance < TABLE_REORDER_DRAG_THRESHOLD) {
+        return;
+      }
+
+      const view = activeView;
+      if (!view || view.isDestroyed || !view.editable) {
+        finishReorderDrag(false);
+        return;
+      }
+      preferredAxisAction = drag.axis;
+      const selected = drag.axis === "row"
+        ? selectTableRow(view, drag.sourceIndex)
+        : selectTableColumn(view, drag.sourceIndex);
+      if (selected === false) {
+        finishReorderDrag(false);
+        return;
+      }
+      drag.started = true;
+      drag.selector.classList.add("is-dragging");
+      drag.selector.setAttribute("aria-grabbed", "true");
+      edgeDom.classList.add("is-reordering");
+      edgeDom.dataset.mdwTableReorderAxis = drag.axis;
+    }
+
+    const target = getReorderTarget(
+      drag.axis,
+      drag.sourceIndex,
+      event.clientX,
+      event.clientY,
+    );
+    if (!target) {
+      hideReorderIndicator();
+      return;
+    }
+    drag.boundaryIndex = target.boundaryIndex;
+    drag.targetIndex = target.targetIndex;
+    if (drag.targetIndex === drag.sourceIndex) {
+      hideReorderIndicator();
+    } else {
+      positionReorderIndicator(drag.axis, drag.boundaryIndex, drag.targetIndex);
+    }
+    event.preventDefault();
+  };
+
+  const handleReorderPointerUp = (event: PointerEvent) => {
+    if (!reorderDrag || reorderDrag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const drag = finishReorderDrag(true)!;
+    if (!drag.started) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (drag.targetIndex === drag.sourceIndex) {
+      return;
+    }
+
+    const view = activeView;
+    if (!view || view.isDestroyed || !view.editable) {
+      close();
+      return;
+    }
+    const handled = drag.axis === "row"
+      ? moveTableRowTo(view, drag.targetIndex)
+      : moveTableColumnTo(view, drag.targetIndex);
+    if (handled === false) {
+      return;
+    }
+    const rtl = win.getComputedStyle(activeMarker ?? dom).direction === "rtl";
+    const action: DefaultUiTableAction = drag.axis === "row"
+      ? (drag.targetIndex < drag.sourceIndex ? "move-row-up" : "move-row-down")
+      : drag.targetIndex < drag.sourceIndex
+        ? (rtl ? "move-column-right" : "move-column-left")
+        : (rtl ? "move-column-left" : "move-column-right");
+    announce(action, view);
+  };
+
+  const handleReorderPointerCancel = (event: PointerEvent) => {
+    if (reorderDrag?.pointerId === event.pointerId) {
+      finishReorderDrag(true);
+    }
   };
 
   const positionEdgeControls = () => {
@@ -1979,6 +2303,14 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       });
     });
 
+    if (reorderDrag?.started && reorderDrag.targetIndex !== reorderDrag.sourceIndex) {
+      positionReorderIndicator(
+        reorderDrag.axis,
+        reorderDrag.boundaryIndex,
+        reorderDrag.targetIndex,
+      );
+    }
+
   };
 
   const reposition = () => {
@@ -2028,6 +2360,8 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     const view = activeView;
     const activeElement = getDeepActiveElement(dom, doc, win);
     const hadToolbarFocus = activeElement instanceof win.Node && dom.contains(activeElement);
+    finishReorderDrag(false);
+    clearSuppressedSelectorClick();
     cancelScheduledReposition();
     activeView = null;
     activeMarker = null;
@@ -2168,6 +2502,11 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   dom.addEventListener("keydown", handleKeyDown);
   edgeDom.addEventListener("mousedown", handleMouseDown);
   edgeDom.addEventListener("keydown", handleKeyDown);
+  edgeDom.addEventListener("pointerdown", handleReorderPointerDown);
+  edgeDom.addEventListener("pointermove", handleReorderPointerMove);
+  edgeDom.addEventListener("pointerup", handleReorderPointerUp);
+  edgeDom.addEventListener("pointercancel", handleReorderPointerCancel);
+  edgeDom.addEventListener("lostpointercapture", handleReorderPointerCancel);
   const runTableAction = (
     action: (view: EditorView) => boolean | void,
     actionName: DefaultUiTableAction,
@@ -2378,6 +2717,11 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       dom.removeEventListener("keydown", handleKeyDown);
       edgeDom.removeEventListener("mousedown", handleMouseDown);
       edgeDom.removeEventListener("keydown", handleKeyDown);
+      edgeDom.removeEventListener("pointerdown", handleReorderPointerDown);
+      edgeDom.removeEventListener("pointermove", handleReorderPointerMove);
+      edgeDom.removeEventListener("pointerup", handleReorderPointerUp);
+      edgeDom.removeEventListener("pointercancel", handleReorderPointerCancel);
+      edgeDom.removeEventListener("lostpointercapture", handleReorderPointerCancel);
       win.removeEventListener("resize", handleWindowChange);
       win.removeEventListener("scroll", handleWindowChange, true);
       removeVisualViewportListeners();

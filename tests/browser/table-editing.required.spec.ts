@@ -67,6 +67,41 @@ async function clickWithCdp(cdp: CDPSession, point: { x: number; y: number }) {
   });
 }
 
+async function moveHeldPointerWithCdp(
+  cdp: CDPSession,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+) {
+  await cdp.send("Input.dispatchMouseEvent", {
+    button: "left",
+    buttons: 1,
+    clickCount: 1,
+    type: "mousePressed",
+    x: from.x,
+    y: from.y,
+  });
+  for (let step = 1; step <= 12; step += 1) {
+    await cdp.send("Input.dispatchMouseEvent", {
+      button: "left",
+      buttons: 1,
+      type: "mouseMoved",
+      x: from.x + (to.x - from.x) * step / 12,
+      y: from.y + (to.y - from.y) * step / 12,
+    });
+  }
+}
+
+async function releasePointerWithCdp(cdp: CDPSession, point: { x: number; y: number }) {
+  await cdp.send("Input.dispatchMouseEvent", {
+    button: "left",
+    buttons: 0,
+    clickCount: 1,
+    type: "mouseReleased",
+    x: point.x,
+    y: point.y,
+  });
+}
+
 test("@required Chromium table edge controls pass selection, insertion, deletion, focus, and visual acceptance", async ({
   browserName,
   context,
@@ -270,6 +305,107 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
     await expect(table.locator("tr").first().locator("th")).toHaveCount(4);
     expect(await table.locator("tr").first().locator("th").allTextContents())
       .toEqual(["H1", "", "H2", "H3"]);
+  } finally {
+    await cdp.detach();
+  }
+});
+
+test("@required Chromium table edge handles drag rows and columns to a visual drop position", async ({
+  browserName,
+  context,
+  labPage,
+}, testInfo) => {
+  test.skip(browserName !== "chromium", "This acceptance test drives the Chromium DevTools Protocol.");
+
+  const id = "table-edge-reorder";
+  await mountEditor(labPage, { id, markdown: TABLE_MARKDOWN, root: "shadow" });
+  const editor = editorLocator(labPage, id);
+  const table = editor.locator("table");
+  await table.locator("tr").nth(1).locator("td").first().click();
+  await settleEditor(labPage, id);
+  const controls = ownedOverlay(labPage, id, ".mdw-table-edge-controls");
+  const indicator = controls.locator(".mdw-table-reorder-indicator");
+  const cdp = await context.newCDPSession(labPage);
+  const scrollBeforeDrag = await labPage.evaluate(() => window.scrollY);
+
+  try {
+    const headerSelector = controls.getByRole("button", { name: "Select row 1" });
+    await expect(headerSelector).toHaveAttribute("data-mdw-table-reorderable", "false");
+
+    const sourceRow = controls.getByRole("button", { name: "Select row 2" });
+    const targetRow = controls.getByRole("button", { name: "Select row 3" });
+    const rowStart = await center(sourceRow);
+    const targetRowBox = await targetRow.boundingBox();
+    expect(targetRowBox).not.toBeNull();
+    const rowEnd = {
+      x: targetRowBox!.x + targetRowBox!.width / 2,
+      y: targetRowBox!.y + targetRowBox!.height * 0.8,
+    };
+    await moveHeldPointerWithCdp(cdp, rowStart, rowEnd);
+    await expect(sourceRow).toHaveAttribute("aria-grabbed", "true");
+    await expect(indicator).toBeVisible();
+    await expect(indicator).toHaveAttribute("data-mdw-table-axis", "row");
+    await expect(indicator).toHaveAttribute("data-mdw-table-target-index", "2");
+    await expect(editor.locator("tr").nth(1).locator(".selectedCell")).toHaveCount(3);
+    await testInfo.attach("table-row-drag-drop-indicator", {
+      body: await labPage.screenshot(),
+      contentType: "image/png",
+    });
+    await releasePointerWithCdp(cdp, rowEnd);
+    await settleEditor(labPage, id);
+    await expect(indicator).toBeHidden();
+    expect(await table.locator("tr").allTextContents()).toEqual(["H1H2H3", "def", "abc"]);
+    expect(await getMarkdown(labPage, id)).toBe([
+      "| H1 | H2 | H3 |",
+      "| --- | --- | --- |",
+      "| d | e | f |",
+      "| a | b | c |",
+    ].join("\n"));
+    await expect(editor).toBeFocused();
+    expect(Math.abs((await labPage.evaluate(() => window.scrollY)) - scrollBeforeDrag))
+      .toBeLessThanOrEqual(1);
+    expect(await runEditorCommand(labPage, id, { type: "undo" })).toBe(true);
+    await settleEditor(labPage, id);
+    expect(await getMarkdown(labPage, id)).toBe(TABLE_MARKDOWN);
+
+    await table.locator("tr").nth(1).locator("td").first().click();
+    await settleEditor(labPage, id);
+    const sourceColumn = controls.getByRole("button", { name: "Select column 1" });
+    const targetColumn = controls.getByRole("button", { name: "Select column 3" });
+    const columnStart = await center(sourceColumn);
+    const targetColumnBox = await targetColumn.boundingBox();
+    expect(targetColumnBox).not.toBeNull();
+    const columnEnd = {
+      x: targetColumnBox!.x + targetColumnBox!.width * 0.8,
+      y: targetColumnBox!.y + targetColumnBox!.height / 2,
+    };
+    await moveHeldPointerWithCdp(cdp, columnStart, columnEnd);
+    await expect(sourceColumn).toHaveAttribute("aria-grabbed", "true");
+    await expect(indicator).toBeVisible();
+    await expect(indicator).toHaveAttribute("data-mdw-table-axis", "column");
+    await expect(indicator).toHaveAttribute("data-mdw-table-target-index", "2");
+    await expect(editor.locator(".selectedCell")).toHaveCount(3);
+    await testInfo.attach("table-column-drag-drop-indicator", {
+      body: await labPage.screenshot(),
+      contentType: "image/png",
+    });
+    await releasePointerWithCdp(cdp, columnEnd);
+    await settleEditor(labPage, id);
+    await expect(indicator).toBeHidden();
+    expect(await table.locator("tr").first().locator("th").allTextContents())
+      .toEqual(["H2", "H3", "H1"]);
+    expect(await getMarkdown(labPage, id)).toBe([
+      "| H2 | H3 | H1 |",
+      "| --- | --- | --- |",
+      "| b | c | a |",
+      "| e | f | d |",
+    ].join("\n"));
+    await expect(editor).toBeFocused();
+    expect(Math.abs((await labPage.evaluate(() => window.scrollY)) - scrollBeforeDrag))
+      .toBeLessThanOrEqual(1);
+    expect(await runEditorCommand(labPage, id, { type: "undo" })).toBe(true);
+    await settleEditor(labPage, id);
+    expect(await getMarkdown(labPage, id)).toBe(TABLE_MARKDOWN);
   } finally {
     await cdp.detach();
   }
