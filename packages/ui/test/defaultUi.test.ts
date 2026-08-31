@@ -2013,6 +2013,7 @@ describe('createDefaultUi', () => {
     controllers.tableToolbar.update(view);
     const contextualDelete = toolbar.querySelector<HTMLButtonElement>('.mdw-table-toolbar-button--danger')!;
     expect(contextualDelete.getAttribute('aria-label')).toBe('Delete row');
+    expect(contextualDelete.querySelector('svg')?.classList).toContain('mdi-table-row-remove');
     contextualDelete.click();
     expect(rowRemovals).toBe(1);
 
@@ -2027,6 +2028,7 @@ describe('createDefaultUi', () => {
     });
     controllers.tableToolbar.update(view);
     expect(contextualDelete.getAttribute('aria-label')).toBe('Delete column');
+    expect(contextualDelete.querySelector('svg')?.classList).toContain('mdi-table-column-remove');
     contextualDelete.click();
     expect(columnRemovals).toBe(1);
 
@@ -2088,6 +2090,7 @@ describe('createDefaultUi', () => {
     expect(toolbar.querySelectorAll('.mdw-table-toolbar-button--danger')).toHaveLength(1);
     expect(contextualDelete.getAttribute('aria-label')).toBe('Delete row');
     expect(contextualDelete.dataset.mdwTableDeleteAction).toBe('delete-row');
+    expect(contextualDelete.querySelector('svg')?.classList).toContain('mdi-table-row-remove');
     contextualDelete.click();
     expect(rowRemovals).toBe(1);
     expect(columnRemovals).toBe(0);
@@ -2102,6 +2105,7 @@ describe('createDefaultUi', () => {
     controllers.tableToolbar.update(view);
     expect(contextualDelete.getAttribute('aria-label')).toBe('Delete column');
     expect(contextualDelete.dataset.mdwTableDeleteAction).toBe('delete-column');
+    expect(contextualDelete.querySelector('svg')?.classList).toContain('mdi-table-column-remove');
     contextualDelete.click();
     expect(rowRemovals).toBe(1);
     expect(columnRemovals).toBe(1);
@@ -2110,6 +2114,7 @@ describe('createDefaultUi', () => {
     controllers.tableToolbar.update(view);
     expect(contextualDelete.getAttribute('aria-label')).toBe('Delete table');
     expect(contextualDelete.dataset.mdwTableDeleteAction).toBe('delete-table');
+    expect(contextualDelete.querySelector('svg')?.classList).toContain('lucide-trash-2');
     contextualDelete.click();
     expect(tableRemovals).toBe(1);
 

@@ -182,6 +182,7 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
 
     await expect(contextualDelete).toHaveAttribute("aria-label", "Delete row");
     await expect(contextualDelete).toHaveAttribute("data-mdw-table-delete-action", "delete-row");
+    await expect(contextualDelete.locator("svg")).toHaveClass(/mdi-table-row-remove/);
     await expect(toolbar.getByRole("button", { name: /^Delete / })).toHaveCount(1);
     await testInfo.attach("table-selected-row-contextual-action", {
       body: await labPage.screenshot(),
@@ -209,6 +210,7 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
       .toHaveAttribute("aria-pressed", "true");
     await expect(contextualDelete).toHaveAttribute("aria-label", "Delete column");
     await expect(contextualDelete).toHaveAttribute("data-mdw-table-delete-action", "delete-column");
+    await expect(contextualDelete.locator("svg")).toHaveClass(/mdi-table-column-remove/);
     await expect(toolbar.getByRole("button", { name: /^Delete / })).toHaveCount(1);
     await testInfo.attach("table-selected-column-contextual-action", {
       body: await labPage.screenshot(),

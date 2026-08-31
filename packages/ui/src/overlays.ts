@@ -17,6 +17,7 @@ import {
   type LucideIconData,
 } from "@lucide/icons";
 import { buildLucideIconElement } from "@lucide/icons/build";
+import { mdiTableColumnRemove, mdiTableRowRemove } from "@mdi/js";
 import type { MarkdownEditor } from "markora";
 import {
   formatDefaultUiMessage,
@@ -42,6 +43,11 @@ type ActiveImageInfoLike = {
   };
 };
 
+type MdiIconData = Readonly<{
+  className: string;
+  path: string;
+}>;
+
 type OverlayEnvironment = {
   doc: Document;
   messages: DefaultUiMessages;
@@ -62,7 +68,34 @@ const TABLE_EDGE_SELECTOR_OVERLAP_DEFAULT = 1;
 const TABLE_EDGE_SELECTOR_SIZE_DEFAULT = 12;
 const TABLE_DIMENSION_MINIMUM = 1;
 const VIEWPORT_MARGIN = 12;
+const TABLE_COLUMN_REMOVE_ICON: MdiIconData = Object.freeze({
+  className: "mdi-table-column-remove",
+  path: mdiTableColumnRemove,
+});
+const TABLE_ROW_REMOVE_ICON: MdiIconData = Object.freeze({
+  className: "mdi-table-row-remove",
+  path: mdiTableRowRemove,
+});
 let nextOverlayMessageId = 0;
+
+function buildMdiIconElement(
+  doc: Document,
+  icon: MdiIconData,
+  options: Readonly<{ className: string; size: number }>,
+) {
+  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", `mdi ${icon.className} ${options.className}`);
+  svg.setAttribute("fill", "currentColor");
+  svg.setAttribute("focusable", "false");
+  svg.setAttribute("height", String(options.size));
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(options.size));
+  const path = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", icon.path);
+  svg.append(path);
+  return svg;
+}
 
 function createOverlayMessageId(kind: "code-language" | "image" | "link" | "table") {
   nextOverlayMessageId += 1;
@@ -1515,6 +1548,20 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   const resizeButton = createButton("resize-table", Maximize2);
   const contextualDeleteButton = createButton("delete-table", Trash2);
   contextualDeleteButton.classList.add("mdw-table-toolbar-button--danger");
+  const contextualDeleteIcons: Readonly<Record<
+    "delete-row" | "delete-column" | "delete-table",
+    SVGElement
+  >> = Object.freeze({
+    "delete-column": buildMdiIconElement(doc, TABLE_COLUMN_REMOVE_ICON, {
+      className: "mdw-table-toolbar-icon",
+      size: 18,
+    }),
+    "delete-row": buildMdiIconElement(doc, TABLE_ROW_REMOVE_ICON, {
+      className: "mdw-table-toolbar-icon",
+      size: 18,
+    }),
+    "delete-table": contextualDeleteButton.querySelector<SVGElement>("svg")!,
+  });
   const toolbarButtons = [
     insertRowBeforeButton,
     insertRowAfterButton,
@@ -1792,6 +1839,10 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     contextualDeleteButton.title = deleteLabel;
     contextualDeleteButton.setAttribute("aria-label", deleteLabel);
     contextualDeleteButton.dataset.mdwTableDeleteAction = contextualDeleteAction;
+    const deleteIcon = contextualDeleteIcons[contextualDeleteAction];
+    if (contextualDeleteButton.firstElementChild !== deleteIcon) {
+      contextualDeleteButton.replaceChildren(deleteIcon);
+    }
 
     rowSelectorButtons.forEach((button, index) => {
       button.setAttribute(
