@@ -379,12 +379,10 @@ describe('createDefaultUi', () => {
       'ui:control:insert-row-after',
       'ui:control:move-row-up',
       'ui:control:move-row-down',
-      'ui:control:delete-row',
       'ui:control:insert-column-before',
       'ui:control:insert-column-after',
       'ui:control:move-column-left',
       'ui:control:move-column-right',
-      'ui:control:delete-column',
       'ui:control:automatic-alignment',
       'ui:control:align-left',
       'ui:control:align-center',
@@ -395,24 +393,19 @@ describe('createDefaultUi', () => {
     expect(tableButtons.map((button) => button.title))
       .toEqual(tableButtons.map((button) => button.getAttribute('aria-label')));
     const tableIcons = tableButtons.map((button) => button.querySelector<SVGElement>('svg'));
-    expect(tableIcons).toHaveLength(16);
+    expect(tableIcons).toHaveLength(14);
     for (const icon of tableIcons) {
       expect(icon).not.toBeNull();
-      expect(
-        icon?.classList.contains('lucide') || icon?.classList.contains('mdi'),
-      ).toBe(true);
+      expect(icon?.classList.contains('lucide')).toBe(true);
       expect(icon?.classList.contains('mdw-table-toolbar-icon')).toBe(true);
       expect(icon?.getAttribute('viewBox')).toBe('0 0 24 24');
       expect(icon?.getAttribute('aria-hidden')).toBe('true');
       expect(icon?.getAttribute('focusable')).toBe('false');
       expect(icon?.childElementCount).toBeGreaterThan(0);
     }
-    expect(toolbar.querySelector('[aria-label="ui:control:delete-row"] svg')?.classList)
-      .toContain('mdi-table-row-remove');
-    expect(toolbar.querySelector('[aria-label="ui:control:delete-column"] svg')?.classList)
-      .toContain('mdi-table-column-remove');
     expect(toolbar.querySelector('[aria-label="ui:control:delete-table"] svg')?.classList)
       .toContain('lucide-trash-2');
+    expect(toolbar.querySelectorAll('.mdw-table-toolbar-button--danger')).toHaveLength(1);
     expect(toolbar.querySelector('[role="status"]')?.textContent).toBe('ui:selection:3-4:2-3');
     const edgeControls = document.querySelector<HTMLElement>('.mdw-table-edge-controls')!;
     expect(Array.from(edgeControls.querySelectorAll('[role="group"]')).map((group) => (
@@ -465,7 +458,7 @@ describe('createDefaultUi', () => {
       .find((button) => button.textContent === 'ui:cancel')!
       .click();
 
-    tableButtons[14]!.click();
+    toolbar.querySelector<HTMLButtonElement>('[aria-label="ui:control:resize-table"]')!.click();
     expect(sizeDialog.getAttribute('aria-label')).toBe('ui:table-dialog:resize');
     expect(Array.from(sizeDialog.querySelectorAll('button')).map((button) => button.textContent))
       .toEqual(['ui:submit:resize', 'ui:cancel']);
@@ -1858,12 +1851,10 @@ describe('createDefaultUi', () => {
       'Insert row after',
       'Move row up',
       'Move row down',
-      'Delete row',
       'Insert column before',
       'Insert column after',
       'Move column left',
       'Move column right',
-      'Delete column',
       'Automatic alignment',
       'Align left',
       'Align center',
@@ -1871,7 +1862,7 @@ describe('createDefaultUi', () => {
       'Resize table',
       'Delete table',
     ]);
-    expect(buttons.map((button) => button.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]);
+    expect(buttons.map((button) => button.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]);
     expect(toolbar.querySelector<HTMLButtonElement>('[aria-label="Move row up"]')?.disabled).toBe(true);
     expect(toolbar.querySelector<HTMLButtonElement>('[aria-label="Move column left"]')?.disabled).toBe(true);
     expect(alignAutomatic.getAttribute('aria-pressed')).toBe('false');
@@ -1882,7 +1873,7 @@ describe('createDefaultUi', () => {
     buttons[0]!.focus();
     buttons[0]!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowRight' }));
     expect(document.activeElement).toBe(buttons[1]);
-    expect(buttons.map((button) => button.tabIndex)).toEqual([-1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]);
+    expect(buttons.map((button) => button.tabIndex)).toEqual([-1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]);
 
     buttons[1]!.dispatchEvent(new KeyboardEvent('keydown', {
       bubbles: true,
@@ -1993,12 +1984,10 @@ describe('createDefaultUi', () => {
     click('Insert row after');
     click('Move row up');
     click('Move row down');
-    click('Delete row');
     click('Insert column before');
     click('Insert column after');
     click('Move column left');
     click('Move column right');
-    click('Delete column');
     click('Automatic alignment');
     click('Align right');
 
@@ -2006,11 +1995,40 @@ describe('createDefaultUi', () => {
     expect(columnInsertions).toEqual(['before', 'after']);
     expect(rowMoves).toEqual(['up', 'down']);
     expect(columnMoves).toEqual(['left', 'right']);
-    expect(rowRemovals).toBe(1);
-    expect(columnRemovals).toBe(1);
+    expect(rowRemovals).toBe(0);
+    expect(columnRemovals).toBe(0);
     expect(alignments).toEqual([null, 'right']);
     expect(toolbar.querySelector('[role="status"]')?.textContent)
       .toBe('Aligned column right. Rectangular selection: rows 3 through 4 and columns 2 through 3.');
+
+    context = createTableContext({
+      columnCount: 4,
+      isCellSelection: true,
+      rowCount: 5,
+      selectedColumnFrom: 0,
+      selectedColumnTo: 3,
+      selectedRowFrom: 2,
+      selectedRowTo: 3,
+    });
+    controllers.tableToolbar.update(view);
+    const contextualDelete = toolbar.querySelector<HTMLButtonElement>('.mdw-table-toolbar-button--danger')!;
+    expect(contextualDelete.getAttribute('aria-label')).toBe('Delete row');
+    contextualDelete.click();
+    expect(rowRemovals).toBe(1);
+
+    context = createTableContext({
+      columnCount: 4,
+      isCellSelection: true,
+      rowCount: 5,
+      selectedColumnFrom: 1,
+      selectedColumnTo: 2,
+      selectedRowFrom: 0,
+      selectedRowTo: 4,
+    });
+    controllers.tableToolbar.update(view);
+    expect(contextualDelete.getAttribute('aria-label')).toBe('Delete column');
+    contextualDelete.click();
+    expect(columnRemovals).toBe(1);
 
     const moveRowUp = toolbar.querySelector<HTMLButtonElement>('[aria-label="Move row up"]')!;
     const moveRowDown = toolbar.querySelector<HTMLButtonElement>('[aria-label="Move row down"]')!;
@@ -2020,15 +2038,15 @@ describe('createDefaultUi', () => {
 
     expect(moveRowUp.disabled).toBe(true);
     expect(moveRowDown.disabled).toBe(true);
-    const deleteRow = toolbar.querySelector<HTMLButtonElement>('[aria-label="Delete row"]')!;
-    expect(document.activeElement).toBe(deleteRow);
+    const insertColumnBefore = toolbar.querySelector<HTMLButtonElement>('[aria-label="Insert column before"]')!;
+    expect(document.activeElement).toBe(insertColumnBefore);
     expect(Array.from(toolbar.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.tabIndex === 0))
-      .toEqual([deleteRow]);
+      .toEqual([insertColumnBefore]);
 
     destroyControllers(controllers);
   });
 
-  it('offers direct, labeled deletion only for a complete selected row or column', () => {
+  it('uses one contextual delete action for the selected axis or whole table', () => {
     const hostElement = document.createElement('div');
     const marker = document.createElement('table');
     document.body.append(hostElement, marker);
@@ -2041,7 +2059,7 @@ describe('createDefaultUi', () => {
     });
     let rowRemovals = 0;
     let columnRemovals = 0;
-    const focus = vi.fn();
+    let tableRemovals = 0;
     const controllers = createControllers(hostElement, undefined, {
       getTableContext() {
         return context;
@@ -2052,27 +2070,27 @@ describe('createDefaultUi', () => {
       removeTableRow() {
         rowRemovals += 1;
       },
+      removeActiveTable() {
+        tableRemovals += 1;
+        return true;
+      },
     });
     const view = {
       ...createView(),
-      focus,
       nodeDOM() {
         return marker;
       },
     };
 
     controllers.tableToolbar.update(view);
-    const edgeControls = document.querySelector<HTMLElement>('.mdw-table-edge-controls')!;
-    const axisDelete = edgeControls.querySelector<HTMLButtonElement>('.mdw-table-axis-delete')!;
-    expect(axisDelete.hidden).toBe(false);
-    expect(axisDelete.getAttribute('aria-label')).toBe('Delete row');
-    expect(axisDelete.textContent).toBe('Delete row');
-    expect(axisDelete.querySelector('svg')?.classList).toContain('mdi-table-row-remove');
-    axisDelete.focus();
-    axisDelete.click();
+    const toolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
+    const contextualDelete = toolbar.querySelector<HTMLButtonElement>('.mdw-table-toolbar-button--danger')!;
+    expect(toolbar.querySelectorAll('.mdw-table-toolbar-button--danger')).toHaveLength(1);
+    expect(contextualDelete.getAttribute('aria-label')).toBe('Delete row');
+    expect(contextualDelete.dataset.mdwTableDeleteAction).toBe('delete-row');
+    contextualDelete.click();
     expect(rowRemovals).toBe(1);
     expect(columnRemovals).toBe(0);
-    expect(focus).toHaveBeenCalledOnce();
 
     context = createTableContext({
       isCellSelection: true,
@@ -2082,15 +2100,18 @@ describe('createDefaultUi', () => {
       selectedRowTo: 2,
     });
     controllers.tableToolbar.update(view);
-    expect(axisDelete.getAttribute('aria-label')).toBe('Delete column');
-    expect(axisDelete.querySelector('svg')?.classList).toContain('mdi-table-column-remove');
-    axisDelete.click();
+    expect(contextualDelete.getAttribute('aria-label')).toBe('Delete column');
+    expect(contextualDelete.dataset.mdwTableDeleteAction).toBe('delete-column');
+    contextualDelete.click();
     expect(rowRemovals).toBe(1);
     expect(columnRemovals).toBe(1);
 
     context = createTableContext();
     controllers.tableToolbar.update(view);
-    expect(axisDelete.hidden).toBe(true);
+    expect(contextualDelete.getAttribute('aria-label')).toBe('Delete table');
+    expect(contextualDelete.dataset.mdwTableDeleteAction).toBe('delete-table');
+    contextualDelete.click();
+    expect(tableRemovals).toBe(1);
 
     destroyControllers(controllers);
   });

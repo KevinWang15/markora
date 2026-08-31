@@ -181,6 +181,17 @@
   color: var(--mdw-color-accent-strong, #0550ae);
 }
 
+.mdw-table-toolbar-button--danger {
+  border-color: transparent;
+  background: var(--mdw-color-danger-soft, rgba(207, 34, 46, 0.12));
+  color: var(--mdw-color-danger, #cf222e);
+}
+
+.mdw-table-toolbar-button--danger:hover:not(:disabled) {
+  border-color: var(--mdw-color-danger, #cf222e);
+  background: var(--mdw-color-danger-soft, rgba(207, 34, 46, 0.12));
+}
+
 .mdw-table-toolbar-button:disabled {
   color: var(--mdw-color-disabled, #8c959f);
   background: var(--mdw-color-surface-subtle, #f6f8fa);
@@ -321,47 +332,6 @@
   flex: 0 0 auto;
 }
 
-.mdw-table-axis-delete {
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--mdw-ui-field-gap, 4px);
-  min-width: max-content;
-  min-height: var(--mdw-ui-table-axis-action-size, 28px);
-  box-sizing: border-box;
-  padding-block: 0;
-  padding-inline: var(--mdw-ui-button-padding-inline, 10px);
-  border: var(--mdw-border-width, 1px) solid var(--mdw-color-border, #d0d7de);
-  border-radius: var(--mdw-radius-pill, 999px);
-  background: var(--mdw-color-surface, #ffffff);
-  box-shadow: var(--mdw-shadow-overlay, 0 6px 20px rgba(15, 23, 42, 0.14));
-  color: var(--mdw-color-danger, #cf222e);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--mdw-ui-table-axis-action-font-size, 12px);
-  font-weight: var(--mdw-label-font-weight, 600);
-  line-height: 1;
-  pointer-events: auto;
-  white-space: nowrap;
-}
-
-.mdw-table-axis-delete:hover {
-  border-color: var(--mdw-color-danger, #cf222e);
-  background: var(--mdw-color-danger-soft, rgba(207, 34, 46, 0.1));
-}
-
-.mdw-table-axis-delete:focus-visible {
-  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
-  outline-offset: var(--mdw-focus-ring-offset, 2px);
-}
-
-.mdw-table-axis-delete-icon {
-  width: var(--mdw-ui-table-axis-action-icon-size, 14px);
-  height: var(--mdw-ui-table-axis-action-icon-size, 14px);
-  flex: 0 0 auto;
-}
-
 .mdw-table-edge-selector:focus-visible,
 .mdw-table-edge-insertion:focus-visible {
   outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
@@ -375,15 +345,13 @@
 
 @media (prefers-reduced-motion: reduce) {
   .mdw-table-edge-selector::before,
-  .mdw-table-edge-insertion,
-  .mdw-table-axis-delete {
+  .mdw-table-edge-insertion {
     transition: none;
   }
 }
 
 :where(.mdw-motion-reduce, [data-mdw-motion="reduce"]) .mdw-table-edge-selector::before,
-:where(.mdw-motion-reduce, [data-mdw-motion="reduce"]) .mdw-table-edge-insertion,
-:where(.mdw-motion-reduce, [data-mdw-motion="reduce"]) .mdw-table-axis-delete {
+:where(.mdw-motion-reduce, [data-mdw-motion="reduce"]) .mdw-table-edge-insertion {
   transition: none;
 }
 
@@ -432,8 +400,7 @@
     .mdw-image-editor,
     .mdw-table-size-editor,
     .mdw-table-toolbar,
-    .mdw-table-edge-insertion,
-    .mdw-table-axis-delete
+    .mdw-table-edge-insertion
   ) {
     border-color: CanvasText;
     background: Canvas;
@@ -463,8 +430,7 @@
   }
 
   .mdw-table-edge-selector::before,
-  .mdw-table-edge-insertion,
-  .mdw-table-axis-delete {
+  .mdw-table-edge-insertion {
     forced-color-adjust: none;
   }
 
@@ -473,8 +439,7 @@
   }
 
   .mdw-table-edge-selector:is(:hover, :focus-visible, [aria-pressed="true"])::before,
-  .mdw-table-edge-insertion:is(:hover, :focus),
-  .mdw-table-axis-delete:is(:hover, :focus-visible) {
+  .mdw-table-edge-insertion:is(:hover, :focus) {
     border-color: Highlight;
     background: Highlight;
     color: HighlightText;

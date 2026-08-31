@@ -228,9 +228,6 @@ importers:
       '@lucide/icons':
         specifier: ^1.37.0
         version: 1.37.0
-      '@mdi/js':
-        specifier: ^7.4.47
-        version: 7.4.47
     devDependencies:
       markora:
         specifier: workspace:*
@@ -657,9 +654,6 @@ packages:
 
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
-
-  '@mdi/js@7.4.47':
-    resolution: {integrity: sha512-KPnNOtm5i2pMabqZxpUz7iQf+mfrYZyKCZ8QNz85czgEt7cuHcGorWfdzUMWYA0SD+a6Hn4FmJ+YhzzzjkTZrQ==}
 
   '@playwright/test@1.61.1':
     resolution: {integrity: sha512-8nKv6+0RJSL9FE4jYOEGXnPeM/Hg12qZpmqzZjRh3qM0Y7c3z1mrOTfFLids72RDQYVh9WpLEfR5WdpNX4fkig==}
@@ -1922,8 +1916,6 @@ snapshots:
   '@lucide/icons@1.37.0': {}
 
   '@marijn/find-cluster-break@1.0.2': {}
-
-  '@mdi/js@7.4.47': {}
 
   '@playwright/test@1.61.1':
     dependencies:

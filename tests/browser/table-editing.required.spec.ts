@@ -126,6 +126,11 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
   const cdp = await context.newCDPSession(labPage);
   const scrollBeforeSelection = await labPage.evaluate(() => window.scrollY);
   try {
+    const toolbar = ownedOverlay(labPage, id, ".mdw-table-toolbar");
+    const contextualDelete = toolbar.locator(".mdw-table-toolbar-button--danger");
+    await expect(contextualDelete).toHaveCount(1);
+    await expect(contextualDelete).toHaveAttribute("aria-label", "Delete table");
+    await expect(contextualDelete.locator("svg")).toHaveClass(/lucide-trash-2/);
     await expect.poll(() => rowSelector.evaluate((button) => (
       getComputedStyle(button, "::before").opacity
     ))).toBe("0");
@@ -175,22 +180,14 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
     expect(Math.abs((await labPage.evaluate(() => window.scrollY)) - scrollBeforeSelection))
       .toBeLessThanOrEqual(1);
 
-    const toolbar = ownedOverlay(labPage, id, ".mdw-table-toolbar");
-    await expect(toolbar.getByRole("button", { name: "Delete row" }).locator("svg"))
-      .toHaveClass(/mdi-table-row-remove/);
-    await expect(toolbar.getByRole("button", { name: "Delete column" }).locator("svg"))
-      .toHaveClass(/mdi-table-column-remove/);
-    await expect(toolbar.getByRole("button", { name: "Delete table" }).locator("svg"))
-      .toHaveClass(/lucide-trash-2/);
-    const deleteSelectedRow = controls.getByRole("button", { name: "Delete row" });
-    await expect(deleteSelectedRow).toBeVisible();
-    await expect(deleteSelectedRow).toHaveText("Delete row");
-    await expect(deleteSelectedRow.locator("svg")).toHaveClass(/mdi-table-row-remove/);
-    await testInfo.attach("table-selected-row-direct-action", {
+    await expect(contextualDelete).toHaveAttribute("aria-label", "Delete row");
+    await expect(contextualDelete).toHaveAttribute("data-mdw-table-delete-action", "delete-row");
+    await expect(toolbar.getByRole("button", { name: /^Delete / })).toHaveCount(1);
+    await testInfo.attach("table-selected-row-contextual-action", {
       body: await labPage.screenshot(),
       contentType: "image/png",
     });
-    await deleteSelectedRow.click();
+    await contextualDelete.click();
     await settleEditor(labPage, id);
     await expect(table.locator("tr")).toHaveCount(2);
     await expect(editor).toBeFocused();
@@ -210,15 +207,14 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
     await expect(editor.locator(".selectedCell")).toHaveCount(3);
     await expect(controls.getByRole("button", { name: "Select column 2" }))
       .toHaveAttribute("aria-pressed", "true");
-    const deleteSelectedColumn = controls.getByRole("button", { name: "Delete column" });
-    await expect(deleteSelectedColumn).toBeVisible();
-    await expect(deleteSelectedColumn).toHaveText("Delete column");
-    await expect(deleteSelectedColumn.locator("svg")).toHaveClass(/mdi-table-column-remove/);
-    await testInfo.attach("table-selected-column-direct-action", {
+    await expect(contextualDelete).toHaveAttribute("aria-label", "Delete column");
+    await expect(contextualDelete).toHaveAttribute("data-mdw-table-delete-action", "delete-column");
+    await expect(toolbar.getByRole("button", { name: /^Delete / })).toHaveCount(1);
+    await testInfo.attach("table-selected-column-contextual-action", {
       body: await labPage.screenshot(),
       contentType: "image/png",
     });
-    await deleteSelectedColumn.click();
+    await contextualDelete.click();
     await settleEditor(labPage, id);
     await expect(table.locator("tr").first().locator("th")).toHaveCount(2);
     await expect(editor).toBeFocused();
