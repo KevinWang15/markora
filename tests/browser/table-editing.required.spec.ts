@@ -177,12 +177,15 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
 
     const toolbar = ownedOverlay(labPage, id, ".mdw-table-toolbar");
     await expect(toolbar.getByRole("button", { name: "Delete row" }).locator("svg"))
-      .toHaveClass(/lucide-trash-2/);
+      .toHaveClass(/mdi-table-row-remove/);
     await expect(toolbar.getByRole("button", { name: "Delete column" }).locator("svg"))
+      .toHaveClass(/mdi-table-column-remove/);
+    await expect(toolbar.getByRole("button", { name: "Delete table" }).locator("svg"))
       .toHaveClass(/lucide-trash-2/);
     const deleteSelectedRow = controls.getByRole("button", { name: "Delete row" });
     await expect(deleteSelectedRow).toBeVisible();
     await expect(deleteSelectedRow).toHaveText("Delete row");
+    await expect(deleteSelectedRow.locator("svg")).toHaveClass(/mdi-table-row-remove/);
     await testInfo.attach("table-selected-row-direct-action", {
       body: await labPage.screenshot(),
       contentType: "image/png",
@@ -210,6 +213,7 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
     const deleteSelectedColumn = controls.getByRole("button", { name: "Delete column" });
     await expect(deleteSelectedColumn).toBeVisible();
     await expect(deleteSelectedColumn).toHaveText("Delete column");
+    await expect(deleteSelectedColumn.locator("svg")).toHaveClass(/mdi-table-column-remove/);
     await testInfo.attach("table-selected-column-direct-action", {
       body: await labPage.screenshot(),
       contentType: "image/png",

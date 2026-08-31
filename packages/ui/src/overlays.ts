@@ -17,6 +17,7 @@ import {
   type LucideIconData,
 } from "@lucide/icons";
 import { buildLucideIconElement } from "@lucide/icons/build";
+import { mdiTableColumnRemove, mdiTableRowRemove } from "@mdi/js";
 import type { MarkdownEditor } from "markora";
 import {
   formatDefaultUiMessage,
@@ -42,6 +43,11 @@ type ActiveImageInfoLike = {
   };
 };
 
+type MdiIconData = Readonly<{
+  className: string;
+  path: string;
+}>;
+
 type OverlayEnvironment = {
   doc: Document;
   messages: DefaultUiMessages;
@@ -62,7 +68,34 @@ const TABLE_EDGE_SELECTOR_OVERLAP_DEFAULT = 1;
 const TABLE_EDGE_SELECTOR_SIZE_DEFAULT = 12;
 const TABLE_DIMENSION_MINIMUM = 1;
 const VIEWPORT_MARGIN = 12;
+const TABLE_COLUMN_REMOVE_ICON: MdiIconData = Object.freeze({
+  className: "mdi-table-column-remove",
+  path: mdiTableColumnRemove,
+});
+const TABLE_ROW_REMOVE_ICON: MdiIconData = Object.freeze({
+  className: "mdi-table-row-remove",
+  path: mdiTableRowRemove,
+});
 let nextOverlayMessageId = 0;
+
+function buildMdiIconElement(
+  doc: Document,
+  icon: MdiIconData,
+  options: Readonly<{ className: string; size: number }>,
+) {
+  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", `mdi ${icon.className} ${options.className}`);
+  svg.setAttribute("fill", "currentColor");
+  svg.setAttribute("focusable", "false");
+  svg.setAttribute("height", String(options.size));
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(options.size));
+  const path = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", icon.path);
+  svg.append(path);
+  return svg;
+}
 
 function createOverlayMessageId(kind: "code-language" | "image" | "link" | "table") {
   nextOverlayMessageId += 1;
@@ -1452,18 +1485,11 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   axisDeleteButton.className = "mdw-table-axis-delete";
   axisDeleteButton.hidden = true;
   axisDeleteButton.style.display = "none";
-  axisDeleteButton.append(
-    buildLucideIconElement(doc, Trash2, {
-      className: "mdw-table-axis-delete-icon",
-      size: 16,
-      strokeWidth: 2,
-      attributes: {
-        "aria-hidden": "true",
-        focusable: "false",
-      },
-    }),
-    doc.createElement("span"),
-  );
+  const axisDeleteIcon = buildMdiIconElement(doc, TABLE_ROW_REMOVE_ICON, {
+    className: "mdw-table-axis-delete-icon",
+    size: 16,
+  });
+  axisDeleteButton.append(axisDeleteIcon, doc.createElement("span"));
 
   edgeDom.append(
     rowSelectors,
@@ -1495,7 +1521,10 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     }
   };
 
-  const createButton = (control: DefaultUiTableControl, icon: LucideIconData) => {
+  const createButton = (
+    control: DefaultUiTableControl,
+    icon: LucideIconData | MdiIconData,
+  ) => {
     const title = formatDefaultUiMessage(
       "messages.tableControlLabel",
       messages.tableControlLabel,
@@ -1507,15 +1536,20 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     button.title = title;
     button.tabIndex = -1;
     button.setAttribute("aria-label", title);
-    button.append(buildLucideIconElement(doc, icon, {
-      className: "mdw-table-toolbar-icon",
-      size: 18,
-      strokeWidth: 1.8,
-      attributes: {
-        "aria-hidden": "true",
-        focusable: "false",
-      },
-    }));
+    button.append("path" in icon
+      ? buildMdiIconElement(doc, icon, {
+          className: "mdw-table-toolbar-icon",
+          size: 18,
+        })
+      : buildLucideIconElement(doc, icon, {
+          className: "mdw-table-toolbar-icon",
+          size: 18,
+          strokeWidth: 1.8,
+          attributes: {
+            "aria-hidden": "true",
+            focusable: "false",
+          },
+        }));
     return button;
   };
 
@@ -1523,12 +1557,12 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   const insertRowAfterButton = createButton("insert-row-after", PanelBottomOpen);
   const moveRowUpButton = createButton("move-row-up", MoveUp);
   const moveRowDownButton = createButton("move-row-down", MoveDown);
-  const removeRowButton = createButton("delete-row", Trash2);
+  const removeRowButton = createButton("delete-row", TABLE_ROW_REMOVE_ICON);
   const insertColumnBeforeButton = createButton("insert-column-before", PanelLeftOpen);
   const insertColumnAfterButton = createButton("insert-column-after", PanelRightOpen);
   const moveColumnLeftButton = createButton("move-column-left", MoveLeft);
   const moveColumnRightButton = createButton("move-column-right", MoveRight);
-  const removeColumnButton = createButton("delete-column", Trash2);
+  const removeColumnButton = createButton("delete-column", TABLE_COLUMN_REMOVE_ICON);
   const alignAutomaticButton = createButton("automatic-alignment", AlignJustify);
   const alignLeftButton = createButton("align-left", AlignLeft);
   const alignCenterButton = createButton("align-center", AlignCenter);
@@ -1801,6 +1835,9 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     }
 
     if (activeAxisAction) {
+      const axisIcon = activeAxisAction === "row"
+        ? TABLE_ROW_REMOVE_ICON
+        : TABLE_COLUMN_REMOVE_ICON;
       const label = formatDefaultUiMessage(
         "messages.tableControlLabel",
         messages.tableControlLabel,
@@ -1809,6 +1846,11 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       axisDeleteButton.hidden = false;
       axisDeleteButton.style.display = "inline-flex";
       axisDeleteButton.dataset.mdwTableAxis = activeAxisAction;
+      axisDeleteIcon.setAttribute(
+        "class",
+        `mdi ${axisIcon.className} mdw-table-axis-delete-icon`,
+      );
+      axisDeleteIcon.querySelector("path")!.setAttribute("d", axisIcon.path);
       axisDeleteButton.title = label;
       axisDeleteButton.setAttribute("aria-label", label);
       axisDeleteButton.querySelector("span")!.textContent = label;

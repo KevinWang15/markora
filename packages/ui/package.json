@@ -50,7 +50,8 @@
     "smoke:node-esm": "node --input-type=module -e \"const mod = await import('./dist/index.js'); if (typeof mod.createDefaultUi !== 'function') throw new Error('createDefaultUi export missing'); if (!Object.isFrozen(mod.defaultUiMessages)) throw new Error('frozen defaultUiMessages export missing');\""
   },
   "dependencies": {
-    "@lucide/icons": "^1.37.0"
+    "@lucide/icons": "^1.37.0",
+    "@mdi/js": "^7.4.47"
   },
   "peerDependencies": {
     "markora": "^0.0.1"

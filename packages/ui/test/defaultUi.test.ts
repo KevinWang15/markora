@@ -398,7 +398,9 @@ describe('createDefaultUi', () => {
     expect(tableIcons).toHaveLength(16);
     for (const icon of tableIcons) {
       expect(icon).not.toBeNull();
-      expect(icon?.classList.contains('lucide')).toBe(true);
+      expect(
+        icon?.classList.contains('lucide') || icon?.classList.contains('mdi'),
+      ).toBe(true);
       expect(icon?.classList.contains('mdw-table-toolbar-icon')).toBe(true);
       expect(icon?.getAttribute('viewBox')).toBe('0 0 24 24');
       expect(icon?.getAttribute('aria-hidden')).toBe('true');
@@ -406,8 +408,10 @@ describe('createDefaultUi', () => {
       expect(icon?.childElementCount).toBeGreaterThan(0);
     }
     expect(toolbar.querySelector('[aria-label="ui:control:delete-row"] svg')?.classList)
-      .toContain('lucide-trash-2');
+      .toContain('mdi-table-row-remove');
     expect(toolbar.querySelector('[aria-label="ui:control:delete-column"] svg')?.classList)
+      .toContain('mdi-table-column-remove');
+    expect(toolbar.querySelector('[aria-label="ui:control:delete-table"] svg')?.classList)
       .toContain('lucide-trash-2');
     expect(toolbar.querySelector('[role="status"]')?.textContent).toBe('ui:selection:3-4:2-3');
     const edgeControls = document.querySelector<HTMLElement>('.mdw-table-edge-controls')!;
@@ -2063,7 +2067,7 @@ describe('createDefaultUi', () => {
     expect(axisDelete.hidden).toBe(false);
     expect(axisDelete.getAttribute('aria-label')).toBe('Delete row');
     expect(axisDelete.textContent).toBe('Delete row');
-    expect(axisDelete.querySelector('svg')?.classList).toContain('lucide-trash-2');
+    expect(axisDelete.querySelector('svg')?.classList).toContain('mdi-table-row-remove');
     axisDelete.focus();
     axisDelete.click();
     expect(rowRemovals).toBe(1);
@@ -2079,6 +2083,7 @@ describe('createDefaultUi', () => {
     });
     controllers.tableToolbar.update(view);
     expect(axisDelete.getAttribute('aria-label')).toBe('Delete column');
+    expect(axisDelete.querySelector('svg')?.classList).toContain('mdi-table-column-remove');
     axisDelete.click();
     expect(rowRemovals).toBe(1);
     expect(columnRemovals).toBe(1);
