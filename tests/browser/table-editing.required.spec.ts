@@ -67,19 +67,25 @@ async function clickWithCdp(cdp: CDPSession, point: { x: number; y: number }) {
   });
 }
 
-async function moveHeldPointerWithCdp(
+async function pressPointerWithCdp(
   cdp: CDPSession,
-  from: { x: number; y: number },
-  to: { x: number; y: number },
+  point: { x: number; y: number },
 ) {
   await cdp.send("Input.dispatchMouseEvent", {
     button: "left",
     buttons: 1,
     clickCount: 1,
     type: "mousePressed",
-    x: from.x,
-    y: from.y,
+    x: point.x,
+    y: point.y,
   });
+}
+
+async function moveHeldPointerWithCdp(
+  cdp: CDPSession,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+) {
   for (let step = 1; step <= 12; step += 1) {
     await cdp.send("Input.dispatchMouseEvent", {
       button: "left",
@@ -341,7 +347,31 @@ test("@required Chromium table edge handles drag rows and columns to a visual dr
       x: targetRowBox!.x + targetRowBox!.width / 2,
       y: targetRowBox!.y + targetRowBox!.height * 0.8,
     };
-    await moveHeldPointerWithCdp(cdp, rowStart, rowEnd);
+    await pressPointerWithCdp(cdp, rowStart);
+    await cdp.send("Input.dispatchMouseEvent", {
+      button: "left",
+      buttons: 1,
+      type: "mouseMoved",
+      x: rowStart.x,
+      y: rowStart.y + 2,
+    });
+    await expect(indicator).toBeHidden();
+    const rowFeedbackOnset = { x: rowStart.x, y: rowStart.y + 3 };
+    await cdp.send("Input.dispatchMouseEvent", {
+      button: "left",
+      buttons: 1,
+      type: "mouseMoved",
+      x: rowFeedbackOnset.x,
+      y: rowFeedbackOnset.y,
+    });
+    await expect(indicator).toBeVisible();
+    await expect(indicator).toHaveAttribute("data-mdw-table-axis", "row");
+    await expect(indicator).toHaveAttribute("data-mdw-table-target-index", "1");
+    await testInfo.attach("table-row-drag-immediate-landing-feedback", {
+      body: await labPage.screenshot(),
+      contentType: "image/png",
+    });
+    await moveHeldPointerWithCdp(cdp, rowFeedbackOnset, rowEnd);
     await expect(sourceRow).toHaveAttribute("aria-grabbed", "true");
     await expect(indicator).toBeVisible();
     await expect(indicator).toHaveAttribute("data-mdw-table-axis", "row");
@@ -379,6 +409,7 @@ test("@required Chromium table edge handles drag rows and columns to a visual dr
       x: targetColumnBox!.x + targetColumnBox!.width * 0.8,
       y: targetColumnBox!.y + targetColumnBox!.height / 2,
     };
+    await pressPointerWithCdp(cdp, columnStart);
     await moveHeldPointerWithCdp(cdp, columnStart, columnEnd);
     await expect(sourceColumn).toHaveAttribute("aria-grabbed", "true");
     await expect(indicator).toBeVisible();

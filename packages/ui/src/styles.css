@@ -316,7 +316,10 @@
   z-index: 1;
   border-radius: var(--mdw-radius-pill, 999px);
   background: var(--mdw-color-accent, #0969da);
-  box-shadow: 0 0 0 1px var(--mdw-color-surface, #ffffff);
+  box-shadow:
+    0 0 0 1px var(--mdw-color-surface, #ffffff),
+    0 0 0 3px var(--mdw-color-accent-soft, rgba(9, 105, 218, 0.14)),
+    0 0 10px var(--mdw-color-accent-soft, rgba(9, 105, 218, 0.14));
   pointer-events: none;
 }
 

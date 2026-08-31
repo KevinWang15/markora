@@ -64,7 +64,7 @@ const CODE_BLOCK_LANGUAGE_MAX_LENGTH = 128;
 const OVERLAY_GAP = 8;
 const TABLE_DIMENSION_MAXIMUM = 100;
 const TABLE_EDGE_INSERTION_SIZE_DEFAULT = 24;
-const TABLE_REORDER_DRAG_THRESHOLD = 5;
+const TABLE_REORDER_DRAG_THRESHOLD = 3;
 const TABLE_REORDER_INDICATOR_THICKNESS_DEFAULT = 3;
 const TABLE_EDGE_SELECTOR_OVERLAP_DEFAULT = 1;
 const TABLE_EDGE_SELECTOR_SIZE_DEFAULT = 12;
@@ -2151,11 +2151,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     }
     drag.boundaryIndex = target.boundaryIndex;
     drag.targetIndex = target.targetIndex;
-    if (drag.targetIndex === drag.sourceIndex) {
-      hideReorderIndicator();
-    } else {
-      positionReorderIndicator(drag.axis, drag.boundaryIndex, drag.targetIndex);
-    }
+    positionReorderIndicator(drag.axis, drag.boundaryIndex, drag.targetIndex);
     event.preventDefault();
   };
 
@@ -2303,7 +2299,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       });
     });
 
-    if (reorderDrag?.started && reorderDrag.targetIndex !== reorderDrag.sourceIndex) {
+    if (reorderDrag?.started) {
       positionReorderIndicator(
         reorderDrag.axis,
         reorderDrag.boundaryIndex,
