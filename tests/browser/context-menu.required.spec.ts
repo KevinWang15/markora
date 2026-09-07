@@ -218,3 +218,18 @@ test("@required queued scroll events preserve the menu while subsequent ancestor
   await labPage.evaluate(() => window.scrollTo(0, 150));
   await expect(menu(labPage)).toHaveCount(0);
 });
+
+test("@required typeahead starts fresh when entering and leaving a submenu", async ({ labPage }) => {
+  await mountEditor(labPage, { id: "typeahead-levels", markdown: "hello world" });
+  await focusEditor(labPage, "typeahead-levels", { anchor: 7, head: 12 });
+  await openKeyboard(labPage, "typeahead-levels");
+  await labPage.keyboard.type("fo"); await labPage.keyboard.press("ArrowRight");
+  await labPage.keyboard.type("it");
+  await expect(labPage.getByRole("menuitemcheckbox", { name: "Italic", exact: true })).toBeFocused();
+  await labPage.keyboard.press("Escape"); await labPage.keyboard.type("pa");
+  await expect(menu(labPage).getByRole("menuitem", { name: "Paragraph", exact: true })).toBeFocused();
+  await labPage.keyboard.press("ArrowRight"); await labPage.keyboard.type("he");
+  await expect(labPage.getByRole("menuitemcheckbox", { name: "Heading 1", exact: true })).toBeFocused();
+  await labPage.keyboard.press("Home"); await labPage.keyboard.type("hH");
+  await expect(labPage.getByRole("menuitemcheckbox", { name: "Heading 2", exact: true })).toBeFocused();
+});

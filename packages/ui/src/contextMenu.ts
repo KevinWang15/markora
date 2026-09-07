@@ -88,6 +88,7 @@ export function createContextMenu(options: Readonly<{
     return item.type === "action" ? item.enabled !== false : item.items.some(child => child.type !== "separator" && enabled(child));
   }
   function focusButton(panel: Panel, button: HTMLButtonElement) {
+    if (!panel.dom.contains(activeElement())) { search = ""; searchTime = 0; }
     for (const peer of panel.buttons) peer.tabIndex = peer === button ? 0 : -1;
     button.focus({ preventScroll: true });
     // Scroll only the menu, never an editor/page ancestor (which dismisses it).
@@ -204,7 +205,11 @@ export function createContextMenu(options: Readonly<{
       event.stopPropagation();
       if (event.key === "Escape") {
         event.preventDefault(); clearHover();
-        if (depth && !session?.executing) { truncatePanels(depth); panel.trigger?.focus(); } else close(true);
+        if (depth && !session?.executing) {
+          truncatePanels(depth);
+          const parent = session?.panels[depth - 1];
+          if (parent && panel.trigger) focusButton(parent, panel.trigger);
+        } else close(true);
         return;
       }
       if (session?.executing) { event.preventDefault(); return; }
@@ -215,22 +220,29 @@ export function createContextMenu(options: Readonly<{
       const forward = dom.dir === "rtl" ? "ArrowLeft" : "ArrowRight";
       const backward = dom.dir === "rtl" ? "ArrowRight" : "ArrowLeft";
       if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-        event.preventDefault(); clearHover();
+        event.preventDefault(); clearHover(); search = ""; searchTime = 0;
         const next = event.key === "Home" ? 0 : event.key === "End" ? available.length - 1
           : (position + (event.key === "ArrowDown" ? 1 : -1) + available.length) % available.length;
         if (available[next]) { truncatePanels(depth + 1); focusButton(panel, available[next]); }
       } else if (event.key === forward && panel.items[index]?.type === "submenu" && enabled(panel.items[index])) {
         event.preventDefault(); openSubmenu(panel.items[index] as ContextMenuSubmenu, panel.buttons[index], depth, true);
       } else if (event.key === backward && depth) {
-        event.preventDefault(); truncatePanels(depth); panel.trigger?.focus();
+        event.preventDefault(); truncatePanels(depth);
+        const parent = session?.panels[depth - 1];
+        if (parent && panel.trigger) focusButton(parent, panel.trigger);
       } else if (event.key === "Enter" || event.key === " ") {
         event.preventDefault(); const item = panel.items[index];
         if (item && enabled(item)) { if (item.type === "submenu") openSubmenu(item, panel.buttons[index], depth, true); else void execute(item); }
       } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault(); clearHover();
-        const now = Date.now(); search = now - searchTime > 600 ? event.key : search + event.key; searchTime = now;
+        const now = Date.now();
+        const character = event.key.toLocaleLowerCase();
+        search = now - searchTime > 600 ? character : search + character; searchTime = now;
         const term = [...search].every(char => char === search[0]) ? search[0] : search;
-        const match = [...available.slice(position + 1), ...available.slice(0, position + 1)]
+        // Extending a prefix keeps the current match; repeated single letters
+        // cycle onward through items sharing that initial.
+        const start = term.length === 1 ? position + 1 : Math.max(position, 0);
+        const match = [...available.slice(start), ...available.slice(0, start)]
           .find(button => button.getAttribute("aria-label")!.toLocaleLowerCase().startsWith(term.toLocaleLowerCase()));
         if (match) { truncatePanels(depth + 1); focusButton(panel, match); }
       }
