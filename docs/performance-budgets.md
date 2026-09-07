@@ -48,6 +48,25 @@ points. The root failure ceilings retain approximately 5–7% headroom over the
 reviewed 181-module / 41,949-byte graph; the older warning thresholds remain in
 place so further growth stays visible in CI.
 
+The context-menu bundle review ([packed report from CI](https://github.com/KevinWang15/markora/actions/runs/34149295604))
+measured the following production-minified consumer at `1817089`:
+
+| Full editor + default UI | Raw bytes | Gzip bytes |
+| --- | ---: | ---: |
+| Initial JavaScript | 1,024,466 | 280,195 |
+| Lazy JavaScript | 1,086,850 | 345,467 |
+| Total JavaScript | 2,111,316 | 625,662 |
+| CSS | 44,903 | 6,694 |
+
+The graph has 187 static modules. Context-menu composition, targeting,
+clipboard transport, accessible interaction, and the extracted overlay environment
+add six modules to the reviewed 181-module default-UI graph. This is an
+intentional feature cost in the optional UI consumer; it does not move default
+UI or active CodeMirror into the headless/minimal entry. The new root initial,
+total, and CSS failure ceilings retain approximately 5–7% headroom over these
+measurements. Warning thresholds, lazy-chunk ceilings, static-module ceilings,
+minimal-editor limits, and all runtime/memory contracts remain unchanged.
+
 ## Commands
 
 Run the same checked entry point used by CI:
