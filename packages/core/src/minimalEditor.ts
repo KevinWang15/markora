@@ -1119,7 +1119,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         let origin = getMarkdownEditorTransactionOrigin(transaction);
 
         if (!origin) {
-          origin = "user";
+          origin = clipboard.isPasting() ? "command" : "user";
           setBuiltinMarkdownEditorTransactionOrigin(transaction, origin);
         }
 
@@ -1921,6 +1921,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     view,
     extensions: extensionAssembly.registry,
     assets: assetController.api,
+    clipboard: Object.freeze({
+      captureSelection() { assertActive("capture clipboard selection"); return clipboard.captureSelection(view); },
+      paste(content) { assertActive("paste clipboard content"); return clipboard.pasteContent(view, content); },
+    }),
     commands,
     state,
     ui: null,
@@ -1950,6 +1954,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
       if (lifecycle === "active" && !view.isDestroyed) {
         view.focus();
+        // ProseMirror restores the selection but skips DOM focus for read-only views.
+        if (!view.editable) view.dom.focus({ preventScroll: true });
       }
     },
     getMarkdown() {

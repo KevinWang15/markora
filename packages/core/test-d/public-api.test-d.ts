@@ -561,3 +561,14 @@ editor.setLink("https://example.com");
 editor.editLink();
 // @ts-expect-error flat aliases were removed from the public API
 editor.undo();
+
+declare const clipboardEditor: MarkdownEditor;
+const clipboardCapture = clipboardEditor.clipboard.captureSelection();
+if (clipboardCapture) {
+  const formats: import("../src").MarkdownEditorClipboardContent = clipboardCapture.content;
+  const deleted: boolean = clipboardCapture.deleteSelection();
+  void formats; void deleted;
+}
+clipboardEditor.clipboard.paste({ text: "heading", markdown: "# heading" });
+// @ts-expect-error Clipboard text must be a string.
+clipboardEditor.clipboard.paste({ text: 42 });

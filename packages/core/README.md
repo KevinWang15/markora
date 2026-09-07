@@ -930,3 +930,26 @@ With `markora-ui`, the language label is an accessible button and `editor.ui?.ed
 - `pnpm pack:smoke` verifies all nine public tarballs plus isolated root, minimal, per-extension, and all-extension consumer graphs
 - `pnpm release:check` dry-runs the core npm tarball and then runs the packed-consumer smoke test
 - `pnpm check` builds the workspace, runs typechecks, executes API type tests, smoke-tests Node ESM imports, and runs the shared test suite
+
+## Host clipboard integration
+
+`editor.clipboard` works in both the full and minimal entry points without reading or writing the system clipboard. It reuses the native clipboard pipeline, including extension transforms, table rectangles, resource policies, and isolated undo steps.
+
+```ts
+const capture = editor.clipboard.captureSelection();
+if (capture) {
+  // Immutable { text, html?, markdown? } formats, generated from the selection.
+  await hostClipboard.write(capture.content);
+  // For Cut only: returns false if the document/selection changed,
+  // the editor became read-only, or the editor was destroyed.
+  capture.deleteSelection();
+}
+
+const content = await hostClipboard.read();
+// Hosts must verify that their intended target is still current after awaiting.
+editor.clipboard.paste(content);
+```
+
+Copy simply omits `deleteSelection()`. Capture returns `null` for an empty/composing selection or a failed serialization. Unsupported table shapes can still produce HTML/text while refusing deletion. Paste accepts `{ text, html?, markdown? }`, dispatches through the outer editor's clipboard handlers, and returns whether the event was handled. For deliberately literal text, use `editor.commands.pastePlainText(text)`. Embedded code editors retain their own clipboard/selection ownership.
+
+A custom `EditorUiFactory` can return an optional `mount(editor)` hook to attach editor-bound UI after extension setup. Its returned cleanup runs before view destruction, including cleanup after later setup failures. If the hook itself throws, it must release any resources it allocated before throwing; core still tears down the editor and existing overlays. Returning cleanup after reentrant destruction causes it to run immediately. Existing UI factories need no changes.

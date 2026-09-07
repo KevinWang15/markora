@@ -2,6 +2,8 @@ import { Fragment, Slice, type Node as ProseMirrorNode } from "prosemirror-model
 import { closeHistory } from "prosemirror-history";
 import { Plugin, type Command, type Selection, type Transaction } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
+import type { MarkdownEditorClipboardContent, MarkdownEditorClipboardSelection } from "./clipboardApi";
+import { setBuiltinMarkdownEditorTransactionOrigin } from "./transactionOrigin";
 import type { MarkdownEditorCodec } from "./markdownCodec";
 
 const MARKDOWN_MIME = "text/markdown";
@@ -361,97 +363,100 @@ export function createClipboardSemantics(options: ClipboardSemanticsOptions) {
     };
   };
 
-  const handleCopy = (view: EditorView, event: ClipboardEvent) => {
+  const captureSelection = (view: EditorView, command = true): MarkdownEditorClipboardSelection | null => {
     const state = view.state;
     const { selection } = state;
-
-    if (selection.empty || !event.clipboardData) {
-      return false;
-    }
-
+    if (selection.empty || view.isDestroyed || view.composing) return null;
     let serialized: ReturnType<EditorView["serializeForClipboard"]>;
     let tableSelection: TableClipboardSelection | null = null;
     let tableSelectionReadFailed = false;
-
-    try {
-      serialized = view.serializeForClipboard(selection.content());
-    } catch (error) {
-      reportBrowserError(error);
-      event.preventDefault();
-      return true;
-    }
-
-    try {
-      tableSelection = tableClipboard?.readSelection(selection) ?? null;
-    } catch (error) {
-      // HTML and ordinary text are still useful fidelity representations for
-      // a host-provided table shape that GFM cannot encode. Report the gap,
-      // omit Markdown, and never mutate the unsupported selection on cut.
+    try { serialized = view.serializeForClipboard(selection.content()); }
+    catch (error) { reportBrowserError(error); return null; }
+    try { tableSelection = tableClipboard?.readSelection(selection) ?? null; }
+    catch (error) {
+      // Unsupported table shapes can still be copied as HTML/text, but must never be cut.
       tableSelectionReadFailed = true;
       (tableClipboard?.reportError ?? reportBrowserError)(error);
     }
-
-    if (view.isDestroyed) {
-      event.preventDefault();
-      return true;
+    if (view.isDestroyed) return null;
+    let markdown: string | undefined;
+    if (!tableSelectionReadFailed) {
+      try { markdown = codec.serialize(tableSelection?.markdownDocument ?? documentForSlice(codec, serialized.slice)); }
+      catch (error) { reportBrowserError(error); }
     }
+    return Object.freeze({
+      content: Object.freeze({ html: serialized.dom.innerHTML,
+        text: tableSelection ? tableSelectionText(tableSelection) : serialized.text, markdown }),
+      deleteSelection() {
+        if (tableSelectionReadFailed || view.isDestroyed || !view.editable || view.composing
+          || view.state.doc !== state.doc || !view.state.selection.eq(selection)) return false;
+        try {
+          const transaction = isolateClipboardHistory((tableSelection && tableClipboard
+            ? tableClipboard.clearSelection(view.state.tr) : view.state.tr.deleteSelection())
+            .scrollIntoView().setMeta("uiEvent", "cut"));
+          if (command) setBuiltinMarkdownEditorTransactionOrigin(transaction, "command");
+          view.dispatch(transaction);
+          return true;
+        } catch (error) { reportBrowserError(error); return false; }
+      },
+    });
+  };
 
+  const handleCopy = (view: EditorView, event: ClipboardEvent) => {
+    if (view.state.selection.empty || !event.clipboardData) return false;
+    const captured = captureSelection(view, false);
+    event.preventDefault();
+    if (!captured) return true;
     try {
       event.clipboardData.clearData();
-      event.clipboardData.setData("text/html", serialized.dom.innerHTML);
-      event.clipboardData.setData(
-        "text/plain",
-        tableSelection ? tableSelectionText(tableSelection) : serialized.text,
-      );
-    } catch {
-      event.preventDefault();
-      return true;
+      event.clipboardData.setData("text/html", captured.content.html!);
+      event.clipboardData.setData("text/plain", captured.content.text);
+    } catch { return true; }
+    if (captured.content.markdown !== undefined) {
+      try { event.clipboardData.setData(MARKDOWN_MIME, captured.content.markdown); }
+      catch { /* Native custom MIME support is optional. */ }
     }
-
-    let markdown: string | null = null;
-
-    if (!tableSelectionReadFailed) {
-      try {
-        markdown = codec.serialize(
-          tableSelection?.markdownDocument ?? documentForSlice(codec, serialized.slice),
-        );
-      } catch (error) {
-        reportBrowserError(error);
-      }
-    }
-
-    if (markdown != null) {
-      try {
-        event.clipboardData.setData(MARKDOWN_MIME, markdown);
-      } catch {
-        // Custom MIME writes are optional. HTML and plain text still interoperate.
-      }
-    }
-
-    event.preventDefault();
-
-    if (
-      event.type === "cut"
-      && !tableSelectionReadFailed
-      && view.editable
-      && !view.isDestroyed
-      && view.state === state
-    ) {
-      try {
-        const transaction = tableSelection && tableClipboard
-          ? tableClipboard.clearSelection(view.state.tr)
-          : view.state.tr.deleteSelection();
-        view.dispatch(isolateClipboardHistory(
-          transaction
-            .scrollIntoView()
-            .setMeta("uiEvent", "cut"),
-        ));
-      } catch (error) {
-        reportBrowserError(error);
-      }
-    }
-
+    if (event.type === "cut") captured.deleteSelection();
     return true;
+  };
+
+  let pasting = false;
+  const pasteContent = (view: EditorView, content: MarkdownEditorClipboardContent) => {
+    const { text, html, markdown } = content;
+    assertClipboardText(text, "Clipboard text");
+    if (html !== undefined) assertClipboardText(html, "Clipboard HTML");
+    if (markdown !== undefined) assertClipboardText(markdown, "Clipboard Markdown");
+    if (view.isDestroyed || !view.editable || view.composing || !(text || html || markdown)) return false;
+    const ownerWindow = view.dom.ownerDocument.defaultView!;
+    // An owner-document event also works with DOM shims that lack ClipboardEvent/DataTransfer constructors.
+    const values = new Map([["text/plain", text], ...(html ? [["text/html", html]] : []), ...(markdown ? [[MARKDOWN_MIME, markdown]] : [])] as [string, string][]);
+    const data = typeof ownerWindow.DataTransfer === "function" ? new ownerWindow.DataTransfer() : null;
+    if (data) for (const [type, value] of values) data.setData(type, value);
+    const event = typeof ownerWindow.ClipboardEvent === "function" && data
+      ? new ownerWindow.ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data })
+      : new ownerWindow.Event("paste", { bubbles: true, cancelable: true });
+    if (!data) Object.defineProperty(event, "clipboardData", { value: {
+      getData: (type: string) => values.get(type) ?? "", types: [...values.keys()], files: [],
+      items: [...values.keys()].map(type => ({ kind: "string", type,
+        getAsFile: () => null, getAsString: (callback: (value: string) => void) => callback(values.get(type)!),
+      })),
+    } });
+    else if (!("clipboardData" in event)) Object.defineProperty(event, "clipboardData", { value: data });
+    const previousPasting = pasting, previousShift = shiftKey;
+    pasting = true; shiftKey = false;
+    try {
+      // Run the same custom DOM handlers first, then the explicit public paste
+      // APIs. A menu may consume Shift keyup outside the editor, so dispatching
+      // a DOM paste would incorrectly consult ProseMirror's latched modifier.
+      const handled = view.someProp("handleDOMEvents", handlers =>
+        handlers.paste?.(view, event as ClipboardEvent) || event.defaultPrevented);
+      if (handled) return true;
+      if (view.isDestroyed || !view.editable) return false;
+      return html && !view.state.selection.$from.parent.type.spec.code
+        ? view.pasteHTML(html, event as ClipboardEvent)
+        : view.pasteText(text, event as ClipboardEvent);
+    }
+    finally { pasting = previousPasting; shiftKey = previousShift; }
   };
 
   const plugin = new Plugin({
@@ -524,5 +529,5 @@ export function createClipboardSemantics(options: ClipboardSemanticsOptions) {
     },
   });
 
-  return Object.freeze({ pasteMarkdown, pastePlainText, plugin });
+  return Object.freeze({ captureSelection, pasteContent, isPasting: () => pasting, pasteMarkdown, pastePlainText, plugin });
 }

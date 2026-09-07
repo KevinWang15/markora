@@ -1,4 +1,5 @@
 import type { Node as ProseMirrorNode } from "prosemirror-model";
+import type { MarkdownEditor } from "./editorApi";
 import type { EditorView } from "prosemirror-view";
 import type { TableAlignment } from "./tableNavigation";
 
@@ -65,6 +66,8 @@ export type TableUiContext = {
 
 export type EditorUiControllers = {
   enabled: boolean;
+  /** Called once after extension setup. Return cleanup for editor-bound UI resources. */
+  mount?: (editor: MarkdownEditor) => void | (() => void);
   clearSelectionAnchor: () => void;
   createSelectionAnchor: (view: EditorView) => HTMLElement | null;
   codeBlockLanguageEditor: CodeBlockLanguageEditorOverlay;

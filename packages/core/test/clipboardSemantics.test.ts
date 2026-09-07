@@ -478,3 +478,62 @@ describe("clipboard extension and security ordering", () => {
     expect(data.values.get("text/plain")).toBe("before <mark> after");
   });
 });
+
+for (const makeEditor of [createEditor, createMinimalEditor]) {
+  it(`${makeEditor === createEditor ? "full" : "minimal"} public clipboard captures formats and makes deferred Cut stale-safe`, () => {
+    const editor = track(makeEditor({ element: host(), markdown: "hello **world**" }));
+    editor.focus({ anchor: 7, head: 12 });
+    const capture = editor.clipboard.captureSelection()!;
+    expect(capture.content).toMatchObject({ text: "world", markdown: "**world**", html: expect.stringContaining("<strong>world</strong>") });
+    expect(Object.isFrozen(capture.content)).toBe(true);
+    editor.focus("start");
+    expect(capture.deleteSelection()).toBe(false);
+    expect(editor.getMarkdown()).toBe("hello **world**");
+    editor.focus({ anchor: 7, head: 12 });
+    expect(editor.clipboard.captureSelection()!.deleteSelection()).toBe(true);
+    expect(editor.getMarkdown()).toBe("hello ");
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe("hello **world**");
+  });
+
+  it(`${makeEditor === createEditor ? "full" : "minimal"} public clipboard paste handles Markdown, rich HTML, and read-only mode`, () => {
+    const editor = track(makeEditor({ element: host(), markdown: "text" }));
+    const origins: string[] = [];
+    editor.subscribe("update", event => origins.push(event.origin));
+    editor.focus("all");
+    expect(editor.clipboard.paste({ text: "", markdown: "## Heading" })).toBe(true);
+    expect(editor.getMarkdown()).toBe("## Heading");
+    expect(origins).toEqual(["command"]);
+    editor.focus("all");
+    // A keyboard-opened menu may consume Shift keyup outside the editor.
+    editor.view.dom.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", keyCode: 16, shiftKey: true, bubbles: true }));
+    expect(editor.clipboard.paste({ text: "bold", html: "<strong>bold</strong>" })).toBe(true);
+    expect(editor.getMarkdown()).toBe("**bold**");
+    editor.updateOptions({ editable: false });
+    const copied = editor.clipboard.captureSelection();
+    expect(copied?.deleteSelection() ?? false).toBe(false);
+    expect(editor.clipboard.paste({ text: "forbidden" })).toBe(false);
+    expect(editor.getMarkdown()).toBe("**bold**");
+  });
+
+  it(`${makeEditor === createEditor ? "full" : "minimal"} public paste respects custom DOM handlers before default insertion`, () => {
+    const editor = track(makeEditor({ element: host(), markdown: "original" }));
+    const seen: string[] = [];
+    editor.view.setProps({ handleDOMEvents: { paste(_view, event) {
+      seen.push(event.clipboardData!.getData("text/html"));
+      event.preventDefault();
+      return false;
+    } } });
+    expect(editor.clipboard.paste({ text: "replacement", html: "<strong>replacement</strong>" })).toBe(true);
+    expect(seen).toEqual(["<strong>replacement</strong>"]);
+    expect(editor.getMarkdown()).toBe("original");
+  });
+
+  it(`${makeEditor === createEditor ? "full" : "minimal"} public paste keeps the plain format in a code block`, () => {
+    const editor = track(makeEditor({ element: host(), markdown: "```\nbase\n```" }));
+    editor.focus("end");
+    expect(editor.clipboard.paste({ text: "<plain>", html: "<strong>rich</strong>" })).toBe(true);
+    expect(editor.view.state.doc.firstChild!.textContent).toBe("base<plain>");
+  });
+
+}

@@ -1,3 +1,4 @@
+import type { MarkdownEditorClipboard } from "./clipboardApi";
 import type { EditorView } from "prosemirror-view";
 import type { CodeBlockLanguageRegistry } from "./codeBlockLanguages";
 import type {
@@ -226,6 +227,7 @@ export type MarkdownEditor = {
   readonly view: EditorView;
   readonly extensions: MarkdownEditorExtensionRegistry;
   readonly assets: MarkdownEditorAssets;
+  readonly clipboard: MarkdownEditorClipboard;
   commands: MarkdownEditorCommands;
   state: MarkdownEditorState;
   ui: MarkdownEditorUi | null;

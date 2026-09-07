@@ -1,3 +1,4 @@
+export type { MarkdownEditorClipboard, MarkdownEditorClipboardContent, MarkdownEditorClipboardSelection } from "./clipboardApi";
 export { createEditor } from "./minimalEditor";
 export { ManagedBlockCursor } from "./managedBlockCursor";
 export { defaultMarkdownEditorMessages } from "./editorMessages";

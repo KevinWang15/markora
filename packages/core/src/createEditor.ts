@@ -1118,6 +1118,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }
   };
   let uiControllers!: EditorUiControllers;
+  let unmountUi: (() => void) | undefined;
   let codeBlockLanguageEditor: CodeBlockLanguageEditorOverlay | null = null;
   let imageEditor!: ImageEditorOverlay;
   let linkEditor!: LinkEditorOverlay;
@@ -2694,7 +2695,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         let origin = getMarkdownEditorTransactionOrigin(transaction);
 
         if (!origin) {
-          origin = "user";
+          origin = clipboard.isPasting() ? "command" : "user";
           setBuiltinMarkdownEditorTransactionOrigin(transaction, origin);
         }
 
@@ -2996,6 +2997,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     view,
     extensions: extensionAssembly.registry,
     assets: assetController.api,
+    clipboard: Object.freeze({
+      captureSelection() { assertActive("capture clipboard selection"); return clipboard.captureSelection(view); },
+      paste(content) { assertActive("paste clipboard content"); return clipboard.pasteContent(view, content); },
+    }),
     commands: editorCommandApi,
     state: editorStateApi,
     ui: uiEnabled ? {
@@ -3039,6 +3044,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
       if (lifecycle === "active" && !view.isDestroyed) {
         view.focus();
+        // ProseMirror restores the selection but skips DOM focus for read-only views.
+        if (!view.editable) view.dom.focus({ preventScroll: true });
       }
     },
     getMarkdown() {
@@ -3090,6 +3097,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       for (const cleanup of [
         () => changeEmitter.flushFinal(),
         () => assetController.cancelAll({ dispatch: false, emit: false }),
+        () => { const cleanup = unmountUi; unmountUi = undefined; cleanup?.(); },
         () => uiControllers.clearSelectionAnchor(),
         () => { cleanupErrors.push(...extensionAssembly.cleanupSetup()); },
         () => runWithViewErrorCollector(cleanupErrors, () => destroyProseMirrorView(view)),
@@ -3126,6 +3134,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
   try {
     extensionAssembly.attachView({ view, editor });
+    if (!editor.isDestroyed) {
+      unmountUi = uiControllers.mount?.(editor) ?? undefined;
+      if (editor.isDestroyed) { const cleanup = unmountUi; unmountUi = undefined; cleanup?.(); }
+    }
     creationComplete = true;
 
     for (const pending of pendingExtensionErrors.splice(0)) {

@@ -1,3 +1,4 @@
+export type { MarkdownEditorClipboard, MarkdownEditorClipboardContent, MarkdownEditorClipboardSelection } from "./clipboardApi";
 export { createEditor } from "./createEditor";
 export { defaultMarkdownEditorMessages } from "./editorMessages";
 export type {

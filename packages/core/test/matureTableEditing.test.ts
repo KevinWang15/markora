@@ -580,3 +580,15 @@ describe("table GFM fidelity reporting", () => {
     expect(errors).toHaveLength(2);
   });
 });
+
+it("public clipboard capture preserves rectangular table shape on a deferred cut and paste", () => {
+  const instance = editor();
+  selectCells(instance, 1, 0, 2, 1);
+  const capture = instance.clipboard.captureSelection()!;
+  expect(capture.content.text).toBe("a\tb\nd\te");
+  expect(capture.content.markdown).toBe("| a | b |\n| --- | --- |\n| d | e |");
+  expect(capture.deleteSelection()).toBe(true);
+  expect(tableText(instance)).toEqual([["H1", "H2", "H3"], ["", "", "c"], ["", "", "f"]]);
+  expect(instance.clipboard.paste(capture.content)).toBe(true);
+  expect(tableText(instance)).toEqual([["H1", "H2", "H3"], ["a", "b", "c"], ["d", "e", "f"]]);
+});
