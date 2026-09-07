@@ -11,7 +11,7 @@
     "dev:nw": "pnpm run build && node ./scripts/nw.mjs run",
     "dist:nw": "pnpm run build && node ./scripts/nw.mjs build",
     "dist:nw:windows": "pnpm run build && node ./scripts/nw.mjs build win x64",
-    "test": "vitest run --root ../.. packages/app/test",
+    "test": "vitest run --root ../.. packages/app/test packages/react-ui/test",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -23,7 +23,6 @@
     "@lezer/highlight": "^1.2.3",
     "@lucide/icons": "^1.37.0",
     "dompurify": "^3.4.15",
-    "katex": "^0.18.7",
     "markora": "workspace:*",
     "markora-extension-diagrams": "workspace:^",
     "markora-extension-footnotes": "workspace:*",
@@ -33,10 +32,10 @@
     "mermaid": "^11.17.2",
     "prosemirror-model": "^1.25.4",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "@markora/react-ui": "workspace:*"
   },
   "devDependencies": {
-    "@types/katex": "^0.16.8",
     "@types/node": "^24.3.0",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",

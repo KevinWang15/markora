@@ -59,12 +59,12 @@ importers:
       '@lucide/icons':
         specifier: ^1.37.0
         version: 1.37.0
+      '@markora/react-ui':
+        specifier: workspace:*
+        version: link:../react-ui
       dompurify:
         specifier: ^3.4.15
         version: 3.4.15
-      katex:
-        specifier: ^0.18.7
-        version: 0.18.7
       markora:
         specifier: workspace:*
         version: link:../core
@@ -96,9 +96,6 @@ importers:
         specifier: ^19.1.1
         version: 19.2.4(react@19.2.4)
     devDependencies:
-      '@types/katex':
-        specifier: ^0.16.8
-        version: 0.16.8
       '@types/node':
         specifier: ^24.3.0
         version: 24.13.3
@@ -216,6 +213,9 @@ importers:
       '@lucide/icons':
         specifier: ^1.37.0
         version: 1.37.0
+      '@markora/react-ui':
+        specifier: workspace:*
+        version: link:../react-ui
       markora:
         specifier: workspace:*
         version: link:../core
@@ -313,6 +313,31 @@ importers:
       markora:
         specifier: workspace:*
         version: link:../core
+
+  packages/react-ui:
+    dependencies:
+      '@lucide/icons':
+        specifier: ^1.37.0
+        version: 1.37.0
+      katex:
+        specifier: ^0.18.7
+        version: 0.18.7
+      markora-extension-math:
+        specifier: workspace:^
+        version: link:../extension-math
+    devDependencies:
+      '@types/katex':
+        specifier: ^0.16.8
+        version: 0.16.8
+      '@types/react':
+        specifier: ^19.1.10
+        version: 19.2.14
+      react:
+        specifier: ^19.1.1
+        version: 19.2.4
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
 
   packages/ui:
     dependencies:

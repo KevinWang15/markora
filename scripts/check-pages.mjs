@@ -38,10 +38,18 @@ try {
   await page.goto(origin + base);
   const editor = page.locator("#editor .ProseMirror");
   await expect(editor).toBeVisible();
+  await expect(editor.locator(".mdw-math math")).toHaveCount(2);
   await editor.locator("p").first().click();
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Input.insertText", { text: "Pages CDP edit " });
   await expect(editor).toContainText("Pages CDP edit");
+  await page.getByRole("button", { name: /^Insert math/ }).click();
+  const mathDialog = page.getByRole("dialog", { name: "Insert math", exact: true });
+  await expect(mathDialog.getByRole("textbox", { name: "LaTeX source" })).toBeFocused();
+  await cdp.send("Input.insertText", { text: String.raw`\sqrt{x}` });
+  await expect(mathDialog.locator("math msqrt")).toHaveCount(1);
+  await mathDialog.getByRole("button", { name: "Insert formula", exact: true }).click();
+  await expect(editor.locator(".mdw-math math")).toHaveCount(3);
   const picker = page.getByRole("combobox", { name: "Theme", exact: true });
   await picker.selectOption("night");
   await expect(editor).toHaveCSS("background-color", "rgb(32, 37, 45)");
@@ -50,6 +58,7 @@ try {
   await expect(page).toHaveTitle(publicRouteMetadata["/docs/api"].title);
   await page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("link", { name: "Core playground", exact: true }).click();
   await expect(editor).toContainText("Pages CDP edit");
+  await expect(editor.locator(".mdw-math math")).toHaveCount(3);
   for (const [route, metadata] of Object.entries(publicRouteMetadata)) {
     const response = await page.goto(origin + base + route.slice(1));
     assert.equal(response.status(), 200, `Direct navigation: ${route}`);
@@ -60,7 +69,7 @@ try {
     if (route === "/docs/getting-started") await expect(page.locator("#site-hero")).toBeVisible();
   }
   assert.deepEqual(errors, []);
-  console.log(`Pages checks passed: ${Object.keys(publicRouteMetadata).length} routes, refresh, base path, theme persistence, and CDP editing.`);
+  console.log(`Pages checks passed: ${Object.keys(publicRouteMetadata).length} routes, refresh, base path, theme persistence, CDP editing, and math insertion/previews.`);
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

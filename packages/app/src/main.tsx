@@ -9,6 +9,7 @@ import "markora-extension-footnotes/styles.css";
 import "markora-extension-toc/styles.css";
 import "markora-extension-math/styles.css";
 import "markora-extension-diagrams/styles.css";
+import "@markora/react-ui/styles.css";
 import "./styles.css";
 
 const themeController = createThemeController({

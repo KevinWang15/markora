@@ -8,11 +8,17 @@ import {
   Link2Off,
   Redo2,
   Strikethrough,
+  Sigma,
   Undo2,
   type LucideIconData,
 } from "@lucide/icons";
 import { buildLucideIconElement } from "@lucide/icons/build";
 import { createEditor, type MarkdownEditor } from "markora";
+import { createMathExtension, type MathKind } from "markora-extension-math";
+import { MathDialog, type MathEdit } from "@markora/react-ui/MathDialog";
+import { renderMath } from "@markora/react-ui/renderMath";
+import "markora-extension-math/styles.css";
+import "@markora/react-ui/styles.css";
 import { createDefaultUi } from "markora-ui";
 import { useEffect, useRef, useState } from "react";
 import { initialMarkdown } from "../lib/content";
@@ -526,6 +532,8 @@ export function EditorPlayground() {
   const editorElementRef = useRef<HTMLDivElement | null>(null);
   const toolbarElementRef = useRef<HTMLDivElement | null>(null);
   const sourceTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [mathEdit, setMathEdit] = useState<MathEdit | null>(null);
+  const mathDialogOpenRef = useRef(false);
   const [output, setOutput] = useState(() => playgroundRouteSession.editorMarkdown);
   const [sourceActionState, setSourceActionState] = useState<"applied" | "dirty" | "idle">(
     () => playgroundRouteSession.sourceDirty ? "dirty" : "idle",
@@ -583,6 +591,51 @@ export function EditorPlayground() {
       linkPopover.close(refocusEditor);
       imagePopover.close(refocusEditor);
     };
+
+    const math = createMathExtension({
+      renderer: renderMath,
+      onEditSource(request) {
+        closeAllPopovers(false);
+        mathDialogOpenRef.current = true;
+        setMathEdit({ mode: "edit", kind: request.kind, source: request.source,
+          apply: request.update, remove: request.remove });
+      },
+    });
+    const openMath = () => {
+      const current = editorRef.current;
+      if (!current || current.view.composing || mathDialogOpenRef.current) return;
+      closeAllPopovers(false);
+      const { doc, selection } = current.view.state;
+      const handle = current.extensions.get(math);
+      const selected = handle.state.getNodes().find(node => node.position === selection.from
+        && doc.nodeAt(node.position)?.nodeSize === selection.to - selection.from);
+      mathDialogOpenRef.current = true;
+      if (selected) {
+        setMathEdit({ mode: "edit", kind: selected.kind, source: selected.source,
+          apply: source => handle.commands.update(selected, source), remove: () => handle.commands.remove(selected) });
+      } else {
+        setMathEdit({ mode: "insert", kind: "block", source: doc.textBetween(selection.from, selection.to, " "),
+          apply(source: string, kind: MathKind) {
+            // A source reconciliation or route replacement must never insert at a stale position.
+            if (current.isDestroyed || current.view.state.doc !== doc) return false;
+            current.view.dispatch(current.view.state.tr.setSelection(selection));
+            return kind === "inline" ? handle.commands.insertInline(source) : handle.commands.insertBlock(source);
+          } });
+      }
+    };
+    const mathButton = createToolbarButton(tooltipController, createToolbarIcon(Sigma),
+      { label: "Insert math", shortcut: "Mod+Shift+M" }, openMath, { compact: true });
+    mathButton.setAttribute("aria-haspopup", "dialog");
+    const mathShortcut = (event: KeyboardEvent) => {
+      if ((isApplePlatform ? event.metaKey : event.ctrlKey) && event.shiftKey && !event.altKey
+        && event.key.toLowerCase() === "m" && !event.isComposing) {
+        event.preventDefault();
+        openMath();
+      }
+    };
+    // The source textarea remains a literal Markdown editor; this shortcut belongs to rich editing.
+    editorElement.addEventListener("keydown", mathShortcut);
+    toolbarElement.addEventListener("keydown", mathShortcut);
 
     const undoButton = createToolbarButton(
       tooltipController,
@@ -690,6 +743,7 @@ export function EditorPlayground() {
       createToolbarGroup("Formatting", boldButton, italicButton, codeButton, strikeButton),
       createToolbarGroup("Links", linkButton, unlinkButton),
       createToolbarGroup("Images", imageButton, removeImageButton),
+      createToolbarGroup("Math", mathButton),
     );
     const toolbarKeyboardNavigation = createToolbarKeyboardNavigation(toolbarElement);
 
@@ -761,6 +815,7 @@ export function EditorPlayground() {
       markdown: mountedSession.editorMarkdown,
       ariaLabel: "Markdown document editor",
       ui: createDefaultUi(),
+      extensions: [math],
       onChange(markdown) {
         const sourceMarkdown = sourceTextareaRef.current?.value
           ?? playgroundRouteSession.sourceMarkdown;
@@ -868,6 +923,8 @@ export function EditorPlayground() {
       sourceTextarea.removeEventListener("focus", closeFromFocus);
       sourceTextarea.removeEventListener("input", rememberSourceDraft);
       editorElement.removeEventListener("mousedown", closeFromMouse);
+      editorElement.removeEventListener("keydown", mathShortcut);
+      toolbarElement.removeEventListener("keydown", mathShortcut);
       toolbarElement.removeEventListener("pointerdown", preserveEditorSelection);
       toolbarElement.removeEventListener("mousedown", preserveEditorSelection);
       toolbarKeyboardNavigation.destroy();
@@ -884,6 +941,11 @@ export function EditorPlayground() {
 
   return (
     <div className="playground-shell">
+      {mathEdit && <MathDialog request={mathEdit} onClose={() => {
+        mathDialogOpenRef.current = false;
+        setMathEdit(null);
+        requestAnimationFrame(() => editorRef.current?.focus());
+      }} onSaved={() => editorRef.current?.flushChange()} />}
       <div className="playground-intro">
         <div>
           <span className="eyebrow">Core playground</span>
@@ -899,7 +961,7 @@ export function EditorPlayground() {
         <section className="panel panel-editor">
           <div className="panel-header">
             <h2>Visual editor</h2>
-            <p>Type below to try headings, tasks, tables, and code blocks.</p>
+            <p>Try headings, tasks, tables, code, and math. Use the Σ button to insert a formula or edit one below.</p>
           </div>
           <div ref={toolbarElementRef} className="mdw-toolbar" />
           <div ref={editorElementRef} id="editor" />
@@ -950,7 +1012,7 @@ export function EditorPlayground() {
       <section className="panel panel-output">
         <div className="panel-header">
           <h2>Serialized output</h2>
-          <p>The editor’s Markdown appears here after you pause typing. This demo uses the core Markdown syntax; optional extensions are covered in the guide.</p>
+          <p>The editor’s Markdown appears here after you pause typing. This playground includes the math extension: inline formulas use $…$, and display formulas use $$…$$.</p>
         </div>
         <pre id="output" role="region" tabIndex={0} aria-label="Serialized Markdown output">{output}</pre>
       </section>

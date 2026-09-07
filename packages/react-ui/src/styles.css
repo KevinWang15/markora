@@ -1,0 +1,121 @@
+/* Internal host UI; colors inherit the active Markora theme. */
+.markora-dialog::backdrop { background: rgba(15, 17, 15, 0.32); }
+
+.markora-dialog {
+  background: var(--mdw-color-surface);
+  border: 1px solid var(--mdw-color-border-strong);
+  border-radius: 13px;
+  box-shadow: var(--mdw-shadow-overlay);
+  display: grid;
+  gap: 2px 14px;
+  grid-template-columns: 38px 1fr;
+  max-width: min(440px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  margin: auto;
+  color: var(--mdw-color-text);
+  padding: 22px;
+  width: 100%;
+}
+
+.markora-dialog-icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--mdw-color-accent) 14%, transparent);
+  border-radius: 9px;
+  color: var(--mdw-color-accent);
+  display: flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.markora-dialog-copy h2 {
+  font-size: 16px;
+  margin: 1px 0 7px;
+}
+
+.markora-dialog-copy p {
+  color: var(--mdw-color-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.markora-dialog-actions {
+  display: flex;
+  gap: 7px;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.markora-dialog-button {
+  background: var(--mdw-color-surface-subtle);
+  border: 1px solid var(--mdw-color-border-strong);
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 560;
+  min-height: 32px;
+  padding: 0 13px;
+}
+
+.markora-dialog-button:hover {
+  background: var(--mdw-color-surface-muted);
+}
+
+.markora-dialog-button-danger {
+  color: var(--mdw-color-danger);
+}
+
+.markora-dialog-button-primary {
+  background: var(--mdw-color-accent);
+  border-color: transparent;
+  color: var(--mdw-color-on-accent, #fff);
+}
+
+.markora-dialog-button-primary:hover {
+  background: color-mix(in srgb, var(--mdw-color-accent) 88%, #000);
+}
+
+.markora-dialog-editor {
+  max-width: min(680px, calc(100vw - 32px));
+  padding: 24px;
+  gap: 12px 14px;
+}
+.markora-dialog-content { grid-column: 1 / -1; min-width: 0; }
+.markora-math-editor { display: grid; gap: 12px; min-width: 0; }
+.markora-math-editor > label, .markora-math-placement legend { font-size: 13px; font-weight: 600; }
+.markora-math-placement { display: flex; flex-wrap: wrap; gap: 12px 24px; border: 0; padding: 0; margin: 0 0 4px; }
+.markora-math-placement legend { padding: 0; margin-bottom: 8px; }
+.markora-math-placement label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+.markora-math-placement input { accent-color: var(--mdw-color-accent); }
+.markora-math-placement span { color: var(--mdw-color-muted); font-size: 12px; }
+.markora-math-editor .markora-math-source { min-height: 120px; max-height: 260px; resize: vertical; border-color: var(--mdw-color-border-strong); margin: 0; }
+.markora-math-editor .markora-math-source:focus-visible { outline: 2px solid var(--mdw-color-accent); outline-offset: 2px; }
+.markora-math-templates { display: flex; flex-wrap: wrap; gap: 8px; }
+.markora-math-hint, .markora-math-kind { margin: 0; color: var(--mdw-color-muted); font-size: 12px; line-height: 1.6; }
+.markora-math-preview { min-width: 0; min-height: 120px; border: 1px solid var(--mdw-color-border); border-radius: 8px; padding: 16px; background: var(--mdw-color-surface); }
+.markora-math-preview h3 { margin: 0 0 12px; font-size: 13px; }
+.markora-math-preview p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--mdw-color-muted); overflow-wrap: anywhere; }
+.markora-math-preview [role="alert"] { color: var(--mdw-color-danger); }
+.markora-math-preview-content { overflow: auto; max-height: 220px; font-size: 1.2rem; }
+.markora-math-remove { margin-inline-end: auto; }
+.markora-dialog-editor .markora-dialog-actions { margin-top: 4px; flex-wrap: wrap; }
+.markora-dialog-editor .markora-dialog-button { min-height: 36px; }
+.markora-dialog-editor .markora-dialog-button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 480px) {
+  .markora-dialog-editor { padding: 18px; }
+  .markora-math-placement { flex-direction: column; }
+}
+
+.markora-dialog:not([open]) { display: none; }
+.markora-dialog, .markora-dialog * { box-sizing: border-box; }
+.markora-dialog { font-family: ui-sans-serif, system-ui, sans-serif; line-height: 1.5; color-scheme: var(--mdw-color-scheme, normal); }
+.markora-dialog-copy { min-width: 0; overflow-wrap: anywhere; }
+.markora-dialog-copy h2 { line-height: 1.5; }
+.markora-dialog-button { color: inherit; font-family: inherit; cursor: pointer; }
+.markora-dialog-button-primary { color: var(--mdw-color-on-accent, #fff); }
+.markora-dialog-button-danger, .markora-dialog-copy [role="alert"] { color: var(--mdw-color-danger); }
+.markora-dialog-button:focus-visible { outline: 2px solid var(--mdw-color-accent); outline-offset: 2px; }
+.markora-math-source { width: 100%; font: 14px/1.6 monospace; padding: .75rem; color: inherit; background: var(--mdw-color-surface); border: 1px solid var(--mdw-color-border-strong); border-radius: 6px; }
+.markora-icon { display: inline-flex; align-items: center; justify-content: center; line-height: 0; }

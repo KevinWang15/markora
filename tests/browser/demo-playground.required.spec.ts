@@ -490,7 +490,7 @@ test("@required formatting toolbar uses one tab stop and arrow-key navigation", 
       };
     })
   ));
-  expect(iconStates).toHaveLength(10);
+  expect(iconStates).toHaveLength(11);
   expect(iconStates.every((icon) => (
     icon.decorative
       && icon.hasGeometry
@@ -538,7 +538,7 @@ test("@required formatting toolbar uses one tab stop and arrow-key navigation", 
   await page.keyboard.press("ArrowLeft");
   await expect(bold).toBeFocused();
   await page.keyboard.press("End");
-  await expect(image).toBeFocused();
+  await expect(page.getByRole("button", { name: /^Insert math/ })).toBeFocused();
   await page.keyboard.press("Home");
   await expect(bold).toBeFocused();
 

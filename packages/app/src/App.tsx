@@ -1067,13 +1067,13 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       {pendingAction && (
         <Dialog title={pendingAction.title} message={pendingAction.message}
           onCancel={() => setPendingAction(null)} busy={saving} error={error ?? undefined}>
-          <button className="app-dialog-button" disabled={saving} onClick={() => setPendingAction(null)} type="button">Cancel</button>
-          <button className="app-dialog-button app-dialog-button-danger" disabled={saving} onClick={() => {
+          <button className="markora-dialog-button" disabled={saving} onClick={() => setPendingAction(null)} type="button">Cancel</button>
+          <button className="markora-dialog-button markora-dialog-button-danger" disabled={saving} onClick={() => {
             const action = pendingAction.action;
             setPendingAction(null);
             void action();
           }} type="button">Don’t save</button>
-          <button autoFocus className="app-dialog-button app-dialog-button-primary" disabled={saving} onClick={async () => {
+          <button autoFocus className="markora-dialog-button markora-dialog-button-primary" disabled={saving} onClick={async () => {
             const action = pendingAction.action;
             if (await saveDocument(false)) {
               setPendingAction(null);
@@ -1092,8 +1092,8 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       {sourceConversionWarning && (
         <Dialog title="Review source conversion" message={`${sourceConversionWarning} Editing Markdown source may flatten this structure. You can undo the change to recover the rich document.`}
           onCancel={() => setSourceConversionWarning(null)}>
-          <button autoFocus className="app-dialog-button" type="button" onClick={() => setSourceConversionWarning(null)}>Keep rich text</button>
-          <button className="app-dialog-button app-dialog-button-primary" type="button" onClick={() => {
+          <button autoFocus className="markora-dialog-button" type="button" onClick={() => setSourceConversionWarning(null)}>Keep rich text</button>
+          <button className="markora-dialog-button markora-dialog-button-primary" type="button" onClick={() => {
             setSourceConversionWarning(null);
             toggleSourceMode(true);
           }}>Continue to source</button>
@@ -1103,8 +1103,8 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       {tableSaveWarning && (
         <Dialog title="Review table conversion" message={tableSaveWarning.message}
           onCancel={() => setTableSaveWarning(null)} busy={saving} error={error ?? undefined}>
-          <button autoFocus className="app-dialog-button" disabled={saving} onClick={() => setTableSaveWarning(null)} type="button">Keep editing</button>
-          <button className="app-dialog-button app-dialog-button-primary" disabled={saving} onClick={async () => {
+          <button autoFocus className="markora-dialog-button" disabled={saving} onClick={() => setTableSaveWarning(null)} type="button">Keep editing</button>
+          <button className="markora-dialog-button markora-dialog-button-primary" disabled={saving} onClick={async () => {
             if (await saveDocument(tableSaveWarning.saveAs, true)) {
               setTableSaveWarning(null);
               if (pendingAction) { const action = pendingAction.action; setPendingAction(null); await action(); }
@@ -1116,14 +1116,14 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       {recoveryCandidate && (
         <Dialog title="Recover your document?" message={`Unsaved changes to ${documentNameFromPath(recoveryCandidate.path)} were recovered from the previous session.`}
           onCancel={() => {}}>
-          <button className="app-dialog-button" type="button" onClick={() => {
+          <button className="markora-dialog-button" type="button" onClick={() => {
             recoveryReadyRef.current = true;
             setRecoveryCandidate(null);
             recoveryRef.current!.schedule(sessionRef.current.snapshot);
             const startupPath = desktop.getStartupPath();
             if (startupPath) void openPath(startupPath);
           }}>Discard recovery</button>
-          <button autoFocus className="app-dialog-button app-dialog-button-primary" type="button" onClick={() => {
+          <button autoFocus className="markora-dialog-button markora-dialog-button-primary" type="button" onClick={() => {
             const recovered = recoveryCandidate;
             replaceDocument(recovered.path, recovered.savedMarkdown);
             if (recovered.path) desktop.restoreDiskBaseline(recovered.path, recovered.savedMarkdown);

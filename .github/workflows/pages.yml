@@ -6,6 +6,7 @@ on:
     paths:
       - 'packages/core/**'
       - 'packages/ui/**'
+      - 'packages/react-ui/**'
       - 'packages/extension-*/**'
       - 'packages/demo/**'
       - 'scripts/**'

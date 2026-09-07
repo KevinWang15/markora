@@ -81,7 +81,7 @@ button {
   white-space: nowrap;
 }
 
-.app-icon {
+.markora-icon {
   align-items: center;
   display: inline-flex;
   flex: 0 0 auto;
@@ -89,7 +89,7 @@ button {
   line-height: 0;
 }
 
-.app-icon > svg {
+.markora-icon > svg {
   display: block;
 }
 
@@ -142,7 +142,7 @@ button {
 .app-outline-item:focus-visible,
 .app-recent-document:focus-visible,
 .app-sidebar-footer button:focus-visible,
-.app-dialog-button:focus-visible {
+.markora-dialog-button:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--app-accent) 65%, transparent);
   outline-offset: 1px;
 }
@@ -700,84 +700,6 @@ button {
   width: 45px;
 }
 
-.app-dialog::backdrop { background: rgba(15, 17, 15, 0.32); }
-
-.app-dialog {
-  background: var(--app-surface);
-  border: 1px solid var(--app-border-strong);
-  border-radius: 13px;
-  box-shadow: var(--app-shadow);
-  display: grid;
-  gap: 2px 14px;
-  grid-template-columns: 38px 1fr;
-  max-width: min(440px, calc(100vw - 48px));
-  max-height: calc(100vh - 48px);
-  overflow: auto;
-  margin: auto;
-  color: var(--app-text);
-  padding: 22px;
-  width: 100%;
-}
-
-.app-dialog-icon {
-  align-items: center;
-  background: color-mix(in srgb, var(--app-accent) 14%, transparent);
-  border-radius: 9px;
-  color: var(--app-accent);
-  display: flex;
-  height: 36px;
-  justify-content: center;
-  width: 36px;
-}
-
-.app-dialog-copy h2 {
-  font-size: 16px;
-  margin: 1px 0 7px;
-}
-
-.app-dialog-copy p {
-  color: var(--app-text-soft);
-  font-size: 12.5px;
-  line-height: 1.55;
-  margin: 0;
-}
-
-.app-dialog-actions {
-  display: flex;
-  gap: 7px;
-  grid-column: 1 / -1;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-
-.app-dialog-button {
-  background: var(--app-surface-soft);
-  border: 1px solid var(--app-border-strong);
-  border-radius: 7px;
-  font-size: 12px;
-  font-weight: 560;
-  min-height: 32px;
-  padding: 0 13px;
-}
-
-.app-dialog-button:hover {
-  background: var(--app-surface-hover);
-}
-
-.app-dialog-button-danger {
-  color: var(--app-danger);
-}
-
-.app-dialog-button-primary {
-  background: var(--app-accent);
-  border-color: transparent;
-  color: var(--mdw-color-on-accent, #fff);
-}
-
-.app-dialog-button-primary:hover {
-  background: color-mix(in srgb, var(--app-accent) 88%, #000);
-}
-
 .app-toast {
   align-items: center;
   background: var(--app-surface);
@@ -840,7 +762,6 @@ button {
   }
 }
 
-.app-dialog:not([open]) { display: none; }
 
 .app-find-bar { background: var(--app-surface); border-bottom: 1px solid var(--app-border); padding: 8px 14px; }
 .app-find-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; flex-wrap: wrap; }
@@ -853,7 +774,7 @@ button {
 .app-search-match { background-color: color-mix(in srgb, #ffc857 42%, transparent); border-radius: 2px; }
 .app-search-current { background-color: color-mix(in srgb, #ff9f1c 70%, transparent); outline: 1px solid currentColor; }
 .app-syntax-source { width: 100%; min-height: 10rem; font: 14px/1.6 monospace; padding: .75rem; color: inherit; background: var(--app-bg); border: 1px solid currentColor; border-radius: 6px; }
-.app-dialog-actions:has(.app-syntax-source) { flex-wrap: wrap; }
+.markora-dialog-actions:has(.app-syntax-source) { flex-wrap: wrap; }
 .mdw-math math { font-size: 1.15em; }
 .mdw-diagram__preview svg { max-width: 100%; height: auto; color: var(--app-text); background: var(--app-surface); }
 .mdw-diagram__preview .node rect, .mdw-diagram__preview .node polygon, .mdw-diagram__preview .node circle { fill: var(--app-surface-soft); stroke: var(--app-text-soft); stroke-width: 1px; }
@@ -865,35 +786,4 @@ button {
   body > :not(#markora-print) { display: none !important; }
   #markora-print { display: block !important; }
   html, body { margin: 0 !important; height: auto !important; overflow: visible !important; background: white !important; }
-}
-
-.app-dialog-editor {
-  max-width: min(680px, calc(100vw - 32px));
-  padding: 24px;
-  gap: 12px 14px;
-}
-.app-dialog-content { grid-column: 1 / -1; min-width: 0; }
-.app-math-editor { display: grid; gap: 12px; min-width: 0; }
-.app-math-editor > label, .app-math-placement legend { font-size: 13px; font-weight: 600; }
-.app-math-placement { display: flex; flex-wrap: wrap; gap: 12px 24px; border: 0; padding: 0; margin: 0 0 4px; }
-.app-math-placement legend { padding: 0; margin-bottom: 8px; }
-.app-math-placement label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; }
-.app-math-placement input { accent-color: var(--app-accent); }
-.app-math-placement span { color: var(--app-text-soft); font-size: 12px; }
-.app-math-editor .app-syntax-source { min-height: 120px; max-height: 260px; resize: vertical; border-color: var(--app-border-strong); margin: 0; }
-.app-math-editor .app-syntax-source:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
-.app-math-templates { display: flex; flex-wrap: wrap; gap: 8px; }
-.app-math-hint, .app-math-kind { margin: 0; color: var(--app-text-soft); font-size: 12px; line-height: 1.6; }
-.app-math-preview { min-width: 0; min-height: 120px; border: 1px solid var(--app-border); border-radius: 8px; padding: 16px; background: var(--app-bg); }
-.app-math-preview h3 { margin: 0 0 12px; font-size: 13px; }
-.app-math-preview p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--app-text-soft); overflow-wrap: anywhere; }
-.app-math-preview [role="alert"] { color: var(--app-danger); }
-.app-math-preview-content { overflow: auto; max-height: 220px; font-size: 1.2rem; }
-.app-math-remove { margin-inline-end: auto; }
-.app-dialog-editor .app-dialog-actions { margin-top: 4px; flex-wrap: wrap; }
-.app-dialog-editor .app-dialog-button { min-height: 36px; }
-.app-dialog-editor .app-dialog-button:disabled { opacity: .5; cursor: not-allowed; }
-@media (max-width: 480px) {
-  .app-dialog-editor { padding: 18px; }
-  .app-math-placement { flex-direction: column; }
 }

@@ -1,0 +1,31 @@
+{
+  "name": "@markora/react-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared React dialogs and math editing UI for the Markora app and playground.",
+  "exports": {
+    "./Dialog": "./src/Dialog.tsx",
+    "./Icon": "./src/Icon.tsx",
+    "./MathDialog": "./src/MathDialog.tsx",
+    "./renderMath": "./src/renderMath.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "dependencies": {
+    "@lucide/icons": "^1.37.0",
+    "katex": "^0.18.7",
+    "markora-extension-math": "workspace:^"
+  },
+  "peerDependencies": {
+    "react": "^19.1.1"
+  },
+  "devDependencies": {
+    "react": "^19.1.1",
+    "@types/react": "^19.1.10",
+    "@types/katex": "^0.16.8",
+    "typescript": "^5.7.3"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

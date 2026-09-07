@@ -7,8 +7,8 @@ export function SourceDialog({ request, onClose, onSaved }: { request: SourceEdi
   return <Dialog title={request.title} message="Edit the source used to render this preview." onCancel={onClose} error={error}>
     <textarea autoFocus className="app-syntax-source" aria-label="Preview source" value={source} spellCheck={false}
       onChange={event => setSource(event.target.value)} />
-    <button className="app-dialog-button" type="button" onClick={onClose}>Cancel</button>
-    <button className="app-dialog-button app-dialog-button-primary" type="button" onClick={() => {
+    <button className="markora-dialog-button" type="button" onClick={onClose}>Cancel</button>
+    <button className="markora-dialog-button markora-dialog-button-primary" type="button" onClick={() => {
       if (source === request.source) { onClose(); return; }
       if (!request.update(source)) { setError("The source is invalid or this block has changed. Review the source, or reopen this dialog."); return; }
       onSaved(); onClose();

@@ -2,9 +2,9 @@ import { createElement } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MathDialog, type MathEdit } from "../src/MathDialog";
-import { renderMath } from "../src/renderers";
+import { renderMath } from "../src/renderMath";
 
-vi.mock("../src/renderers", () => ({ renderMath: vi.fn() }));
+vi.mock("../src/renderMath", () => ({ renderMath: vi.fn() }));
 const nativeMethods = ["showModal", "close"].map(name => [name, Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, name)] as const);
 beforeEach(() => {
   Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value(this: HTMLDialogElement) { this.setAttribute("open", ""); } });
