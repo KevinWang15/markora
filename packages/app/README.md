@@ -82,3 +82,25 @@ behavior checks, including CDP input, mode-switch history, exact-source saves,
 modal focus, outline navigation, footnotes, and recovery. These run alongside the
 unit/typecheck job in CI; native filesystem checks also use isolated NW.js CDP
 sessions during development.
+
+
+## Manual Windows and macOS builds
+
+In GitHub, open **Actions → Build desktop binaries → Run workflow**. Choose
+`windows-x64`, `macos-arm64` (Apple Silicon), `macos-x64` (Intel), or `all`.
+The default builds Windows only. This workflow has only `workflow_dispatch`:
+commits, pull requests, tags, and schedules never start binary builds.
+
+Each selected target builds on its native runner, verifies the packaged manifest
+and renderer entry, and checks that the native process stays running through
+startup. The normal NW.js runtime omits DevTools; this launch check does not
+certify UI behavior. Detailed CDP checks live in the separate app browser suite. Successful jobs upload a ZIP and SHA-256
+checksum under the run's **Artifacts** section. Artifacts expire after seven days;
+download them before then. ZIP contents include the NW.js runtime. Extract the
+complete Windows folder before running `Markora.exe`; the Mac ZIP contains
+`Markora.app` and preserves its permissions and framework symlinks.
+
+Windows builds have no publisher signature. Mac builds are ad-hoc signed after
+packaging, without Developer ID signing or notarization. These are testable
+portable builds; trusted public distribution still needs signing credentials.
+The existing browser and performance workflows keep their separate triggers.

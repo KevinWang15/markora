@@ -1,0 +1,101 @@
+name: Build desktop binaries
+run-name: Desktop binaries / ${{ inputs.target }}
+
+# Binary packaging is deliberately manual-only: no push, PR, or schedule trigger.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Platform to build
+        required: true
+        default: windows-x64
+        type: choice
+        options:
+          - windows-x64
+          - macos-arm64
+          - macos-x64
+          - all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-build-${{ github.ref }}-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Package / ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.target == 'windows-x64' && '[{"target":"windows-x64","platform":"win","arch":"x64","runner":"windows-2022"}]' || inputs.target == 'macos-arm64' && '[{"target":"macos-arm64","platform":"osx","arch":"arm64","runner":"macos-15"}]' || inputs.target == 'macos-x64' && '[{"target":"macos-x64","platform":"osx","arch":"x64","runner":"macos-15-intel"}]' || '[{"target":"windows-x64","platform":"win","arch":"x64","runner":"windows-2022"},{"target":"macos-arm64","platform":"osx","arch":"arm64","runner":"macos-15"},{"target":"macos-x64","platform":"osx","arch":"x64","runner":"macos-15-intel"}]') }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build renderer and packages
+        run: pnpm build:app
+      - name: Package native application
+        run: node packages/app/scripts/nw.mjs build "${{ matrix.platform }}" "${{ matrix.arch }}"
+      - name: Sign local macOS build
+        if: runner.os == 'macOS'
+        # Ad-hoc signing repairs signatures invalidated by bundle customization.
+        # This does not provide a Developer ID or notarization.
+        run: |
+          codesign --force --deep --sign - "packages/app/release/osx-${{ matrix.arch }}/Markora.app"
+          codesign --verify --deep --strict "packages/app/release/osx-${{ matrix.arch }}/Markora.app"
+      - name: Check packaged files and native process startup
+        timeout-minutes: 3
+        run: node packages/app/scripts/smoke-packaged.mjs "${{ matrix.platform }}" "${{ matrix.arch }}"
+      - name: Archive Windows application
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          Compress-Archive -Path packages/app/release/win-x64/* -DestinationPath artifacts/Markora-windows-x64.zip
+      - name: Archive macOS application with permissions and symlinks
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p artifacts
+          ditto -c -k --sequesterRsrc --keepParent "packages/app/release/osx-${{ matrix.arch }}/Markora.app" "artifacts/Markora-${{ matrix.target }}.zip"
+      - name: Write archive checksum
+        env:
+          ARCHIVE_PATH: artifacts/Markora-${{ matrix.target }}.zip
+        run: |
+          node --input-type=module <<'JS'
+          import { createHash } from 'node:crypto';
+          import { createReadStream } from 'node:fs';
+          import { writeFile } from 'node:fs/promises';
+          import { basename } from 'node:path';
+          const archive = process.env.ARCHIVE_PATH;
+          const hash = createHash('sha256');
+          for await (const chunk of createReadStream(archive)) hash.update(chunk);
+          await writeFile(`${archive}.sha256`, `${hash.digest('hex')}  ${basename(archive)}\n`);
+          JS
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Markora-${{ matrix.target }}
+          path: artifacts/Markora-${{ matrix.target }}.zip*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload native smoke diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: desktop-smoke-${{ matrix.target }}
+          path: test-results/packaged/
+          if-no-files-found: ignore
+          retention-days: 7
