@@ -25,6 +25,7 @@ import { createEditor, type MarkdownEditor, type MarkdownEditorHeadingLevel } fr
 import { createDefaultUi } from "markora-ui";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { desktop } from "./desktop";
+import { DocumentSession } from "./documentSession";
 import {
   countDocumentCharacters,
   countDocumentWords,
@@ -44,11 +45,6 @@ const SourceEditor = lazy(async () => ({
 
 type Theme = "system" | "light" | "dark";
 type SidebarTab = "outline" | "recent";
-type DocumentSnapshot = Readonly<{
-  markdown: string;
-  path: string | null;
-  savedMarkdown: string;
-}>;
 type PendingAction = Readonly<{
   action: () => void | Promise<void>;
   message: string;
@@ -132,19 +128,14 @@ export function App() {
   const editorHostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MarkdownEditor | null>(null);
   const sourceEditorRef = useRef<SourceEditorHandle | null>(null);
-  const pathRef = useRef<string | null>(null);
-  const markdownRef = useRef(welcomeMarkdown);
-  const savedMarkdownRef = useRef(welcomeMarkdown);
-  const dirtyRef = useRef(false);
+  const sessionRef = useRef(new DocumentSession(welcomeMarkdown));
+  const savingRef = useRef(false);
+  const openRequestRef = useRef(0);
   const sourceModeRef = useRef(false);
   const sourceEntryMarkdownRef = useRef(welcomeMarkdown);
   const dragDepthRef = useRef(0);
   const closeRequestedRef = useRef(false);
-  const [documentSnapshot, setDocumentSnapshot] = useState<DocumentSnapshot>({
-    markdown: welcomeMarkdown,
-    path: null,
-    savedMarkdown: welcomeMarkdown,
-  });
+  const [documentSnapshot, setDocumentSnapshot] = useState(sessionRef.current.snapshot);
   const [recents, setRecents] = useState<readonly RecentDocument[]>(readStoredRecents);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("outline");
@@ -174,9 +165,6 @@ export function App() {
   );
 
   useEffect(() => {
-    pathRef.current = documentSnapshot.path;
-    markdownRef.current = documentSnapshot.markdown;
-    dirtyRef.current = dirty;
     desktop.setWindowTitle(`${dirty ? "• " : ""}${documentName} — Markora`);
   }, [dirty, documentName, documentSnapshot.markdown, documentSnapshot.path]);
 
@@ -189,9 +177,7 @@ export function App() {
   }, [theme]);
 
   const updateLiveMarkdown = useCallback((markdown: string) => {
-    markdownRef.current = markdown;
-    dirtyRef.current = markdown !== savedMarkdownRef.current;
-    setDocumentSnapshot((current) => ({ ...current, markdown }));
+    setDocumentSnapshot(sessionRef.current.edit(markdown));
   }, []);
 
   useEffect(() => {
@@ -201,7 +187,7 @@ export function App() {
     const editor = createEditor({
       element: host,
       ariaLabel: "Markdown document",
-      markdown: markdownRef.current,
+      markdown: sessionRef.current.markdown,
       autofocus: true,
       placeholder: "Start writing…",
       attributes: { "data-markora-app-editor": "true" },
@@ -209,7 +195,7 @@ export function App() {
       resources: {
         images: { allowedProtocols: ["http:", "https:", "data:", "file:"] },
         links: { allowedProtocols: ["http:", "https:", "mailto:", "tel:", "file:"] },
-        resolveUrl: ({ url }) => desktop.resolveResource(pathRef.current, url),
+        resolveUrl: ({ url }) => desktop.resolveResource(sessionRef.current.path, url),
         openUrl: ({ url }) => desktop.openExternal(url),
         assets: {
           allowedMimeTypes: ["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"],
@@ -217,7 +203,7 @@ export function App() {
             reportProgress(0.2);
             const storedUrl = await desktop.storeImage(
               { file, path: (file as File & { path?: string }).path ?? null },
-              pathRef.current,
+              sessionRef.current.path,
             );
             reportProgress(1);
             return { kind: "image", url: storedUrl, alt: file.name.replace(/\.[^.]+$/u, "") };
@@ -248,12 +234,9 @@ export function App() {
 
   const replaceDocument = useCallback((path: string | null, markdown: string) => {
     editorRef.current?.commands.resetMarkdown(markdown);
-    markdownRef.current = markdown;
-    savedMarkdownRef.current = markdown;
     sourceEntryMarkdownRef.current = markdown;
-    dirtyRef.current = false;
-    pathRef.current = path;
-    setDocumentSnapshot({ markdown, path, savedMarkdown: markdown });
+    openRequestRef.current += 1;
+    setDocumentSnapshot(sessionRef.current.replace(path, markdown));
     setDocumentRevision((revision) => revision + 1);
     if (path) rememberPath(path);
     window.requestAnimationFrame(() => {
@@ -263,69 +246,69 @@ export function App() {
   }, [rememberPath]);
 
   const saveDocument = useCallback(async (saveAs = false) => {
-    const editor = editorRef.current;
-    if (!sourceModeRef.current) editor?.flushChange();
-    const markdown = sourceModeRef.current
-      ? markdownRef.current
-      : editor?.getMarkdown() ?? markdownRef.current;
+    // Native menus and shortcuts must obey the same lock as the toolbar.
+    if (savingRef.current) return false;
+    savingRef.current = true;
     setSaving(true);
     try {
+      if (!sourceModeRef.current) editorRef.current?.flushChange();
+      const snapshot = sessionRef.current.snapshot;
       const path = await desktop.saveDocument(
-        saveAs ? null : pathRef.current,
-        documentNameFromPath(pathRef.current),
-        markdown,
+        saveAs ? null : snapshot.path,
+        documentNameFromPath(snapshot.path),
+        snapshot.markdown,
       );
       if (desktop.isNative && !path) return false;
-      pathRef.current = path ?? pathRef.current;
-      markdownRef.current = markdown;
-      savedMarkdownRef.current = markdown;
-      dirtyRef.current = false;
-      setDocumentSnapshot({ markdown, path: pathRef.current, savedMarkdown: markdown });
+      if (!sourceModeRef.current) editorRef.current?.flushChange();
+      const clean = sessionRef.current.saved(snapshot, path);
+      setDocumentSnapshot(sessionRef.current.snapshot);
       if (path) rememberPath(path);
-      return true;
+      // Save-and-close/new may proceed only if the current content is on disk.
+      return clean;
     } catch (cause) {
       showError(cause, "The document could not be saved.");
       return false;
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }, [rememberPath, showError]);
 
   const guardUnsaved = useCallback((action: PendingAction["action"], title: string, message: string) => {
     if (!sourceModeRef.current) editorRef.current?.flushChange();
-    if (!dirtyRef.current) {
+    if (!sessionRef.current.dirty) {
       void action();
       return;
     }
     setPendingAction({ action, title, message });
   }, []);
 
+  const acceptOpenedDocument = useCallback((path: string | null, content: string) => {
+    guardUnsaved(() => replaceDocument(path, content), "Save your changes?",
+      "Your changes will be lost if you open another document.");
+  }, [guardUnsaved, replaceDocument]);
+
   const openPath = useCallback(async (path: string) => {
+    const request = ++openRequestRef.current;
     try {
-      replaceDocument(path, await desktop.readDocument(path));
+      const content = await desktop.readDocument(path);
+      if (request === openRequestRef.current) acceptOpenedDocument(path, content);
     } catch (cause) {
-      showError(cause, `Could not open ${documentNameFromPath(path)}.`);
+      if (request === openRequestRef.current) showError(cause, `Could not open ${documentNameFromPath(path)}.`);
     }
-  }, [replaceDocument, showError]);
+  }, [acceptOpenedDocument, showError]);
 
-  const requestOpenPath = useCallback((path: string) => {
-    guardUnsaved(
-      () => openPath(path),
-      "Save your changes?",
-      `Your changes to ${documentNameFromPath(pathRef.current)} will be lost if you open another document.`,
-    );
-  }, [guardUnsaved, openPath]);
+  const requestOpenPath = openPath;
 
-  const openDocument = useCallback(() => {
-    guardUnsaved(async () => {
-      try {
-        const opened = await desktop.openDocument();
-        if (opened) replaceDocument(opened.path, opened.content);
-      } catch (cause) {
-        showError(cause, "The document could not be opened.");
-      }
-    }, "Save your changes?", "Your changes will be lost if you open another document.");
-  }, [guardUnsaved, replaceDocument, showError]);
+  const openDocument = useCallback(async () => {
+    const request = ++openRequestRef.current;
+    try {
+      const opened = await desktop.openDocument();
+      if (opened && request === openRequestRef.current) acceptOpenedDocument(opened.path, opened.content);
+    } catch (cause) {
+      if (request === openRequestRef.current) showError(cause, "The document could not be opened.");
+    }
+  }, [acceptOpenedDocument, showError]);
 
   const newDocument = useCallback(() => {
     guardUnsaved(
@@ -337,7 +320,7 @@ export function App() {
 
   const toggleSourceMode = useCallback(() => {
     if (sourceModeRef.current) {
-      const markdown = markdownRef.current;
+      const markdown = sessionRef.current.markdown;
       try {
         if (markdown !== sourceEntryMarkdownRef.current) {
           editorRef.current?.commands.resetMarkdown(markdown);
@@ -354,7 +337,7 @@ export function App() {
 
     const editor = editorRef.current;
     editor?.flushChange();
-    const markdown = markdownRef.current;
+    const markdown = sessionRef.current.markdown;
     updateLiveMarkdown(markdown);
     sourceEntryMarkdownRef.current = markdown;
     sourceModeRef.current = true;
@@ -393,16 +376,15 @@ export function App() {
     return desktop.onOpenPath(requestOpenPath);
   }, [openPath, requestOpenPath]);
 
-  const requestDroppedDocument = useCallback((file: File) => {
-    guardUnsaved(async () => {
-      try {
-        const opened = await desktop.openDroppedDocument(file);
-        replaceDocument(opened.path, opened.content);
-      } catch (cause) {
-        showError(cause, `Could not open ${file.name}.`);
-      }
-    }, "Save your changes?", "Your changes will be lost if you open the dropped document.");
-  }, [guardUnsaved, replaceDocument, showError]);
+  const requestDroppedDocument = useCallback(async (file: File) => {
+    const request = ++openRequestRef.current;
+    try {
+      const opened = await desktop.openDroppedDocument(file);
+      if (request === openRequestRef.current) acceptOpenedDocument(opened.path, opened.content);
+    } catch (cause) {
+      if (request === openRequestRef.current) showError(cause, `Could not open ${file.name}.`);
+    }
+  }, [acceptOpenedDocument, showError]);
 
   useEffect(() => {
     const resetDropTarget = () => {
@@ -518,7 +500,7 @@ export function App() {
     try {
       const image = await desktop.chooseImage();
       if (!image) return;
-      const url = await desktop.storeImage(image, pathRef.current);
+      const url = await desktop.storeImage(image, sessionRef.current.path);
       editorRef.current?.commands.insertImage({
         src: url,
         alt: image.file.name.replace(/\.[^.]+$/u, ""),
