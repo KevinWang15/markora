@@ -63,12 +63,16 @@ try {
   await page.waitForFunction(() => document.querySelector(".mdw-image img")?.naturalWidth === 100);
   await expect(page.locator(".mdw-math__preview math")).toHaveCount(1);
   pass("native command-line open, relative image loading, and math preview");
-  await toSource(); await page.keyboard.press(end); await cdp.send("Input.insertText", { text: "\nsaved" });
-  await page.evaluate(destination => {
-    const fs = window.nw.require("node:fs/promises"), rename = fs.rename.bind(fs);
+  await toSource(); await source.click(); await page.keyboard.press(end); await cdp.send("Input.insertText", { text: "\nsaved" });
+  await expect(source).toContainText("saved");
+  await page.evaluate(() => {
+    const fs = window.nw.require("node:fs/promises"), rename = fs.rename.bind(fs), path = window.nw.require("node:path");
     window.restoreRename = () => { fs.rename = rename; };
-    fs.rename = async (...args) => { if (args[1] === destination) await new Promise(resolve => { window.finishSave = resolve; }); return rename(...args); };
-  }, documentPath);
+    window.observedRenames = [];
+    // NW normalizes startup paths on Windows/macOS; target the unique fixture
+    // filename so /private/var aliases and path separators do not skip the delay.
+    fs.rename = async (...args) => { window.observedRenames.push(String(args[1])); if (path.basename(String(args[1])) === "native.md") await new Promise(resolve => { window.finishSave = resolve; }); return rename(...args); };
+  });
   await page.getByRole("button", { name: "Save document", exact: true }).click();
   await page.waitForFunction(() => Boolean(window.finishSave));
   await source.focus(); await page.keyboard.press(end); await cdp.send("Input.insertText", { text: " NEW" });
@@ -130,6 +134,8 @@ try {
   pass("native recovery, Unicode input, and unsaved-close cancellation");
   await page.screenshot({ path: path.join(diagnostics, "complete.png") });
 } catch (error) {
+  const state = await page?.evaluate(() => ({ title: document.title, renames: window.observedRenames, text: document.body.innerText })).catch(() => null);
+  await writeFile(path.join(diagnostics, "failure.json"), JSON.stringify({ error: String(error), state }, null, 2));
   await page?.screenshot({ path: path.join(diagnostics, "failure.png") }).catch(() => undefined);
   throw error;
 } finally {

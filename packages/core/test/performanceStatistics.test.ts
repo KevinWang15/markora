@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   evaluateBudget,
   reportBudgetEvaluations,
@@ -28,6 +28,7 @@ describe("performance statistics", () => {
 });
 
 describe("performance budgets", () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
   it("distinguishes pass, warning, and failure ceilings", () => {
     const budget = { failure: 120, warning: 100 };
 
@@ -37,6 +38,7 @@ describe("performance budgets", () => {
   });
 
   it("reports warnings without turning them into failures", () => {
+    vi.stubEnv("GITHUB_ACTIONS", "");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const result = reportBudgetEvaluations([
       evaluateBudget("warning metric", 11, { warning: 10, failure: 20 }),
@@ -46,5 +48,16 @@ describe("performance budgets", () => {
     expect(result.warnings).toHaveLength(1);
     expect(result.failures).toHaveLength(0);
     expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it("reports escaped GitHub annotations in Actions without changing severity", () => {
+    vi.stubEnv("GITHUB_ACTIONS", "true");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const result = reportBudgetEvaluations([
+      evaluateBudget("warning\nmetric%", 11, { warning: 10, failure: 20 }),
+    ], { title: "Budget\rreport" });
+    expect(result.passed).toBe(true);
+    expect(result.warnings).toHaveLength(1);
+    expect(log).toHaveBeenCalledWith("::warning title=Budget%0Dreport::warning%0Ametric%25: 11 (warning > 10, failure > 20)");
   });
 });
