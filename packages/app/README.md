@@ -104,3 +104,13 @@ Windows builds have no publisher signature. Mac builds are ad-hoc signed after
 packaging, without Developer ID signing or notarization. These are testable
 portable builds; trusted public distribution still needs signing credentials.
 The existing browser and performance workflows keep their separate triggers.
+
+Source and rich views retain their own caret and scroll positions when switching.
+Entering source mode asks for consent if the current table structure cannot be
+represented by Markdown; cancelling leaves the rich document intact. Accepted
+source edits remain undoable back to the rich snapshot.
+
+Word counts and source outlines run in a coalescing worker. Stale outline entries
+are disabled until current positions arrive. See
+[desktop performance measurements](../../docs/desktop-performance.md) for the
+100 KB–1 MB source-typing comparison and reproduction command.

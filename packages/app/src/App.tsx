@@ -22,12 +22,12 @@ import Undo2 from "@lucide/icons/icons/undo-2";
 import X from "@lucide/icons/icons/x";
 import { createEditor, type MarkdownEditor, type MarkdownEditorHeadingLevel } from "markora";
 import { createTocExtension } from "markora-extension-toc";
-import { useDocumentStatistics } from "./useDocumentStatistics";
+import { useDocumentAnalysis } from "./useDocumentAnalysis";
 import { createFootnotesExtension } from "markora-extension-footnotes";
 import { createDocumentBridge } from "./documentBridge";
 import { DocumentHistory } from "./DocumentHistory";
 import { createDefaultUi } from "markora-ui";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { desktop } from "./desktop";
 import { DocumentSession, type DocumentSnapshot } from "./documentSession";
 import { Dialog } from "./Dialog";
@@ -35,13 +35,12 @@ import { RecoveryJournal } from "./RecoveryJournal";
 import {
   documentNameFromPath,
   isMarkdownPath,
-  parseDocumentOutline,
   type DocumentOutlineItem,
   type RecentDocument,
   upsertRecentDocument,
 } from "./document";
 import { Icon } from "./Icon";
-import type { SourceEditorHandle } from "./SourceEditor";
+import type { SourceEditorHandle, SourceViewState } from "./SourceEditor";
 import { welcomeMarkdown } from "./welcome";
 
 const SourceEditor = lazy(async () => ({
@@ -133,6 +132,9 @@ export function App() {
   const editorHostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MarkdownEditor | null>(null);
   const sourceEditorRef = useRef<SourceEditorHandle | null>(null);
+  const sourceViewRef = useRef<SourceViewState | undefined>(undefined);
+  const richScrollRef = useRef(0);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const tocRef = useRef(createTocExtension());
   const bridgeRef = useRef(createDocumentBridge());
   const historyRef = useRef(new DocumentHistory(welcomeMarkdown));
@@ -163,16 +165,18 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingCopy, setSavingCopy] = useState(false);
+  const [sourceConversionWarning, setSourceConversionWarning] = useState<string | null>(null);
   const [tableSaveWarning, setTableSaveWarning] = useState<{ saveAs: boolean; message: string } | null>(null);
 
   const dirty = documentSnapshot.markdown !== documentSnapshot.savedMarkdown;
   const documentName = documentNameFromPath(documentSnapshot.path);
-  const sourceOutline = useMemo(() => sourceMode ? parseDocumentOutline(documentSnapshot.markdown) : [], [documentSnapshot.markdown, sourceMode]);
-  const outline: readonly DocumentOutlineItem[] = sourceMode ? sourceOutline
+  const analysis = useDocumentAnalysis(documentSnapshot.markdown, sourceMode && sidebarOpen && sidebarTab === "outline");
+  const outline: readonly DocumentOutlineItem[] = sourceMode ? analysis.outline
     : editorRef.current?.extensions.get(tocRef.current).state.getSnapshot().headings.map(heading => ({
       id: `heading-${heading.position}`, level: heading.level, text: heading.label, position: heading.position, offset: 0,
     })) ?? [];
-  const { words: wordCount, characters: characterCount } = useDocumentStatistics(documentSnapshot.markdown);
+  const { words: wordCount, characters: characterCount } = analysis;
+  useEffect(() => { if (analysis.error) setError(analysis.error); }, [analysis.error]);
 
   useEffect(() => {
     desktop.setWindowTitle(`${dirty ? "• " : ""}${documentName} — Markora`);
@@ -283,6 +287,9 @@ export function App() {
       throw cause;
     }
     sourceEntryMarkdownRef.current = markdown;
+    sourceViewRef.current = undefined;
+    richScrollRef.current = 0;
+    if (viewportRef.current) viewportRef.current.scrollTop = 0;
     historyRef.current.reset(markdown);
     openRequestRef.current += 1;
     setDocumentSnapshot(sessionRef.current.replace(path, markdown));
@@ -394,9 +401,13 @@ export function App() {
     );
   }, [guardUnsaved, replaceDocument]);
 
-  const toggleSourceMode = useCallback(() => {
+  const toggleSourceMode = useCallback((acceptConversion = false) => {
+    acceptConversion = acceptConversion === true;
+    if (editorRef.current?.view.composing || sourceEditorRef.current?.isComposing()) return;
+    if (document.querySelector("dialog[open]") && !acceptConversion) return;
     historyRef.current.breakGroup();
     if (sourceModeRef.current) {
+      sourceViewRef.current = sourceEditorRef.current?.captureView();
       const markdown = sessionRef.current.markdown;
       try {
         if (markdown !== sourceEntryMarkdownRef.current) {
@@ -408,11 +419,20 @@ export function App() {
       }
       sourceModeRef.current = false;
       setSourceMode(false);
-      window.requestAnimationFrame(() => editorRef.current?.focus());
+      window.requestAnimationFrame(() => {
+        editorRef.current?.focus();
+        if (viewportRef.current) viewportRef.current.scrollTop = richScrollRef.current;
+      });
       return;
     }
 
     const editor = editorRef.current;
+    const issues = editor?.state.tableIssues() ?? [];
+    if (issues.length && !acceptConversion) {
+      setSourceConversionWarning([...new Set(issues.map(issue => issue.message))].join(" "));
+      return;
+    }
+    richScrollRef.current = viewportRef.current?.scrollTop ?? 0;
     editor?.flushChange();
     const markdown = sessionRef.current.markdown;
     updateLiveMarkdown(markdown);
@@ -597,7 +617,7 @@ export function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (pendingAction || recoveryCandidate || tableSaveWarning || event.isComposing) return;
+      if (pendingAction || recoveryCandidate || tableSaveWarning || sourceConversionWarning || event.isComposing) return;
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
       if (!event.isComposing && (key === "z" || key === "y") && event.target instanceof Element
@@ -627,7 +647,7 @@ export function App() {
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [navigateHistory, newDocument, openDocument, pendingAction, recoveryCandidate, tableSaveWarning, saveDocument, toggleSourceMode]);
+  }, [navigateHistory, newDocument, openDocument, pendingAction, recoveryCandidate, tableSaveWarning, sourceConversionWarning, saveDocument, toggleSourceMode]);
 
   const editor = editorRef.current;
   const active = {
@@ -733,10 +753,11 @@ export function App() {
           </div>
 
           {sidebarTab === "outline" ? (
-            <nav className="app-outline" aria-label="Document outline">
+            <nav className="app-outline" aria-label="Document outline" aria-busy={sourceMode && analysis.stale}>
               {outline.length ? outline.map((item) => (
                 <button
                   className="app-outline-item"
+                  disabled={sourceMode && analysis.stale}
                   key={item.id}
                   onClick={() => scrollToHeading(item)}
                   style={{ "--outline-depth": item.level - 1 } as CSSProperties}
@@ -847,7 +868,7 @@ export function App() {
             </div>
           </div>
 
-          <div className="app-document-viewport" inert={savingCopy} data-source-mode={sourceMode || undefined}>
+          <div className="app-document-viewport" ref={viewportRef} inert={savingCopy} data-source-mode={sourceMode || undefined}>
             <div className="app-editor" hidden={sourceMode} ref={editorHostRef} />
             {sourceMode && (
               <div className="app-source-shell">
@@ -855,6 +876,7 @@ export function App() {
                   <SourceEditor
                     key={documentRevision}
                     markdown={documentSnapshot.markdown}
+                    savedView={sourceViewRef.current}
                     onChange={updateLiveMarkdown}
                     onHistoryChange={() => setSourceEditorVersion((version) => version + 1)}
                     ref={sourceEditorRef}
@@ -911,6 +933,17 @@ export function App() {
               await action();
             }
           }} type="button">{saving ? "Saving…" : "Save"}</button>
+        </Dialog>
+      )}
+
+      {sourceConversionWarning && (
+        <Dialog title="Review source conversion" message={`${sourceConversionWarning} Editing Markdown source may flatten this structure. You can undo the change to recover the rich document.`}
+          onCancel={() => setSourceConversionWarning(null)}>
+          <button autoFocus className="app-dialog-button" type="button" onClick={() => setSourceConversionWarning(null)}>Keep rich text</button>
+          <button className="app-dialog-button app-dialog-button-primary" type="button" onClick={() => {
+            setSourceConversionWarning(null);
+            toggleSourceMode(true);
+          }}>Continue to source</button>
         </Dialog>
       )}
 

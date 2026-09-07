@@ -1,7 +1,7 @@
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, indentOnInput, syntaxHighlighting } from "@codemirror/language";
-import { EditorState } from "@codemirror/state";
+import { ChangeSet, EditorState } from "@codemirror/state";
 import {
   drawSelection,
   dropCursor,
@@ -13,10 +13,18 @@ import {
   lineNumbers,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import { mapTextPosition, textChange } from "./textChanges";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+
+export type SourceViewState = Readonly<{
+  markdown: string;
+  selection: { anchor: number; head: number };
+  scroll: ReturnType<EditorView["scrollSnapshot"]>;
+}>;
 
 export type SourceEditorHandle = Readonly<{
   isComposing: () => boolean;
+  captureView: () => SourceViewState | undefined;
   getSelection: () => { anchor: number; head: number } | undefined;
   setMarkdown: (markdown: string, selection?: { anchor: number; head: number }) => void;
   focus: () => void;
@@ -25,6 +33,7 @@ export type SourceEditorHandle = Readonly<{
 
 type SourceEditorProps = Readonly<{
   markdown: string;
+  savedView?: SourceViewState;
   onChange: (markdown: string) => void;
   onHistoryChange: () => void;
 }>;
@@ -43,7 +52,7 @@ const sourceHighlightStyle = HighlightStyle.define([
 ]);
 
 export const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(function SourceEditor(
-  { markdown: initialMarkdown, onChange, onHistoryChange },
+  { markdown: initialMarkdown, savedView, onChange, onHistoryChange },
   forwardedRef,
 ) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -55,6 +64,12 @@ export const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(fu
   onHistoryChangeRef.current = onHistoryChange;
 
   useImperativeHandle(forwardedRef, () => ({
+    captureView: () => {
+      const view = viewRef.current;
+      if (!view) return;
+      const { anchor, head } = view.state.selection.main;
+      return { markdown: view.state.doc.toString(), selection: { anchor, head }, scroll: view.scrollSnapshot() };
+    },
     isComposing: () => viewRef.current?.composing ?? false,
     getSelection: () => {
       const selection = viewRef.current?.state.selection.main;
@@ -66,7 +81,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(fu
       const current = view.state.doc.toString();
       const bound = (position: number) => Math.max(0, Math.min(markdown.length, position));
       if (current !== markdown || selection) view.dispatch({
-        changes: current !== markdown ? { from: 0, to: view.state.doc.length, insert: markdown } : undefined,
+        changes: current !== markdown ? textChange(current, markdown) : undefined,
         selection: selection ? { anchor: bound(selection.anchor), head: bound(selection.head) } : undefined,
       });
     },
@@ -87,10 +102,18 @@ export const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(fu
     const host = hostRef.current;
     if (!host) return;
 
+    const sourceMarkdown = initialMarkdown.replace(/\r\n?/gu, "\n");
+    const change = savedView ? textChange(savedView.markdown, sourceMarkdown) : undefined;
+    const selection = savedView && change ? {
+      anchor: mapTextPosition(savedView.selection.anchor, change),
+      head: mapTextPosition(savedView.selection.head, change),
+    } : undefined;
     const view = new EditorView({
       parent: host,
+      scrollTo: savedView && change ? savedView.scroll.map(ChangeSet.of(change, savedView.markdown.length)) : undefined,
       state: EditorState.create({
-        doc: initialMarkdown,
+        doc: sourceMarkdown,
+        selection,
         extensions: [
           lineNumbers(),
           highlightActiveLineGutter(),
@@ -120,9 +143,13 @@ export const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(fu
     };
     view.scrollDOM.tabIndex = 0;
     view.scrollDOM.addEventListener("focus", focusEditorFromScroller);
-    window.requestAnimationFrame(() => view.focus());
+    const frame = window.requestAnimationFrame(() => {
+      view.focus();
+
+    });
 
     return () => {
+      cancelAnimationFrame(frame);
       view.scrollDOM.removeEventListener("focus", focusEditorFromScroller);
       view.destroy();
       viewRef.current = null;

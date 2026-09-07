@@ -147,3 +147,44 @@ test("saving nested table content requires an explicit conversion decision", asy
   expect(saved).toContain("Second");
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
 });
+
+test("source conversion requires consent and rich table structure remains undoable", async ({ page }) => {
+  await openDocument(page, "before");
+  const body = page.getByRole("textbox", { name: "Markdown document", exact: true });
+  await body.click(); await page.keyboard.press("Control+End");
+  await body.evaluate(element => {
+    const data = new DataTransfer();
+    data.setData("text/html", "<table><tr><th>H</th></tr><tr><td><p>First</p><p>Second</p></td></tr></table>");
+    element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data }));
+  });
+  await page.getByRole("button", { name: "Edit Markdown source", exact: true }).click();
+  await expect(page.getByRole("alertdialog")).toContainText("Review source conversion");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".app-editor td p")).toHaveText(["First", "Second"]);
+  await page.getByRole("button", { name: "Edit Markdown source", exact: true }).click();
+  await page.getByRole("button", { name: "Continue to source", exact: true }).click();
+  await page.getByRole("textbox", { name: "Markdown source", exact: true }).focus();
+  await page.keyboard.type("edit ");
+  await rich(page); await body.click(); await page.keyboard.press("Control+z");
+  await expect(page.locator(".app-editor td p")).toHaveText(["First", "Second"]);
+});
+
+test("view switches retain source caret and scroll without adding undo steps", async ({ page }) => {
+  await openDocument(page, Array.from({ length: 150 }, (_, i) => `Line ${i}: Writing at a stable position.`).join("\n\n"));
+  await source(page);
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("ArrowLeft");
+  const scroller = page.locator(".app-source-editor .cm-scroller");
+  await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeGreaterThan(500);
+  const top = await scroller.evaluate(element => element.scrollTop);
+  await rich(page); await source(page);
+  await expect.poll(() => scroller.evaluate((element, position) => Math.abs(element.scrollTop - position), top)).toBeLessThan(3);
+  await page.keyboard.type("CARET");
+  // CodeMirror virtualizes long files, so inspect the actual saved source.
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save document", exact: true }).click();
+  const content = await readFile((await (await downloading).path())!, "utf8");
+  expect(content).toMatch(/positionCARET\.$/u);
+  await page.keyboard.press("Control+z");
+  await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+});
