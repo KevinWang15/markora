@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+      - name: Prepare browser disk space
+        run: bash scripts/ci/browser-disk.sh prepare
       - uses: pnpm/action-setup@v4
         with:
           version: 10.6.5
@@ -33,7 +35,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm exec playwright install --with-deps chromium
+      - name: Report disk space before browser tests
+        run: bash scripts/ci/browser-disk.sh report
       - run: pnpm test:app:browser
+      - name: Report final disk usage
+        if: ${{ !cancelled() }}
+        run: bash scripts/ci/browser-disk.sh report
       - uses: actions/upload-artifact@v5
         if: failure()
         with:
@@ -52,6 +59,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
+      - name: Prepare browser disk space
+        run: bash scripts/ci/browser-disk.sh prepare
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -68,8 +77,13 @@ jobs:
         run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
       - name: Typecheck browser tests
         run: pnpm typecheck:browser
+      - name: Report disk space before browser tests
+        run: bash scripts/ci/browser-disk.sh report
       - name: Run required browser tests
         run: pnpm exec playwright test --project=${{ matrix.browser }} --grep @required
+      - name: Report final disk usage
+        if: ${{ !cancelled() }}
+        run: bash scripts/ci/browser-disk.sh report
       - name: Upload browser artifacts
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v5
@@ -93,6 +107,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
+      - name: Prepare browser disk space
+        run: bash scripts/ci/browser-disk.sh prepare
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -109,8 +125,13 @@ jobs:
         run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
       - name: Typecheck browser tests
         run: pnpm typecheck:browser
+      - name: Report disk space before browser tests
+        run: bash scripts/ci/browser-disk.sh report
       - name: Run full browser suite
         run: pnpm exec playwright test --project=${{ matrix.browser }}
+      - name: Report final disk usage
+        if: ${{ !cancelled() }}
+        run: bash scripts/ci/browser-disk.sh report
       - name: Upload browser artifacts
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v5
