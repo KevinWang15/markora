@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigationType } from "react-router-dom";
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigationType } from "react-router-dom";
 import { defaultDocumentMetadata, publicRouteMetadata } from "./lib/siteRoutes";
 import { CodeBlock } from "./components/CodeBlock";
 import { docsNavigation, installCommand, quickStartCode } from "./lib/content";
@@ -107,6 +107,7 @@ export function App({ themeController }: Readonly<{ themeController?: MarkdownTh
   const currentEntryKeyRef = useRef(location.key);
   const scrollPositionsRef = useRef(new Map<string, { left: number; top: number }>());
   const showHeroBanner = pathname === "/docs/getting-started";
+  const isPlaygroundRoute = pathname === "/" || pathname === "/demo";
   const isInternalLabRoute = pathname === "/__dev" || pathname === "/__browser";
   const skipTargetId = showHeroBanner ? "site-hero" : "main-content";
 
@@ -277,23 +278,27 @@ export function App({ themeController }: Readonly<{ themeController?: MarkdownTh
             <span className="brand-badge">M</span>
             <span>
               <strong>Markora</strong>
-              <small>Embedded Markdown editing for modern products</small>
+              <small>Markdown editor toolkit</small>
             </span>
           </NavLink>
           <nav className="topnav" aria-label="Primary">
-            {docsNavigation.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) => isActive ? "topnav-link is-active" : "topnav-link"}
-                onBlur={item.path === "/demo" ? cancelEditorPlaygroundPreload : undefined}
-                onFocus={item.path === "/demo" ? scheduleEditorPlaygroundPreload : undefined}
-                onPointerEnter={item.path === "/demo" ? scheduleEditorPlaygroundPreload : undefined}
-                onPointerLeave={item.path === "/demo" ? cancelEditorPlaygroundPreload : undefined}
-              >
-                {item.title}
-              </NavLink>
-            ))}
+            {docsNavigation.map((item) => {
+              const isActive = pathname === item.path || (isPlaygroundRoute && item.path === "/demo");
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={isActive ? "topnav-link is-active" : "topnav-link"}
+                  aria-current={isActive ? "page" : undefined}
+                  onBlur={item.path === "/demo" ? cancelEditorPlaygroundPreload : undefined}
+                  onFocus={item.path === "/demo" ? scheduleEditorPlaygroundPreload : undefined}
+                  onPointerEnter={item.path === "/demo" ? scheduleEditorPlaygroundPreload : undefined}
+                  onPointerLeave={item.path === "/demo" ? cancelEditorPlaygroundPreload : undefined}
+                >
+                  {item.title}
+                </Link>
+              );
+            })}
             <a className="topnav-link" href="https://github.com/KevinWang15/markora">GitHub</a>
           </nav>
           {themeController && (
@@ -338,8 +343,8 @@ export function App({ themeController }: Readonly<{ themeController?: MarkdownTh
         </section>
       ) : null}
 
-      <div className={isInternalLabRoute ? "docs-layout docs-layout-dev" : "docs-layout"}>
-        {isInternalLabRoute ? null : <aside className="sidebar panel">
+      <div className={`docs-layout${isInternalLabRoute ? " docs-layout-dev" : isPlaygroundRoute ? " docs-layout-playground" : ""}`}>
+        {isInternalLabRoute || isPlaygroundRoute ? null : <aside className="sidebar panel">
           <nav className="sidebar-section" aria-label="Documentation">
             <span className="card-kicker">Guide</span>
             {docsNavigation.map((item) => (

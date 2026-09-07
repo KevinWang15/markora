@@ -14,7 +14,7 @@ import {
 import { buildLucideIconElement } from "@lucide/icons/build";
 import { createEditor, type MarkdownEditor } from "markora";
 import { createDefaultUi } from "markora-ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { initialMarkdown } from "../lib/content";
 
 type TooltipContent = {
@@ -531,15 +531,6 @@ export function EditorPlayground() {
     () => playgroundRouteSession.sourceDirty ? "dirty" : "idle",
   );
 
-  const notes = useMemo(
-    () => [
-      "This focused playground mounts the markora core with optional markora-ui overlays.",
-      "Try tasks, tables, code-fence metadata, rich or plain paste, and authoritative source reconciliation.",
-      "The seven advanced-syntax packages are deliberately not mounted here; their examples live in the guide.",
-    ],
-    [],
-  );
-
   useEffect(() => {
     const editorElement = editorElementRef.current;
     const toolbarElement = toolbarElementRef.current;
@@ -896,25 +887,19 @@ export function EditorPlayground() {
       <div className="playground-intro">
         <div>
           <span className="eyebrow">Core playground</span>
-          <h1>Exercise the core editor in a realistic embed.</h1>
+          <h1>Try the Markora editor.</h1>
           <p>
-            This page pairs <code>markora</code> with optional <code>markora-ui</code> overlays, default
-            {" "}idle/coalesced output, and side-by-side Markdown input and output. It demonstrates the base
-            {" "}dialect and embedding API, not the optional advanced-syntax packages.
+            Write naturally, format with the toolbar, or edit the Markdown source. Try a different
+            {" "}theme using the menu above.
           </p>
         </div>
-        <ul className="check-list">
-          {notes.map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
       </div>
 
       <div className="playground-layout">
         <section className="panel panel-editor">
           <div className="panel-header">
             <h2>Visual editor</h2>
-            <p>Use the toolbar or type directly into the mounted editor instance.</p>
+            <p>Type below to try headings, tasks, tables, and code blocks.</p>
           </div>
           <div ref={toolbarElementRef} className="mdw-toolbar" />
           <div ref={editorElementRef} id="editor" />
@@ -924,9 +909,7 @@ export function EditorPlayground() {
           <div className="panel-header">
             <h2 id="playground-source-heading">Markdown source</h2>
             <p>
-              Applying source reconciles an authoritative snapshot while mapping selection and history.
-              {" "}Base semantic syntax is normalized and documented fallback forms stay inert and exact. Optional
-              {" "}package semantics require the matching persisted extension manifest and are not mounted on this page.
+              Edit the source, then choose Apply Markdown to update the editor.
             </p>
           </div>
           <textarea
@@ -934,6 +917,7 @@ export function EditorPlayground() {
             id="source"
             aria-labelledby="playground-source-heading"
             spellCheck={false}
+            wrap="off"
             defaultValue={initialMarkdown}
           />
           <div className="source-actions">
@@ -966,9 +950,9 @@ export function EditorPlayground() {
       <section className="panel panel-output">
         <div className="panel-header">
           <h2>Serialized output</h2>
-          <p>Compare the idle <code>onChange</code> output with the published Markdown compatibility contract.</p>
+          <p>The editor’s Markdown appears here after you pause typing. This demo uses the core Markdown syntax; optional extensions are covered in the guide.</p>
         </div>
-        <pre id="output" aria-label="Serialized Markdown output">{output}</pre>
+        <pre id="output" role="region" tabIndex={0} aria-label="Serialized Markdown output">{output}</pre>
       </section>
     </div>
   );
