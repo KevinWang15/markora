@@ -133,7 +133,7 @@ are disabled until current positions arrive. See
   images. Remote images remain remote. Local image embedding accepts PNG, JPEG,
   GIF, WebP and SVG, with a 20 MB limit per image. Missing local files report an
   error. Export preserves the active document's path, saved baseline and history.
-- **Export PDF** in the desktop app writes the same document to the chosen PDF
+- **File → Export → PDF…** (or **Export PDF** in the toolbar) in the desktop app writes the same document to the chosen PDF
   path using Chromium printing and an atomic file replacement. Browser previews
   show **Print / Save as PDF** and open their print dialog. Editor tools, search
   highlights and source-mode chrome are excluded; current source edits are included.
@@ -144,6 +144,13 @@ Renderer configuration follows the official [KaTeX options](https://katex.org/do
 The native PDF path uses the internal `chrome.debugger` transport (also available
 in normal NW.js) without opening a remote debugging port. It avoids a reproducible
 NW.js 0.115.0 legacy print-preview crash, including on a minimal standalone page.
+The packaged app sets Chromium's `--silent-debugger-extension-api` option in its
+[NW.js manifest](https://docs.nwjs.io/References/Manifest%20Format/#chromium-args)
+so this internal printing connection does not show a browser debugging banner.
+This option is scoped to the Markora runtime; it does not change the user's browser.
+The native File menu is available on Windows, Linux and macOS, with both PDF and
+HTML exports using the same actions as the toolbar. Export actions stay disabled
+while an export is running.
 
 ## Native behavior checks
 

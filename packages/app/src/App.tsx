@@ -179,6 +179,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const [saving, setSaving] = useState(false);
   const [savingCopy, setSavingCopy] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const exportingRef = useRef(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchOptions, setSearchOptions] = useState<SearchOptions>({ query: "", caseSensitive: false, wholeWord: false });
   const [replacement, setReplacement] = useState("");
@@ -458,20 +459,6 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   }, [showError, updateLiveMarkdown]);
 
   useEffect(() => {
-    desktop.installMenu({
-      newDocument,
-      openDocument,
-      saveDocument: () => void saveDocument(false),
-      saveDocumentAs: () => void saveDocument(true),
-      toggleSidebar: () => setSidebarOpen((open) => !open),
-      toggleSourceMode,
-      themes: themeController.themes,
-      theme: theme.id,
-      setTheme: themeController.setTheme,
-    });
-  }, [newDocument, openDocument, saveDocument, toggleSourceMode, themeController, theme.id]);
-
-  useEffect(() => {
     return desktop.installCloseHandler(() => {
       if (closeRequestedRef.current) return;
       guardUnsaved(() => {
@@ -635,12 +622,13 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     setSearchOpen(true);
     setSearchFocusRequest(value => value + 1);
   }, []);
-  const exportDocument = async (format: "html" | "pdf") => {
-    if (exporting || document.querySelector("dialog[open]") || editorRef.current?.view.composing || sourceEditorRef.current?.isComposing()) return;
+  const exportDocument = useCallback(async (format: "html" | "pdf") => {
+    if (exportingRef.current || document.querySelector("dialog[open]") || editorRef.current?.view.composing || sourceEditorRef.current?.isComposing()) return;
     const current = editorRef.current;
     if (!current) return;
     current.flushChange();
     const path = sessionRef.current.snapshot.path;
+    exportingRef.current = true;
     setExporting(true);
     try {
       const doc = sourceModeRef.current ? current.extensions.get(bridgeRef.current).state.parse(sourceEditorRef.current?.getMarkdown() ?? sessionRef.current.markdown) : current.view.state.doc;
@@ -651,8 +639,28 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       if (format === "html") await desktop.exportHtml(documentName.replace(/\.[^.]+$/u, "") + ".html", output.html);
       else await printExport(output, () => desktop.exportPdf(documentName.replace(/\.[^.]+$/u, "") + ".pdf"), desktop.isNative);
     } catch (cause) { showError(cause, "The document could not be exported."); }
-    finally { setExporting(false); }
-  };
+    finally {
+      exportingRef.current = false;
+      setExporting(false);
+    }
+  }, [documentName, showError, themeController]);
+  useEffect(() => {
+    desktop.installMenu({
+      newDocument,
+      openDocument,
+      saveDocument: () => void saveDocument(false),
+      saveDocumentAs: () => void saveDocument(true),
+      toggleSidebar: () => setSidebarOpen((open) => !open),
+      toggleSourceMode,
+      exportPdf: () => void exportDocument("pdf"),
+      exportHtml: () => void exportDocument("html"),
+      canExport: !exporting,
+      themes: themeController.themes,
+      theme: theme.id,
+      setTheme: themeController.setTheme,
+    });
+  }, [newDocument, openDocument, saveDocument, toggleSourceMode, themeController, theme.id, exportDocument, exporting]);
+
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
     if (sourceModeRef.current) sourceEditorRef.current?.focus();

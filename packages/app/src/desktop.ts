@@ -17,6 +17,9 @@ export type DesktopMenuActions = Readonly<{
   openDocument: () => void;
   saveDocument: () => void;
   saveDocumentAs: () => void;
+  exportPdf: () => void;
+  exportHtml: () => void;
+  canExport: boolean;
   toggleSidebar: () => void;
   toggleSourceMode: () => void;
   themes: readonly Readonly<{ id: string; label: string }>[];
@@ -31,6 +34,7 @@ type NodeUrl = {
 
 type NwMenu = {
   append: (item: NwMenuItem) => void;
+  insert: (item: NwMenuItem, index: number) => void;
   createMacBuiltin?: (applicationName: string, options?: { hideEdit?: boolean; hideWindow?: boolean }) => void;
 };
 
@@ -126,28 +130,40 @@ function createNativeMenu(actions: DesktopMenuActions) {
   const runtime = getNw();
   if (!runtime) return;
   const menu = new runtime.Menu({ type: "menubar" });
+  const isMac = runtime.process.platform === "darwin";
+  const modifier = isMac ? "cmd" : "ctrl";
+  const appendItem = (target: NwMenu, options: Record<string, unknown>) => {
+    target.append(new runtime.MenuItem(options));
+  };
 
-  if (runtime.process.platform === "darwin" && menu.createMacBuiltin) {
+  if (isMac && menu.createMacBuiltin) {
     menu.createMacBuiltin("Markora", { hideEdit: false, hideWindow: false });
-  } else {
-    const appendItem = (target: NwMenu, options: Record<string, unknown>) => {
-      target.append(new runtime.MenuItem(options));
-    };
-    const file = new runtime.Menu();
-    appendItem(file, { label: "New", key: "n", modifiers: "ctrl", click: actions.newDocument });
-    appendItem(file, { label: "Open…", key: "o", modifiers: "ctrl", click: actions.openDocument });
-    appendItem(file, { type: "separator" });
-    appendItem(file, { label: "Save", key: "s", modifiers: "ctrl", click: actions.saveDocument });
-    appendItem(file, { label: "Save As…", key: "s", modifiers: "ctrl-shift", click: actions.saveDocumentAs });
-    appendItem(file, { type: "separator" });
-    appendItem(file, { label: "Close", key: "w", modifiers: "ctrl", click: () => runtime.Window.get().close() });
-    appendItem(menu, { label: "File", submenu: file });
-
-    const view = new runtime.Menu();
-    appendItem(view, { label: "Toggle Sidebar", key: "\\", modifiers: "ctrl-shift", click: actions.toggleSidebar });
-    appendItem(view, { label: "Source Mode", key: "/", modifiers: "ctrl", click: actions.toggleSourceMode });
-    appendItem(menu, { label: "View", submenu: view });
   }
+
+  const file = new runtime.Menu();
+  appendItem(file, { label: "New", key: "n", modifiers: modifier, click: actions.newDocument });
+  appendItem(file, { label: "Open…", key: "o", modifiers: modifier, click: actions.openDocument });
+  appendItem(file, { type: "separator" });
+  appendItem(file, { label: "Save", key: "s", modifiers: modifier, click: actions.saveDocument });
+  appendItem(file, { label: "Save As…", key: "s", modifiers: `${modifier}-shift`, click: actions.saveDocumentAs });
+  appendItem(file, { type: "separator" });
+  const exports = new runtime.Menu();
+  appendItem(exports, { label: "PDF…", enabled: actions.canExport, click: actions.exportPdf });
+  appendItem(exports, { label: "HTML…", enabled: actions.canExport, click: actions.exportHtml });
+  appendItem(file, { label: "Export", submenu: exports });
+  appendItem(file, { type: "separator" });
+  appendItem(file, { label: "Close", key: "w", modifiers: modifier, click: () => runtime.Window.get().close() });
+  const fileItem = new runtime.MenuItem({ label: "File", submenu: file });
+  // Keep the standard App, Edit and Window menus on macOS.
+  if (isMac && menu.createMacBuiltin) menu.insert(fileItem, 1);
+  else menu.append(fileItem);
+
+  const view = new runtime.Menu();
+  appendItem(view, { label: "Toggle Sidebar", key: "\\", modifiers: `${modifier}-shift`, click: actions.toggleSidebar });
+  appendItem(view, { label: "Source Mode", key: "/", modifiers: modifier, click: actions.toggleSourceMode });
+  const viewItem = new runtime.MenuItem({ label: "View", submenu: view });
+  if (isMac && menu.createMacBuiltin) menu.insert(viewItem, 3);
+  else menu.append(viewItem);
 
   const themes = new runtime.Menu();
   for (const theme of actions.themes) {

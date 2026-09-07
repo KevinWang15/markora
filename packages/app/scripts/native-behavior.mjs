@@ -110,12 +110,19 @@ try {
   await page.getByRole("button", { name: "Export HTML", exact: true }).click();
   await expect.poll(async () => readFile(htmlPath, "utf8").catch(() => "")).toContain("data:image/svg+xml;base64,");
   assert.match(await readFile(htmlPath, "utf8"), /<math/u);
-  await page.getByRole("button", { name: "Export PDF", exact: true }).click();
+  await page.getByRole("combobox", { name: "Theme", exact: true }).selectOption("night");
+  await page.evaluate(() => {
+    const menu = window.nw.Window.get().menu;
+    const file = menu.items.find(item => item.label === "File").submenu;
+    const pdf = file.items.find(item => item.label === "Export").submenu.items.find(item => item.label === "PDF…");
+    if (!pdf.enabled) throw new Error("Native PDF export must be available");
+    pdf.click();
+  });
   await expect.poll(async () => (await readFile(pdfPath).catch(() => Buffer.alloc(0))).length, { timeout: 30_000 }).toBeGreaterThan(2000);
   assert.equal((await readFile(pdfPath)).subarray(0, 5).toString(), "%PDF-");
   await writeFile(path.join(diagnostics, "export.pdf"), await readFile(pdfPath));
   await expect(page.getByRole("button", { name: "Export PDF", exact: true })).toBeEnabled();
-  pass("native HTML export embeds local images and internal Chromium printing produces a PDF");
+  pass("native HTML export embeds local images and File → Export → PDF prints with the selected theme");
   await page.bringToFront(); await source.click(); await page.keyboard.press(end); await cdp.send("Input.insertText", { text: " RECOVER 中文 🙂" });
   await expect(source).toContainText("RECOVER 中文 🙂");
   await expect.poll(() => page.evaluate(async () => {

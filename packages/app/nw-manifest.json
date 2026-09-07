@@ -8,6 +8,7 @@
   "nodejs": true,
   "product_string": "Markora",
   "single-instance": true,
+  "chromium-args": "--silent-debugger-extension-api",
   "window": {
     "id": "markora-main",
     "title": "Markora",

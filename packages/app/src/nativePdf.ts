@@ -11,6 +11,7 @@ type ChromeApi = {
 
 /** Normal NW.js exposes this internal transport without a remote debug port.
  * Its legacy print preview API crashes in 0.115.0, even for a minimal page.
+ * nw-manifest.json silences the connection's browser infobar for this app.
  */
 export async function captureNativePdf(): Promise<Uint8Array> {
   const api = (window as Window & { chrome?: ChromeApi }).chrome;
