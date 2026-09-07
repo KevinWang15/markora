@@ -1239,6 +1239,7 @@ function prepareNativeVisualNavigation(
 function isSingleVisualTextLine(
   view: EditorView,
   selection: TextSelection,
+  line?: { from: number; to: number },
 ): boolean {
   const ownerDocument = view.dom.ownerDocument;
   const parentPos = selection.$head.before();
@@ -1251,7 +1252,15 @@ function isSingleVisualTextLine(
   const contentRange = ownerDocument.createRange();
 
   try {
-    contentRange.selectNodeContents(parentDOM);
+    if (line) {
+      const start = selection.$head.start();
+      const from = view.domAtPos(start + line.from, 1);
+      const to = view.domAtPos(start + line.to, -1);
+      contentRange.setStart(from.node, from.offset);
+      contentRange.setEnd(to.node, to.offset);
+    } else {
+      contentRange.selectNodeContents(parentDOM);
+    }
   } catch {
     return false;
   }
@@ -1306,13 +1315,26 @@ function handleNativeLineEdgeNavigation(
     return false;
   }
 
+  const parent = selection.$head.parent;
   const parentStart = selection.$head.start();
-  const parentEnd = parentStart + selection.$head.parent.content.size;
-  if (!isSingleVisualTextLine(view, selection)) {
+  let from = 0;
+  let to = parent.content.size;
+  if (parent.type.spec.code) {
+    const text = parent.textContent;
+    const offset = selection.$head.parentOffset;
+    from = offset === 0 ? 0 : text.lastIndexOf("\n", offset - 1) + 1;
+    const newline = text.indexOf("\n", offset);
+    to = newline < 0 ? text.length : newline;
+  }
+
+  // Native Home/End can race ProseMirror's delayed focus restoration in
+  // WebKit Shadow DOM. Own unambiguous code-line edges just as we already
+  // own single-line prose; soft-wrapped code still needs native affinity.
+  if (!isSingleVisualTextLine(view, selection, parent.type.spec.code ? { from, to } : undefined)) {
     return false;
   }
 
-  const head = event.key === "Home" ? parentStart : parentEnd;
+  const head = parentStart + (event.key === "Home" ? from : to);
   const anchor = event.shiftKey ? selection.anchor : head;
 
   event.preventDefault();
