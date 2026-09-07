@@ -4,13 +4,19 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
-    "sourceMap": false
+    "sourceMap": false,
+    "paths": {
+      "markora": [
+        "./packages/core/src/index.ts"
+      ]
+    }
   },
   "include": [
     "playwright.config.ts",
     "tests/browser/**/*.ts",
     "tests/browser/**/*.tsx",
     "playwright.app.config.ts",
-    "tests/app/**/*.ts"
+    "tests/app/**/*.ts",
+    "packages/core/src/**/*.d.ts"
   ]
 }
