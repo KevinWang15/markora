@@ -281,7 +281,7 @@ export type LabEditorSpec = {
     autoPairs?: readonly ("braces" | "double-quotes" | "emphasis-asterisks" | "emphasis-underscores" | "inline-code" | "parentheses" | "single-quotes" | "square-brackets" | "strikethrough" | "strong-asterisks" | "strong-underscores")[];
     wrapSelection?: boolean;
   };
-  theme?: "auto" | "contrast" | "dark" | "light";
+  theme?: import("../../packages/core/src/themes").BuiltInThemeId;
   tocMessages?: Partial<Record<
     | "emptyState"
     | "goToHeadingLabel"

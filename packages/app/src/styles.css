@@ -28,72 +28,57 @@ button {
 }
 
 .markora-app {
-  --app-bg: #f7f7f6;
-  --app-surface: #ffffff;
-  --app-surface-soft: #f3f3f1;
-  --app-surface-hover: #ebebe8;
-  --app-border: rgba(31, 36, 40, 0.105);
-  --app-border-strong: rgba(31, 36, 40, 0.16);
-  --app-text: #252724;
-  --app-text-soft: #6f716c;
-  --app-text-faint: #72746f;
-  --app-accent: #d96941;
-  --app-accent-soft: #f9e9e2;
-  --app-danger: #c9473a;
-  --app-syntax-comment: #6e7781;
-  --app-syntax-keyword: #cf222e;
-  --app-syntax-link: #0550ae;
-  --app-syntax-punctuation: #6e7781;
-  --app-syntax-string: #0a3069;
-  --app-shadow: 0 18px 44px rgba(26, 28, 25, 0.14), 0 3px 12px rgba(26, 28, 25, 0.08);
+  --app-bg: var(--mdw-color-surface, #f7f7f6);
+  --app-surface: var(--mdw-color-surface, #ffffff);
+  --app-surface-soft: var(--mdw-color-surface-subtle, #f3f3f1);
+  --app-surface-hover: var(--mdw-color-surface-muted, #ebebe8);
+  --app-border: var(--mdw-color-border, #d0d7de);
+  --app-border-strong: var(--mdw-color-border-strong, #94a3b8);
+  --app-text: var(--mdw-color-text, #252724);
+  --app-text-soft: var(--mdw-color-muted, #6f716c);
+  --app-text-faint: var(--mdw-color-muted, #72746f);
+  --app-accent: var(--mdw-color-accent, #d96941);
+  --app-accent-soft: var(--mdw-color-accent-soft, #f9e9e2);
+  --app-danger: var(--mdw-color-danger, #c9473a);
+  --app-syntax-comment: var(--mdw-syntax-comment, #6e7781);
+  --app-syntax-keyword: var(--mdw-syntax-keyword, #cf222e);
+  --app-syntax-link: var(--mdw-syntax-literal, #0550ae);
+  --app-syntax-punctuation: var(--mdw-syntax-operator, #6e7781);
+  --app-syntax-string: var(--mdw-syntax-string, #0a3069);
+  --app-shadow: var(--mdw-shadow-overlay, 0 18px 44px rgba(26, 28, 25, 0.14));
+  color-scheme: var(--mdw-color-scheme, normal);
   background: var(--app-bg);
   color: var(--app-text);
   height: 100%;
   overflow: hidden;
 }
 
-.markora-app.mdw-theme-dark {
-  --app-bg: #1d1e1d;
-  --app-surface: #242624;
-  --app-surface-soft: #2a2c2a;
-  --app-surface-hover: #343634;
-  --app-border: rgba(255, 255, 255, 0.075);
-  --app-border-strong: rgba(255, 255, 255, 0.13);
-  --app-text: #e7e8e4;
-  --app-text-soft: #a5a8a1;
-  --app-text-faint: #9a9d96;
-  --app-accent: #e6865f;
-  --app-accent-soft: #432f28;
-  --app-danger: #ef7468;
-  --app-syntax-comment: #9da7b3;
-  --app-syntax-keyword: #ff7b72;
-  --app-syntax-link: #79c0ff;
-  --app-syntax-punctuation: #9da7b3;
-  --app-syntax-string: #a5d6ff;
-  --app-shadow: 0 20px 52px rgba(0, 0, 0, 0.42), 0 3px 12px rgba(0, 0, 0, 0.32);
+.app-theme-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-
-@media (prefers-color-scheme: dark) {
-  .markora-app.mdw-theme-auto {
-    --app-bg: #1d1e1d;
-    --app-surface: #242624;
-    --app-surface-soft: #2a2c2a;
-    --app-surface-hover: #343634;
-    --app-border: rgba(255, 255, 255, 0.075);
-    --app-border-strong: rgba(255, 255, 255, 0.13);
-    --app-text: #e7e8e4;
-    --app-text-soft: #a5a8a1;
-    --app-text-faint: #9a9d96;
-    --app-accent: #e6865f;
-    --app-accent-soft: #432f28;
-    --app-danger: #ef7468;
-    --app-syntax-comment: #9da7b3;
-    --app-syntax-keyword: #ff7b72;
-    --app-syntax-link: #79c0ff;
-    --app-syntax-punctuation: #9da7b3;
-    --app-syntax-string: #a5d6ff;
-    --app-shadow: 0 20px 52px rgba(0, 0, 0, 0.42), 0 3px 12px rgba(0, 0, 0, 0.32);
-  }
+.app-theme-picker select {
+  max-width: 135px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+  cursor: pointer;
+}
+.app-theme-picker select:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+.app-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .app-icon {
@@ -171,7 +156,7 @@ button {
   align-items: center;
   background: var(--app-accent);
   border-radius: 6px 6px 6px 2px;
-  color: #fff;
+  color: var(--mdw-color-on-accent, #fff);
   display: inline-flex;
   font-family: Georgia, serif;
   font-size: 14px;
@@ -491,18 +476,21 @@ button {
   --mdw-editor-min-block-size: calc(100vh - 190px);
   --mdw-editor-padding: 62px 28px 160px;
   margin: 0 auto;
-  max-width: 820px;
+  max-width: 960px;
   min-height: 100%;
-  width: min(100%, 820px);
+  width: 100%;
+  font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+  font-size: 17px;
+  line-height: 1.72;
 }
 
 .app-editor > .ProseMirror {
   border: 0;
   box-shadow: none;
   caret-color: var(--app-accent);
-  font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
-  font-size: 17px;
-  line-height: 1.72;
+  font-family: var(--mdw-document-font-family, inherit);
+  font-size: var(--mdw-document-font-size, inherit);
+  line-height: var(--mdw-document-line-height, inherit);
   outline: 0;
 }
 
@@ -517,16 +505,16 @@ button {
 .app-editor > .ProseMirror h2,
 .app-editor > .ProseMirror h3,
 .app-editor > .ProseMirror h4 {
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  letter-spacing: -0.025em;
+  font-family: var(--mdw-heading-font-family, inherit);
+  letter-spacing: var(--mdw-heading-letter-spacing, -0.025em);
 }
 
 .app-editor > .ProseMirror h1 {
-  font-size: 2.18em;
+  font-size: var(--mdw-heading-1-font-size, 2.18em);
 }
 
 .app-editor > .ProseMirror h2 {
-  font-size: 1.58em;
+  font-size: var(--mdw-heading-2-font-size, 1.58em);
 }
 
 .app-editor > .ProseMirror code,
@@ -783,7 +771,7 @@ button {
 .app-dialog-button-primary {
   background: var(--app-accent);
   border-color: transparent;
-  color: #fff;
+  color: var(--mdw-color-on-accent, #fff);
 }
 
 .app-dialog-button-primary:hover {
@@ -867,11 +855,11 @@ button {
 .app-syntax-source { width: 100%; min-height: 10rem; font: 14px/1.6 monospace; padding: .75rem; color: inherit; background: var(--app-bg); border: 1px solid currentColor; border-radius: 6px; }
 .app-dialog-actions:has(.app-syntax-source) { flex-wrap: wrap; }
 .mdw-math math { font-size: 1.15em; }
-.mdw-diagram__preview svg { max-width: 100%; height: auto; color: #222; background: #fff; }
-.mdw-diagram__preview .node rect, .mdw-diagram__preview .node polygon, .mdw-diagram__preview .node circle { fill: #f4f4f4; stroke: #555; stroke-width: 1px; }
-.mdw-diagram__preview .flowchart-link, .mdw-diagram__preview .messageLine0, .mdw-diagram__preview .messageLine1 { stroke: #555; fill: none; }
-.mdw-diagram__preview .arrowheadPath, .mdw-diagram__preview marker path { fill: #555; stroke: #555; }
-.mdw-diagram__preview text { fill: #222; font: 16px sans-serif; }
+.mdw-diagram__preview svg { max-width: 100%; height: auto; color: var(--app-text); background: var(--app-surface); }
+.mdw-diagram__preview .node rect, .mdw-diagram__preview .node polygon, .mdw-diagram__preview .node circle { fill: var(--app-surface-soft); stroke: var(--app-text-soft); stroke-width: 1px; }
+.mdw-diagram__preview .flowchart-link, .mdw-diagram__preview .messageLine0, .mdw-diagram__preview .messageLine1 { stroke: var(--app-text-soft); fill: none; }
+.mdw-diagram__preview .arrowheadPath, .mdw-diagram__preview marker path { fill: var(--app-text-soft); stroke: var(--app-text-soft); }
+.mdw-diagram__preview text { fill: var(--app-text); font: 16px sans-serif; }
 #markora-print { display: none; }
 @media print {
   body > :not(#markora-print) { display: none !important; }

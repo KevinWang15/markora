@@ -19,7 +19,9 @@ export type DesktopMenuActions = Readonly<{
   saveDocumentAs: () => void;
   toggleSidebar: () => void;
   toggleSourceMode: () => void;
-  toggleTheme: () => void;
+  themes: readonly Readonly<{ id: string; label: string }>[];
+  theme: string;
+  setTheme: (id: string) => void;
 }>;
 
 type NodeUrl = {
@@ -32,7 +34,7 @@ type NwMenu = {
   createMacBuiltin?: (applicationName: string, options?: { hideEdit?: boolean; hideWindow?: boolean }) => void;
 };
 
-type NwMenuItem = object;
+type NwMenuItem = { checked?: boolean };
 
 type NwWindow = {
   menu: NwMenu | null;
@@ -144,10 +146,24 @@ function createNativeMenu(actions: DesktopMenuActions) {
     const view = new runtime.Menu();
     appendItem(view, { label: "Toggle Sidebar", key: "\\", modifiers: "ctrl-shift", click: actions.toggleSidebar });
     appendItem(view, { label: "Source Mode", key: "/", modifiers: "ctrl", click: actions.toggleSourceMode });
-    appendItem(view, { label: "Toggle Theme", click: actions.toggleTheme });
     appendItem(menu, { label: "View", submenu: view });
   }
 
+  const themes = new runtime.Menu();
+  for (const theme of actions.themes) {
+    const item: NwMenuItem = new runtime.MenuItem({
+      label: theme.label,
+      type: "checkbox",
+      checked: actions.theme === theme.id,
+      click: () => {
+        // Native checkboxes toggle before invoking click; a selected theme stays checked.
+        item.checked = true;
+        actions.setTheme(theme.id);
+      },
+    });
+    themes.append(item);
+  }
+  menu.append(new runtime.MenuItem({ label: "Themes", submenu: themes }));
   runtime.Window.get().menu = menu;
 }
 

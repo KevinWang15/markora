@@ -789,6 +789,32 @@ export function ApiPage() {
         </div>
       </section>
 
+      <section className="panel doc-panel">
+        <span className="card-kicker">Themes</span>
+        <h2>Style a workspace without rebuilding its editor.</h2>
+        <p>
+          Import <code>markora/themes.css</code> for eight presets. The optional <code>markora/themes</code> API
+          supplies immutable definitions, custom token overrides, live subscriptions, and opt-in preference storage.
+          Each controller owns one element and keeps document history and selection intact when switching.
+        </p>
+        <CodeBlock language="ts" title="Custom themes and live switching" code={`import { builtInThemes, defineTheme, createThemeController } from "markora/themes";
+import "markora/themes.css";
+
+const brand = defineTheme({
+  id: "brand-paper", label: "Brand paper", extends: "newsprint",
+  tokens: { "--mdw-color-accent": "#793936" },
+});
+const appearance = createThemeController({
+  element: workspaceElement,
+  themes: [...builtInThemes, brand],
+  initialTheme: "github",
+  storageKey: "my-product.theme", // optional
+});
+appearance.setTheme("brand-paper");
+// appearance.themes supplies picker options.
+// appearance.getSnapshot / subscribe also work with useSyncExternalStore.
+// Call appearance.destroy() when the workspace is removed.`} />
+      </section>
       <DocPageNav />
     </div>
   );

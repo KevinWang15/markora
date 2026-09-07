@@ -1,8 +1,12 @@
-import { Component, lazy, Suspense, useLayoutEffect, useRef, type ReactNode } from "react";
+import { Component, lazy, Suspense, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigationType } from "react-router-dom";
 import { CodeBlock } from "./components/CodeBlock";
 import { docsNavigation, installCommand, quickStartCode } from "./lib/content";
 import { GettingStartedPage } from "./pages/GettingStartedPage";
+import { builtInThemes, type MarkdownThemeController } from "markora/themes";
+
+const noThemeSubscription = () => () => {};
+const defaultThemeSnapshot = () => builtInThemes[0];
 
 const MarkdownCompatibilityPage = lazy(async () => ({
   default: (await import("./pages/MarkdownCompatibilityPage")).MarkdownCompatibilityPage,
@@ -125,7 +129,8 @@ const publicRouteMetadata: Record<string, typeof defaultDocumentMetadata> = {
   },
 };
 
-export function App() {
+export function App({ themeController }: Readonly<{ themeController?: MarkdownThemeController }>) {
+  const theme = useSyncExternalStore(themeController?.subscribe ?? noThemeSubscription, themeController?.getSnapshot ?? defaultThemeSnapshot);
   const location = useLocation();
   const navigationType = useNavigationType();
   const previousPathRef = useRef(location.pathname);
@@ -321,6 +326,14 @@ export function App() {
             ))}
             <a className="topnav-link" href="https://github.com/KevinWang15/markora">GitHub</a>
           </nav>
+          {themeController && (
+            <label className="docs-theme-picker" title={theme.description}>
+              <span>Theme</span>
+              <select aria-label="Theme" value={theme.id} onChange={event => themeController.setTheme(event.target.value)}>
+                {themeController.themes.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+              </select>
+            </label>
+          )}
         </header>
       )}
 

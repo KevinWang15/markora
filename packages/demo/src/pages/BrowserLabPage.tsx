@@ -21,6 +21,7 @@ import {
   type UpdateEditorOptions,
 } from "markora";
 import { createEditor as createMinimalEditor } from "markora/minimal";
+import * as themeApi from "markora/themes";
 import { NodeSelection, TextSelection, type Selection } from "markora/extension-api";
 import {
   createDiagramsExtension,
@@ -202,7 +203,7 @@ export type BrowserLabEditorSpec = {
   resourceMode?: "custom-protocol" | "deny-images" | "immediate-upload" | "proxy-images";
   shortcuts?: MarkdownEditorShortcutMap;
   typing?: MarkdownEditorTypingOptions;
-  theme?: "auto" | "contrast" | "dark" | "light";
+  theme?: themeApi.BuiltInThemeId;
   tocMessages?: BrowserLabTocMessages;
   uiMessages?: DefaultUiMessageOverrides;
 };
@@ -453,6 +454,7 @@ export type BrowserLabResourceLog = {
 };
 
 export type BrowserLabApi = {
+  themes: typeof themeApi;
   alertsCommand: (id: string, request: BrowserLabAlertsCommandRequest) => boolean;
   alertsSnapshot: (id: string) => BrowserLabAlertsSnapshot;
   alertsState: (id: string, request: BrowserLabAlertsStateRequest) => boolean;
@@ -1805,6 +1807,7 @@ export function BrowserLabPage() {
     };
 
     const api: BrowserLabApi = {
+      themes: themeApi,
       ready: true,
       alertsCommand(id, request) {
         const mounted = requireEditor(editors, id);

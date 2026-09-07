@@ -382,7 +382,7 @@ type BrowserLabTestSpec = {
     autoPairs?: readonly ("braces" | "double-quotes" | "emphasis-asterisks" | "emphasis-underscores" | "inline-code" | "parentheses" | "single-quotes" | "square-brackets" | "strikethrough" | "strong-asterisks" | "strong-underscores")[];
     wrapSelection?: boolean;
   };
-  theme?: "auto" | "contrast" | "dark" | "light";
+  theme?: import("../../packages/core/src/themes").BuiltInThemeId;
   tocMessages?: Partial<Record<
     | "emptyState"
     | "goToHeadingLabel"
@@ -657,6 +657,7 @@ type BrowserLabMathRendererCall = {
 
 interface Window {
   __MARKORA_BROWSER_LAB__?: {
+    themes: typeof import("../../packages/core/src/themes");
     active(id: string, request: BrowserLabActiveRequest): boolean;
     alertsCommand(id: string, request: BrowserLabAlertsCommandRequest): boolean;
     alertsSnapshot(id: string): BrowserLabAlertsSnapshot;

@@ -157,7 +157,8 @@ test("@required public image workflow validates URLs and identifies empty-alt au
   await expect(image).toHaveAttribute("alt", "Edited alt");
   await expect(image).not.toHaveAttribute("aria-label");
   await expect(image).toHaveAccessibleName("Edited alt");
-  await expect(page.locator("#output")).toHaveText(`image anchor![Edited alt](${PUBLIC_PIXEL_GIF})`);
+  // Idle change delivery permits a five-second maximum wait; allow the final React render too.
+  await expect(page.locator("#output")).toHaveText(`image anchor![Edited alt](${PUBLIC_PIXEL_GIF})`, { timeout: 7_000 });
 
   await removeImageButton.click();
   await expect(image).toHaveCount(0);
@@ -417,7 +418,7 @@ test("@required overflowing code regions have concise non-landmark names", async
 });
 
 test("@required code headers are direct figure captions", async ({ page }) => {
-  for (const [route, count] of [["/docs/api", 16], ["/docs/examples", 11]] as const) {
+  for (const [route, count] of [["/docs/api", 17], ["/docs/examples", 11]] as const) {
     await page.goto(route);
     const figures = page.locator("figure.code-block");
     await expect(figures).toHaveCount(count);
@@ -842,7 +843,7 @@ test("@required code-copy controls are distinguishable and report success or fai
   });
   await page.goto("/docs/api");
   const buttons = page.locator(".code-block-copy");
-  await expect(buttons).toHaveCount(16);
+  await expect(buttons).toHaveCount(17);
   const labels = await buttons.evaluateAll((elements) => (
     elements.map((element) => element.getAttribute("aria-label"))
   ));

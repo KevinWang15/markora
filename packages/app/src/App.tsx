@@ -37,7 +37,8 @@ import { createSearchExtension } from "./searchExtension";
 import { findTextMatches, type SearchOptions, type SearchResults } from "./search";
 import { DocumentHistory } from "./DocumentHistory";
 import { createDefaultUi } from "markora-ui";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import type { MarkdownThemeController } from "markora/themes";
 import { desktop } from "./desktop";
 import { DocumentSession, type DocumentSnapshot } from "./documentSession";
 import { Dialog } from "./Dialog";
@@ -57,7 +58,6 @@ const SourceEditor = lazy(async () => ({
   default: (await import("./SourceEditor")).SourceEditor,
 }));
 
-type Theme = "system" | "light" | "dark";
 type SidebarTab = "outline" | "recent";
 type PendingAction = Readonly<{
   action: () => void | Promise<void>;
@@ -68,7 +68,6 @@ type PendingAction = Readonly<{
 const EMPTY_SEARCH: SearchResults = { matches: [], truncated: false };
 
 const RECENTS_KEY = "markora-app.recent-documents";
-const THEME_KEY = "markora-app.theme";
 
 function readStoredRecents() {
   try {
@@ -84,11 +83,6 @@ function readStoredRecents() {
   } catch {
     return [];
   }
-}
-
-function readStoredTheme(): Theme {
-  const theme = localStorage.getItem(THEME_KEY);
-  return theme === "light" || theme === "dark" ? theme : "system";
 }
 
 function formatRecentTime(timestamp: number) {
@@ -140,7 +134,8 @@ function ToolbarButton({
   );
 }
 
-export function App() {
+export function App({ themeController }: Readonly<{ themeController: MarkdownThemeController }>) {
+  const theme = useSyncExternalStore(themeController.subscribe, themeController.getSnapshot);
   const [sourceEdit, setSourceEdit] = useState<SourceEdit | null>(null);
   const mathRef = useRef(createMathExtension({ renderer: renderMath, onEditSource: request =>
     setSourceEdit({ title: "Edit math", source: request.source, update: request.update }) }));
@@ -173,7 +168,6 @@ export function App() {
   const [recents, setRecents] = useState<readonly RecentDocument[]>(readStoredRecents);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("outline");
-  const [theme, setTheme] = useState<Theme>(readStoredTheme);
   const [editorVersion, setEditorVersion] = useState(0);
   const [sourceEditorVersion, setSourceEditorVersion] = useState(0);
   const [sourceMode, setSourceMode] = useState(false);
@@ -209,10 +203,6 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(RECENTS_KEY, JSON.stringify(recents));
   }, [recents]);
-
-  useEffect(() => {
-    localStorage.setItem(THEME_KEY, theme);
-  }, [theme]);
 
   const updateLiveMarkdown = useCallback((markdown: string) => {
     if (sourceModeRef.current && !applyingHistoryRef.current) historyRef.current.record({
@@ -466,10 +456,6 @@ export function App() {
     setSourceMode(true);
   }, [showError, updateLiveMarkdown]);
 
-  const toggleTheme = useCallback(() => {
-    setTheme((current) => current === "system" ? "light" : current === "light" ? "dark" : "system");
-  }, []);
-
   useEffect(() => {
     desktop.installMenu({
       newDocument,
@@ -478,9 +464,11 @@ export function App() {
       saveDocumentAs: () => void saveDocument(true),
       toggleSidebar: () => setSidebarOpen((open) => !open),
       toggleSourceMode,
-      toggleTheme,
+      themes: themeController.themes,
+      theme: theme.id,
+      setTheme: themeController.setTheme,
     });
-  }, [newDocument, openDocument, saveDocument, toggleSourceMode, toggleTheme]);
+  }, [newDocument, openDocument, saveDocument, toggleSourceMode, themeController, theme.id]);
 
   useEffect(() => {
     return desktop.installCloseHandler(() => {
@@ -803,7 +791,7 @@ export function App() {
   };
 
   return (
-    <div className={`markora-app mdw-ui mdw-theme-${theme === "system" ? "auto" : theme}`} data-theme={theme} inert={!startupReady}>
+    <div className="markora-app mdw-ui" data-theme={theme.id} inert={!startupReady}>
       <header className="app-titlebar">
         <div className="app-titlebar-leading">
           <button
@@ -822,7 +810,13 @@ export function App() {
           {documentName}<span className="app-dirty-dot" data-visible={dirty || undefined}>•</span>
         </h1>
         <div className="app-titlebar-actions">
-          <ToolbarButton icon={SunMoon} label={`Theme: ${theme}`} onClick={toggleTheme} />
+          <label className="app-theme-picker" title={theme.description}>
+            <Icon icon={SunMoon} />
+            <span className="app-visually-hidden">Theme</span>
+            <select aria-label="Theme" value={theme.id} onChange={event => themeController.setTheme(event.target.value)}>
+              {themeController.themes.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
         </div>
       </header>
 
