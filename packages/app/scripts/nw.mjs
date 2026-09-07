@@ -51,6 +51,8 @@ const app = platform === "win"
   : platform === "osx"
     ? {
         name: "Markora",
+        icon: path.join(packageRoot, "dist", "icon.icns"),
+        NSHumanReadableCopyright: "Copyright (c) 2026 Kevin Wang. MIT License.",
         CFBundleIdentifier: "app.markora.desktop",
         CFBundleName: "Markora",
         CFBundleDisplayName: "Markora",

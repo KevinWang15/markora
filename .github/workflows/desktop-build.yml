@@ -54,6 +54,8 @@ jobs:
         # Ad-hoc signing repairs signatures invalidated by bundle customization.
         # This does not provide a Developer ID or notarization.
         run: |
+          plutil -lint "packages/app/release/osx-${{ matrix.arch }}/Markora.app/Contents/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "packages/app/release/osx-${{ matrix.arch }}/Markora.app/Contents/Info.plist")" = Markora
           codesign --force --deep --sign - "packages/app/release/osx-${{ matrix.arch }}/Markora.app"
           codesign --verify --deep --strict "packages/app/release/osx-${{ matrix.arch }}/Markora.app"
       - name: Check packaged files and native process startup

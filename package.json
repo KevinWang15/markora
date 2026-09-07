@@ -14,14 +14,14 @@
     "vitest": "^4.0.18"
   },
   "scripts": {
-    "dev": "pnpm run build:packages && pnpm --parallel --filter markora --filter './packages/extension-*' --filter markora-ui --filter demo dev",
+    "dev": "pnpm run build:packages && pnpm --parallel --filter markora --filter \"./packages/extension-*\" --filter markora-ui --filter demo dev",
     "dev:demo": "pnpm --filter demo dev",
     "dev:core": "pnpm --filter markora dev",
     "dev:ui": "pnpm --filter markora-ui dev",
     "build": "pnpm run build:packages && pnpm --filter demo build && pnpm --filter markora-app build",
     "build:packages": "pnpm --filter markora build && pnpm run build:extensions && pnpm --filter markora-ui build",
     "build:core": "pnpm --filter markora build",
-    "build:extensions": "pnpm --filter './packages/extension-*' --if-present build",
+    "build:extensions": "pnpm --filter \"./packages/extension-*\" --fail-if-no-match --if-present build",
     "build:ui": "pnpm --filter markora-ui build",
     "build:demo": "pnpm --filter demo build",
     "build:app": "pnpm run build:packages && pnpm --filter markora-app build",
@@ -38,9 +38,9 @@
     "test": "vitest run",
     "test:browser": "playwright test",
     "test:browser:required": "playwright test --grep @required",
-    "typecheck:extensions": "pnpm --filter './packages/extension-*' --if-present typecheck",
+    "typecheck:extensions": "pnpm --filter \"./packages/extension-*\" --if-present typecheck",
     "typecheck:browser": "tsc -p tsconfig.browser.json --noEmit",
-    "smoke:extensions": "pnpm --filter './packages/extension-*' --if-present smoke:node-esm",
+    "smoke:extensions": "pnpm --filter \"./packages/extension-*\" --if-present smoke:node-esm",
     "pack:smoke": "node ./scripts/pack-smoke.mjs",
     "test:app:browser": "playwright test -c playwright.app.config.ts"
   }
