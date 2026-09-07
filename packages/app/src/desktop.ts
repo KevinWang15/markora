@@ -1,3 +1,5 @@
+import { atomicWrite, readIfPresent, saveFile, type FileSystem, type PathModule } from "./persistence";
+import type { DocumentSnapshot } from "./documentSession";
 import { extractOpenPath, parseCommandLineArguments } from "./document";
 
 export type OpenedDocument = Readonly<{
@@ -20,23 +22,6 @@ export type DesktopMenuActions = Readonly<{
   toggleTheme: () => void;
 }>;
 
-type NodePath = {
-  basename: (path: string, suffix?: string) => string;
-  dirname: (path: string) => string;
-  extname: (path: string) => string;
-  join: (...parts: string[]) => string;
-  relative: (from: string, to: string) => string;
-  resolve: (...parts: string[]) => string;
-};
-
-type NodeFs = {
-  access: (path: string) => Promise<void>;
-  copyFile: (source: string, destination: string) => Promise<void>;
-  mkdir: (path: string, options: { recursive: boolean }) => Promise<void>;
-  readFile: (path: string, encoding: "utf8") => Promise<string>;
-  writeFile: (path: string, content: string, encoding: "utf8") => Promise<void>;
-};
-
 type NodeUrl = {
   pathToFileURL: (path: string) => URL;
 };
@@ -51,6 +36,7 @@ type NwMenuItem = object;
 type NwWindow = {
   menu: NwMenu | null;
   on: (event: "close", listener: () => void) => void;
+  removeListener: (event: "close", listener: () => void) => void;
   close: (force?: boolean) => void;
 };
 
@@ -58,7 +44,9 @@ type NwRuntime = {
   App: {
     argv: string[];
     startPath: string;
+    dataPath: string;
     on: (event: "open", listener: (commandLine: string) => void) => void;
+    removeListener: (event: "open", listener: (commandLine: string) => void) => void;
   };
   Menu: new (options?: { type?: "menubar" | "contextmenu" }) => NwMenu;
   MenuItem: new (options: Record<string, unknown>) => NwMenuItem;
@@ -85,8 +73,8 @@ function getNodeModules() {
   const runtime = getNw();
   if (!runtime) return null;
   return {
-    fs: runtime.require("node:fs/promises") as NodeFs,
-    path: runtime.require("node:path") as NodePath,
+    fs: runtime.require("node:fs/promises") as FileSystem,
+    path: runtime.require("node:path") as PathModule,
     url: runtime.require("node:url") as NodeUrl,
   };
 }
@@ -162,6 +150,8 @@ function createNativeMenu(actions: DesktopMenuActions) {
   runtime.Window.get().menu = menu;
 }
 
+const diskBaselines = new Map<string, string | null>();
+
 export const desktop = {
   isNative: Boolean(getNw()),
   isMac: getNw()?.process.platform === "darwin",
@@ -185,7 +175,9 @@ export const desktop = {
   async readDocument(path: string) {
     const modules = getNodeModules();
     if (!modules) throw new Error("Reading a file path requires the desktop app.");
-    return await modules.fs.readFile(path, "utf8");
+    const content = await modules.fs.readFile(path, "utf8");
+    diskBaselines.set(path, content);
+    return content;
   },
 
   async saveDocument(path: string | null, suggestedName: string, content: string) {
@@ -205,8 +197,44 @@ export const desktop = {
       destination = file ? nativeFilePath(file) : null;
     }
     if (!destination) return null;
-    await modules.fs.writeFile(destination, content, "utf8");
+    const expected = diskBaselines.has(destination)
+      ? diskBaselines.get(destination)!
+      : await readIfPresent(modules.fs, destination);
+    await saveFile(modules.fs, modules.path, destination, content, expected);
+    diskBaselines.set(destination, content);
     return destination;
+  },
+
+  async readRecovery(): Promise<DocumentSnapshot | null> {
+    const modules = getNodeModules();
+    const runtime = getNw();
+    const source = modules && runtime
+      ? await readIfPresent(modules.fs, modules.path.join(runtime.App.dataPath, "recovery.json"))
+      : localStorage.getItem("markora-app.recovery");
+    if (!source) return null;
+    const value: unknown = JSON.parse(source);
+    if (!value || typeof value !== "object") throw new Error("The recovery file is invalid.");
+    const record = value as DocumentSnapshot;
+    if (typeof record.markdown !== "string" || typeof record.savedMarkdown !== "string"
+      || !(record.path === null || typeof record.path === "string")) throw new Error("The recovery file is invalid.");
+    return record.markdown === record.savedMarkdown ? null : record;
+  },
+
+  async writeRecovery(snapshot: DocumentSnapshot) {
+    const modules = getNodeModules();
+    const runtime = getNw();
+    if (modules && runtime) {
+      await modules.fs.mkdir(runtime.App.dataPath, { recursive: true });
+      const destination = modules.path.join(runtime.App.dataPath, "recovery.json");
+      // An atomic clean checkpoint also survives a crash during document switching.
+      await atomicWrite(modules.fs, modules.path, destination, JSON.stringify(snapshot));
+    } else {
+      localStorage.setItem("markora-app.recovery", JSON.stringify(snapshot));
+    }
+  },
+
+  restoreDiskBaseline(path: string, content: string) {
+    diskBaselines.set(path, content);
   },
 
   async chooseImage(): Promise<PickedImage | null> {
@@ -277,7 +305,7 @@ export const desktop = {
       if (openPath) listener(modules ? modules.path.resolve(runtime.App.startPath, openPath) : openPath);
     };
     runtime.App.on("open", handler);
-    return () => undefined;
+    return () => runtime.App.removeListener("open", handler);
   },
 
   setWindowTitle(title: string) {
@@ -286,8 +314,10 @@ export const desktop = {
 
   installCloseHandler(handler: () => void) {
     const runtime = getNw();
-    if (!runtime) return;
-    runtime.Window.get().on("close", handler);
+    if (!runtime) return () => undefined;
+    const win = runtime.Window.get();
+    win.on("close", handler);
+    return () => win.removeListener("close", handler);
   },
 
   forceClose() {

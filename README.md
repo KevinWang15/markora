@@ -382,3 +382,9 @@ Notes:
 - change callbacks and state/selection/update events expose `user`, `command`, `external`, `reset`, or namespaced extension origins
 - built-in code block languages cover JavaScript, TypeScript, JSON, CSS, HTML, XML, Markdown, Python, C/C++, Java, Rust, and shell
 - `editor.state.can.*` and `editor.state.isActive.*` expose host-friendly capability and activity checks
+
+When a host changes the base directory, authentication context, or other state
+used by `resources.resolveUrl` or `resources.loadImage`, call
+`editor.refreshResources()`. It cancels stale image loads and reloads the mounted
+images using the current host context, preserving document content, selection,
+and undo history. Set the new resource context before resetting a document.

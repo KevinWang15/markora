@@ -233,6 +233,8 @@ export type MarkdownEditor = {
   focus: (selection?: MarkdownEditorSelectionTarget) => void;
   getMarkdown: () => string;
   flushChange: () => void;
+  /** Reload images after host resource context changes; preserves document and history. */
+  refreshResources: () => void;
   subscribe: <TType extends MarkdownEditorEventName>(
     type: TType,
     listener: MarkdownEditorEventListener<TType>,

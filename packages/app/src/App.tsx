@@ -1,4 +1,3 @@
-import AlertTriangle from "@lucide/icons/icons/triangle-alert";
 import Bold from "@lucide/icons/icons/bold";
 import Check from "@lucide/icons/icons/check";
 import Clock3 from "@lucide/icons/icons/clock-3";
@@ -25,7 +24,9 @@ import { createEditor, type MarkdownEditor, type MarkdownEditorHeadingLevel } fr
 import { createDefaultUi } from "markora-ui";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { desktop } from "./desktop";
-import { DocumentSession } from "./documentSession";
+import { DocumentSession, type DocumentSnapshot } from "./documentSession";
+import { Dialog } from "./Dialog";
+import { RecoveryJournal } from "./RecoveryJournal";
 import {
   countDocumentCharacters,
   countDocumentWords,
@@ -129,11 +130,16 @@ export function App() {
   const editorRef = useRef<MarkdownEditor | null>(null);
   const sourceEditorRef = useRef<SourceEditorHandle | null>(null);
   const sessionRef = useRef(new DocumentSession(welcomeMarkdown));
+  const resourcePathRef = useRef<string | null>(null);
   const savingRef = useRef(false);
   const openRequestRef = useRef(0);
   const sourceModeRef = useRef(false);
   const sourceEntryMarkdownRef = useRef(welcomeMarkdown);
   const dragDepthRef = useRef(0);
+  const [startupReady, setStartupReady] = useState(false);
+  const recoveryReadyRef = useRef(false);
+  const recoveryRef = useRef<RecoveryJournal | null>(null);
+  const [recoveryCandidate, setRecoveryCandidate] = useState<DocumentSnapshot | null>(null);
   const closeRequestedRef = useRef(false);
   const [documentSnapshot, setDocumentSnapshot] = useState(sessionRef.current.snapshot);
   const [recents, setRecents] = useState<readonly RecentDocument[]>(readStoredRecents);
@@ -195,7 +201,7 @@ export function App() {
       resources: {
         images: { allowedProtocols: ["http:", "https:", "data:", "file:"] },
         links: { allowedProtocols: ["http:", "https:", "mailto:", "tel:", "file:"] },
-        resolveUrl: ({ url }) => desktop.resolveResource(sessionRef.current.path, url),
+        resolveUrl: ({ url }) => desktop.resolveResource(resourcePathRef.current, url),
         openUrl: ({ url }) => desktop.openExternal(url),
         assets: {
           allowedMimeTypes: ["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"],
@@ -229,11 +235,28 @@ export function App() {
 
   const showError = useCallback((cause: unknown, fallback: string) => {
     setError(cause instanceof Error ? cause.message : fallback);
-    window.setTimeout(() => setError(null), 5000);
+
   }, []);
 
+  if (!recoveryRef.current) {
+    recoveryRef.current = new RecoveryJournal(snapshot => desktop.writeRecovery(snapshot), cause => showError(cause, "Recovery could not be saved."));
+  }
+
+  useEffect(() => {
+    if (recoveryReadyRef.current) recoveryRef.current!.schedule(documentSnapshot);
+  }, [documentSnapshot, startupReady]);
+
   const replaceDocument = useCallback((path: string | null, markdown: string) => {
-    editorRef.current?.commands.resetMarkdown(markdown);
+    const previousPath = resourcePathRef.current;
+    resourcePathRef.current = path;
+    try {
+      editorRef.current?.commands.resetMarkdown(markdown);
+      editorRef.current?.refreshResources();
+    } catch (cause) {
+      resourcePathRef.current = previousPath;
+      editorRef.current?.refreshResources();
+      throw cause;
+    }
     sourceEntryMarkdownRef.current = markdown;
     openRequestRef.current += 1;
     setDocumentSnapshot(sessionRef.current.replace(path, markdown));
@@ -262,6 +285,10 @@ export function App() {
       if (!sourceModeRef.current) editorRef.current?.flushChange();
       const clean = sessionRef.current.saved(snapshot, path);
       setDocumentSnapshot(sessionRef.current.snapshot);
+      if (snapshot.id === sessionRef.current.snapshot.id && resourcePathRef.current !== sessionRef.current.path) {
+        resourcePathRef.current = sessionRef.current.path;
+        editorRef.current?.refreshResources();
+      }
       if (path) rememberPath(path);
       // Save-and-close/new may proceed only if the current content is on disk.
       return clean;
@@ -361,20 +388,41 @@ export function App() {
   }, [newDocument, openDocument, saveDocument, toggleSourceMode, toggleTheme]);
 
   useEffect(() => {
-    desktop.installCloseHandler(() => {
+    return desktop.installCloseHandler(() => {
       if (closeRequestedRef.current) return;
       guardUnsaved(() => {
         closeRequestedRef.current = true;
-        desktop.forceClose();
+        const snapshot = sessionRef.current.snapshot;
+        recoveryRef.current!.schedule({ ...snapshot, savedMarkdown: snapshot.markdown });
+        void recoveryRef.current!.flush().then(() => desktop.forceClose(), cause => {
+          closeRequestedRef.current = false;
+          showError(cause, "Recovery could not be saved before closing.");
+        });
       }, "Save before closing?", "Your unsaved changes will be lost when Markora closes.");
     });
-  }, [guardUnsaved]);
+  }, [guardUnsaved, showError]);
 
   useEffect(() => {
-    const startupPath = desktop.getStartupPath();
-    if (startupPath) void openPath(startupPath);
-    return desktop.onOpenPath(requestOpenPath);
-  }, [openPath, requestOpenPath]);
+    let cancelled = false;
+    void desktop.readRecovery().then(recovery => {
+      if (cancelled) return;
+      setStartupReady(true);
+      if (recovery) {
+        setRecoveryCandidate(recovery);
+      } else {
+        recoveryReadyRef.current = true;
+        const startupPath = desktop.getStartupPath();
+        if (startupPath) void openPath(startupPath);
+      }
+    }, cause => {
+      if (!cancelled) {
+        setStartupReady(true);
+        showError(cause, "Recovery could not be read. It has been left intact.");
+      }
+    });
+    const unsubscribe = desktop.onOpenPath(requestOpenPath);
+    return () => { cancelled = true; unsubscribe(); };
+  }, [openPath, requestOpenPath, showError]);
 
   const requestDroppedDocument = useCallback(async (file: File) => {
     const request = ++openRequestRef.current;
@@ -442,7 +490,7 @@ export function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (pendingAction) return;
+      if (pendingAction || recoveryCandidate) return;
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
       if (!event.altKey && !event.shiftKey && (event.code === "Slash" || key === "/")) {
@@ -465,7 +513,7 @@ export function App() {
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [newDocument, openDocument, pendingAction, saveDocument, toggleSourceMode]);
+  }, [newDocument, openDocument, pendingAction, recoveryCandidate, saveDocument, toggleSourceMode]);
 
   const editor = editorRef.current;
   const active = {
@@ -497,10 +545,12 @@ export function App() {
   };
 
   const insertImage = async () => {
+    const snapshot = sessionRef.current.snapshot;
     try {
       const image = await desktop.chooseImage();
-      if (!image) return;
-      const url = await desktop.storeImage(image, sessionRef.current.path);
+      if (!image || snapshot.id !== sessionRef.current.snapshot.id) return;
+      const url = await desktop.storeImage(image, snapshot.path);
+      if (snapshot.id !== sessionRef.current.snapshot.id) return;
       editorRef.current?.commands.insertImage({
         src: url,
         alt: image.file.name.replace(/\.[^.]+$/u, ""),
@@ -520,7 +570,7 @@ export function App() {
   };
 
   return (
-    <div className={`markora-app mdw-ui mdw-theme-${theme === "system" ? "auto" : theme}`} data-theme={theme}>
+    <div className={`markora-app mdw-ui mdw-theme-${theme === "system" ? "auto" : theme}`} data-theme={theme} inert={!startupReady}>
       <header className="app-titlebar">
         <div className="app-titlebar-leading">
           <button
@@ -730,48 +780,51 @@ export function App() {
       )}
 
       {pendingAction && (
-        <div className="app-dialog-backdrop" role="presentation">
-          <section aria-describedby="unsaved-message" aria-labelledby="unsaved-title" aria-modal="true" className="app-dialog" role="alertdialog">
-            <div className="app-dialog-icon"><Icon icon={AlertTriangle} size={22} /></div>
-            <div className="app-dialog-copy">
-              <h2 id="unsaved-title">{pendingAction.title}</h2>
-              <p id="unsaved-message">{pendingAction.message}</p>
-            </div>
-            <div className="app-dialog-actions">
-              <button className="app-dialog-button" onClick={() => setPendingAction(null)} type="button">Cancel</button>
-              <button
-                className="app-dialog-button app-dialog-button-danger"
-                onClick={() => {
-                  const action = pendingAction.action;
-                  setPendingAction(null);
-                  void action();
-                }}
-                type="button"
-              >
-                Don’t save
-              </button>
-              <button
-                autoFocus
-                className="app-dialog-button app-dialog-button-primary"
-                onClick={async () => {
-                  const action = pendingAction.action;
-                  if (await saveDocument(false)) {
-                    setPendingAction(null);
-                    await action();
-                  }
-                }}
-                type="button"
-              >
-                Save
-              </button>
-            </div>
-          </section>
-        </div>
+        <Dialog title={pendingAction.title} message={pendingAction.message}
+          onCancel={() => setPendingAction(null)} busy={saving}>
+          <button className="app-dialog-button" disabled={saving} onClick={() => setPendingAction(null)} type="button">Cancel</button>
+          <button className="app-dialog-button app-dialog-button-danger" disabled={saving} onClick={() => {
+            const action = pendingAction.action;
+            setPendingAction(null);
+            void action();
+          }} type="button">Don’t save</button>
+          <button autoFocus className="app-dialog-button app-dialog-button-primary" disabled={saving} onClick={async () => {
+            const action = pendingAction.action;
+            if (await saveDocument(false)) {
+              setPendingAction(null);
+              await action();
+            }
+          }} type="button">{saving ? "Saving…" : "Save"}</button>
+        </Dialog>
+      )}
+
+      {recoveryCandidate && (
+        <Dialog title="Recover your document?" message={`Unsaved changes to ${documentNameFromPath(recoveryCandidate.path)} were recovered from the previous session.`}
+          onCancel={() => {}}>
+          <button className="app-dialog-button" type="button" onClick={() => {
+            recoveryReadyRef.current = true;
+            setRecoveryCandidate(null);
+            recoveryRef.current!.schedule(sessionRef.current.snapshot);
+            const startupPath = desktop.getStartupPath();
+            if (startupPath) void openPath(startupPath);
+          }}>Discard recovery</button>
+          <button autoFocus className="app-dialog-button app-dialog-button-primary" type="button" onClick={() => {
+            const recovered = recoveryCandidate;
+            replaceDocument(recovered.path, recovered.savedMarkdown);
+            if (recovered.path) desktop.restoreDiskBaseline(recovered.path, recovered.savedMarkdown);
+            updateLiveMarkdown(recovered.markdown);
+            sourceEntryMarkdownRef.current = recovered.savedMarkdown;
+            sourceModeRef.current = true;
+            setSourceMode(true);
+            recoveryReadyRef.current = true;
+            setRecoveryCandidate(null);
+          }}>Restore</button>
+        </Dialog>
       )}
 
       {error && (
         <div className="app-toast" role="alert">
-          <Icon icon={AlertTriangle} size={18} />
+          <strong>Error</strong>
           <span>{error}</span>
           <button aria-label="Dismiss" onClick={() => setError(null)} type="button"><Icon icon={X} size={16} /></button>
         </div>

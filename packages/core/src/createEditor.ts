@@ -3048,6 +3048,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
       return changeEmitter.getMarkdown(view.state.doc);
     },
+    refreshResources() {
+      assertActive("refresh resources");
+      ImageView.refresh();
+    },
     flushChange() {
       if (lifecycle !== "active" || view.isDestroyed) {
         return;

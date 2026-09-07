@@ -21,7 +21,10 @@ type ImageViewInstance = {
   destroy(): void;
 };
 
-type ImageViewClass = new (node: ProseMirrorNode, ownerDocument: Document) => ImageViewInstance;
+type ImageViewClass = {
+  new (node: ProseMirrorNode, ownerDocument: Document): ImageViewInstance;
+  refresh(): void;
+};
 
 export function createImageViewClass(options: {
   imageNodeType: NodeType;
@@ -36,7 +39,14 @@ export function createImageViewClass(options: {
     resources,
   } = options;
 
+  const instances = new Set<ImageView>();
+
   class ImageView {
+    static refresh() {
+      for (const instance of [...instances]) {
+        if (!instance.destroyed) instance.load();
+      }
+    }
     dom: HTMLSpanElement;
     private sourceRow: HTMLSpanElement;
     private sourceText: HTMLSpanElement;
@@ -103,6 +113,7 @@ export function createImageViewClass(options: {
       this.frame.append(this.img, this.status);
       this.dom.append(this.sourceRow, this.frame);
 
+      instances.add(this);
       this.syncMeta();
       this.load();
     }
@@ -151,6 +162,7 @@ export function createImageViewClass(options: {
       }
 
       this.destroyed = true;
+      instances.delete(this);
       this.requestVersion += 1;
       this.cancelRequest();
       this.img.onload = null;

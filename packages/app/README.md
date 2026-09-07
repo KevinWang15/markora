@@ -48,3 +48,18 @@ pnpm dist:app:windows
 The result is `packages/app/release/win-x64/Markora.exe`. Distribute the complete `win-x64` directory because the executable uses the NW.js DLLs and resources beside it. This is a portable application, not an installer.
 
 NW.js is pinned in `scripts/nw.mjs`; upgrading it is an explicit product update rather than an ambient dependency change.
+
+## Document safety
+
+Saves write and flush a temporary file before replacing the destination. The
+previous saved version is kept beside the document as `.<filename>.markora-backup`.
+If a file changes outside Markora after it was opened or saved, Save refuses to
+overwrite it. Reopen it to review the disk version, or use Save As for a separate
+copy. Untouched documents retain their original Markdown and line endings.
+
+Unsaved changes are checkpointed to `recovery.json` in the NW.js application data
+directory. Source edits are coalesced over 300 ms; rich edits use the editor's idle
+change delivery (up to five seconds during continuous typing). After an unexpected
+exit, the app offers Restore or Discard recovery. Recovery is a recent checkpoint,
+not a guarantee that the final keystroke before a crash reached disk. Normal close
+waits for its final checkpoint. The renderer-only browser uses local storage.

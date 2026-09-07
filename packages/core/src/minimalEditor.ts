@@ -1957,6 +1957,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         ? changeEmitter.getMarkdown(view.state.doc)
         : finalMarkdown;
     },
+    refreshResources() {
+      assertActive("refresh resources");
+      ImageView.refresh();
+    },
     flushChange() {
       if (lifecycle === "active" && !view.isDestroyed) {
         changeEmitter.flush();

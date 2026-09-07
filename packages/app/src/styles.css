@@ -712,16 +712,7 @@ button {
   width: 45px;
 }
 
-.app-dialog-backdrop {
-  align-items: center;
-  background: rgba(15, 17, 15, 0.32);
-  display: flex;
-  inset: 0;
-  justify-content: center;
-  padding: 24px;
-  position: fixed;
-  z-index: 1000;
-}
+.app-dialog::backdrop { background: rgba(15, 17, 15, 0.32); }
 
 .app-dialog {
   background: var(--app-surface);
@@ -731,7 +722,11 @@ button {
   display: grid;
   gap: 2px 14px;
   grid-template-columns: 38px 1fr;
-  max-width: 440px;
+  max-width: min(440px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  margin: auto;
+  color: var(--app-text);
   padding: 22px;
   width: 100%;
 }
@@ -856,3 +851,5 @@ button {
     transition: none;
   }
 }
+
+.app-dialog:not([open]) { display: none; }
