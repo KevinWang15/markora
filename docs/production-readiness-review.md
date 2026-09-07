@@ -4,7 +4,7 @@ Reviewed 2026-09-07 at commit `8bdcd26`. Target: a dependable desktop Markdown w
 
 The repository has a substantial editor foundation: ProseMirror document semantics, lazy CodeMirror fences, explicit resource policies, extension boundaries, teardown handling, and broad interaction tests. The desktop application does not yet provide the same reliability. The highest-value next work is document safety and continuity across editing modes.
 
-This was a review, not an implementation pass. Production source was not changed. Inspection covered the desktop host in detail and selected core, UI, extension, compatibility, performance, and CI paths. Browser probes used Chromium; the built NW.js application was also launched with an isolated profile and temporary documents and tested through CDP. This is not a claim that every line or platform was audited.
+The findings and original verification below describe the initial review at `8bdcd26`. The subsequent implementation is recorded in the follow-up section; the original findings remain here as the baseline. Inspection covered the desktop host in detail and selected core, UI, extension, compatibility, performance, and CI paths. Browser probes used Chromium; the built NW.js application was also launched with an isolated profile and temporary documents and tested through CDP. This is not a claim that every line or platform was audited.
 
 ## Prioritized findings
 
@@ -150,3 +150,20 @@ The diagrams performance unit test also checks a 20-second budget while using Vi
 Raw session artifacts are available locally under `/tmp/markora-review-*`, including `markora-review-probes.json`, `markora-review-outline.json`, `markora-review-native/results.json`, screenshots, scripts, and test logs. The primary browser failure trace is in the workspace's `test-results` directory.
 
 Recommended implementation order: fix revision-safe saves and resource context; add atomic persistence and recovery; preserve source fidelity and undo; establish desktop release tests; then improve navigation, accessibility, performance, and writing features. Each phase should have explicit behavior tests before expanding scope.
+
+
+## Implementation follow-up — 2026-09-07
+
+The confirmed desktop defects now have fixes and regression coverage:
+
+- `2b5859d`: document identities and revision-aware save completion preserve edits made during I/O, serialize saves, and retain untouched source bytes.
+- `c0de084`: atomic replacement, previous-version backups, external-change checks, ordered recovery checkpoints, resource refresh, native modal behavior, and native listener cleanup.
+- `a135780`: shared source/rich undo and redo, semantic footnotes and TOC, model-based outline navigation, and deferred document statistics.
+- `6172e8d`: the final app follow-up preserves relative images on Save As, resolves encoded resource names, surfaces asset/editor errors, asks before lossy table saves, and prevents closing over edits made during the final recovery write. Source reconciliation retains the existing rich view; history shortcuts respect active composition.
+- CI now runs the complete unit/build/typecheck/import-smoke checks and a separate production-app Chromium suite. The Android fallback cancellation test dispatches each invalidating event in the same browser turn as the pending deletion, eliminating its race with the 60 ms timer. The diagram performance test's runner timeout now accommodates its existing 20-second budget, with bounded unit concurrency.
+
+Native validation used the built NW.js application on Linux with isolated profiles and temporary files. CDP checks exercised real atomic save/backup/conflict behavior, delayed-save edits, first-open and switched-directory images, Save As with encoded image filenames and copied assets, recovery after renderer reload, modal Tab/Escape behavior, and late edits during the final close checkpoint. The Save As destination was supplied at the native picker boundary; the file writes and image copies used the real filesystem.
+
+Final local verification: `pnpm check` passed, including **1,509 unit tests across 90 files**, builds, type checks, and import smoke checks. The production-app Chromium suite passed **8/8** checks, including direct restoration of rich table snapshots during undo. The required Chromium suite passed **229** checks with **1 existing skip**; its previously failing Android cancellation case now passes. The final rich-undo adjustment also passed the app type check and production build. The Android input file also passed all **21** cases across three repetitions.
+
+Remaining release work includes native Windows/macOS and real assistive-technology/IME validation, power-loss and filesystem-specific durability testing, packaged launch/open/save/close automation, full desktop performance measurements, and the additional writing workflows listed above. Conflict checks minimize accidental external overwrites but do not provide a cross-process filesystem lock. Recovery retains a recent checkpoint, and the application still uses its documented bounded Markdown dialect. These changes address the confirmed defects; they are not certification of complete Typora parity.

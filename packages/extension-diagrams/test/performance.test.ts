@@ -35,4 +35,4 @@ it("mounts and position-remaps 512 source-only diagrams within the retained broa
 
   editor.destroy();
   element.remove();
-});
+}, 25_000);

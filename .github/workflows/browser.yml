@@ -17,6 +17,29 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  desktop-and-unit:
+    name: Unit checks and desktop browser behavior
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:app:browser
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: desktop-browser-failures
+          path: test-results/app
+
   required:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     name: Required / ${{ matrix.browser }}

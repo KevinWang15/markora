@@ -558,7 +558,15 @@ export function App() {
     applyingHistoryRef.current = true;
     try {
       if (!sourceModeRef.current) {
-        editor.commands.resetMarkdown(markdown);
+        if (typeof entry.source === "string") {
+          editor.commands.resetMarkdown(markdown);
+        } else {
+          // Rich snapshots can contain structure that Markdown cannot encode.
+          // Restore the stored model so undo never silently flattens that data.
+          editor.view.dispatch(editor.view.state.tr
+            .replaceWith(0, editor.view.state.doc.content.size, entry.source.content)
+            .setMeta("addToHistory", false));
+        }
         sourceEntryMarkdownRef.current = markdown;
       }
       setDocumentSnapshot(sessionRef.current.edit(markdown));

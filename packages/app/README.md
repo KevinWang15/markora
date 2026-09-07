@@ -70,3 +70,15 @@ views. Typing bursts are grouped; explicit view changes separate groups. Rich
 history snapshots retain immutable editor nodes, so typing does not require
 serializing the document on each keystroke. The outline uses the editor's indexed
 heading positions in rich mode and CommonMark source positions in source mode.
+
+Save As copies relative images within the original document folder to the new
+folder while keeping the authored URLs unchanged. Existing different images are
+never overwritten, and references outside the document folder require saving in
+the original folder or using absolute URLs. External HTTP images are not copied.
+The app asks before saving table structures that Markdown cannot represent.
+
+Run `pnpm test:app:browser` from the repository root for production-renderer
+behavior checks, including CDP input, mode-switch history, exact-source saves,
+modal focus, outline navigation, footnotes, and recovery. These run alongside the
+unit/typecheck job in CI; native filesystem checks also use isolated NW.js CDP
+sessions during development.

@@ -8,6 +8,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^24.3.0",
     "jsdom": "^28.1.0",
     "typescript": "^5.7.3",
     "vitest": "^4.0.18"
@@ -40,6 +41,7 @@
     "typecheck:extensions": "pnpm --filter './packages/extension-*' --if-present typecheck",
     "typecheck:browser": "tsc -p tsconfig.browser.json --noEmit",
     "smoke:extensions": "pnpm --filter './packages/extension-*' --if-present smoke:node-esm",
-    "pack:smoke": "node ./scripts/pack-smoke.mjs"
+    "pack:smoke": "node ./scripts/pack-smoke.mjs",
+    "test:app:browser": "playwright test -c playwright.app.config.ts"
   }
 }

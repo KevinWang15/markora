@@ -9,6 +9,8 @@
   "include": [
     "playwright.config.ts",
     "tests/browser/**/*.ts",
-    "tests/browser/**/*.tsx"
+    "tests/browser/**/*.tsx",
+    "playwright.app.config.ts",
+    "tests/app/**/*.ts"
   ]
 }

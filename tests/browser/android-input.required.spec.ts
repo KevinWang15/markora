@@ -28,6 +28,7 @@ async function dispatchNoMutationDeletion(
   target: "code-mirror" | "prosemirror" = "prosemirror",
   count = 1,
   inputType: "deleteContentBackward" | "deleteContentForward" = "deleteContentBackward",
+  followup?: "selection" | "readonly" | "composition" | "blur",
 ) {
   const cdp = await context.newCDPSession(page);
   const containerSelector = `[data-e2e-editor="${id}"]`;
@@ -53,6 +54,20 @@ async function dispatchNoMutationDeletion(
         if (index + 1 < ${count}) {
           await new Promise((resolve) => setTimeout(resolve, 20));
         }
+      }
+      // State invalidation must occur before the fallback deadline, in this same
+      // browser turn; separate CDP/locator round trips race the 60 ms timer.
+      const followup = ${JSON.stringify(followup ?? null)};
+      const lab = window.__MARKORA_BROWSER_LAB__;
+      if (followup === "selection") lab.selectText(${JSON.stringify(id)}, "alpha", "end");
+      if (followup === "readonly") lab.updateOptions(${JSON.stringify(id)}, { editable: false });
+      if (followup === "composition") events[events.length - 1].target.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+      if (followup === "blur") {
+        const button = document.createElement("button");
+        button.id = "android-external-focus";
+        button.textContent = "External focus";
+        document.body.append(button);
+        button.focus();
       }
       return {
         defaultPrevented: events.some((event) => event.defaultPrevented),
@@ -397,11 +412,7 @@ test("@required Android CDP fallback expires after editor state changes", async 
     (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "beta", "end"),
     id,
   )).toBe(true);
-  await dispatchNoMutationDeletion(context, id, labPage);
-  expect(await labPage.evaluate(
-    (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
-    id,
-  )).toBe(true);
+  await dispatchNoMutationDeletion(context, id, labPage, "prosemirror", 1, "deleteContentBackward", "selection");
   await labPage.waitForTimeout(100);
   expect(await getMarkdown(labPage, id)).toBe("alpha beta");
 
@@ -410,8 +421,7 @@ test("@required Android CDP fallback expires after editor state changes", async 
     (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
     id,
   )).toBe(true);
-  await dispatchNoMutationDeletion(context, id, labPage);
-  await updateEditorOptions(labPage, id, { editable: false });
+  await dispatchNoMutationDeletion(context, id, labPage, "prosemirror", 1, "deleteContentBackward", "readonly");
   await labPage.waitForTimeout(100);
   expect(await getMarkdown(labPage, id)).toBe("alpha");
   await updateEditorOptions(labPage, id, { editable: true });
@@ -421,10 +431,7 @@ test("@required Android CDP fallback expires after editor state changes", async 
     (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
     id,
   )).toBe(true);
-  await dispatchNoMutationDeletion(context, id, labPage);
-  await editor.evaluate((element) => {
-    element.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
-  });
+  await dispatchNoMutationDeletion(context, id, labPage, "prosemirror", 1, "deleteContentBackward", "composition");
   await labPage.waitForTimeout(100);
   expect(await getMarkdown(labPage, id)).toBe("alpha");
   await editor.evaluate((element) => {
@@ -436,14 +443,7 @@ test("@required Android CDP fallback expires after editor state changes", async 
     (editorId) => window.__MARKORA_BROWSER_LAB__!.selectText(editorId, "alpha", "end"),
     id,
   )).toBe(true);
-  await dispatchNoMutationDeletion(context, id, labPage);
-  await labPage.evaluate(() => {
-    const button = document.createElement("button");
-    button.id = "android-external-focus";
-    button.textContent = "External focus";
-    document.body.append(button);
-    button.focus();
-  });
+  await dispatchNoMutationDeletion(context, id, labPage, "prosemirror", 1, "deleteContentBackward", "blur");
   await labPage.waitForTimeout(100);
   expect(await getMarkdown(labPage, id)).toBe("alpha");
   await expect(labPage.locator("#android-external-focus")).toBeFocused();
