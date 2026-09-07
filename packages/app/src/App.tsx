@@ -40,6 +40,7 @@ import { createDefaultUi } from "markora-ui";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import type { MarkdownThemeController } from "markora/themes";
 import { desktop } from "./desktop";
+import { captureExportTheme } from "./exportTheme";
 import { DocumentSession, type DocumentSnapshot } from "./documentSession";
 import { Dialog } from "./Dialog";
 import { RecoveryJournal } from "./RecoveryJournal";
@@ -644,8 +645,9 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     try {
       const doc = sourceModeRef.current ? current.extensions.get(bridgeRef.current).state.parse(sourceEditorRef.current?.getMarkdown() ?? sessionRef.current.markdown) : current.view.state.doc;
       if (!doc) throw new Error("This source could not be parsed for export.");
+      const exportTheme = format === "pdf" ? captureExportTheme(current.view.dom, themeController.getSnapshot().id) : undefined;
       const { buildExport, printExport } = await import("./exportDocument");
-      const output = await buildExport(doc, documentName, url => desktop.exportImage(path, url));
+      const output = await buildExport(doc, documentName, { resolveImage: url => desktop.exportImage(path, url), theme: exportTheme });
       if (format === "html") await desktop.exportHtml(documentName.replace(/\.[^.]+$/u, "") + ".html", output.html);
       else await printExport(output, () => desktop.exportPdf(documentName.replace(/\.[^.]+$/u, "") + ".pdf"), desktop.isNative);
     } catch (cause) { showError(cause, "The document could not be exported."); }

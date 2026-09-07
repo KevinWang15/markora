@@ -169,3 +169,5 @@ node packages/app/scripts/native-behavior.mjs linux x64
 
 Use `win x64`, `osx arm64` or `osx x64` on the corresponding host. Linux needs a
 display (for example `xvfb-run -a` in a headless environment).
+
+PDF exports use the selected theme’s colors, typography, headings, tables, and code surfaces. System appearance is resolved when export starts. Dark themes retain their dark paper background. Exporting from source mode uses the latest source without changing document history or saved state.
