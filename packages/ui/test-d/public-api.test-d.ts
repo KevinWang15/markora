@@ -68,3 +68,17 @@ createDefaultUi({ messages: { tableControlLabel: "Control" } });
 // @ts-expect-error Table contexts use one-based numeric coordinates.
 const invalidSelection: DefaultUiTableSelectionContext = { columnFrom: "1" };
 void invalidSelection;
+
+createDefaultUi({ contextMenu: {
+  includeExtensionActions: true,
+  messages: { itemLabel: (id, label) => `${id}: ${label}` },
+  providers: [{ id: "host", order: 25, items: context => [{
+    type: "action", id: "host.heading", label: "Heading",
+    enabled: context.editor.state.can.setHeading(2),
+    run: current => current.editor.commands.setHeading(2),
+  }] }],
+  clipboard: { read: async () => ({ text: "hello", html: "<p>hello</p>" }), write: async content => { void content.markdown; } },
+} });
+createDefaultUi({ contextMenu: false });
+// @ts-expect-error A command callback is required on an action.
+createDefaultUi({ contextMenu: { providers: [{ id: "host", items: () => [{ type: "action", id: "missing", label: "Missing" }] }] } });

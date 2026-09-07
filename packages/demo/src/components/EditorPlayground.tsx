@@ -16,6 +16,7 @@ import { buildLucideIconElement } from "@lucide/icons/build";
 import { createEditor, type MarkdownEditor } from "markora";
 import { createMathExtension, type MathKind } from "markora-extension-math";
 import { MathDialog, type MathEdit } from "@markora/react-ui/MathDialog";
+import { createMathContextMenuProvider } from "@markora/react-ui/mathContextMenu";
 import { renderMath } from "@markora/react-ui/renderMath";
 import "markora-extension-math/styles.css";
 import "@markora/react-ui/styles.css";
@@ -814,7 +815,7 @@ export function EditorPlayground() {
       element: editorElement,
       markdown: mountedSession.editorMarkdown,
       ariaLabel: "Markdown document editor",
-      ui: createDefaultUi(),
+      ui: createDefaultUi({ contextMenu: { providers: [createMathContextMenuProvider(math, openMath)] } }),
       extensions: [math],
       onChange(markdown) {
         const sourceMarkdown = sourceTextareaRef.current?.value

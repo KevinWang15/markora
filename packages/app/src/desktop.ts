@@ -1,3 +1,4 @@
+import type { ContextMenuClipboard } from "markora-ui";
 import { atomicWrite, copyRelativeImages, isMissingFile, readIfPresent, saveFile, type FileSystem, type PathModule } from "./persistence";
 import type { DocumentSnapshot } from "./documentSession";
 import { extractOpenPath, parseCommandLineArguments } from "./document";
@@ -50,6 +51,11 @@ type NwWindow = {
 };
 
 type NwRuntime = {
+  Clipboard?: { get: () => {
+    get: (type: "text" | "html") => string;
+    set: (items: { type: "text" | "html"; data: string }[]) => void;
+    readAvailableTypes: () => string[];
+  } };
   App: {
     argv: string[];
     startPath: string;
@@ -194,6 +200,25 @@ function createNativeMenu(actions: DesktopMenuActions) {
 const diskBaselines = new Map<string, string | null>();
 
 export const desktop = {
+  /** Native clipboard transport; document semantics remain in editor.clipboard. */
+  getClipboard(): ContextMenuClipboard | undefined {
+    const clipboard = getNw()?.Clipboard?.get();
+    if (!clipboard) return undefined;
+    return {
+      async read() {
+        const types = clipboard.readAvailableTypes();
+        if (!types.includes("text") && !types.includes("html")) throw new Error("The clipboard does not contain supported text.");
+        return { text: types.includes("text") ? clipboard.get("text") : "",
+          html: types.includes("html") ? clipboard.get("html") : undefined };
+      },
+      async write(content) {
+        // One multi-format write preserves both formats; separate writes would overwrite each other.
+        const items: { type: "text" | "html"; data: string }[] = [{ type: "text", data: content.text }];
+        if (content.html) items.push({ type: "html", data: content.html });
+        clipboard.set(items);
+      },
+    };
+  },
   isNative: Boolean(getNw()),
   isMac: getNw()?.process.platform === "darwin",
 

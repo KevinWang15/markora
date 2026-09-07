@@ -232,9 +232,20 @@ Code surfaces default to LTR independently of the surrounding document, while Un
 | `--mdw-ui-table-edge-z-index` | `0` (keeps edge controls beneath host overlays) |
 | `--mdw-ui-error-font-size`, `--mdw-ui-error-line-height` | `0.875rem`, `1.4` |
 
+Context menus use the shared UI palette, font, stacking, gap, border, focus and radius tokens above, with these additional controls:
+
+| Token | Default |
+| --- | --- |
+| `--mdw-ui-menu-inline-size`, `--mdw-ui-menu-padding`, `--mdw-ui-menu-line-height` | `224px`, `5px`, `1.45` |
+| `--mdw-ui-menu-item-min-size`, `--mdw-ui-menu-item-padding-block`, `--mdw-ui-menu-item-padding-inline` | `32px`, `5px`, `9px` |
+| `--mdw-ui-menu-check-size`, `--mdw-ui-menu-chevron-size` | `15px`, `20px` |
+| `--mdw-ui-menu-hint-font-size`, `--mdw-ui-menu-hint-gap`, `--mdw-ui-menu-status-inline-size` | `11px`, `20px`, `250px` |
+
+Menu dimensions are clamped to the visual viewport at runtime; coarse pointers retain the shared `--mdw-control-min-size` accessibility floor.
+
 ## Logical layout and ownership boundaries
 
-Core owns presentation required to understand and operate document nodes: editable-canvas bounds, document rhythm, visible task controls, selected nodes/cells, passive and active code views, preserved-source atoms, and managed cursors. `markora-ui` owns only its dialogs, table toolbar, and table edge controls. The host owns all page-level layout, surrounding toolbars, product navigation, modal policy, global typography, portal stacking context, and theme placement.
+Core owns presentation required to understand and operate document nodes: editable-canvas bounds, document rhythm, visible task controls, selected nodes/cells, passive and active code views, preserved-source atoms, and managed cursors. `markora-ui` owns only its dialogs, context menus, table toolbar, and table edge controls. The host owns all page-level layout, surrounding toolbars, product navigation, modal policy, global typography, portal stacking context, and theme placement.
 
 The shipped styles use logical inline properties for document indentation, table alignment defaults, code gutters, toolbar grouping, and managed-block cursors. Runtime viewport coordinates remain physical because they describe browser geometry rather than reading order. Explicit Markdown table alignments named `left` and `right` remain content semantics and are not rewritten as `start`/`end`.
 

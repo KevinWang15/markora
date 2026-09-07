@@ -43,6 +43,20 @@ try {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Input.insertText", { text: "Pages CDP edit " });
   await expect(editor).toContainText("Pages CDP edit");
+  await page.keyboard.press("Shift+F10");
+  const contextMenu = page.getByRole("menu", { name: "Editor context menu", exact: true });
+  await expect(contextMenu).toBeVisible();
+  await contextMenu.getByRole("menuitem", { name: "Select all", exact: true }).click();
+  await expect(contextMenu).toHaveCount(0);
+  await expect(editor).toBeFocused();
+  assert(await editor.evaluate(element => {
+    const selection = window.getSelection();
+    return selection?.rangeCount === 1 && selection.getRangeAt(0).startContainer === element
+      && selection.getRangeAt(0).startOffset === 0
+      && selection.getRangeAt(0).endContainer === element
+      && selection.getRangeAt(0).endOffset === element.childNodes.length;
+  }), "Select all must span the complete editor document, including atomic nodes.");
+  await editor.locator("p").first().click();
   await page.getByRole("button", { name: /^Insert math/ }).click();
   const mathDialog = page.getByRole("dialog", { name: "Insert math", exact: true });
   await expect(mathDialog.getByRole("textbox", { name: "LaTeX source" })).toBeFocused();
@@ -69,7 +83,7 @@ try {
     if (route === "/docs/getting-started") await expect(page.locator("#site-hero")).toBeVisible();
   }
   assert.deepEqual(errors, []);
-  console.log(`Pages checks passed: ${Object.keys(publicRouteMetadata).length} routes, refresh, base path, theme persistence, CDP editing, and math insertion/previews.`);
+  console.log(`Pages checks passed: ${Object.keys(publicRouteMetadata).length} routes, refresh, base path, theme persistence, CDP editing, context menus, and math insertion/previews.`);
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

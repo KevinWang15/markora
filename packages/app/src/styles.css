@@ -28,6 +28,8 @@ button {
 }
 
 .markora-app {
+  /* Editor overlays sit above window chrome and below product dialogs. */
+  --mdw-ui-z-index: 60;
   --app-bg: var(--mdw-color-surface, #f7f7f6);
   --app-surface: var(--mdw-color-surface, #ffffff);
   --app-surface-soft: var(--mdw-color-surface-subtle, #f3f3f1);

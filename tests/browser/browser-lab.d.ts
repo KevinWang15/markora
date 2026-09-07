@@ -193,6 +193,7 @@ type BrowserLabUpdateOptions = {
 };
 
 type BrowserLabTestSpec = {
+  contextMenu?: false | import("../../packages/ui/src/contextMenuTypes").ContextMenuConfig;
   alertsMessages?: Partial<{
     alertLabel: string;
     cautionKindLabel: string;

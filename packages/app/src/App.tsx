@@ -38,6 +38,7 @@ import { FindBar } from "./FindBar";
 import { createSearchExtension } from "./searchExtension";
 import { findTextMatches, type SearchOptions, type SearchResults } from "./search";
 import { DocumentHistory } from "./DocumentHistory";
+import { createMathContextMenuProvider } from "@markora/react-ui/mathContextMenu";
 import { createDefaultUi } from "markora-ui";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import type { MarkdownThemeController } from "markora/themes";
@@ -230,7 +231,17 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       autofocus: true,
       placeholder: "Start writing…",
       attributes: { "data-markora-app-editor": "true" },
-      ui: createDefaultUi(),
+      ui: createDefaultUi({ contextMenu: {
+        clipboard: desktop.getClipboard(),
+        providers: [createMathContextMenuProvider(mathRef.current, openMath)],
+        onError: cause => showError(cause, "This editor action could not be completed."),
+        transform: (items, context) => items.map(item => {
+          if (item.type !== "action") return item;
+          if (item.id === "history.undo") return { ...item, enabled: context.editor.view.editable && historyRef.current.canUndo, run: () => navigateHistory("undo") };
+          if (item.id === "history.redo") return { ...item, enabled: context.editor.view.editable && historyRef.current.canRedo, run: () => navigateHistory("redo") };
+          return item;
+        }),
+      } }),
       extensions: [createFootnotesExtension(), tocRef.current, bridgeRef.current, searchRef.current, mathRef.current, diagramsRef.current],
       resources: {
         images: { allowedProtocols: ["http:", "https:", "data:", "file:"] },

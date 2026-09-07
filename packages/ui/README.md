@@ -127,3 +127,60 @@ package styles into that root. The complete token and ownership contract is in
 - `markora-ui` does not change parsing or serialization; those guarantees are defined by the [`markora` Markdown compatibility contract](https://github.com/KevinWang15/markora/blob/main/packages/core/MARKDOWN_COMPATIBILITY.md)
 - import `markora-ui/styles.css` whenever you use the default UI package
 - `markora-ui` declares `markora` as a peer dependency and is intended to track the same package version
+
+## Context menus
+
+Right-click the rich editor, or press **Shift+F10** / the **Context Menu** key, to open the shared context menu. It includes clipboard actions, formatting, paragraph styles, insertion, undo/redo, and commands for the targeted link, image, code block, or table. Existing extension `uiActions` appear in an Extensions submenu. `contextMenu: false` opts out and keeps the platform menu.
+
+A pointer inside a selected range preserves that selection. Otherwise the menu targets the clicked text or atom. Nested CodeMirror editors, form controls, and elements marked `data-mdw-native-context-menu` keep their own native menus and selection ownership. Read-only views still support selection and copying; mutation actions are disabled.
+
+Menus use the same theme/portal environment as the other overlays, including independently themed editors, Shadow DOM, transformed portals, and RTL. Arrow keys, Home/End, typeahead, Enter/Space, Escape, and Tab work at each submenu level. Disabled items remain focusable for discovery but cannot execute.
+
+### Host contributions
+
+Contribute data and callbacks; the UI owns menu DOM, focus, positioning, and cleanup:
+
+```ts
+const ui = createDefaultUi({
+  contextMenu: {
+    providers: [{
+      id: "product",
+      order: 25,
+      items: ({ editor }) => [{
+        type: "submenu",
+        id: "product.insert",
+        label: "Product actions",
+        items: [{
+          type: "action",
+          id: "product.date",
+          label: "Insert today's date",
+          enabled: editor.state.can.pastePlainText(),
+          run: ({ editor }) => editor.commands.pastePlainText(new Date().toLocaleDateString()),
+        }],
+      }],
+    }],
+    messages: {
+      menuLabel: "Document actions",
+      itemLabel: (id, fallback) => id === "history.undo" ? "Undo document change" : fallback,
+    },
+  },
+});
+```
+
+`ContextMenuItem` is an action, submenu, or separator. Action fields are `id`, `label`, `run`, and optional `enabled`, `checked`, `danger`, and `shortcut`. Providers are ordered numerically (ties retain registration order); each nonempty provider contributes one separated group. Built-ins occupy orders 10–60. IDs must be unique throughout the resulting tree; provider IDs beginning with `markora.` are reserved. Empty submenus and redundant separators are removed. Trees and creation-time options are copied and frozen; nesting is limited to eight submenu levels.
+
+Use `includeDefaults: false` or `includeExtensionActions: false` to compose a smaller menu. `transform(items, context)` can remove/reorder items or replace callbacks. Built-in IDs include `history.undo`, `history.redo`, `clipboard.copy`, `clipboard.cut`, `clipboard.paste`, `clipboard.paste-plain`, `selection.all`, `format.bold`, `paragraph.heading-2`, `insert.table`, `link.edit`, `image.edit`, and `table.row.after`. The desktop app uses this hook to connect Undo/Redo to its history across rich/source mode switches. Hosts with custom keyboard bindings can update shortcut hints through the same hook.
+
+Every item label, including extension labels, passes through `messages.itemLabel(id, fallback)`. Other menu copy is independently replaceable through the typed `ContextMenuMessages` contract. Core overlay messages remain in `createDefaultUi({ messages })`.
+
+### Asynchronous actions and clipboard ownership
+
+A `run(context)` callback may return `boolean`, `void`, or a promise. Returning `false` or throwing reports a failure; the menu stays open for retry. `onError(error, context)` also lets a host report diagnostics. Capability/checked values are snapshots for presentation; commands must still enforce their own preconditions.
+
+A session captures the document, selection, and editability. Changes to that target, outside interaction, viewport changes, or teardown close it and abort `context.signal`. **After an await, check `context.isCurrent()` before mutating the editor.** Escape cancels pending work. Menu focus never overrides a deliberate handoff to another input or dialog.
+
+The default transport uses the browser Clipboard API. Permissions are requested only by an explicit clipboard action. Unsupported APIs disable the corresponding item; failed permission requests leave document content unchanged and explain how to use the keyboard alternative. Hosts can inject `clipboard.read()` and `clipboard.write(content)` to supply a native or product clipboard. Formats are `{ text, html?, markdown? }`; browser writes use interoperable plain text and HTML, while transports may also preserve Markdown.
+
+Selection capture, table rectangles, extension serialization, stale Cut guards, and paste policies live in **`editor.clipboard`**, not in the transport. A Cut deletes only after the host write succeeds, and Paste checks its target again after reading. No renderer-specific clipboard logic is needed in a host.
+
+See [the architecture and lifetime design](../../docs/context-menu-design.md) for implementation boundaries and verification coverage.

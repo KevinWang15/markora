@@ -63,6 +63,30 @@ try {
   await page.waitForFunction(() => document.querySelector(".mdw-image img")?.naturalWidth === 100);
   await expect(page.locator(".mdw-math__preview math")).toHaveCount(1);
   pass("native command-line open, relative image loading, and math preview");
+  const richEditor = page.getByRole("textbox", { name: "Markdown document", exact: true });
+  const contextMenu = page.getByRole("menu", { name: "Editor context menu", exact: true });
+  await richEditor.focus(); await page.keyboard.press(`${mod}+a`); await page.keyboard.press("Shift+F10");
+  await contextMenu.getByRole("menuitem", { name: "Copy", exact: true }).click();
+  await expect(contextMenu).toHaveCount(0);
+  const clipboardFormats = await page.evaluate(() => {
+    const clipboard = window.nw.Clipboard.get();
+    return { text: clipboard.get("text"), html: clipboard.get("html") };
+  });
+  assert.match(clipboardFormats.text, /cat cat/u); assert.match(clipboardFormats.html, /<h1/u);
+  await page.keyboard.press("Shift+F10");
+  await contextMenu.getByRole("menuitem", { name: "Cut", exact: true }).click();
+  await expect(richEditor).toHaveText("");
+  await page.keyboard.press("Shift+F10");
+  await contextMenu.getByRole("menuitem", { name: "Paste", exact: true }).click();
+  await expect(richEditor).toContainText("cat cat");
+  await expect(richEditor.locator(".mdw-math__preview math")).toHaveCount(1);
+  for (let index = 0; index < 2; index++) {
+    await page.keyboard.press("Shift+F10");
+    await contextMenu.getByRole("menuitem", { name: "Undo", exact: true }).click();
+  }
+  await expect(richEditor).toContainText("cat cat");
+  await expect(page).toHaveTitle("native.md — Markora");
+  pass("native context menu rich clipboard, cut/paste, and document undo");
   await toSource(); await source.click(); await page.keyboard.press(end); await cdp.send("Input.insertText", { text: "\nsaved" });
   await expect(source).toContainText("saved");
   await page.evaluate(() => {

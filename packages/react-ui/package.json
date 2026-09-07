@@ -9,12 +9,14 @@
     "./Icon": "./src/Icon.tsx",
     "./MathDialog": "./src/MathDialog.tsx",
     "./renderMath": "./src/renderMath.ts",
-    "./styles.css": "./src/styles.css"
+    "./styles.css": "./src/styles.css",
+    "./mathContextMenu": "./src/mathContextMenu.ts"
   },
   "dependencies": {
     "@lucide/icons": "^1.37.0",
     "katex": "^0.18.7",
-    "markora-extension-math": "workspace:^"
+    "markora-extension-math": "workspace:^",
+    "markora-ui": "workspace:*"
   },
   "peerDependencies": {
     "react": "^19.1.1"

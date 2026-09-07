@@ -97,7 +97,7 @@ import {
   type TocSnapshot,
 } from "markora-extension-toc";
 import "markora-extension-toc/styles.css";
-import { createDefaultUi, type DefaultUiMessageOverrides } from "markora-ui";
+import { createDefaultUi, type DefaultUiMessageOverrides, type ContextMenuConfig } from "markora-ui";
 import { useEffect, useRef } from "react";
 import { createGlobalListenerLedger, type ListenerSnapshot } from "../browser-lab/listenerLedger";
 import {
@@ -172,6 +172,7 @@ export type BrowserLabDiagramCommandRequest =
     };
 
 export type BrowserLabEditorSpec = {
+  contextMenu?: false | ContextMenuConfig;
   ariaLabel?: string;
   ariaLabelledBy?: string;
   attributes?: Record<string, string>;
@@ -1753,9 +1754,10 @@ export function BrowserLabPage() {
         ui: mounted.explicitPortalRoot
           ? createDefaultUi({
               messages: spec.uiMessages,
+              contextMenu: spec.contextMenu,
               portalRoot: mounted.explicitPortalRoot,
             })
-          : createDefaultUi({ messages: spec.uiMessages }),
+          : createDefaultUi({ messages: spec.uiMessages, contextMenu: spec.contextMenu }),
       }));
 
       subscribeToEditorEvents(mounted);

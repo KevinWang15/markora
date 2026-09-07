@@ -325,6 +325,9 @@ importers:
       markora-extension-math:
         specifier: workspace:^
         version: link:../extension-math
+      markora-ui:
+        specifier: workspace:*
+        version: link:../ui
     devDependencies:
       '@types/katex':
         specifier: ^0.16.8
@@ -347,6 +350,9 @@ importers:
       '@mdi/js':
         specifier: ^7.4.47
         version: 7.4.47
+      prosemirror-state:
+        specifier: ^1.4.4
+        version: 1.4.4
     devDependencies:
       markora:
         specifier: workspace:*
