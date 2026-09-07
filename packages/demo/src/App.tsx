@@ -1,5 +1,6 @@
 import { Component, lazy, Suspense, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigationType } from "react-router-dom";
+import { defaultDocumentMetadata, publicRouteMetadata } from "./lib/siteRoutes";
 import { CodeBlock } from "./components/CodeBlock";
 import { docsNavigation, installCommand, quickStartCode } from "./lib/content";
 import { GettingStartedPage } from "./pages/GettingStartedPage";
@@ -97,47 +98,16 @@ class RouteErrorBoundary extends Component<
   }
 }
 
-const defaultDocumentMetadata = {
-  title: "Markora — Embedded Markdown Editor",
-  description: "Markora is a production-minded embedded Markdown editor with predictable fidelity, accessible interactions, host-owned lifecycle, and opt-in syntax packages.",
-};
-
-const publicRouteMetadata: Record<string, typeof defaultDocumentMetadata> = {
-  "/": {
-    title: "Getting Started — Markora",
-    description: "Install Markora, mount the embedded Markdown editor, and add only the UI and syntax packages your product needs.",
-  },
-  "/docs/getting-started": {
-    title: "Getting Started — Markora",
-    description: "Install Markora, mount the embedded Markdown editor, and add only the UI and syntax packages your product needs.",
-  },
-  "/docs/markdown": {
-    title: "Markdown Compatibility — Markora",
-    description: "Review Markora's published Markdown dialect, exact-source fallback behavior, and opt-in semantic syntax packages.",
-  },
-  "/docs/api": {
-    title: "API Reference — Markora",
-    description: "Explore Markora's typed editor API for commands, state, events, reconciliation, resources, extensions, and teardown.",
-  },
-  "/docs/examples": {
-    title: "Embedding Examples — Markora",
-    description: "Use practical Markora recipes for framework lifecycles, host-owned persistence, scoped UI, and optional Markdown syntax.",
-  },
-  "/demo": {
-    title: "Core Playground — Markora",
-    description: "Try Markora's embedded core editor and optional UI in a realistic host-controlled playground.",
-  },
-};
-
 export function App({ themeController }: Readonly<{ themeController?: MarkdownThemeController }>) {
   const theme = useSyncExternalStore(themeController?.subscribe ?? noThemeSubscription, themeController?.getSnapshot ?? defaultThemeSnapshot);
   const location = useLocation();
+  const pathname = location.pathname.replace(/\/+$/u, "") || "/";
   const navigationType = useNavigationType();
-  const previousPathRef = useRef(location.pathname);
+  const previousPathRef = useRef(pathname);
   const currentEntryKeyRef = useRef(location.key);
   const scrollPositionsRef = useRef(new Map<string, { left: number; top: number }>());
-  const showHeroBanner = location.pathname === "/" || location.pathname === "/docs/getting-started";
-  const isInternalLabRoute = location.pathname === "/__dev" || location.pathname === "/__browser";
+  const showHeroBanner = pathname === "/docs/getting-started";
+  const isInternalLabRoute = pathname === "/__dev" || pathname === "/__browser";
   const skipTargetId = showHeroBanner ? "site-hero" : "main-content";
 
   useLayoutEffect(() => {
@@ -197,9 +167,9 @@ export function App({ themeController }: Readonly<{ themeController?: MarkdownTh
   }, [isInternalLabRoute]);
 
   useLayoutEffect(() => {
-    const routeChanged = previousPathRef.current !== location.pathname;
-    previousPathRef.current = location.pathname;
-    const metadata = publicRouteMetadata[location.pathname] ?? defaultDocumentMetadata;
+    const routeChanged = previousPathRef.current !== pathname;
+    previousPathRef.current = pathname;
+    const metadata = publicRouteMetadata[pathname] ?? defaultDocumentMetadata;
     const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
     const syncKeyboardScrollRegions = () => {
       document.querySelectorAll<HTMLElement>(
@@ -296,7 +266,7 @@ export function App({ themeController }: Readonly<{ themeController?: MarkdownTh
         }
       });
     };
-  }, [isInternalLabRoute, location.key, location.pathname, navigationType, skipTargetId]);
+  }, [isInternalLabRoute, location.key, pathname, navigationType, skipTargetId]);
 
   return (
     <div className={isInternalLabRoute ? "docs-site docs-site-dev" : "docs-site"}>
@@ -397,10 +367,10 @@ export function App({ themeController }: Readonly<{ themeController?: MarkdownTh
           id={isInternalLabRoute ? undefined : "main-content"}
           tabIndex={isInternalLabRoute ? undefined : -1}
         >
-          <RouteErrorBoundary key={location.pathname}>
+          <RouteErrorBoundary key={pathname}>
             <Suspense fallback={<div className="panel route-loading" role="status">Loading page…</div>}>
               <Routes>
-                <Route path="/" element={<Navigate to="/docs/getting-started" replace />} />
+                <Route path="/" element={<EditorPlayground />} />
                 <Route path="/docs/getting-started" element={<GettingStartedPage />} />
                 <Route path="/docs/markdown" element={<MarkdownCompatibilityPage />} />
                 <Route path="/docs/api" element={<ApiPage />} />

@@ -4,6 +4,8 @@
 
 Write Markdown at the speed of thought, inside your product.
 
+[Try the live demo](https://KevinWang15.github.io/markora/)
+
 `markora` is an embedded Markdown editor toolkit built with ProseMirror and CodeMirror. The library keeps a clear host boundary: the host owns mounting, persistence, product chrome, network access, and security policy, while Markora owns the editor model, interactions, and predictable Markdown conversion. This repository also contains `markora-app`, an NW.js desktop host for people who want a complete local writing application.
 
 ## Packages
@@ -388,3 +390,15 @@ used by `resources.resolveUrl` or `resources.loadImage`, call
 `editor.refreshResources()`. It cancels stale image loads and reloads the mounted
 images using the current host context, preserving document content, selection,
 and undo history. Set the new resource context before resetting a document.
+
+## Demo deployment
+
+The `Deploy demo to GitHub Pages` workflow publishes the editor and documentation from `packages/demo` when relevant files change on `main`; it can also be run manually. Desktop binary builds remain manual-only.
+
+Pages builds use the repository base path and generate directory entrypoints for each public route, so direct links and refreshes return HTTP 200. To check the same static deployment locally:
+
+```sh
+pnpm build:packages
+pnpm --filter demo build:pages --base /markora/
+node scripts/check-pages.mjs /markora/
+```
