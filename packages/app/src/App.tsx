@@ -14,6 +14,7 @@ import ListTree from "@lucide/icons/icons/list-tree";
 import PanelLeftClose from "@lucide/icons/icons/panel-left-close";
 import PanelLeftOpen from "@lucide/icons/icons/panel-left-open";
 import Redo2 from "@lucide/icons/icons/redo-2";
+import Search from "@lucide/icons/icons/search";
 import Save from "@lucide/icons/icons/save";
 import Strikethrough from "@lucide/icons/icons/strikethrough";
 import SunMoon from "@lucide/icons/icons/sun-moon";
@@ -25,9 +26,12 @@ import { createTocExtension } from "markora-extension-toc";
 import { useDocumentAnalysis } from "./useDocumentAnalysis";
 import { createFootnotesExtension } from "markora-extension-footnotes";
 import { createDocumentBridge } from "./documentBridge";
+import { FindBar } from "./FindBar";
+import { createSearchExtension } from "./searchExtension";
+import { findTextMatches, type SearchOptions, type SearchResults } from "./search";
 import { DocumentHistory } from "./DocumentHistory";
 import { createDefaultUi } from "markora-ui";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { desktop } from "./desktop";
 import { DocumentSession, type DocumentSnapshot } from "./documentSession";
 import { Dialog } from "./Dialog";
@@ -54,6 +58,8 @@ type PendingAction = Readonly<{
   message: string;
   title: string;
 }>;
+
+const EMPTY_SEARCH: SearchResults = { matches: [], truncated: false };
 
 const RECENTS_KEY = "markora-app.recent-documents";
 const THEME_KEY = "markora-app.theme";
@@ -135,6 +141,7 @@ export function App() {
   const sourceViewRef = useRef<SourceViewState | undefined>(undefined);
   const richScrollRef = useRef(0);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef(createSearchExtension());
   const tocRef = useRef(createTocExtension());
   const bridgeRef = useRef(createDocumentBridge());
   const historyRef = useRef(new DocumentHistory(welcomeMarkdown));
@@ -165,6 +172,11 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingCopy, setSavingCopy] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOptions, setSearchOptions] = useState<SearchOptions>({ query: "", caseSensitive: false, wholeWord: false });
+  const [replacement, setReplacement] = useState("");
+  const [searchIndex, setSearchIndex] = useState(-1);
+  const [searchFocusRequest, setSearchFocusRequest] = useState(0);
   const [sourceConversionWarning, setSourceConversionWarning] = useState<string | null>(null);
   const [tableSaveWarning, setTableSaveWarning] = useState<{ saveAs: boolean; message: string } | null>(null);
 
@@ -209,7 +221,7 @@ export function App() {
       placeholder: "Start writing…",
       attributes: { "data-markora-app-editor": "true" },
       ui: createDefaultUi(),
-      extensions: [createFootnotesExtension(), tocRef.current, bridgeRef.current],
+      extensions: [createFootnotesExtension(), tocRef.current, bridgeRef.current, searchRef.current],
       resources: {
         images: { allowedProtocols: ["http:", "https:", "data:", "file:"] },
         links: { allowedProtocols: ["http:", "https:", "mailto:", "tel:", "file:"] },
@@ -288,6 +300,7 @@ export function App() {
     }
     sourceEntryMarkdownRef.current = markdown;
     sourceViewRef.current = undefined;
+    setSearchIndex(-1);
     richScrollRef.current = 0;
     if (viewportRef.current) viewportRef.current.scrollTop = 0;
     historyRef.current.reset(markdown);
@@ -603,6 +616,56 @@ export function App() {
     } finally { applyingHistoryRef.current = false; }
   }, [showError]);
 
+  const sourceMatches = useMemo(() => searchOpen && sourceMode
+    ? findTextMatches(documentSnapshot.markdown.replace(/\r\n?/gu, "\n"), searchOptions) : EMPTY_SEARCH,
+  [documentSnapshot.markdown, searchOptions, searchOpen, sourceMode]);
+  const searchResults = sourceMode ? sourceMatches : editorRef.current?.extensions.get(searchRef.current).state.getMatches() ?? EMPTY_SEARCH;
+
+  useEffect(() => {
+    editorRef.current?.extensions.get(searchRef.current).commands.configure(searchOpen && !sourceMode ? searchOptions : null);
+    setSearchIndex(-1);
+  }, [searchOpen, sourceMode, searchOptions]);
+  useEffect(() => {
+    if (sourceMode) sourceEditorRef.current?.setSearch(searchOpen ? sourceMatches.matches : [], searchIndex);
+  }, [sourceMode, searchOpen, sourceMatches, searchIndex, documentRevision]);
+
+  const openSearch = useCallback(() => {
+    if (document.querySelector("dialog[open]")) return;
+    setSearchOpen(true);
+    setSearchFocusRequest(value => value + 1);
+  }, []);
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    if (sourceModeRef.current) sourceEditorRef.current?.focus();
+    else editorRef.current?.focus();
+  }, []);
+  const nextMatch = (direction: 1 | -1) => {
+    const handle = editorRef.current?.extensions.get(searchRef.current);
+    if (!sourceModeRef.current) handle?.commands.configure(searchOptions);
+    const result = sourceModeRef.current ? sourceMatches : handle?.state.getMatches() ?? EMPTY_SEARCH;
+    if (!result.matches.length) return;
+    const index = (searchIndex < 0 ? direction > 0 ? 0 : result.matches.length - 1 : searchIndex + direction + result.matches.length) % result.matches.length;
+    setSearchIndex(index);
+    if (sourceModeRef.current) sourceEditorRef.current?.selectMatch(result.matches[index]);
+    else handle?.commands.select(index);
+  };
+  const replaceMatches = (all: boolean) => {
+    if (savingCopy || sourceEditorRef.current?.isComposing() || editorRef.current?.view.composing) return;
+    historyRef.current.breakGroup();
+    if (sourceModeRef.current) {
+      const matches = findTextMatches(sourceEditorRef.current?.getMarkdown() ?? "", searchOptions);
+      if (all && matches.truncated) return;
+      sourceEditorRef.current?.replaceMatches(all ? matches.matches : matches.matches.slice(searchIndex, searchIndex + 1), replacement);
+    } else {
+      const handle = editorRef.current?.extensions.get(searchRef.current);
+      handle?.commands.configure(searchOptions);
+      handle?.commands.replace(replacement, all ? undefined : searchIndex);
+      editorRef.current?.flushChange();
+    }
+    historyRef.current.breakGroup();
+    setSearchIndex(-1);
+  };
+
   useEffect(() => {
     const onHistoryInput = (event: InputEvent) => {
       if (event.isComposing || !(event.target instanceof Element) || !event.target.closest(".app-editor, .app-source-editor")) return;
@@ -617,6 +680,9 @@ export function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && searchOpen && !event.isComposing && !document.querySelector("dialog[open]")) {
+        event.preventDefault(); closeSearch(); return;
+      }
       if (pendingAction || recoveryCandidate || tableSaveWarning || sourceConversionWarning || event.isComposing) return;
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
@@ -627,7 +693,9 @@ export function App() {
         navigateHistory(key === "y" || event.shiftKey ? "redo" : "undo");
         return;
       }
-      if (!event.altKey && !event.shiftKey && (event.code === "Slash" || key === "/")) {
+      if (!event.altKey && (key === "f" || key === "h")) {
+        event.preventDefault(); event.stopPropagation(); openSearch();
+      } else if (!event.altKey && !event.shiftKey && (event.code === "Slash" || key === "/")) {
         event.preventDefault();
         event.stopPropagation();
         toggleSourceMode();
@@ -647,7 +715,7 @@ export function App() {
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [navigateHistory, newDocument, openDocument, pendingAction, recoveryCandidate, tableSaveWarning, sourceConversionWarning, saveDocument, toggleSourceMode]);
+  }, [navigateHistory, newDocument, openDocument, openSearch, closeSearch, searchOpen, pendingAction, recoveryCandidate, tableSaveWarning, sourceConversionWarning, saveDocument, toggleSourceMode]);
 
   const editor = editorRef.current;
   const active = {
@@ -858,6 +926,7 @@ export function App() {
             </div>
             <span className="app-toolbar-divider" />
             <div className="app-toolbar-group app-source-tools">
+              <ToolbarButton icon={Search} label="Find and replace" onClick={openSearch} shortcut="Ctrl+F" />
               <ToolbarButton
                 active={sourceMode}
                 icon={FileCode}
@@ -867,6 +936,10 @@ export function App() {
               />
             </div>
           </div>
+
+          {searchOpen && <FindBar options={searchOptions} onOptions={options => { setSearchOptions(options); setSearchIndex(-1); }}
+            replacement={replacement} onReplacement={setReplacement} results={searchResults} index={searchIndex}
+            focusRequest={searchFocusRequest} onNext={nextMatch} onReplace={replaceMatches} onClose={closeSearch} />}
 
           <div className="app-document-viewport" ref={viewportRef} inert={savingCopy} data-source-mode={sourceMode || undefined}>
             <div className="app-editor" hidden={sourceMode} ref={editorHostRef} />

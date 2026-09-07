@@ -1,8 +1,10 @@
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, indentOnInput, syntaxHighlighting } from "@codemirror/language";
-import { ChangeSet, EditorState } from "@codemirror/state";
+import { ChangeSet, EditorState, StateEffect, StateField } from "@codemirror/state";
 import {
+  Decoration,
+  type DecorationSet,
   drawSelection,
   dropCursor,
   EditorView,
@@ -13,8 +15,27 @@ import {
   lineNumbers,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import type { SearchMatch } from "./search";
 import { mapTextPosition, textChange } from "./textChanges";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+
+const searchEffect = StateEffect.define<{ matches: readonly SearchMatch[]; index: number }>();
+const searchField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, transaction) {
+    value = value.map(transaction.changes);
+    for (const effect of transaction.effects) if (effect.is(searchEffect)) {
+      const { matches, index } = effect.value;
+      const visible = matches.slice(0, 1000);
+      if (index >= 1000 && matches[index]) visible.push(matches[index]);
+      value = Decoration.set(visible.map(match => Decoration.mark({
+        class: match === matches[index] ? "app-search-match app-search-current" : "app-search-match",
+      }).range(match.from, match.to)), true);
+    }
+    return value;
+  },
+  provide: field => EditorView.decorations.from(field),
+});
 
 export type SourceViewState = Readonly<{
   markdown: string;
@@ -24,6 +45,10 @@ export type SourceViewState = Readonly<{
 
 export type SourceEditorHandle = Readonly<{
   isComposing: () => boolean;
+  getMarkdown: () => string;
+  setSearch: (matches: readonly SearchMatch[], index: number) => void;
+  selectMatch: (match: SearchMatch) => void;
+  replaceMatches: (matches: readonly SearchMatch[], replacement: string) => void;
   captureView: () => SourceViewState | undefined;
   getSelection: () => { anchor: number; head: number } | undefined;
   setMarkdown: (markdown: string, selection?: { anchor: number; head: number }) => void;
@@ -70,6 +95,14 @@ export const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(fu
       const { anchor, head } = view.state.selection.main;
       return { markdown: view.state.doc.toString(), selection: { anchor, head }, scroll: view.scrollSnapshot() };
     },
+    getMarkdown: () => viewRef.current?.state.doc.toString() ?? "",
+    setSearch: (matches, index) => viewRef.current?.dispatch({ effects: searchEffect.of({ matches, index }) }),
+    selectMatch: match => viewRef.current?.dispatch({ selection: { anchor: match.from, head: match.to }, effects: EditorView.scrollIntoView(match.from, { y: "center" }) }),
+    replaceMatches: (matches, replacement) => {
+      const view = viewRef.current;
+      if (!view || view.composing) return;
+      view.dispatch({ changes: matches.map(match => ({ from: match.from, to: match.to, insert: replacement })) });
+    },
     isComposing: () => viewRef.current?.composing ?? false,
     getSelection: () => {
       const selection = viewRef.current?.state.selection.main;
@@ -115,6 +148,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(fu
         doc: sourceMarkdown,
         selection,
         extensions: [
+          searchField,
           lineNumbers(),
           highlightActiveLineGutter(),
           highlightSpecialChars(),

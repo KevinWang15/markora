@@ -853,3 +853,14 @@ button {
 }
 
 .app-dialog:not([open]) { display: none; }
+
+.app-find-bar { background: var(--app-surface); border-bottom: 1px solid var(--app-border); padding: 8px 14px; }
+.app-find-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; flex-wrap: wrap; }
+.app-find-row > input { background: var(--app-bg); border: 1px solid var(--app-border-strong); border-radius: 4px; color: var(--app-text); flex: 1 1 180px; min-width: 100px; padding: 6px 8px; }
+.app-find-row button { background: var(--app-bg); border: 1px solid var(--app-border); border-radius: 4px; color: var(--app-text); padding: 6px 10px; }
+.app-find-row button:disabled { opacity: .45; }
+.app-find-row label { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+.app-find-count { font-size: 12px; min-width: 75px; }
+.app-find-bar p { font-size: 12px; margin: 6px 0; }
+.app-search-match { background-color: color-mix(in srgb, #ffc857 42%, transparent); border-radius: 2px; }
+.app-search-current { background-color: color-mix(in srgb, #ff9f1c 70%, transparent); outline: 1px solid currentColor; }

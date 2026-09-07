@@ -188,3 +188,46 @@ test("view switches retain source caret and scroll without adding undo steps", a
   await page.keyboard.press("Control+z");
   await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
 });
+
+test("find spans rich formatting and replace all is one undo step", async ({ page }) => {
+  await openDocument(page, "**cat** ca*t* catfish **keep**");
+  await page.keyboard.press("Control+f");
+  await page.getByRole("textbox", { name: "Find text", exact: true }).fill("cat");
+  await page.getByRole("checkbox", { name: "Whole word" }).check();
+  await expect(page.locator(".app-find-count")).toHaveText("2 matches");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".app-find-count")).toHaveText("1 of 2");
+  await page.getByRole("textbox", { name: "Replacement text" }).fill("dog");
+  await page.getByRole("button", { name: "Replace all", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Markdown document", exact: true })).toContainText("dog catfish keep");
+  await expect(page.locator(".app-editor strong").last()).toHaveText("keep");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Control+z");
+  await source(page);
+  expect(await sourceText(page)).toBe("**cat** ca*t* catfish **keep**");
+});
+
+test("CDP find works in source, wraps, and retains its query across modes", async ({ page, context }) => {
+  await openDocument(page, "Cat cat catfish [cat]");
+  await source(page);
+  await page.keyboard.press("Control+h");
+  const query = page.getByRole("textbox", { name: "Find text", exact: true });
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("Input.insertText", { text: "cat" });
+  await page.getByRole("checkbox", { name: "Whole word" }).check();
+  await page.getByRole("checkbox", { name: "Match case" }).check();
+  await expect(page.locator(".app-find-count")).toHaveText("2 matches");
+  await query.focus(); await page.keyboard.press("Shift+Enter");
+  await expect(page.locator(".app-find-count")).toHaveText("2 of 2");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".app-find-count")).toHaveText("1 of 2");
+  await page.getByRole("textbox", { name: "Replacement text" }).fill("$&");
+  await page.getByRole("button", { name: "Replace all", exact: true }).click();
+  expect(await sourceText(page)).toBe("Cat $& catfish [$&]");
+  await page.keyboard.press("Escape"); await page.keyboard.press("Control+z");
+  expect(await sourceText(page)).toBe("Cat cat catfish [cat]");
+  await page.keyboard.press("Control+f"); await rich(page);
+  await expect(query).toHaveValue("cat");
+  await expect(page.locator(".app-find-count")).toHaveText("2 matches");
+  await expect(page.locator(".app-file-location")).not.toHaveText("Edited");
+});
