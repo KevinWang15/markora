@@ -6,6 +6,25 @@
  * token after this stylesheet, or on a more specific/local scope.
  */
 
+/* Optional document typography stays out of the root/minimal base stylesheet. */
+.mdw-host .ProseMirror {
+  font-family: var(--mdw-document-font-family, inherit);
+  font-size: var(--mdw-document-font-size, inherit);
+  line-height: var(--mdw-document-line-height, inherit);
+  max-inline-size: var(--mdw-document-max-inline-size, none);
+  margin-inline: auto;
+}
+
+.mdw-host .ProseMirror :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--mdw-heading-font-family, inherit);
+  letter-spacing: var(--mdw-heading-letter-spacing, normal);
+}
+
+.mdw-host .ProseMirror :is(h1, h2) {
+  border-block-end: var(--mdw-heading-rule-width, 0px) solid var(--mdw-color-border, #d8dee4);
+  padding-block-end: var(--mdw-heading-rule-padding, 0px);
+}
+
 :where(
   .mdw-theme-light,
   [data-mdw-theme="light"],

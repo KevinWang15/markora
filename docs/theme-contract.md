@@ -120,7 +120,7 @@ The motion hooks are `--mdw-motion-duration-fast` (default `120ms`), `--mdw-care
 | `--mdw-heading-letter-spacing` | `normal` |
 | `--mdw-heading-rule-width`, `--mdw-heading-rule-padding` | `0px`; GitHub adds ruled headings |
 
-Reference scopes reset these typography roles so a nested Light editor does not inherit a parent document preset. Existing heading sizes, weights, code-block radius, and block spacing tokens remain available for theme authors.
+The document typography rules ship in the optional `markora/themes.css`, keeping the base and minimal stylesheets unchanged in size. Reference scopes reset these typography roles so a nested Light editor does not inherit a parent document preset. Existing heading sizes, weights, code-block radius, and block spacing tokens remain available for theme authors.
 
 ## Public color and effect tokens
 
