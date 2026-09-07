@@ -240,8 +240,8 @@ test("math and Mermaid previews render, source edits preserve Markdown and undo"
   await expect(page.locator(".app-file-location")).not.toHaveText("Edited");
   await page.locator(".mdw-math").first().click();
   await page.locator(".mdw-math").first().getByRole("button", { name: /Edit/ }).click();
-  await page.getByRole("textbox", { name: "Preview source" }).fill("x^3");
-  await page.getByRole("button", { name: "Apply source", exact: true }).click();
+  await page.getByRole("textbox", { name: "LaTeX source" }).fill("x^3");
+  await page.getByRole("button", { name: "Apply formula", exact: true }).click();
   await source(page); expect(await sourceText(page)).toContain("$x^3$");
   await page.keyboard.press("Control+z"); expect(await sourceText(page)).toContain("$x^2$");
 });

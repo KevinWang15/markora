@@ -123,6 +123,27 @@ try {
   await writeFile(path.join(diagnostics, "export.pdf"), await readFile(pdfPath));
   await expect(page.getByRole("button", { name: "Export PDF", exact: true })).toBeEnabled();
   pass("native HTML export embeds local images and File → Export → PDF prints with the selected theme");
+  await toRich();
+  await page.getByRole("textbox", { name: "Markdown document", exact: true }).click();
+  await page.keyboard.press(end);
+  await page.evaluate(() => {
+    const math = window.nw.Window.get().menu.items.find(item => item.label === "Insert").submenu.items.find(item => item.label === "Math…");
+    if (!math.enabled) throw new Error("Math insertion must be available in rich text");
+    math.click();
+  });
+  const mathDialog = page.getByRole("dialog", { name: "Insert math", exact: true });
+  const mathSource = mathDialog.getByRole("textbox", { name: "LaTeX source", exact: true });
+  await expect(mathSource).toBeFocused();
+  await cdp.send("Input.insertText", { text: String.raw`\frac{1}{2}` });
+  await expect(mathDialog.locator("math mfrac")).toHaveCount(1);
+  await mathSource.press(`${mod}+Enter`);
+  await expect(mathDialog).toHaveCount(0);
+  await expect(page.locator('.app-editor [data-mdw-math-kind="block"] math')).toHaveCount(1);
+  await toSource();
+  await expect(source).toContainText(String.raw`\frac{1}{2}`);
+  await source.press(`${mod}+z`);
+  await expect(source).not.toContainText(String.raw`\frac{1}{2}`);
+  pass("native Insert → Math opens a live LaTeX preview and inserts one undoable formula");
   await page.bringToFront(); await source.click(); await page.keyboard.press(end); await cdp.send("Input.insertText", { text: " RECOVER 中文 🙂" });
   await expect(source).toContainText("RECOVER 中文 🙂");
   await expect.poll(() => page.evaluate(async () => {

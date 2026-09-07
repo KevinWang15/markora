@@ -866,3 +866,34 @@ button {
   #markora-print { display: block !important; }
   html, body { margin: 0 !important; height: auto !important; overflow: visible !important; background: white !important; }
 }
+
+.app-dialog-editor {
+  max-width: min(680px, calc(100vw - 32px));
+  padding: 24px;
+  gap: 12px 14px;
+}
+.app-dialog-content { grid-column: 1 / -1; min-width: 0; }
+.app-math-editor { display: grid; gap: 12px; min-width: 0; }
+.app-math-editor > label, .app-math-placement legend { font-size: 13px; font-weight: 600; }
+.app-math-placement { display: flex; flex-wrap: wrap; gap: 12px 24px; border: 0; padding: 0; margin: 0 0 4px; }
+.app-math-placement legend { padding: 0; margin-bottom: 8px; }
+.app-math-placement label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+.app-math-placement input { accent-color: var(--app-accent); }
+.app-math-placement span { color: var(--app-text-soft); font-size: 12px; }
+.app-math-editor .app-syntax-source { min-height: 120px; max-height: 260px; resize: vertical; border-color: var(--app-border-strong); margin: 0; }
+.app-math-editor .app-syntax-source:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
+.app-math-templates { display: flex; flex-wrap: wrap; gap: 8px; }
+.app-math-hint, .app-math-kind { margin: 0; color: var(--app-text-soft); font-size: 12px; line-height: 1.6; }
+.app-math-preview { min-width: 0; min-height: 120px; border: 1px solid var(--app-border); border-radius: 8px; padding: 16px; background: var(--app-bg); }
+.app-math-preview h3 { margin: 0 0 12px; font-size: 13px; }
+.app-math-preview p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--app-text-soft); overflow-wrap: anywhere; }
+.app-math-preview [role="alert"] { color: var(--app-danger); }
+.app-math-preview-content { overflow: auto; max-height: 220px; font-size: 1.2rem; }
+.app-math-remove { margin-inline-end: auto; }
+.app-dialog-editor .app-dialog-actions { margin-top: 4px; flex-wrap: wrap; }
+.app-dialog-editor .app-dialog-button { min-height: 36px; }
+.app-dialog-editor .app-dialog-button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 480px) {
+  .app-dialog-editor { padding: 18px; }
+  .app-math-placement { flex-direction: column; }
+}

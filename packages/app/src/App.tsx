@@ -18,6 +18,7 @@ import Search from "@lucide/icons/icons/search";
 import Download from "@lucide/icons/icons/download";
 import Printer from "@lucide/icons/icons/printer";
 import Save from "@lucide/icons/icons/save";
+import Sigma from "@lucide/icons/icons/sigma";
 import Strikethrough from "@lucide/icons/icons/strikethrough";
 import SunMoon from "@lucide/icons/icons/sun-moon";
 import Table2 from "@lucide/icons/icons/table-2";
@@ -27,10 +28,11 @@ import { createEditor, type MarkdownEditor, type MarkdownEditorHeadingLevel } fr
 import { createTocExtension } from "markora-extension-toc";
 import { useDocumentAnalysis } from "./useDocumentAnalysis";
 import { createFootnotesExtension } from "markora-extension-footnotes";
-import { createMathExtension } from "markora-extension-math";
+import { createMathExtension, type MathKind } from "markora-extension-math";
 import { createDiagramsExtension } from "markora-extension-diagrams";
 import { renderMath, renderMermaid } from "./renderers";
 import { SourceDialog, type SourceEdit } from "./SourceDialog";
+import { MathDialog, type MathEdit } from "./MathDialog";
 import { createDocumentBridge } from "./documentBridge";
 import { FindBar } from "./FindBar";
 import { createSearchExtension } from "./searchExtension";
@@ -138,8 +140,12 @@ function ToolbarButton({
 export function App({ themeController }: Readonly<{ themeController: MarkdownThemeController }>) {
   const theme = useSyncExternalStore(themeController.subscribe, themeController.getSnapshot);
   const [sourceEdit, setSourceEdit] = useState<SourceEdit | null>(null);
-  const mathRef = useRef(createMathExtension({ renderer: renderMath, onEditSource: request =>
-    setSourceEdit({ title: "Edit math", source: request.source, update: request.update }) }));
+  const [mathEdit, setMathEdit] = useState<MathEdit | null>(null);
+  const mathDialogOpenRef = useRef(false);
+  const mathRef = useRef(createMathExtension({ renderer: renderMath, onEditSource: request => {
+    mathDialogOpenRef.current = true;
+    setMathEdit({ mode: "edit", kind: request.kind, source: request.source, apply: request.update, remove: request.remove });
+  } }));
   const diagramsRef = useRef(createDiagramsExtension({ renderers: { mermaid: renderMermaid }, onEditSource: request =>
     setSourceEdit({ title: `Edit ${request.kind}`, source: request.source, update: source => request.update({ source }) }) }));
   const editorHostRef = useRef<HTMLDivElement>(null);
@@ -622,6 +628,34 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     setSearchOpen(true);
     setSearchFocusRequest(value => value + 1);
   }, []);
+  const openMath = useCallback(() => {
+    const current = editorRef.current;
+    if (!current || sourceModeRef.current || exportingRef.current || mathDialogOpenRef.current
+      || current.view.composing || document.querySelector("dialog[open]")) return;
+    const { doc, selection } = current.view.state;
+    const handle = current.extensions.get(mathRef.current);
+    const selected = handle.state.getNodes().find(node => node.position === selection.from
+      && doc.nodeAt(node.position)?.nodeSize === selection.to - selection.from);
+    mathDialogOpenRef.current = true;
+    if (selected) {
+      setMathEdit({ mode: "edit", kind: selected.kind, source: selected.source,
+        apply: source => handle.commands.update(selected, source), remove: () => handle.commands.remove(selected) });
+    } else {
+      setMathEdit({ mode: "insert", kind: "block", source: doc.textBetween(selection.from, selection.to, " "),
+        apply: (source: string, kind: MathKind) => {
+          // A modal can outlive an external document replacement. Never insert at a stale position.
+          if (current.isDestroyed || current.view.state.doc !== doc) return false;
+          current.view.dispatch(current.view.state.tr.setSelection(selection));
+          historyRef.current.breakGroup();
+          return kind === "inline" ? handle.commands.insertInline(source) : handle.commands.insertBlock(source);
+        } });
+    }
+  }, []);
+  const closeMath = useCallback(() => {
+    mathDialogOpenRef.current = false;
+    setMathEdit(null);
+    requestAnimationFrame(() => editorRef.current?.focus());
+  }, []);
   const exportDocument = useCallback(async (format: "html" | "pdf") => {
     if (exportingRef.current || document.querySelector("dialog[open]") || editorRef.current?.view.composing || sourceEditorRef.current?.isComposing()) return;
     const current = editorRef.current;
@@ -655,11 +689,13 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       exportPdf: () => void exportDocument("pdf"),
       exportHtml: () => void exportDocument("html"),
       canExport: !exporting,
+      insertMath: openMath,
+      canInsertMath: startupReady && !sourceMode && !exporting,
       themes: themeController.themes,
       theme: theme.id,
       setTheme: themeController.setTheme,
     });
-  }, [newDocument, openDocument, saveDocument, toggleSourceMode, themeController, theme.id, exportDocument, exporting]);
+  }, [newDocument, openDocument, saveDocument, toggleSourceMode, themeController, theme.id, exportDocument, exporting, openMath, startupReady, sourceMode]);
 
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
@@ -720,7 +756,9 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
         navigateHistory(key === "y" || event.shiftKey ? "redo" : "undo");
         return;
       }
-      if (!event.altKey && (key === "f" || key === "h")) {
+      if (!event.altKey && event.shiftKey && key === "m") {
+        event.preventDefault(); event.stopPropagation(); openMath();
+      } else if (!event.altKey && (key === "f" || key === "h")) {
         event.preventDefault(); event.stopPropagation(); openSearch();
       } else if (!event.altKey && !event.shiftKey && (event.code === "Slash" || key === "/")) {
         event.preventDefault();
@@ -742,7 +780,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [navigateHistory, newDocument, openDocument, openSearch, closeSearch, searchOpen, pendingAction, recoveryCandidate, tableSaveWarning, sourceConversionWarning, saveDocument, toggleSourceMode]);
+  }, [navigateHistory, newDocument, openDocument, openSearch, closeSearch, searchOpen, pendingAction, recoveryCandidate, tableSaveWarning, sourceConversionWarning, saveDocument, toggleSourceMode, openMath]);
 
   const editor = editorRef.current;
   const active = {
@@ -955,6 +993,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
             </div>
             <span className="app-toolbar-divider" />
             <div className="app-toolbar-group">
+              <ToolbarButton disabled={sourceMode || exporting} icon={Sigma} label="Insert math" onClick={openMath} shortcut={desktop.isMac ? "⌘Shift+M" : "Ctrl+Shift+M"} />
               <ToolbarButton disabled={sourceMode} icon={Link2} label="Add or edit link" onClick={insertLink} />
               <ToolbarButton disabled={sourceMode} icon={ImagePlus} label="Insert image" onClick={() => void insertImage()} />
               <ToolbarButton disabled={sourceMode} icon={Table2} label="Insert table" onClick={() => editor?.ui?.createTable()} />
@@ -1044,6 +1083,9 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
         </Dialog>
       )}
 
+      {mathEdit && <MathDialog request={mathEdit} onClose={closeMath} onSaved={() => {
+        editorRef.current?.flushChange(); historyRef.current.breakGroup();
+      }} />}
       {sourceEdit && <SourceDialog request={sourceEdit} onClose={() => setSourceEdit(null)} onSaved={() => {
         editorRef.current?.flushChange(); historyRef.current.breakGroup();
       }} />}

@@ -29,7 +29,7 @@ it.each(["win32", "darwin"])("keeps native theme selection and its checkmark con
   const actions: DesktopMenuActions = {
     newDocument: vi.fn(), openDocument: vi.fn(), saveDocument: vi.fn(), saveDocumentAs: vi.fn(),
     toggleSidebar: vi.fn(), toggleSourceMode: vi.fn(), setTheme: vi.fn(),
-    exportPdf: vi.fn(), exportHtml: vi.fn(), canExport: true,
+    exportPdf: vi.fn(), exportHtml: vi.fn(), canExport: true, insertMath: vi.fn(), canInsertMath: true,
     themes: [{ id: "newsprint", label: "Newsprint" }, { id: "night", label: "Night" }], theme: "newsprint",
   };
   desktop.installMenu(actions);
@@ -56,12 +56,17 @@ it.each(["win32", "darwin"])("exports through File on %s and disables export whi
   const actions: DesktopMenuActions = {
     newDocument: vi.fn(), openDocument: vi.fn(), saveDocument: vi.fn(), saveDocumentAs: vi.fn(),
     toggleSidebar: vi.fn(), toggleSourceMode: vi.fn(), setTheme: vi.fn(),
-    exportPdf: vi.fn(), exportHtml: vi.fn(), canExport: true, themes: [], theme: "night",
+    exportPdf: vi.fn(), exportHtml: vi.fn(), canExport: true, insertMath: vi.fn(), canInsertMath: true, themes: [], theme: "night",
   };
   desktop.installMenu(actions);
   expect(nativeWindow.menu!.items.map(item => item.label)).toEqual(platform === "darwin"
-    ? ["Markora", "File", "Edit", "View", "Window", "Themes"]
-    : ["File", "View", "Themes"]);
+    ? ["Markora", "File", "Edit", "Insert", "View", "Window", "Themes"]
+    : ["File", "Insert", "View", "Themes"]);
+  const math = () => nativeWindow.menu!.items.find(item => item.label === "Insert")!.submenu!.items[0];
+  expect(math().label).toBe("Math…");
+  expect(math().modifiers).toBe(platform === "darwin" ? "cmd-shift" : "ctrl-shift");
+  math().click!();
+  expect(actions.insertMath).toHaveBeenCalledOnce();
   const file = () => nativeWindow.menu!.items.find(item => item.label === "File")!.submenu!;
   expect(file().items.find(item => item.label === "Save")!.modifiers).toBe(platform === "darwin" ? "cmd" : "ctrl");
   const exports = () => file().items.find(item => item.label === "Export")!.submenu!.items;
@@ -71,6 +76,7 @@ it.each(["win32", "darwin"])("exports through File on %s and disables export whi
   expect(actions.exportHtml).not.toHaveBeenCalled();
   exports()[1].click!();
   expect(actions.exportHtml).toHaveBeenCalledOnce();
-  desktop.installMenu({ ...actions, canExport: false });
+  desktop.installMenu({ ...actions, canExport: false, canInsertMath: false });
+  expect(math().enabled).toBe(false);
   expect(exports().map(item => item.enabled)).toEqual([false, false]);
 });

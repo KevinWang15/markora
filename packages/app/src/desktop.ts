@@ -20,6 +20,8 @@ export type DesktopMenuActions = Readonly<{
   exportPdf: () => void;
   exportHtml: () => void;
   canExport: boolean;
+  insertMath: () => void;
+  canInsertMath: boolean;
   toggleSidebar: () => void;
   toggleSourceMode: () => void;
   themes: readonly Readonly<{ id: string; label: string }>[];
@@ -158,11 +160,17 @@ function createNativeMenu(actions: DesktopMenuActions) {
   if (isMac && menu.createMacBuiltin) menu.insert(fileItem, 1);
   else menu.append(fileItem);
 
+  const insert = new runtime.Menu();
+  appendItem(insert, { label: "Math…", key: "m", modifiers: `${modifier}-shift`, enabled: actions.canInsertMath, click: actions.insertMath });
+  const insertItem = new runtime.MenuItem({ label: "Insert", submenu: insert });
+  if (isMac && menu.createMacBuiltin) menu.insert(insertItem, 3);
+  else menu.append(insertItem);
+
   const view = new runtime.Menu();
   appendItem(view, { label: "Toggle Sidebar", key: "\\", modifiers: `${modifier}-shift`, click: actions.toggleSidebar });
   appendItem(view, { label: "Source Mode", key: "/", modifiers: modifier, click: actions.toggleSourceMode });
   const viewItem = new runtime.MenuItem({ label: "View", submenu: view });
-  if (isMac && menu.createMacBuiltin) menu.insert(viewItem, 3);
+  if (isMac && menu.createMacBuiltin) menu.insert(viewItem, 4);
   else menu.append(viewItem);
 
   const themes = new runtime.Menu();
