@@ -25,7 +25,9 @@
     "markora": "workspace:*",
     "markora-ui": "workspace:*",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "markora-extension-footnotes": "workspace:*",
+    "markora-extension-toc": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

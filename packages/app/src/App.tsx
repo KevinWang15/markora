@@ -21,6 +21,11 @@ import Table2 from "@lucide/icons/icons/table-2";
 import Undo2 from "@lucide/icons/icons/undo-2";
 import X from "@lucide/icons/icons/x";
 import { createEditor, type MarkdownEditor, type MarkdownEditorHeadingLevel } from "markora";
+import { createTocExtension } from "markora-extension-toc";
+import { useDocumentStatistics } from "./useDocumentStatistics";
+import { createFootnotesExtension } from "markora-extension-footnotes";
+import { createDocumentBridge } from "./documentBridge";
+import { DocumentHistory } from "./DocumentHistory";
 import { createDefaultUi } from "markora-ui";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { desktop } from "./desktop";
@@ -28,11 +33,10 @@ import { DocumentSession, type DocumentSnapshot } from "./documentSession";
 import { Dialog } from "./Dialog";
 import { RecoveryJournal } from "./RecoveryJournal";
 import {
-  countDocumentCharacters,
-  countDocumentWords,
   documentNameFromPath,
   isMarkdownPath,
   parseDocumentOutline,
+  type DocumentOutlineItem,
   type RecentDocument,
   upsertRecentDocument,
 } from "./document";
@@ -129,6 +133,10 @@ export function App() {
   const editorHostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MarkdownEditor | null>(null);
   const sourceEditorRef = useRef<SourceEditorHandle | null>(null);
+  const tocRef = useRef(createTocExtension());
+  const bridgeRef = useRef(createDocumentBridge());
+  const historyRef = useRef(new DocumentHistory(welcomeMarkdown));
+  const applyingHistoryRef = useRef(false);
   const sessionRef = useRef(new DocumentSession(welcomeMarkdown));
   const resourcePathRef = useRef<string | null>(null);
   const savingRef = useRef(false);
@@ -157,18 +165,12 @@ export function App() {
 
   const dirty = documentSnapshot.markdown !== documentSnapshot.savedMarkdown;
   const documentName = documentNameFromPath(documentSnapshot.path);
-  const outline = useMemo(
-    () => parseDocumentOutline(documentSnapshot.markdown),
-    [documentSnapshot.markdown],
-  );
-  const wordCount = useMemo(
-    () => countDocumentWords(documentSnapshot.markdown),
-    [documentSnapshot.markdown],
-  );
-  const characterCount = useMemo(
-    () => countDocumentCharacters(documentSnapshot.markdown),
-    [documentSnapshot.markdown],
-  );
+  const sourceOutline = useMemo(() => sourceMode ? parseDocumentOutline(documentSnapshot.markdown) : [], [documentSnapshot.markdown, sourceMode]);
+  const outline: readonly DocumentOutlineItem[] = sourceMode ? sourceOutline
+    : editorRef.current?.extensions.get(tocRef.current).state.getSnapshot().headings.map(heading => ({
+      id: `heading-${heading.position}`, level: heading.level, text: heading.label, position: heading.position, offset: 0,
+    })) ?? [];
+  const { words: wordCount, characters: characterCount } = useDocumentStatistics(documentSnapshot.markdown);
 
   useEffect(() => {
     desktop.setWindowTitle(`${dirty ? "• " : ""}${documentName} — Markora`);
@@ -183,6 +185,9 @@ export function App() {
   }, [theme]);
 
   const updateLiveMarkdown = useCallback((markdown: string) => {
+    if (sourceModeRef.current && !applyingHistoryRef.current) historyRef.current.record({
+      source: markdown, mode: "source", selection: sourceEditorRef.current?.getSelection(),
+    }, "source");
     setDocumentSnapshot(sessionRef.current.edit(markdown));
   }, []);
 
@@ -198,6 +203,7 @@ export function App() {
       placeholder: "Start writing…",
       attributes: { "data-markora-app-editor": "true" },
       ui: createDefaultUi(),
+      extensions: [createFootnotesExtension(), tocRef.current, bridgeRef.current],
       resources: {
         images: { allowedProtocols: ["http:", "https:", "data:", "file:"] },
         links: { allowedProtocols: ["http:", "https:", "mailto:", "tel:", "file:"] },
@@ -220,10 +226,17 @@ export function App() {
     });
     editorRef.current = editor;
     setEditorVersion((version) => version + 1);
+    const untrackHistory = editor.subscribe("update", event => {
+      if (applyingHistoryRef.current || event.origin === "reset" || sourceModeRef.current) return;
+      const { doc, selection } = editor.view.state;
+      historyRef.current.record({ source: doc, mode: "rich", selection: { anchor: selection.anchor, head: selection.head } },
+        event.origin === "user" ? "rich" : null);
+    });
     const unsubscribe = editor.subscribe("state", () => setEditorVersion((version) => version + 1));
 
     return () => {
       unsubscribe();
+      untrackHistory();
       editor.destroy();
       editorRef.current = null;
     };
@@ -258,6 +271,7 @@ export function App() {
       throw cause;
     }
     sourceEntryMarkdownRef.current = markdown;
+    historyRef.current.reset(markdown);
     openRequestRef.current += 1;
     setDocumentSnapshot(sessionRef.current.replace(path, markdown));
     setDocumentRevision((revision) => revision + 1);
@@ -346,6 +360,7 @@ export function App() {
   }, [guardUnsaved, replaceDocument]);
 
   const toggleSourceMode = useCallback(() => {
+    historyRef.current.breakGroup();
     if (sourceModeRef.current) {
       const markdown = sessionRef.current.markdown;
       try {
@@ -488,11 +503,58 @@ export function App() {
     };
   }, [requestDroppedDocument]);
 
+  const navigateHistory = useCallback((direction: "undo" | "redo") => {
+    const editor = editorRef.current;
+    if (!editor || editor.view.composing) return;
+    if (!sourceModeRef.current) editor.flushChange();
+    const entry = historyRef.current[direction]();
+    if (!entry) return;
+    const markdown = typeof entry.source === "string"
+      ? entry.source : editor.extensions.get(bridgeRef.current).state.serialize(entry.source);
+    applyingHistoryRef.current = true;
+    try {
+      if (!sourceModeRef.current) {
+        editor.commands.resetMarkdown(markdown);
+        sourceEntryMarkdownRef.current = markdown;
+      }
+      setDocumentSnapshot(sessionRef.current.edit(markdown));
+      if (sourceModeRef.current) {
+        sourceEditorRef.current?.setMarkdown(markdown, entry.mode === "source" ? entry.selection : undefined);
+        sourceEditorRef.current?.focus();
+      } else {
+        editor.focus(entry.mode === "rich" ? entry.selection : undefined);
+      }
+      setEditorVersion(version => version + 1);
+    } catch (cause) {
+      historyRef.current[direction === "undo" ? "redo" : "undo"]();
+      showError(cause, "This change could not be restored. Try source mode.");
+    } finally { applyingHistoryRef.current = false; }
+  }, [showError]);
+
+  useEffect(() => {
+    const onHistoryInput = (event: InputEvent) => {
+      if (event.isComposing || !(event.target instanceof Element) || !event.target.closest(".app-editor, .app-source-editor")) return;
+      if (event.inputType !== "historyUndo" && event.inputType !== "historyRedo") return;
+      event.preventDefault();
+      event.stopPropagation();
+      navigateHistory(event.inputType === "historyUndo" ? "undo" : "redo");
+    };
+    window.addEventListener("beforeinput", onHistoryInput, true);
+    return () => window.removeEventListener("beforeinput", onHistoryInput, true);
+  }, [navigateHistory]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (pendingAction || recoveryCandidate) return;
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
+      if (!event.isComposing && (key === "z" || key === "y") && event.target instanceof Element
+        && event.target.closest(".app-editor, .app-source-editor") && !event.altKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        navigateHistory(key === "y" || event.shiftKey ? "redo" : "undo");
+        return;
+      }
       if (!event.altKey && !event.shiftKey && (event.code === "Slash" || key === "/")) {
         event.preventDefault();
         event.stopPropagation();
@@ -513,7 +575,7 @@ export function App() {
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [newDocument, openDocument, pendingAction, recoveryCandidate, saveDocument, toggleSourceMode]);
+  }, [navigateHistory, newDocument, openDocument, pendingAction, recoveryCandidate, saveDocument, toggleSourceMode]);
 
   const editor = editorRef.current;
   const active = {
@@ -528,12 +590,8 @@ export function App() {
   void sourceEditorVersion;
 
   const sourceShortcut = desktop.isMac ? "⌘/" : "Ctrl+/";
-  const canUndo = sourceMode
-    ? sourceEditorRef.current?.canUndo() ?? false
-    : editor?.state.can.undo() ?? false;
-  const canRedo = sourceMode
-    ? sourceEditorRef.current?.canRedo() ?? false
-    : editor?.state.can.redo() ?? false;
+  const canUndo = historyRef.current.canUndo;
+  const canRedo = historyRef.current.canRedo;
 
   const insertLink = () => {
     if (editor?.state.isActive.mark("link")) {
@@ -560,13 +618,17 @@ export function App() {
     }
   };
 
-  const scrollToHeading = (index: number, offset: number) => {
+  const scrollToHeading = (item: DocumentOutlineItem) => {
     if (sourceMode) {
-      sourceEditorRef.current?.revealOffset(offset);
+      sourceEditorRef.current?.revealOffset(item.offset);
       return;
     }
-    const heading = editorHostRef.current?.querySelectorAll("h1, h2, h3, h4, h5, h6")[index];
-    heading?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (item.position === undefined || !editor) return;
+    editor.focus({ anchor: item.position + 1 });
+    const heading = editor.view.nodeDOM(item.position);
+    if (heading instanceof HTMLElement) heading.scrollIntoView({
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center",
+    });
   };
 
   return (
@@ -618,11 +680,11 @@ export function App() {
 
           {sidebarTab === "outline" ? (
             <nav className="app-outline" aria-label="Document outline">
-              {outline.length ? outline.map((item, index) => (
+              {outline.length ? outline.map((item) => (
                 <button
                   className="app-outline-item"
                   key={item.id}
-                  onClick={() => scrollToHeading(index, item.offset)}
+                  onClick={() => scrollToHeading(item)}
                   style={{ "--outline-depth": item.level - 1 } as CSSProperties}
                   title={item.text}
                   type="button"
@@ -684,8 +746,8 @@ export function App() {
             </div>
             <span className="app-toolbar-divider" />
             <div className="app-toolbar-group">
-              <ToolbarButton disabled={!canUndo} icon={Undo2} label="Undo" onClick={() => sourceMode ? sourceEditorRef.current?.undo() : editor?.commands.undo()} shortcut="Ctrl+Z" />
-              <ToolbarButton disabled={!canRedo} icon={Redo2} label="Redo" onClick={() => sourceMode ? sourceEditorRef.current?.redo() : editor?.commands.redo()} shortcut="Ctrl+Shift+Z" />
+              <ToolbarButton disabled={!canUndo} icon={Undo2} label="Undo" onClick={() => navigateHistory("undo")} shortcut="Ctrl+Z" />
+              <ToolbarButton disabled={!canRedo} icon={Redo2} label="Redo" onClick={() => navigateHistory("redo")} shortcut="Ctrl+Shift+Z" />
             </div>
             <span className="app-toolbar-divider" />
             <select
@@ -812,6 +874,7 @@ export function App() {
             const recovered = recoveryCandidate;
             replaceDocument(recovered.path, recovered.savedMarkdown);
             if (recovered.path) desktop.restoreDiskBaseline(recovered.path, recovered.savedMarkdown);
+            sourceModeRef.current = true;
             updateLiveMarkdown(recovered.markdown);
             sourceEntryMarkdownRef.current = recovered.savedMarkdown;
             sourceModeRef.current = true;

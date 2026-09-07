@@ -1,13 +1,4 @@
-import {
-  defaultKeymap,
-  history,
-  historyKeymap,
-  indentWithTab,
-  redo,
-  redoDepth,
-  undo,
-  undoDepth,
-} from "@codemirror/commands";
+import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, indentOnInput, syntaxHighlighting } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
@@ -25,12 +16,10 @@ import { tags } from "@lezer/highlight";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 export type SourceEditorHandle = Readonly<{
-  canRedo: () => boolean;
-  canUndo: () => boolean;
+  getSelection: () => { anchor: number; head: number } | undefined;
+  setMarkdown: (markdown: string, selection?: { anchor: number; head: number }) => void;
   focus: () => void;
-  redo: () => void;
   revealOffset: (offset: number) => void;
-  undo: () => void;
 }>;
 
 type SourceEditorProps = Readonly<{
@@ -65,12 +54,21 @@ export const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(fu
   onHistoryChangeRef.current = onHistoryChange;
 
   useImperativeHandle(forwardedRef, () => ({
-    canRedo: () => Boolean(viewRef.current && redoDepth(viewRef.current.state) > 0),
-    canUndo: () => Boolean(viewRef.current && undoDepth(viewRef.current.state) > 0),
-    focus: () => viewRef.current?.focus(),
-    redo: () => {
-      if (viewRef.current) redo(viewRef.current);
+    getSelection: () => {
+      const selection = viewRef.current?.state.selection.main;
+      return selection ? { anchor: selection.anchor, head: selection.head } : undefined;
     },
+    setMarkdown: (markdown, selection) => {
+      const view = viewRef.current;
+      if (!view) return;
+      const current = view.state.doc.toString();
+      const bound = (position: number) => Math.max(0, Math.min(markdown.length, position));
+      if (current !== markdown || selection) view.dispatch({
+        changes: current !== markdown ? { from: 0, to: view.state.doc.length, insert: markdown } : undefined,
+        selection: selection ? { anchor: bound(selection.anchor), head: bound(selection.head) } : undefined,
+      });
+    },
+    focus: () => viewRef.current?.focus(),
     revealOffset: (offset) => {
       const view = viewRef.current;
       if (!view) return;
@@ -80,9 +78,6 @@ export const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(fu
         effects: EditorView.scrollIntoView(anchor, { y: "center" }),
       });
       view.focus();
-    },
-    undo: () => {
-      if (viewRef.current) undo(viewRef.current);
     },
   }), []);
 
@@ -98,7 +93,6 @@ export const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(fu
           lineNumbers(),
           highlightActiveLineGutter(),
           highlightSpecialChars(),
-          history(),
           drawSelection(),
           dropCursor(),
           indentOnInput(),
@@ -109,7 +103,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(fu
           EditorState.tabSize.of(2),
           EditorView.contentAttributes.of({ "aria-label": "Markdown source" }),
           EditorView.editorAttributes.of({ "data-markora-source-editor": "true" }),
-          keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+          keymap.of([...defaultKeymap, indentWithTab]),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) return;
             onChangeRef.current(update.state.doc.toString());

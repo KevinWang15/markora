@@ -59,6 +59,12 @@ importers:
       markora:
         specifier: workspace:*
         version: link:../core
+      markora-extension-footnotes:
+        specifier: workspace:*
+        version: link:../extension-footnotes
+      markora-extension-toc:
+        specifier: workspace:*
+        version: link:../extension-toc
       markora-ui:
         specifier: workspace:*
         version: link:../ui

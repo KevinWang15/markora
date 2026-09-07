@@ -1,7 +1,10 @@
+import { MarkdownIt } from "markora/extension-api";
+
 export type DocumentOutlineItem = Readonly<{
   id: string;
   level: number;
   offset: number;
+  position?: number;
   text: string;
 }>;
 
@@ -18,15 +21,6 @@ function pathBasename(path: string) {
   return segments[segments.length - 1] ?? path;
 }
 
-function stripInlineMarkdown(value: string) {
-  return value
-    .replace(/!\[([^\]]*)\]\([^)]*\)/gu, "$1")
-    .replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1")
-    .replace(/<([^>]+)>/gu, "$1")
-    .replace(/[`*_~]/gu, "")
-    .trim();
-}
-
 export function documentNameFromPath(path: string | null) {
   return path ? pathBasename(path) : "Untitled.md";
 }
@@ -36,47 +30,24 @@ export function isMarkdownPath(path: string) {
   return match ? MARKDOWN_EXTENSIONS.has(match[0].toLowerCase()) : false;
 }
 
+const outlineParser = new MarkdownIt("commonmark");
+
 export function parseDocumentOutline(markdown: string): readonly DocumentOutlineItem[] {
   const headings: DocumentOutlineItem[] = [];
-  let fence: string | null = null;
-  let offset = 0;
-
-  for (const rawLine of markdown.split("\n")) {
-    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-    const fenceMatch = /^\s*(`{3,}|~{3,})/u.exec(line);
-    if (fenceMatch) {
-      const marker = fenceMatch[1][0];
-      if (fence === marker) fence = null;
-      else if (!fence) fence = marker;
-      offset += rawLine.length + 1;
-      continue;
-    }
-    if (fence) {
-      offset += rawLine.length + 1;
-      continue;
-    }
-
-    const match = /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/u.exec(line);
-    if (!match) {
-      offset += rawLine.length + 1;
-      continue;
-    }
-
-    const text = stripInlineMarkdown(match[2]);
-    if (!text) {
-      offset += rawLine.length + 1;
-      continue;
-    }
-
-    headings.push({
-      id: `heading-${headings.length + 1}`,
-      level: match[1].length,
-      offset,
-      text,
-    });
-    offset += rawLine.length + 1;
+  const starts = [0];
+  for (const match of markdown.matchAll(/\r\n|\r|\n/gu)) starts.push(match.index! + match[0].length);
+  const tokens = outlineParser.parse(markdown, {});
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.type !== "heading_open" || !token.map) continue;
+    const inline = tokens[index + 1];
+    const text = (inline?.children ?? []).map(child => {
+      if (child.type === "text" || child.type === "code_inline" || child.type === "image") return child.content;
+      if (child.type === "softbreak" || child.type === "hardbreak") return " ";
+      return "";
+    }).join("").trim();
+    headings.push({ id: `heading-${headings.length + 1}`, level: Number(token.tag.slice(1)), offset: starts[token.map[0]] ?? 0, text });
   }
-
   return headings;
 }
 

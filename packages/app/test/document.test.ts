@@ -57,3 +57,13 @@ describe("desktop document model", () => {
     ]);
   });
 });
+
+describe("source outline syntax", () => {
+  it("includes Setext and nested headings without stripping literal hashes", () => {
+    expect(parseDocumentOutline("First\n=====\n\n## C#\n\n> ### Nested\n").map(item => item.text)).toEqual(["First", "C#", "Nested"]);
+  });
+  it("honors fence lengths and retains CRLF source offsets", () => {
+    const source = "````md\r\n```\r\n# Hidden\r\n````\r\n\r\n# Actual";
+    expect(parseDocumentOutline(source)).toEqual([{ id: "heading-1", level: 1, text: "Actual", offset: source.indexOf("# Actual") }]);
+  });
+});

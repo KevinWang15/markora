@@ -4,6 +4,8 @@ import { App } from "./App";
 import "markora/styles.css";
 import "markora/themes.css";
 import "markora-ui/styles.css";
+import "markora-extension-footnotes/styles.css";
+import "markora-extension-toc/styles.css";
 import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

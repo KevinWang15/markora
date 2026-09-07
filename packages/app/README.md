@@ -63,3 +63,10 @@ change delivery (up to five seconds during continuous typing). After an unexpect
 exit, the app offers Restore or Discard recovery. Recovery is a recent checkpoint,
 not a guarantee that the final keystroke before a crash reached disk. Normal close
 waits for its final checkpoint. The renderer-only browser uses local storage.
+
+The desktop dialect enables semantic footnotes and `[TOC]`. Source and rich views
+share a bounded document undo/redo history, including edits made before switching
+views. Typing bursts are grouped; explicit view changes separate groups. Rich
+history snapshots retain immutable editor nodes, so typing does not require
+serializing the document on each keystroke. The outline uses the editor's indexed
+heading positions in rich mode and CommonMark source positions in source mode.
