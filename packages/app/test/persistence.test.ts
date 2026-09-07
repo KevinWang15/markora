@@ -47,3 +47,16 @@ describe("atomic document persistence", () => {
     expect(await fs.readFile(target, "utf8")).toBe("after");
   });
 });
+
+it("copies relative images for Save As without overwriting unrelated files", async () => {
+  const { copyRelativeImages } = await import("../src/persistence");
+  const first = path.join(directory, "first"), second = path.join(directory, "second");
+  await fs.mkdir(first); await fs.mkdir(second);
+  await fs.writeFile(path.join(first, "picture name.png"), "image bytes");
+  const urls = ["picture%20name.png", "https://example.com/remote.png"];
+  await copyRelativeImages(fs, path, path.join(first, "note.md"), path.join(second, "note.md"), urls);
+  expect(await fs.readFile(path.join(second, "picture name.png"), "utf8")).toBe("image bytes");
+  await fs.writeFile(path.join(second, "picture name.png"), "unrelated bytes");
+  await expect(copyRelativeImages(fs, path, path.join(first, "note.md"), path.join(second, "note.md"), urls)).rejects.toThrow("unrelated image");
+  expect(await fs.readFile(path.join(second, "picture name.png"), "utf8")).toBe("unrelated bytes");
+});

@@ -72,3 +72,31 @@ export async function saveFile(
     if (await readIfPresent(fs, target) !== expected) throw new DocumentConflictError();
   });
 }
+
+/** Keeps relative image references usable when saving a copy in another directory. */
+export async function copyRelativeImages(
+  fs: FileSystem, path: PathModule, sourcePath: string, destinationPath: string, urls: readonly string[],
+) {
+  const sourceDirectory = path.dirname(sourcePath);
+  const destinationDirectory = path.dirname(destinationPath);
+  if (sourceDirectory === destinationDirectory) return;
+  for (const url of new Set(urls)) {
+    if (/^(?:[a-z][a-z\d+.-]*:|[/\\]|#)/iu.test(url)) continue;
+    const relative = decodeURIComponent(url.split(/[?#]/u)[0]);
+    if (!relative) continue;
+    const source = path.resolve(sourceDirectory, relative);
+    const destination = path.resolve(destinationDirectory, relative);
+    if (source === destination) continue;
+    const within = path.relative(destinationDirectory, destination);
+    if (within === ".." || within.startsWith(`..${path.sep}`) || path.isAbsolute(within)) {
+      throw new Error("An image is outside the document folder. Save in the original folder or use an absolute image URL before Save As.");
+    }
+    await fs.mkdir(path.dirname(destination), { recursive: true });
+    try { await fs.copyFile(source, destination, fs.constants.COPYFILE_EXCL); }
+    catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code !== "EEXIST") throw cause;
+      const [original, existing] = await Promise.all([fs.readFile(source), fs.readFile(destination)]);
+      if (!original.equals(existing)) throw new Error(`An unrelated image already exists at ${destination}. Choose another folder for Save As.`);
+    }
+  }
+}

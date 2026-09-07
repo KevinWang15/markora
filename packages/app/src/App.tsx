@@ -162,6 +162,8 @@ export function App() {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savingCopy, setSavingCopy] = useState(false);
+  const [tableSaveWarning, setTableSaveWarning] = useState<{ saveAs: boolean; message: string } | null>(null);
 
   const dirty = documentSnapshot.markdown !== documentSnapshot.savedMarkdown;
   const documentName = documentNameFromPath(documentSnapshot.path);
@@ -211,12 +213,14 @@ export function App() {
         openUrl: ({ url }) => desktop.openExternal(url),
         assets: {
           allowedMimeTypes: ["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"],
-          upload: async ({ file, reportProgress }) => {
+          upload: async ({ file, reportProgress, signal }) => {
             reportProgress(0.2);
-            const storedUrl = await desktop.storeImage(
-              { file, path: (file as File & { path?: string }).path ?? null },
-              sessionRef.current.path,
-            );
+            const snapshot = sessionRef.current.snapshot;
+            const image = { file, path: (file as File & { path?: string }).path ?? null };
+            let storedUrl = await desktop.storeImage(image, snapshot.path);
+            if (signal.aborted || snapshot.id !== sessionRef.current.snapshot.id) throw new DOMException("Upload cancelled", "AbortError");
+            if (snapshot.path !== sessionRef.current.path) storedUrl = await desktop.storeImage(image, sessionRef.current.path);
+            if (signal.aborted || snapshot.id !== sessionRef.current.snapshot.id || sourceModeRef.current) throw new DOMException("Upload cancelled", "AbortError");
             reportProgress(1);
             return { kind: "image", url: storedUrl, alt: file.name.replace(/\.[^.]+$/u, "") };
           },
@@ -226,6 +230,12 @@ export function App() {
     });
     editorRef.current = editor;
     setEditorVersion((version) => version + 1);
+    const untrackErrors = editor.subscribe("error", event => {
+      setError(event.error instanceof Error ? event.error.message : "The editor could not complete this operation.");
+    });
+    const untrackAssets = editor.subscribe("asset", event => {
+      if (event.upload.error) setError(event.upload.error.message);
+    });
     const untrackHistory = editor.subscribe("update", event => {
       if (applyingHistoryRef.current || event.origin === "reset" || sourceModeRef.current) return;
       const { doc, selection } = editor.view.state;
@@ -237,6 +247,8 @@ export function App() {
     return () => {
       unsubscribe();
       untrackHistory();
+      untrackAssets();
+      untrackErrors();
       editor.destroy();
       editorRef.current = null;
     };
@@ -282,18 +294,34 @@ export function App() {
     });
   }, [rememberPath]);
 
-  const saveDocument = useCallback(async (saveAs = false) => {
+  const saveDocument = useCallback(async (saveAs = false, acceptTableLoss = false) => {
     // Native menus and shortcuts must obey the same lock as the toolbar.
     if (savingRef.current) return false;
+    const editor = editorRef.current;
+    const issues = !sourceModeRef.current ? editor?.state.tableIssues() ?? [] : [];
+    if (issues.length && !acceptTableLoss) {
+      setTableSaveWarning({ saveAs, message: [...new Set(issues.map(issue => issue.message))].join(" ") });
+      return false;
+    }
     savingRef.current = true;
+    setError(null);
     setSaving(true);
     try {
       if (!sourceModeRef.current) editorRef.current?.flushChange();
       const snapshot = sessionRef.current.snapshot;
+      let assets: { sourcePath: string; urls: string[] } | undefined;
+      if (saveAs && snapshot.path && editor) {
+        setSavingCopy(true);
+        const doc = sourceModeRef.current ? editor.extensions.get(bridgeRef.current).state.parse(snapshot.markdown) : editor.view.state.doc;
+        const urls: string[] = [];
+        doc?.descendants(node => { if (node.type.name === "image") urls.push(String(node.attrs.src)); });
+        assets = { sourcePath: snapshot.path, urls };
+      }
       const path = await desktop.saveDocument(
         saveAs ? null : snapshot.path,
         documentNameFromPath(snapshot.path),
         snapshot.markdown,
+        assets,
       );
       if (desktop.isNative && !path) return false;
       if (!sourceModeRef.current) editorRef.current?.flushChange();
@@ -312,17 +340,24 @@ export function App() {
     } finally {
       savingRef.current = false;
       setSaving(false);
+      setSavingCopy(false);
     }
   }, [rememberPath, showError]);
 
   const guardUnsaved = useCallback((action: PendingAction["action"], title: string, message: string) => {
+    if (document.querySelector("dialog[open]")) return;
     if (!sourceModeRef.current) editorRef.current?.flushChange();
+    const run = async () => {
+      try { await action(); }
+      catch (cause) { showError(cause, "The document could not be changed."); }
+    };
     if (!sessionRef.current.dirty) {
-      void action();
+      void run();
       return;
     }
-    setPendingAction({ action, title, message });
-  }, []);
+    setError(null);
+    setPendingAction({ action: run, title, message });
+  }, [showError]);
 
   const acceptOpenedDocument = useCallback((path: string | null, content: string) => {
     guardUnsaved(() => replaceDocument(path, content), "Save your changes?",
@@ -365,7 +400,7 @@ export function App() {
       const markdown = sessionRef.current.markdown;
       try {
         if (markdown !== sourceEntryMarkdownRef.current) {
-          editorRef.current?.commands.resetMarkdown(markdown);
+          editorRef.current?.commands.reconcileMarkdown(markdown);
         }
       } catch (cause) {
         showError(cause, "The Markdown source could not be rendered.");
@@ -409,7 +444,16 @@ export function App() {
         closeRequestedRef.current = true;
         const snapshot = sessionRef.current.snapshot;
         recoveryRef.current!.schedule({ ...snapshot, savedMarkdown: snapshot.markdown });
-        void recoveryRef.current!.flush().then(() => desktop.forceClose(), cause => {
+        void recoveryRef.current!.flush().then(() => {
+          if (!sourceModeRef.current) editorRef.current?.flushChange();
+          const current = sessionRef.current.snapshot;
+          if (current.id !== snapshot.id || current.revision !== snapshot.revision) {
+            closeRequestedRef.current = false;
+            recoveryRef.current!.schedule(current);
+            return;
+          }
+          desktop.forceClose();
+        }).catch(cause => {
           closeRequestedRef.current = false;
           showError(cause, "Recovery could not be saved before closing.");
         });
@@ -505,7 +549,7 @@ export function App() {
 
   const navigateHistory = useCallback((direction: "undo" | "redo") => {
     const editor = editorRef.current;
-    if (!editor || editor.view.composing) return;
+    if (!editor || editor.view.composing || sourceEditorRef.current?.isComposing()) return;
     if (!sourceModeRef.current) editor.flushChange();
     const entry = historyRef.current[direction]();
     if (!entry) return;
@@ -545,7 +589,7 @@ export function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (pendingAction || recoveryCandidate) return;
+      if (pendingAction || recoveryCandidate || tableSaveWarning || event.isComposing) return;
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
       if (!event.isComposing && (key === "z" || key === "y") && event.target instanceof Element
@@ -575,7 +619,7 @@ export function App() {
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [navigateHistory, newDocument, openDocument, pendingAction, recoveryCandidate, saveDocument, toggleSourceMode]);
+  }, [navigateHistory, newDocument, openDocument, pendingAction, recoveryCandidate, tableSaveWarning, saveDocument, toggleSourceMode]);
 
   const editor = editorRef.current;
   const active = {
@@ -607,8 +651,10 @@ export function App() {
     try {
       const image = await desktop.chooseImage();
       if (!image || snapshot.id !== sessionRef.current.snapshot.id) return;
-      const url = await desktop.storeImage(image, snapshot.path);
+      let url = await desktop.storeImage(image, snapshot.path);
       if (snapshot.id !== sessionRef.current.snapshot.id) return;
+      if (snapshot.path !== sessionRef.current.path) url = await desktop.storeImage(image, sessionRef.current.path);
+      if (snapshot.id !== sessionRef.current.snapshot.id || sourceModeRef.current) return;
       editorRef.current?.commands.insertImage({
         src: url,
         alt: image.file.name.replace(/\.[^.]+$/u, ""),
@@ -793,7 +839,7 @@ export function App() {
             </div>
           </div>
 
-          <div className="app-document-viewport" data-source-mode={sourceMode || undefined}>
+          <div className="app-document-viewport" inert={savingCopy} data-source-mode={sourceMode || undefined}>
             <div className="app-editor" hidden={sourceMode} ref={editorHostRef} />
             {sourceMode && (
               <div className="app-source-shell">
@@ -843,7 +889,7 @@ export function App() {
 
       {pendingAction && (
         <Dialog title={pendingAction.title} message={pendingAction.message}
-          onCancel={() => setPendingAction(null)} busy={saving}>
+          onCancel={() => setPendingAction(null)} busy={saving} error={error ?? undefined}>
           <button className="app-dialog-button" disabled={saving} onClick={() => setPendingAction(null)} type="button">Cancel</button>
           <button className="app-dialog-button app-dialog-button-danger" disabled={saving} onClick={() => {
             const action = pendingAction.action;
@@ -857,6 +903,19 @@ export function App() {
               await action();
             }
           }} type="button">{saving ? "Saving…" : "Save"}</button>
+        </Dialog>
+      )}
+
+      {tableSaveWarning && (
+        <Dialog title="Review table conversion" message={tableSaveWarning.message}
+          onCancel={() => setTableSaveWarning(null)} busy={saving} error={error ?? undefined}>
+          <button autoFocus className="app-dialog-button" disabled={saving} onClick={() => setTableSaveWarning(null)} type="button">Keep editing</button>
+          <button className="app-dialog-button app-dialog-button-primary" disabled={saving} onClick={async () => {
+            if (await saveDocument(tableSaveWarning.saveAs, true)) {
+              setTableSaveWarning(null);
+              if (pendingAction) { const action = pendingAction.action; setPendingAction(null); await action(); }
+            }
+          }} type="button">Save Markdown</button>
         </Dialog>
       )}
 

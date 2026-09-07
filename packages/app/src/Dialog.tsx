@@ -2,12 +2,13 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 import AlertTriangle from "@lucide/icons/icons/triangle-alert";
 import { Icon } from "./Icon";
 
-export function Dialog({ title, message, children, onCancel, busy = false }: Readonly<{
+export function Dialog({ title, message, children, onCancel, busy = false, error }: Readonly<{
   title: string;
   message: string;
   children: ReactNode;
   onCancel: () => void;
   busy?: boolean;
+  error?: string;
 }>) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
@@ -27,6 +28,7 @@ export function Dialog({ title, message, children, onCancel, busy = false }: Rea
     <div className="app-dialog-copy">
       <h2 id={`${id}-title`}>{title}</h2>
       <p id={`${id}-message`}>{message}</p>
+      {error && <p role="alert">{error}</p>}
     </div>
     <div className="app-dialog-actions">{children}</div>
   </dialog>;

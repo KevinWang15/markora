@@ -1,4 +1,4 @@
-import { atomicWrite, readIfPresent, saveFile, type FileSystem, type PathModule } from "./persistence";
+import { atomicWrite, copyRelativeImages, readIfPresent, saveFile, type FileSystem, type PathModule } from "./persistence";
 import type { DocumentSnapshot } from "./documentSession";
 import { extractOpenPath, parseCommandLineArguments } from "./document";
 
@@ -180,7 +180,7 @@ export const desktop = {
     return content;
   },
 
-  async saveDocument(path: string | null, suggestedName: string, content: string) {
+  async saveDocument(path: string | null, suggestedName: string, content: string, assets?: { sourcePath: string; urls: readonly string[] }) {
     const modules = getNodeModules();
     if (!modules) {
       const link = document.createElement("a");
@@ -200,6 +200,7 @@ export const desktop = {
     const expected = diskBaselines.has(destination)
       ? diskBaselines.get(destination)!
       : await readIfPresent(modules.fs, destination);
+    if (assets) await copyRelativeImages(modules.fs, modules.path, assets.sourcePath, destination, assets.urls);
     await saveFile(modules.fs, modules.path, destination, content, expected);
     diskBaselines.set(destination, content);
     return destination;
@@ -274,8 +275,7 @@ export const desktop = {
     if (!documentPath || /^(?:[a-z]+:|#)/iu.test(storedUrl)) return storedUrl;
     const modules = getNodeModules();
     if (!modules) return storedUrl;
-    const absolutePath = modules.path.resolve(modules.path.dirname(documentPath), storedUrl);
-    return modules.url.pathToFileURL(absolutePath).href;
+    return new URL(storedUrl.replace(/\\/gu, "/"), modules.url.pathToFileURL(documentPath)).href;
   },
 
   openExternal(url: string) {

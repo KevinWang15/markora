@@ -16,6 +16,7 @@ import { tags } from "@lezer/highlight";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 export type SourceEditorHandle = Readonly<{
+  isComposing: () => boolean;
   getSelection: () => { anchor: number; head: number } | undefined;
   setMarkdown: (markdown: string, selection?: { anchor: number; head: number }) => void;
   focus: () => void;
@@ -54,6 +55,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, SourceEditorProps>(fu
   onHistoryChangeRef.current = onHistoryChange;
 
   useImperativeHandle(forwardedRef, () => ({
+    isComposing: () => viewRef.current?.composing ?? false,
     getSelection: () => {
       const selection = viewRef.current?.state.selection.main;
       return selection ? { anchor: selection.anchor, head: selection.head } : undefined;
