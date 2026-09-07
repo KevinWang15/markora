@@ -6,6 +6,8 @@ import "markora/themes.css";
 import "markora-ui/styles.css";
 import "markora-extension-footnotes/styles.css";
 import "markora-extension-toc/styles.css";
+import "markora-extension-math/styles.css";
+import "markora-extension-diagrams/styles.css";
 import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

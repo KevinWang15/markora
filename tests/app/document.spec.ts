@@ -231,3 +231,37 @@ test("CDP find works in source, wraps, and retains its query across modes", asyn
   await expect(page.locator(".app-find-count")).toHaveText("2 matches");
   await expect(page.locator(".app-file-location")).not.toHaveText("Edited");
 });
+
+test("math and Mermaid previews render, source edits preserve Markdown and undo", async ({ page }) => {
+  await openDocument(page, "Inline $x^2$.\n\n$$\n\\frac{a}{b}\n$$\n\n```mermaid\ngraph LR\n A[Start] --> B[Finish]\n```\n");
+  await expect(page.locator(".mdw-math__preview math")).toHaveCount(2);
+  await expect(page.locator(".mdw-diagram__preview svg")).toHaveCount(1);
+  await expect(page.locator(".mdw-diagram__preview")).toContainText("Finish");
+  await expect(page.locator(".app-file-location")).not.toHaveText("Edited");
+  await page.locator(".mdw-math").first().click();
+  await page.locator(".mdw-math").first().getByRole("button", { name: /Edit/ }).click();
+  await page.getByRole("textbox", { name: "Preview source" }).fill("x^3");
+  await page.getByRole("button", { name: "Apply source", exact: true }).click();
+  await source(page); expect(await sourceText(page)).toContain("$x^3$");
+  await page.keyboard.press("Control+z"); expect(await sourceText(page)).toContain("$x^2$");
+});
+
+test("HTML and PDF export use clean document content without changing saved state", async ({ page, context }) => {
+  await openDocument(page, "# Export example\n\n**bold** and $x^2$\n\n<script>window.compromised=true</script>");
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export HTML", exact: true }).click();
+  const html = await readFile((await (await downloading).path())!, "utf8");
+  expect(html).toContain("<math"); expect(html).toContain("<strong>bold</strong>");
+  expect(html).not.toContain("<script>"); expect(html).not.toContain("contenteditable");
+  await expect(page.locator(".app-file-location")).not.toHaveText("Edited");
+  await source(page); await page.keyboard.press("Control+End"); await page.keyboard.type("\n\nFresh source content");
+  await page.evaluate(() => { window.print = () => { document.body.dataset.printRequested = "true"; }; });
+  await page.getByRole("button", { name: "Print / Save as PDF", exact: true }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-print-requested", "true");
+  await expect(page.locator("#markora-print article")).toContainText("Fresh source content");
+  const cdp = await context.newCDPSession(page);
+  const { data } = await cdp.send("Page.printToPDF", { printBackground: true });
+  expect(Buffer.from(data, "base64").subarray(0, 5).toString()).toBe("%PDF-");
+  expect(Buffer.from(data, "base64").length).toBeGreaterThan(2000);
+  await expect(page.locator(".app-file-location")).toHaveText("Edited");
+});

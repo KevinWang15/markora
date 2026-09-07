@@ -1,4 +1,4 @@
-import { atomicWrite, copyRelativeImages, readIfPresent, saveFile, type FileSystem, type PathModule } from "./persistence";
+import { atomicWrite, copyRelativeImages, isMissingFile, readIfPresent, saveFile, type FileSystem, type PathModule } from "./persistence";
 import type { DocumentSnapshot } from "./documentSession";
 import { extractOpenPath, parseCommandLineArguments } from "./document";
 
@@ -24,6 +24,7 @@ export type DesktopMenuActions = Readonly<{
 
 type NodeUrl = {
   pathToFileURL: (path: string) => URL;
+  fileURLToPath: (url: string) => string;
 };
 
 type NwMenu = {
@@ -155,6 +156,49 @@ const diskBaselines = new Map<string, string | null>();
 export const desktop = {
   isNative: Boolean(getNw()),
   isMac: getNw()?.process.platform === "darwin",
+
+  async exportHtml(suggestedName: string, content: string) {
+    const modules = getNodeModules();
+    if (!modules) {
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(new Blob([content], { type: "text/html;charset=utf-8" }));
+      link.href = url; link.download = suggestedName; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return;
+    }
+    const file = await pickFile({ accept: ".html,text/html", saveAs: suggestedName });
+    const destination = file && nativeFilePath(file);
+    if (!destination) return;
+    await saveFile(modules.fs, modules.path, destination, content, await readIfPresent(modules.fs, destination));
+  },
+
+  async exportImage(documentPath: string | null, storedUrl: string) {
+    const url = this.resolveResource(documentPath, storedUrl);
+    const modules = getNodeModules();
+    if (!url.startsWith("file:") || !modules) return url;
+    const path = modules.url.fileURLToPath(url);
+    const mime: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml" };
+    const type = mime[modules.path.extname(path).toLowerCase()];
+    if (!type) throw new Error("Only PNG, JPEG, GIF, WebP and SVG images can be embedded in an export.");
+    if ((await modules.fs.stat(path)).size > 20 * 1024 * 1024) throw new Error("An image exceeds the 20 MB export limit.");
+    return `data:${type};base64,${(await modules.fs.readFile(path)).toString("base64")}`;
+  },
+
+  async exportPdf(suggestedName: string) {
+    const modules = getNodeModules();
+    if (!modules) { window.print(); return; }
+    const file = await pickFile({ accept: ".pdf,application/pdf", saveAs: suggestedName });
+    const destination = file && nativeFilePath(file);
+    if (!destination) return;
+    const read = () => modules.fs.readFile(destination).catch(cause => { if (isMissingFile(cause)) return null; throw cause; });
+    const expected = await read();
+    const { captureNativePdf } = await import("./nativePdf");
+    const bytes = await captureNativePdf();
+    await atomicWrite(modules.fs, modules.path, destination, bytes, async () => {
+      const current = await read();
+      if (current === null ? expected !== null : expected === null || !current.equals(expected)) throw new Error("The PDF destination changed during export. Choose another destination.");
+    });
+  },
 
   async openDocument(): Promise<OpenedDocument | null> {
     const file = await pickFile({ accept: ".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain" });

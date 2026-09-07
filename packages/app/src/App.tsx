@@ -15,6 +15,8 @@ import PanelLeftClose from "@lucide/icons/icons/panel-left-close";
 import PanelLeftOpen from "@lucide/icons/icons/panel-left-open";
 import Redo2 from "@lucide/icons/icons/redo-2";
 import Search from "@lucide/icons/icons/search";
+import Download from "@lucide/icons/icons/download";
+import Printer from "@lucide/icons/icons/printer";
 import Save from "@lucide/icons/icons/save";
 import Strikethrough from "@lucide/icons/icons/strikethrough";
 import SunMoon from "@lucide/icons/icons/sun-moon";
@@ -25,6 +27,10 @@ import { createEditor, type MarkdownEditor, type MarkdownEditorHeadingLevel } fr
 import { createTocExtension } from "markora-extension-toc";
 import { useDocumentAnalysis } from "./useDocumentAnalysis";
 import { createFootnotesExtension } from "markora-extension-footnotes";
+import { createMathExtension } from "markora-extension-math";
+import { createDiagramsExtension } from "markora-extension-diagrams";
+import { renderMath, renderMermaid } from "./renderers";
+import { SourceDialog, type SourceEdit } from "./SourceDialog";
 import { createDocumentBridge } from "./documentBridge";
 import { FindBar } from "./FindBar";
 import { createSearchExtension } from "./searchExtension";
@@ -135,6 +141,11 @@ function ToolbarButton({
 }
 
 export function App() {
+  const [sourceEdit, setSourceEdit] = useState<SourceEdit | null>(null);
+  const mathRef = useRef(createMathExtension({ renderer: renderMath, onEditSource: request =>
+    setSourceEdit({ title: "Edit math", source: request.source, update: request.update }) }));
+  const diagramsRef = useRef(createDiagramsExtension({ renderers: { mermaid: renderMermaid }, onEditSource: request =>
+    setSourceEdit({ title: `Edit ${request.kind}`, source: request.source, update: source => request.update({ source }) }) }));
   const editorHostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MarkdownEditor | null>(null);
   const sourceEditorRef = useRef<SourceEditorHandle | null>(null);
@@ -172,6 +183,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savingCopy, setSavingCopy] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchOptions, setSearchOptions] = useState<SearchOptions>({ query: "", caseSensitive: false, wholeWord: false });
   const [replacement, setReplacement] = useState("");
@@ -221,7 +233,7 @@ export function App() {
       placeholder: "Start writing…",
       attributes: { "data-markora-app-editor": "true" },
       ui: createDefaultUi(),
-      extensions: [createFootnotesExtension(), tocRef.current, bridgeRef.current, searchRef.current],
+      extensions: [createFootnotesExtension(), tocRef.current, bridgeRef.current, searchRef.current, mathRef.current, diagramsRef.current],
       resources: {
         images: { allowedProtocols: ["http:", "https:", "data:", "file:"] },
         links: { allowedProtocols: ["http:", "https:", "mailto:", "tel:", "file:"] },
@@ -634,6 +646,23 @@ export function App() {
     setSearchOpen(true);
     setSearchFocusRequest(value => value + 1);
   }, []);
+  const exportDocument = async (format: "html" | "pdf") => {
+    if (exporting || document.querySelector("dialog[open]") || editorRef.current?.view.composing || sourceEditorRef.current?.isComposing()) return;
+    const current = editorRef.current;
+    if (!current) return;
+    current.flushChange();
+    const path = sessionRef.current.snapshot.path;
+    setExporting(true);
+    try {
+      const doc = sourceModeRef.current ? current.extensions.get(bridgeRef.current).state.parse(sourceEditorRef.current?.getMarkdown() ?? sessionRef.current.markdown) : current.view.state.doc;
+      if (!doc) throw new Error("This source could not be parsed for export.");
+      const { buildExport, printExport } = await import("./exportDocument");
+      const output = await buildExport(doc, documentName, url => desktop.exportImage(path, url));
+      if (format === "html") await desktop.exportHtml(documentName.replace(/\.[^.]+$/u, "") + ".html", output.html);
+      else await printExport(output, () => desktop.exportPdf(documentName.replace(/\.[^.]+$/u, "") + ".pdf"), desktop.isNative);
+    } catch (cause) { showError(cause, "The document could not be exported."); }
+    finally { setExporting(false); }
+  };
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
     if (sourceModeRef.current) sourceEditorRef.current?.focus();
@@ -683,7 +712,7 @@ export function App() {
       if (event.key === "Escape" && searchOpen && !event.isComposing && !document.querySelector("dialog[open]")) {
         event.preventDefault(); closeSearch(); return;
       }
-      if (pendingAction || recoveryCandidate || tableSaveWarning || sourceConversionWarning || event.isComposing) return;
+      if (document.querySelector("dialog[open]") || event.isComposing) return;
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
       if (!event.isComposing && (key === "z" || key === "y") && event.target instanceof Element
@@ -886,6 +915,8 @@ export function App() {
               <ToolbarButton icon={FilePlus2} label="New document" onClick={newDocument} shortcut="Ctrl+N" />
               <ToolbarButton icon={FolderOpen} label="Open document" onClick={openDocument} shortcut="Ctrl+O" />
               <ToolbarButton disabled={saving} icon={saving ? Check : Save} label="Save document" onClick={() => void saveDocument(false)} shortcut="Ctrl+S" />
+              <ToolbarButton disabled={exporting} icon={Download} label="Export HTML" onClick={() => void exportDocument("html")} />
+              <ToolbarButton disabled={exporting} icon={Printer} label={desktop.isNative ? "Export PDF" : "Print / Save as PDF"} onClick={() => void exportDocument("pdf")} />
             </div>
             <span className="app-toolbar-divider" />
             <div className="app-toolbar-group">
@@ -1009,6 +1040,9 @@ export function App() {
         </Dialog>
       )}
 
+      {sourceEdit && <SourceDialog request={sourceEdit} onClose={() => setSourceEdit(null)} onSaved={() => {
+        editorRef.current?.flushChange(); historyRef.current.breakGroup();
+      }} />}
       {sourceConversionWarning && (
         <Dialog title="Review source conversion" message={`${sourceConversionWarning} Editing Markdown source may flatten this structure. You can undo the change to recover the rich document.`}
           onCancel={() => setSourceConversionWarning(null)}>

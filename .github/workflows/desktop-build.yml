@@ -15,6 +15,10 @@ on:
           - macos-arm64
           - macos-x64
           - all
+      behavior_checks:
+        description: Also package an SDK runtime and check native editing and file behavior over CDP
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -92,6 +96,24 @@ jobs:
           path: artifacts/Markora-${{ matrix.target }}.zip*
           if-no-files-found: error
           compression-level: 0
+          retention-days: 7
+      - name: Package SDK runtime for native behavior checks
+        if: inputs.behavior_checks
+        run: node packages/app/scripts/nw.mjs build "${{ matrix.platform }}" "${{ matrix.arch }}" sdk
+      - name: Sign diagnostic macOS build
+        if: inputs.behavior_checks && runner.os == 'macOS'
+        run: codesign --force --deep --sign - "packages/app/release/osx-${{ matrix.arch }}-sdk/Markora.app"
+      - name: Check native editing, persistence and export over CDP
+        if: inputs.behavior_checks
+        timeout-minutes: 4
+        run: node packages/app/scripts/native-behavior.mjs "${{ matrix.platform }}" "${{ matrix.arch }}"
+      - name: Upload native behavior report
+        if: always() && inputs.behavior_checks
+        uses: actions/upload-artifact@v5
+        with:
+          name: native-behavior-${{ matrix.target }}
+          path: test-results/native/
+          if-no-files-found: ignore
           retention-days: 7
       - name: Upload native smoke diagnostics
         if: failure()

@@ -864,3 +864,17 @@ button {
 .app-find-bar p { font-size: 12px; margin: 6px 0; }
 .app-search-match { background-color: color-mix(in srgb, #ffc857 42%, transparent); border-radius: 2px; }
 .app-search-current { background-color: color-mix(in srgb, #ff9f1c 70%, transparent); outline: 1px solid currentColor; }
+.app-syntax-source { width: 100%; min-height: 10rem; font: 14px/1.6 monospace; padding: .75rem; color: inherit; background: var(--app-bg); border: 1px solid currentColor; border-radius: 6px; }
+.app-dialog-actions:has(.app-syntax-source) { flex-wrap: wrap; }
+.mdw-math math { font-size: 1.15em; }
+.mdw-diagram__preview svg { max-width: 100%; height: auto; color: #222; background: #fff; }
+.mdw-diagram__preview .node rect, .mdw-diagram__preview .node polygon, .mdw-diagram__preview .node circle { fill: #f4f4f4; stroke: #555; stroke-width: 1px; }
+.mdw-diagram__preview .flowchart-link, .mdw-diagram__preview .messageLine0, .mdw-diagram__preview .messageLine1 { stroke: #555; fill: none; }
+.mdw-diagram__preview .arrowheadPath, .mdw-diagram__preview marker path { fill: #555; stroke: #555; }
+.mdw-diagram__preview text { fill: #222; font: 16px sans-serif; }
+#markora-print { display: none; }
+@media print {
+  body > :not(#markora-print) { display: none !important; }
+  #markora-print { display: block !important; }
+  html, body { margin: 0 !important; height: auto !important; overflow: visible !important; background: white !important; }
+}

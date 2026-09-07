@@ -64,7 +64,7 @@ exit, the app offers Restore or Discard recovery. Recovery is a recent checkpoin
 not a guarantee that the final keystroke before a crash reached disk. Normal close
 waits for its final checkpoint. The renderer-only browser uses local storage.
 
-The desktop dialect enables semantic footnotes and `[TOC]`. Source and rich views
+The desktop dialect enables semantic footnotes, `[TOC]`, math, and diagram fences. Source and rich views
 share a bounded document undo/redo history, including edits made before switching
 views. Typing bursts are grouped; explicit view changes separate groups. Rich
 history snapshots retain immutable editor nodes, so typing does not require
@@ -114,3 +114,58 @@ Word counts and source outlines run in a coalescing worker. Stale outline entrie
 are disabled until current positions arrive. See
 [desktop performance measurements](../../docs/desktop-performance.md) for the
 100 KB–1 MB source-typing comparison and reproduction command.
+
+## Find, previews, and export
+
+- **Find and replace** (`Ctrl/Cmd+F` or `Ctrl/Cmd+H`) searches the active view. Rich
+  searches cross formatting marks within a text block; source searches include
+  Markdown syntax. Matching is literal, with case and Unicode whole-word options.
+  Replace all is one document undo step. Searches report a 10,000-match limit and
+  disable Replace all when exceeded; up to 1,000 matches plus the active result
+  are highlighted to bound decoration work.
+- Inline/block math uses a locally bundled, lazy-loaded KaTeX parser and native
+  MathML. Mermaid uses a lazy-loaded local renderer with strict security and SVG
+  labels. Source-edit controls retain the extension's stale-target protection.
+  Configuration directives and active/unsupported SVG output fall back to source;
+  GeoJSON, TopoJSON and STL remain editable source without a preview renderer.
+- **Export HTML** writes a static, sanitized document with inline styles, MathML,
+  rendered Mermaid (or source on rendering failure), and embedded native local
+  images. Remote images remain remote. Local image embedding accepts PNG, JPEG,
+  GIF, WebP and SVG, with a 20 MB limit per image. Missing local files report an
+  error. Export preserves the active document's path, saved baseline and history.
+- **Export PDF** in the desktop app writes the same document to the chosen PDF
+  path using Chromium printing and an atomic file replacement. Browser previews
+  show **Print / Save as PDF** and open their print dialog. Editor tools, search
+  highlights and source-mode chrome are excluded; current source edits are included.
+
+Renderer configuration follows the official [KaTeX options](https://katex.org/docs/options),
+[Mermaid API](https://mermaid.js.org/config/usage.html), and
+[Chromium printing protocol](https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-printToPDF).
+The native PDF path uses the internal `chrome.debugger` transport (also available
+in normal NW.js) without opening a remote debugging port. It avoids a reproducible
+NW.js 0.115.0 legacy print-preview crash, including on a minimal standalone page.
+
+## Native behavior checks
+
+The manual binary workflow has an optional **behavior_checks** checkbox (off by default). It packages a separate NW.js SDK runtime from the same production
+renderer, runs `scripts/native-behavior.mjs` over CDP on the selected runner, and
+uploads a JSON report, screenshot and runtime log. Downloadable binaries continue
+using the normal runtime. No Windows/macOS build runs on pushes, PRs or schedules.
+
+The checks cover native command-line opening, relative image loading, math,
+atomic saves and backups, edits during a delayed save, Save As with asset copying,
+find/replace and undo, native HTML/PDF output, recovery and unsaved-close handling.
+Only file chooser interaction is substituted; filesystem writes and the
+Chromium PDF renderer are real. Unicode insertion is synthetic and does **not** certify
+OS IME, VoiceOver/NVDA or native chooser accessibility. Those remain human checks
+in the [assistive technology checklist](../../docs/assistive-technology-checklist.md).
+
+For a local diagnostic build after `pnpm build:app`:
+
+```sh
+node packages/app/scripts/nw.mjs build linux x64 sdk
+node packages/app/scripts/native-behavior.mjs linux x64
+```
+
+Use `win x64`, `osx arm64` or `osx x64` on the corresponding host. Linux needs a
+display (for example `xvfb-run -a` in a headless environment).

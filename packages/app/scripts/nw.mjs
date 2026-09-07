@@ -9,6 +9,8 @@ const repositoryRoot = path.resolve(packageRoot, "..", "..");
 const mode = process.argv[2];
 const requestedPlatform = process.argv[3];
 const requestedArch = process.argv[4];
+const flavor = process.argv[5] ?? (mode === "run" ? "sdk" : "normal");
+if (!["normal", "sdk"].includes(flavor)) throw new Error("Flavor must be normal or sdk.");
 
 if (mode !== "run" && mode !== "build") {
   throw new Error('Usage: node scripts/nw.mjs <run|build> [linux|osx|win] [x64|arm64]');
@@ -33,7 +35,7 @@ if (mode === "run" && (platform !== hostPlatform || arch !== hostArch)) {
   throw new Error(`Cannot run the ${platform}-${arch} NW.js runtime on ${hostPlatform}-${hostArch}. Use build instead.`);
 }
 
-const outDir = path.join(packageRoot, "release", `${platform}-${arch}`);
+const outDir = path.join(packageRoot, "release", `${platform}-${arch}${flavor === "sdk" ? "-sdk" : ""}`);
 process.chdir(packageRoot);
 const app = platform === "win"
   ? {
@@ -77,7 +79,7 @@ const app = platform === "win"
 await nwbuild({
   mode,
   version: NW_VERSION,
-  flavor: mode === "run" ? "sdk" : "normal",
+  flavor,
   srcDir: "./dist",
   outDir,
   cacheDir: path.join(repositoryRoot, ".cache", "nwjs"),

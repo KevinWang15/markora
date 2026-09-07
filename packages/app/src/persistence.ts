@@ -22,7 +22,7 @@ export async function readIfPresent(fs: FileSystem, path: string) {
 }
 
 /** Replaces a file only after its complete new contents have reached the filesystem. */
-export async function atomicWrite(fs: FileSystem, path: PathModule, destination: string, content: string, beforeReplace?: () => Promise<void>) {
+export async function atomicWrite(fs: FileSystem, path: PathModule, destination: string, content: string | Uint8Array, beforeReplace?: () => Promise<void>) {
   const temporary = path.join(path.dirname(destination), `.${path.basename(destination)}.${crypto.randomUUID()}.tmp`);
   const mode = await fs.stat(destination).then(stat => stat.mode, cause => {
     if (isMissingFile(cause)) return 0o600;
