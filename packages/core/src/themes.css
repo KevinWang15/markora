@@ -9,11 +9,17 @@
 :where(
   .mdw-theme-light,
   [data-mdw-theme="light"],
+  .mdw-theme-github, [data-mdw-theme="github"],
+  .mdw-theme-newsprint, [data-mdw-theme="newsprint"],
+  .mdw-theme-sepia, [data-mdw-theme="sepia"],
   .mdw-theme-auto,
   [data-mdw-theme="auto"]
 ) {
   color-scheme: light;
   --mdw-color-scheme: light;
+  --mdw-border-width: 1px;
+  --mdw-focus-ring-width: 2px;
+  --mdw-disabled-opacity: 0.7;
   --mdw-editor-color: #24292f;
   --mdw-editor-background: #ffffff;
   --mdw-color-text: #24292f;
@@ -26,6 +32,7 @@
   --mdw-color-border: #d8dee4;
   --mdw-color-border-strong: #afb8c1;
   --mdw-color-accent: #0969da;
+  --mdw-color-on-accent: #ffffff;
   --mdw-color-accent-strong: #0550ae;
   --mdw-color-accent-soft: rgba(9, 105, 218, 0.14);
   --mdw-color-accent-softer: rgba(9, 105, 218, 0.08);
@@ -64,9 +71,12 @@
   --mdw-image-status-background: rgba(148, 163, 184, 0.12);
 }
 
-:where(.mdw-theme-dark, [data-mdw-theme="dark"]) {
+:where(.mdw-theme-dark, [data-mdw-theme="dark"], .mdw-theme-night, [data-mdw-theme="night"]) {
   color-scheme: dark;
   --mdw-color-scheme: dark;
+  --mdw-border-width: 1px;
+  --mdw-focus-ring-width: 2px;
+  --mdw-disabled-opacity: 0.7;
   --mdw-editor-color: #e6edf3;
   --mdw-editor-background: #0d1117;
   --mdw-color-text: #e6edf3;
@@ -79,6 +89,7 @@
   --mdw-color-border: #30363d;
   --mdw-color-border-strong: #6e7681;
   --mdw-color-accent: #58a6ff;
+  --mdw-color-on-accent: #0d1117;
   --mdw-color-accent-strong: #79c0ff;
   --mdw-color-accent-soft: rgba(56, 139, 253, 0.26);
   --mdw-color-accent-softer: rgba(56, 139, 253, 0.16);
@@ -132,6 +143,7 @@
   --mdw-color-border: CanvasText;
   --mdw-color-border-strong: CanvasText;
   --mdw-color-accent: LinkText;
+  --mdw-color-on-accent: Canvas;
   --mdw-color-accent-strong: LinkText;
   --mdw-color-accent-soft: transparent;
   --mdw-color-accent-softer: transparent;
@@ -177,6 +189,9 @@
   :where(.mdw-theme-auto, [data-mdw-theme="auto"]) {
     color-scheme: dark;
     --mdw-color-scheme: dark;
+    --mdw-border-width: 1px;
+    --mdw-focus-ring-width: 2px;
+    --mdw-disabled-opacity: 0.7;
     --mdw-editor-color: #e6edf3;
     --mdw-editor-background: #0d1117;
     --mdw-color-text: #e6edf3;
@@ -189,6 +204,7 @@
     --mdw-color-border: #30363d;
     --mdw-color-border-strong: #6e7681;
     --mdw-color-accent: #58a6ff;
+    --mdw-color-on-accent: #0d1117;
     --mdw-color-accent-strong: #79c0ff;
     --mdw-color-accent-soft: rgba(56, 139, 253, 0.26);
     --mdw-color-accent-softer: rgba(56, 139, 253, 0.16);
@@ -228,12 +244,167 @@
   }
 }
 
+:where(
+  .mdw-theme-auto, [data-mdw-theme="auto"],
+  .mdw-theme-light, [data-mdw-theme="light"],
+  .mdw-theme-dark, [data-mdw-theme="dark"],
+  .mdw-theme-contrast, [data-mdw-theme="contrast"],
+  .mdw-theme-github, [data-mdw-theme="github"],
+  .mdw-theme-newsprint, [data-mdw-theme="newsprint"],
+  .mdw-theme-sepia, [data-mdw-theme="sepia"],
+  .mdw-theme-night, [data-mdw-theme="night"]
+) {
+  /* CSS-wide initial clears inherited tokens; var() then uses the component fallback. */
+  --mdw-document-font-family: initial;
+  --mdw-document-font-size: initial;
+  --mdw-document-line-height: initial;
+  --mdw-document-max-inline-size: none;
+  --mdw-heading-font-family: initial;
+  --mdw-heading-letter-spacing: normal;
+  --mdw-heading-font-weight: 700;
+  --mdw-heading-1-font-size: 2rem;
+  --mdw-heading-2-font-size: 1.5rem;
+  --mdw-heading-rule-width: 0px;
+  --mdw-heading-rule-padding: 0px;
+  --mdw-block-spacing: 0.75rem;
+  --mdw-code-block-radius: 12px;
+}
+
+/* Original document presets: typography and rhythm, as well as color. */
+:where(.mdw-theme-github, [data-mdw-theme="github"]) {
+  --mdw-document-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --mdw-document-font-size: 16px;
+  --mdw-document-line-height: 1.65;
+  --mdw-document-max-inline-size: 880px;
+  --mdw-heading-font-weight: 600;
+  --mdw-heading-letter-spacing: -0.02em;
+  --mdw-heading-rule-width: 1px;
+  --mdw-heading-rule-padding: 0.35em;
+  --mdw-code-block-radius: 6px;
+}
+:where(.mdw-theme-newsprint, [data-mdw-theme="newsprint"]) {
+  --mdw-block-spacing: 1em;
+  --mdw-task-background: var(--mdw-color-surface-subtle, #f0eeea);
+  --mdw-task-checked-background: var(--mdw-color-accent, #7c3434);
+  --mdw-task-checked-color: var(--mdw-color-on-accent, #ffffff);
+  --mdw-task-checked-shadow: none;
+
+  --mdw-editor-background: #faf9f6;
+  --mdw-editor-color: #30302e;
+  --mdw-color-text: #30302e;
+  --mdw-color-surface: #faf9f6;
+  --mdw-color-surface-subtle: #f0eeea;
+  --mdw-color-surface-muted: #e8e5df;
+  --mdw-color-border: #d5d1c9;
+  --mdw-color-border-strong: #868179;
+  --mdw-color-muted: #66615a;
+  --mdw-color-placeholder: #767067;
+  --mdw-color-accent: #7c3434;
+  --mdw-color-accent-strong: #682b2b;
+  --mdw-color-accent-soft: rgba(124, 52, 52, 0.14);
+  --mdw-color-accent-softer: rgba(124, 52, 52, 0.08);
+  --mdw-color-focus: #7c3434;
+  --mdw-color-focus-soft: rgba(124, 52, 52, 0.18);
+  --mdw-color-selection: rgba(124, 52, 52, 0.18);
+  --mdw-color-selection-overlay: rgba(124, 52, 52, 0.12);
+  --mdw-document-font-family: Georgia, "Times New Roman", serif;
+  --mdw-document-font-size: 18px;
+  --mdw-document-line-height: 1.8;
+  --mdw-document-max-inline-size: 760px;
+  --mdw-heading-font-family: Georgia, "Times New Roman", serif;
+  --mdw-heading-letter-spacing: -0.035em;
+  --mdw-heading-1-font-size: 2.5em;
+  --mdw-heading-2-font-size: 1.65em;
+  --mdw-code-block-radius: 2px;
+}
+:where(.mdw-theme-sepia, [data-mdw-theme="sepia"]) {
+  --mdw-block-spacing: 1.05em;
+  --mdw-task-background: var(--mdw-color-surface-subtle, #f1e7d5);
+  --mdw-task-checked-background: var(--mdw-color-accent, #8a4b20);
+  --mdw-task-checked-color: var(--mdw-color-on-accent, #ffffff);
+  --mdw-task-checked-shadow: none;
+
+  --mdw-editor-background: #fbf5e9;
+  --mdw-editor-color: #44382b;
+  --mdw-color-text: #44382b;
+  --mdw-color-surface: #fbf5e9;
+  --mdw-color-surface-subtle: #f1e7d5;
+  --mdw-color-surface-muted: #e9dbc4;
+  --mdw-color-border: #d7c5a9;
+  --mdw-color-border-strong: #99815e;
+  --mdw-color-muted: #73614a;
+  --mdw-color-placeholder: #73614a;
+  --mdw-color-quote: #73614a;
+  --mdw-color-marker: #73614a;
+  --mdw-color-accent: #8a4b20;
+  --mdw-color-accent-strong: #753d18;
+  --mdw-color-accent-soft: rgba(138, 75, 32, 0.14);
+  --mdw-color-accent-softer: rgba(138, 75, 32, 0.08);
+  --mdw-color-focus: #8a4b20;
+  --mdw-color-focus-soft: rgba(138, 75, 32, 0.18);
+  --mdw-color-selection: rgba(138, 75, 32, 0.18);
+  --mdw-color-selection-overlay: rgba(138, 75, 32, 0.12);
+  --mdw-color-caret: #44382b;
+  --mdw-document-font-family: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --mdw-document-font-size: 18px;
+  --mdw-document-line-height: 1.85;
+  --mdw-document-max-inline-size: 780px;
+  --mdw-heading-font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  --mdw-heading-1-font-size: 2.3em;
+  --mdw-heading-2-font-size: 1.6em;
+  --mdw-code-block-radius: 4px;
+  --mdw-syntax-comment: #73614a;
+}
+:where(.mdw-theme-night, [data-mdw-theme="night"]) {
+  --mdw-block-spacing: 0.9em;
+  --mdw-task-background: var(--mdw-color-surface-subtle, #292f39);
+  --mdw-task-checked-background: var(--mdw-color-accent, #a1d5bc);
+  --mdw-task-checked-color: var(--mdw-color-on-accent, #20252d);
+  --mdw-task-checked-shadow: none;
+
+  --mdw-editor-background: #20252d;
+  --mdw-editor-color: #dce2eb;
+  --mdw-color-text: #dce2eb;
+  --mdw-color-surface: #20252d;
+  --mdw-color-surface-subtle: #292f39;
+  --mdw-color-surface-muted: #343d49;
+  --mdw-color-border: #465363;
+  --mdw-color-border-strong: #7d8da1;
+  --mdw-color-muted: #aeb9c7;
+  --mdw-color-placeholder: #aeb9c7;
+  --mdw-color-quote: #aeb9c7;
+  --mdw-color-marker: #aeb9c7;
+  --mdw-color-accent: #a1d5bc;
+  --mdw-color-on-accent: #20252d;
+  --mdw-color-accent-strong: #b5e5ce;
+  --mdw-color-accent-soft: rgba(161, 213, 188, 0.17);
+  --mdw-color-accent-softer: rgba(161, 213, 188, 0.09);
+  --mdw-color-focus: #a1d5bc;
+  --mdw-color-focus-soft: rgba(161, 213, 188, 0.24);
+  --mdw-color-selection: rgba(161, 213, 188, 0.25);
+  --mdw-color-selection-overlay: rgba(161, 213, 188, 0.17);
+  --mdw-color-caret: #dce2eb;
+  --mdw-document-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mdw-document-font-size: 17px;
+  --mdw-document-line-height: 1.75;
+  --mdw-document-max-inline-size: 820px;
+  --mdw-heading-letter-spacing: -0.025em;
+  --mdw-code-block-radius: 6px;
+  --mdw-code-active-line-background: rgba(161, 213, 188, 0.08);
+  --mdw-syntax-comment: #aeb9c7;
+  --mdw-syntax-string: #a1d5bc;
+}
+
 @media (prefers-contrast: more) {
   :where(
     .mdw-theme-light,
     [data-mdw-theme="light"],
+    .mdw-theme-github, [data-mdw-theme="github"],
+    .mdw-theme-newsprint, [data-mdw-theme="newsprint"],
+    .mdw-theme-sepia, [data-mdw-theme="sepia"],
     .mdw-theme-dark,
     [data-mdw-theme="dark"],
+    .mdw-theme-night, [data-mdw-theme="night"],
     .mdw-theme-auto,
     [data-mdw-theme="auto"]
   ) {

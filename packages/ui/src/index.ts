@@ -23,14 +23,9 @@ type OverlayEnvironmentController = {
   ) => void;
 };
 
-const THEME_CLASSES = [
-  "mdw-theme-auto",
-  "mdw-theme-contrast",
-  "mdw-theme-dark",
-  "mdw-theme-light",
-] as const;
+const isThemeClass = (name: string) => /^mdw-theme-[a-z][a-z0-9-]*$/u.test(name);
 const MOTION_CLASSES = ["mdw-motion-reduce"] as const;
-const ENVIRONMENT_ATTRIBUTES = ["data-mdw-motion", "data-mdw-theme"] as const;
+const ENVIRONMENT_ATTRIBUTES = ["data-mdw-motion", "data-mdw-theme", "data-mdw-theme-id"] as const;
 const ENVIRONMENT_MEDIA_QUERIES = [
   "(forced-colors: active)",
   "(prefers-color-scheme: dark)",
@@ -116,18 +111,20 @@ function findInheritedAttribute(
 function findEnvironmentScope(
   ancestors: readonly HTMLElement[],
   attribute: string,
-  candidates: readonly string[],
+  candidates: readonly string[] | ((name: string) => boolean),
 ) {
   for (const element of ancestors) {
     const attributeValue = element.getAttribute(attribute);
-    const className = candidates.find((candidate) => element.classList.contains(candidate)) ?? null;
+    const className = (typeof candidates === "function"
+      ? [...element.classList].find(candidates)
+      : candidates.find((candidate) => element.classList.contains(candidate))) ?? null;
 
     if (attributeValue !== null || className !== null) {
-      return { attributeValue, className };
+      return { attributeValue, className, element };
     }
   }
 
-  return { attributeValue: null, className: null };
+  return { attributeValue: null, className: null, element: null };
 }
 
 function createOverlayEnvironmentController(
@@ -191,7 +188,7 @@ function createOverlayEnvironmentController(
     const themeScope = findEnvironmentScope(
       ancestors,
       "data-mdw-theme",
-      THEME_CLASSES,
+      isThemeClass,
     );
     const motionScope = findEnvironmentScope(
       ancestors,
@@ -200,7 +197,7 @@ function createOverlayEnvironmentController(
     );
     target.classList.add("mdw-ui");
 
-    for (const candidate of [...THEME_CLASSES, ...MOTION_CLASSES]) {
+    for (const candidate of [...target.classList].filter(name => isThemeClass(name) || MOTION_CLASSES.some(motion => motion === name))) {
       target.classList.remove(candidate);
     }
 
@@ -209,6 +206,7 @@ function createOverlayEnvironmentController(
 
     for (const [name, value] of [
       ["data-mdw-theme", themeScope.attributeValue],
+      ["data-mdw-theme-id", themeScope.element?.getAttribute("data-mdw-theme-id") ?? null],
       ["data-mdw-motion", motionScope.attributeValue],
     ] as const) {
       if (value === null) {

@@ -548,7 +548,12 @@ function assertPackedPackage(packageInfo, extensionCssContract) {
     }
 
     const themes = readFileSync(themesPath, "utf8");
-    for (const requiredTheme of ["light", "dark", "auto", "contrast"]) {
+    if (packageJson.exports?.["./themes"]?.import !== "./dist/themes.js"
+      || !existsSync(join(packageRoot, "dist/themes.js"))
+      || !existsSync(join(packageRoot, "dist/themes.d.ts"))) {
+      throw new Error("Packed markora omitted the optional theme API.");
+    }
+    for (const requiredTheme of ["light", "dark", "auto", "contrast", "github", "newsprint", "sepia", "night"]) {
       if (!themes.includes(`[data-mdw-theme=\"${requiredTheme}\"]`)) {
         throw new Error(`Packed themes.css omitted the ${requiredTheme} reference theme.`);
       }

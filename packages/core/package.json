@@ -40,6 +40,10 @@
       "types": "./dist/minimal.d.ts",
       "import": "./dist/minimal.js"
     },
+    "./themes": {
+      "types": "./dist/themes.d.ts",
+      "import": "./dist/themes.js"
+    },
     "./minimal.css": "./dist/minimal.css",
     "./styles.css": "./dist/styles.css",
     "./themes.css": "./dist/themes.css"
@@ -61,7 +65,7 @@
     "publish:public": "npm publish --access public",
     "prepack": "pnpm run build && pnpm run typecheck && pnpm run typecheck:api && pnpm run smoke:node-esm",
     "typecheck:api": "tsc -p tsconfig.api.json --noEmit",
-    "smoke:node-esm": "node --input-type=module -e \"const [root, minimal, extensionApi] = await Promise.all([import('./dist/index.js'), import('./dist/minimal.js'), import('./dist/extension-api.js')]); if (typeof root.createEditor !== 'function') throw new Error('createEditor export missing'); if (typeof minimal.createEditor !== 'function') throw new Error('minimal createEditor export missing'); if (typeof extensionApi.defineMarkdownEditorExtension !== 'function') throw new Error('extension API export missing'); if (typeof extensionApi.closeHistory !== 'function') throw new Error('closeHistory export missing'); if (typeof extensionApi.readMarkdownEditorOpaqueTokenSource !== 'function') throw new Error('opaque token source export missing');\""
+    "smoke:node-esm": "node --input-type=module -e \"const [root, minimal, extensionApi, themes] = await Promise.all([import('./dist/index.js'), import('./dist/minimal.js'), import('./dist/extension-api.js'), import('./dist/themes.js')]); if (typeof themes.defineTheme !== 'function' || typeof themes.createThemeController !== 'function' || themes.builtInThemes.length !== 8) throw new Error('theme API export missing'); if (typeof root.createEditor !== 'function') throw new Error('createEditor export missing'); if (typeof minimal.createEditor !== 'function') throw new Error('minimal createEditor export missing'); if (typeof extensionApi.defineMarkdownEditorExtension !== 'function') throw new Error('extension API export missing'); if (typeof extensionApi.closeHistory !== 'function') throw new Error('closeHistory export missing'); if (typeof extensionApi.readMarkdownEditorOpaqueTokenSource !== 'function') throw new Error('opaque token source export missing');\""
   },
   "dependencies": {
     "@codemirror/commands": "^6.8.1",

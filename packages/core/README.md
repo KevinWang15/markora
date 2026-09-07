@@ -417,12 +417,17 @@ exposed through a documented `--mdw-*` custom property with its previous value
 as the fallback. An integration that sets no tokens keeps the compatibility
 appearance.
 
-Import `markora/themes.css` to opt into the reference light, dark, automatic,
-and higher-contrast palettes. Scope one with `data-mdw-theme="light"`,
-`"dark"`, `"auto"`, or `"contrast"` (or the equivalent
+Import `markora/themes.css` for Light, Dark, System, High contrast, GitHub,
+Newsprint, Sepia, and Night. The document presets include typography, readable
+column widths, and heading/code styles as well as colors. Scope one with `data-mdw-theme="light"`,
+`"dark"`, `"auto"`, `"contrast"`, `"github"`, `"newsprint"`, `"sepia"`, or `"night"` (or the equivalent
 `.mdw-theme-*` class). Reduced motion and forced colors are honored
 automatically; `.mdw-motion-reduce` and `data-mdw-motion="reduce"` provide an
 explicit reduced-motion scope.
+
+The optional `markora/themes` entry exports `builtInThemes`, `defineTheme`, and
+`createThemeController` for immutable custom definitions, isolated live switching,
+subscriptions, and opt-in persistence. It does not recreate editors when switching.
 
 Default UI mirrors the active editor's effective `--mdw-*` tokens, theme and
 motion scope, color scheme, language, and direction onto body-portaled

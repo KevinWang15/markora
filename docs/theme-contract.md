@@ -13,7 +13,20 @@ Every visual value in those styles is read through a namespaced `--mdw-*` custom
 
 ## Reference themes
 
-`markora/themes.css` is optional. It provides reviewed light, dark, automatic, and higher-contrast token sets without changing unthemed consumers:
+`markora/themes.css` is optional. It provides light, dark, automatic, higher-contrast, and four document presets without changing unthemed consumers:
+
+| ID | Name | Document presentation |
+| --- | --- | --- |
+| `auto` | System | Reference light/dark palette following the operating system |
+| `light` | Light | Neutral light palette, inherited product typography |
+| `dark` | Dark | Neutral dark palette, inherited product typography |
+| `github` | GitHub | Sans-serif text, ruled headings, compact code corners |
+| `newsprint` | Newsprint | Editorial serif text, larger headings, off-white paper |
+| `sepia` | Sepia | Warm paper and brown ink, relaxed serif typography |
+| `night` | Night | Slate surfaces, green accents, comfortable sans-serif text |
+| `contrast` | High contrast | System colors and stronger outlines |
+
+The document presets are original Markora styles inspired by familiar Markdown writing environments; they do not load third-party fonts or theme assets.
 
 ```ts
 import "markora/styles.css";
@@ -30,7 +43,7 @@ Put one reference scope on an ancestor of the editor:
 </section>
 ```
 
-The equivalent classes are `.mdw-theme-light`, `.mdw-theme-dark`, `.mdw-theme-auto`, and `.mdw-theme-contrast`. An explicit `light` or `dark` scope is stable regardless of the operating-system color preference. `auto` starts from the reference light palette and follows `prefers-color-scheme`; all three ordinary reference scopes strengthen borders under `prefers-contrast: more`. `contrast` uses CSS system colors and thicker outlines. Windows forced-colors mode is honored automatically by the base and UI styles, including focus, table/cell selection, node selection, task state, caret, and text selection indicators.
+Each ID also has an equivalent `.mdw-theme-{id}` class. Explicit palettes remain stable regardless of the operating-system color preference. `auto` starts from the reference light palette and follows `prefers-color-scheme`; all ordinary reference scopes strengthen borders under `prefers-contrast: more`. `contrast` uses CSS system colors and thicker outlines. Windows forced-colors mode is honored automatically by the base and UI styles, including focus, table/cell selection, node selection, task state, caret, and text selection indicators.
 
 Custom declarations after the reference import win normally:
 
@@ -47,11 +60,67 @@ Custom declarations after the reference import win normally:
 
 Custom properties inherit through the DOM. Because default UI is often portaled outside the editor subtree, `markora-ui` mirrors the active editor's effective `--mdw-*` properties, theme/motion scope, `color-scheme`, language, and direction onto each owned overlay. It resynchronizes when the relevant editor/ancestor attributes or user media preferences change, so body-portaled overlays remain isolated when two editors use different themes. An explicit same-scope `portalRoot` is still useful when the product needs a local stacking/landmark boundary or wants the portal to participate naturally in its layout. In Shadow DOM, the host remains responsible for loading the package styles into every shadow root that renders editor or UI DOM.
 
+## Theme API and ownership
+
+The optional `markora/themes` entry is framework-independent and safe to import without a DOM. It does not pull the editor runtime into a theme picker, and the root and minimal editor entries do not import it. CSS remains the source of reference visual values; `builtInThemes` supplies immutable picker metadata. The same IDs work through attributes, `.mdw-theme-{id}` classes, or the controller.
+
+```ts
+import { builtInThemes, createThemeController, defineTheme } from "markora/themes";
+import "markora/themes.css";
+
+const brand = defineTheme({
+  id: "brand-paper",
+  label: "Brand paper",
+  description: "Our publication's reading style.",
+  extends: "newsprint", // or another custom theme definition
+  tokens: {
+    "--mdw-color-accent": "#793936",
+    "--mdw-document-font-size": "19px",
+  },
+});
+const appearance = createThemeController({
+  element: document.querySelector<HTMLElement>("#workspace")!,
+  themes: [...builtInThemes, brand],
+  initialTheme: "github",
+  storageKey: "my-product.appearance", // optional; no persistence by default
+});
+
+appearance.setTheme("brand-paper");
+const unsubscribe = appearance.subscribe(() => {
+  console.log(appearance.getSnapshot().id);
+});
+// On host teardown:
+unsubscribe();
+appearance.destroy();
+```
+
+`defineTheme` snapshots and freezes its definition and token map. IDs must be lowercase kebab-case, labels nonempty, and token keys namespaced `--mdw-*`. Custom themes inherit a complete reference palette and can extend other custom definitions. Definitions are trusted host configuration; this API is not a loader for arbitrary Typora CSS files.
+
+`createThemeController` owns one element, independently of any editor instances. Its catalog is local and immutable; duplicate IDs and unknown selections throw before changing the scope. `getSnapshot()` is referentially stable until selection changes, and `subscribe()` returns an unsubscribe function, making it suitable for React's `useSyncExternalStore` as well as vanilla integrations. A controller changes CSS attributes and custom properties only: it does not dispatch document transactions, recreate editors, or reset selection, history, or source-mode state.
+
+The scope's `data-mdw-theme` identifies its reference CSS palette; `data-mdw-theme-id` identifies the chosen definition, including custom themes. Custom token overrides are removed when switching to another theme. A second controller cannot own the same element. `destroy()` is idempotent, removes subscriptions and storage listeners, and restores attributes, pre-existing theme classes, and inline tokens it still owns. Later host changes are preserved. Other scopes, including nested controllers, retain their own selection.
+
+Persistence is explicitly opt-in through `storageKey`. It uses the element's owning window, safely falls back from unknown or obsolete IDs, tolerates blocked/full storage, and synchronizes other tabs using storage events. Removing the stored preference returns to `initialTheme`. The System preset's media response remains CSS-driven. The demo and desktop app use separate preference keys and the same controller. The app's former `system` preference falls back to the equivalent `auto` preset.
+
+An attribute/class integration remains supported without JavaScript. Import the base editor CSS, optional reference CSS, and any UI/extension styles into every shadow root that renders those components. The controller intentionally does not inject stylesheets, set global document preferences, or apply fonts to surrounding product navigation.
+
 ## Reduced motion
 
 The editor automatically honors `prefers-reduced-motion: reduce`: custom caret blinking, the image-loading spinner, CodeMirror cursor blinking, and decorative transitions stop. Loading and selection state remain available through text, ARIA state, borders, and outlines. A host can force the same reference behavior within a subtree with `.mdw-motion-reduce` or `data-mdw-motion="reduce"`.
 
 The motion hooks are `--mdw-motion-duration-fast` (default `120ms`), `--mdw-caret-animation` (the complete caret animation), and `--mdw-spinner-animation` (the complete image-spinner animation).
+
+## Document typography tokens
+
+| Token | Unthemed fallback |
+| --- | --- |
+| `--mdw-document-font-family`, `--mdw-document-font-size`, `--mdw-document-line-height` | `inherit` |
+| `--mdw-document-max-inline-size` | `none`; document presets choose a readable column width |
+| `--mdw-heading-font-family` | `inherit` |
+| `--mdw-heading-letter-spacing` | `normal` |
+| `--mdw-heading-rule-width`, `--mdw-heading-rule-padding` | `0px`; GitHub adds ruled headings |
+
+Reference scopes reset these typography roles so a nested Light editor does not inherit a parent document preset. Existing heading sizes, weights, code-block radius, and block spacing tokens remain available for theme authors.
 
 ## Public color and effect tokens
 
@@ -59,6 +128,7 @@ The reference values live in `markora/themes.css`; the unthemed fallback remains
 
 | Tokens | Responsibility |
 | --- | --- |
+| `--mdw-color-on-accent` | Text on filled accent controls |
 | `--mdw-color-scheme`, `--mdw-editor-color`, `--mdw-editor-background` | Native-control scheme and outer editable canvas |
 | `--mdw-color-text`, `--mdw-color-muted`, `--mdw-color-placeholder`, `--mdw-color-disabled`, `--mdw-color-marker`, `--mdw-color-quote` | Text roles |
 | `--mdw-color-surface`, `--mdw-color-surface-subtle`, `--mdw-color-surface-muted` | Canvas, code/table/control, and header surfaces |

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { builtInThemes } from "../src/themes";
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const coreRoot = join(testDirectory, "..");
@@ -88,6 +89,10 @@ describe("public theme styles", () => {
   });
 
   it("ships opt-in reference schemes and automatic accessibility media behavior", () => {
+    for (const theme of builtInThemes) {
+      expect(themes).toContain(`[data-mdw-theme="${theme.id}"]`);
+      expect(themes).toContain(`.mdw-theme-${theme.id}`);
+    }
     expect(themes).toContain('[data-mdw-theme="light"]');
     expect(themes).toContain('[data-mdw-theme="dark"]');
     expect(themes).toContain('[data-mdw-theme="auto"]');
@@ -102,6 +107,7 @@ describe("public theme styles", () => {
   });
 
   it("publishes and copies the reference theme asset", () => {
+    expect(packageJson.exports["./themes"]).toEqual({ types: "./dist/themes.d.ts", import: "./dist/themes.js" });
     expect(packageJson.exports["./themes.css"]).toBe("./dist/themes.css");
     expect(packageJson.sideEffects).toContain("./dist/themes.css");
     expect(copyScript).toContain('resolve(packageRoot, "src/themes.css")');
