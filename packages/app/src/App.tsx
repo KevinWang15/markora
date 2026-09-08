@@ -1,3 +1,4 @@
+import { useSourceMode } from "./useSourceMode";
 import { createApplicationActions, matchApplicationShortcut, type ApplicationActionBindings } from "./applicationActions";
 import Bold from "@lucide/icons/icons/bold";
 import Check from "@lucide/icons/icons/check";
@@ -37,15 +38,15 @@ import { SourceDialog, type SourceEdit } from "./SourceDialog";
 import { createDocumentBridge } from "./documentBridge";
 import { FindBar } from "./FindBar";
 import { createSearchExtension } from "./searchExtension";
-import { findTextMatches, type SearchOptions, type SearchResults } from "./search";
+import { useDocumentSearch } from "./useDocumentSearch";
 import { DocumentController } from "./DocumentController";
 import { createMathContextMenuProvider } from "@markora/react-ui/mathContextMenu";
 import { createDiagramContextMenuProvider } from "@markora/react-ui/diagramContextMenu";
 import { createDefaultUi } from "markora-ui";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import type { MarkdownThemeController } from "markora/themes";
 import { desktop } from "./desktop";
-import { captureExportTheme } from "./exportTheme";
+import { useDocumentExport } from "./useDocumentExport";
 import { type DocumentSnapshot } from "./documentSession";
 import { Dialog } from "./Dialog";
 import { RecoveryJournal } from "./RecoveryJournal";
@@ -57,7 +58,7 @@ import {
   upsertRecentDocument,
 } from "./document";
 import { Icon } from "./Icon";
-import type { SourceEditorHandle, SourceViewState } from "./SourceEditor";
+import type { SourceEditorHandle } from "./SourceEditor";
 import { welcomeMarkdown } from "./welcome";
 
 const SourceEditor = lazy(async () => ({
@@ -70,8 +71,6 @@ type PendingAction = Readonly<{
   message: string;
   title: string;
 }>;
-
-const EMPTY_SEARCH: SearchResults = { matches: [], truncated: false };
 
 const RECENTS_KEY = "markora-app.recent-documents";
 
@@ -150,8 +149,6 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const editorHostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MarkdownEditor | null>(null);
   const sourceEditorRef = useRef<SourceEditorHandle | null>(null);
-  const sourceViewRef = useRef<SourceViewState | undefined>(undefined);
-  const richScrollRef = useRef(0);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [searchExtension] = useState(() => createSearchExtension());
   const [tocExtension] = useState(() => createTocExtension());
@@ -165,8 +162,6 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const { document: documentSnapshot, saving, savingCopy, exporting } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const applyingHistoryRef = useRef(false);
   const resourcePathRef = useRef<string | null>(null);
-  const sourceModeRef = useRef(false);
-  const sourceEntryMarkdownRef = useRef(welcomeMarkdown);
   const dragDepthRef = useRef(0);
   const [startupReady, setStartupReady] = useState(false);
   const recoveryReadyRef = useRef(false);
@@ -178,18 +173,28 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("outline");
   const [editorVersion, setEditorVersion] = useState(0);
   const [sourceEditorVersion, setSourceEditorVersion] = useState(0);
-  const [sourceMode, setSourceMode] = useState(false);
   const [documentRevision, setDocumentRevision] = useState(0);
   const [dropFileName, setDropFileName] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchOptions, setSearchOptions] = useState<SearchOptions>({ query: "", caseSensitive: false, wholeWord: false });
-  const [replacement, setReplacement] = useState("");
-  const [searchIndex, setSearchIndex] = useState(-1);
-  const [searchFocusRequest, setSearchFocusRequest] = useState(0);
-  const [sourceConversionWarning, setSourceConversionWarning] = useState<string | null>(null);
   const [tableSaveWarning, setTableSaveWarning] = useState<{ saveAs: boolean; message: string } | null>(null);
+
+  const showError = useCallback((cause: unknown, fallback: string) => {
+    setError(cause instanceof Error ? cause.message : fallback);
+
+  }, []);
+
+  const sourceSession = useSourceMode({ controller, editorRef, sourceEditorRef, viewportRef,
+    finishEditing: () => editorRef.current?.extensions.get(mathExtension).commands.finishEditing() ?? true,
+    onSourceEntry: markdown => updateLiveMarkdown(markdown), onError: showError });
+  const { sourceMode, sourceModeRef, warning: sourceConversionWarning, toggleSourceMode } = sourceSession;
+
+  const { searchOpen, searchOptions, setSearchOptions, replacement, setReplacement,
+    searchIndex, setSearchIndex, searchFocusRequest, searchResults, openSearch,
+    closeSearch, nextMatch, replaceMatches } = useDocumentSearch({
+      controller, editorRef, sourceEditorRef, sourceMode, sourceModeRef,
+      searchExtension, markdown: documentSnapshot.markdown, documentRevision, savingCopy,
+    });
 
   const dirty = documentSnapshot.markdown !== documentSnapshot.savedMarkdown;
   const documentName = documentNameFromPath(documentSnapshot.path);
@@ -297,10 +302,6 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     setRecents((current) => upsertRecentDocument(current, path));
   }, []);
 
-  const showError = useCallback((cause: unknown, fallback: string) => {
-    setError(cause instanceof Error ? cause.message : fallback);
-
-  }, []);
 
   if (!recoveryRef.current) {
     recoveryRef.current = new RecoveryJournal(snapshot => desktop.writeRecovery(snapshot), cause => showError(cause, "Recovery could not be saved."));
@@ -321,10 +322,8 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       editorRef.current?.refreshResources();
       throw cause;
     }
-    sourceEntryMarkdownRef.current = markdown;
-    sourceViewRef.current = undefined;
+    sourceSession.resetDocument(markdown);
     setSearchIndex(-1);
-    richScrollRef.current = 0;
     if (viewportRef.current) viewportRef.current.scrollTop = 0;
     controller.replace(path, markdown);
     setDocumentRevision((revision) => revision + 1);
@@ -418,47 +417,6 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       "Your changes will be lost if you create a new document.",
     );
   }, [guardUnsaved, replaceDocument]);
-
-  const toggleSourceMode = useCallback((acceptConversion = false) => {
-    acceptConversion = acceptConversion === true;
-    if (editorRef.current?.view.composing || sourceEditorRef.current?.isComposing()) return;
-    if (document.querySelector("dialog[open]") && !acceptConversion) return;
-    controller.history.breakGroup();
-    if (sourceModeRef.current) {
-      sourceViewRef.current = sourceEditorRef.current?.captureView();
-      const markdown = controller.markdown;
-      try {
-        if (markdown !== sourceEntryMarkdownRef.current) {
-          editorRef.current?.commands.reconcileMarkdown(markdown);
-        }
-      } catch (cause) {
-        showError(cause, "The Markdown source could not be rendered.");
-        return;
-      }
-      sourceModeRef.current = false;
-      setSourceMode(false);
-      window.requestAnimationFrame(() => {
-        editorRef.current?.focus();
-        if (viewportRef.current) viewportRef.current.scrollTop = richScrollRef.current;
-      });
-      return;
-    }
-
-    const editor = editorRef.current;
-    if (!finishRichInput()) return;
-    const issues = editor?.state.tableIssues() ?? [];
-    if (issues.length && !acceptConversion) {
-      setSourceConversionWarning([...new Set(issues.map(issue => issue.message))].join(" "));
-      return;
-    }
-    richScrollRef.current = viewportRef.current?.scrollTop ?? 0;
-    editor?.flushChange();
-    const markdown = controller.markdown;
-    updateLiveMarkdown(markdown);
-    sourceEntryMarkdownRef.current = markdown;
-    sourceModeRef.current = true;
-    setSourceMode(true);
-  }, [showError, updateLiveMarkdown]);
 
   useEffect(() => {
     return desktop.installCloseHandler(() => {
@@ -586,7 +544,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
             .replaceWith(0, editor.view.state.doc.content.size, entry.source.content)
             .setMeta("addToHistory", false));
         }
-        sourceEntryMarkdownRef.current = markdown;
+        sourceSession.setRichBaseline(markdown);
       }
       controller.edit(markdown);
       if (sourceModeRef.current) {
@@ -605,24 +563,6 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     } finally { applyingHistoryRef.current = false; }
   }, [showError]);
 
-  const sourceMatches = useMemo(() => searchOpen && sourceMode
-    ? findTextMatches(documentSnapshot.markdown.replace(/\r\n?/gu, "\n"), searchOptions) : EMPTY_SEARCH,
-  [documentSnapshot.markdown, searchOptions, searchOpen, sourceMode]);
-  const searchResults = sourceMode ? sourceMatches : editorRef.current?.extensions.get(searchExtension).state.getMatches() ?? EMPTY_SEARCH;
-
-  useEffect(() => {
-    editorRef.current?.extensions.get(searchExtension).commands.configure(searchOpen && !sourceMode ? searchOptions : null);
-    setSearchIndex(-1);
-  }, [searchOpen, sourceMode, searchOptions]);
-  useEffect(() => {
-    if (sourceMode) sourceEditorRef.current?.setSearch(searchOpen ? sourceMatches.matches : [], searchIndex);
-  }, [sourceMode, searchOpen, sourceMatches, searchIndex, documentRevision]);
-
-  const openSearch = useCallback(() => {
-    if (document.querySelector("dialog[open]")) return;
-    setSearchOpen(true);
-    setSearchFocusRequest(value => value + 1);
-  }, []);
   const openMath = useCallback(() => {
     const current = editorRef.current;
     if (!current || sourceModeRef.current || controller.getSnapshot().exporting
@@ -630,24 +570,8 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     controller.history.breakGroup();
     current.extensions.get(mathExtension).commands.editSelection();
   }, []);
-  const exportDocument = useCallback(async (format: "html" | "pdf") => {
-    if (controller.getSnapshot().exporting || document.querySelector("dialog[open]") || editorRef.current?.view.composing || sourceEditorRef.current?.isComposing()) return;
-    const current = editorRef.current;
-    if (!current || !finishRichInput()) return;
-    current.flushChange();
-    const path = controller.snapshot.path;
-    try {
-      await controller.export(async () => {
-        const doc = sourceModeRef.current ? current.extensions.get(documentBridge).state.parse(sourceEditorRef.current?.getMarkdown() ?? controller.markdown) : current.view.state.doc;
-        if (!doc) throw new Error("This source could not be parsed for export.");
-        const exportTheme = format === "pdf" ? captureExportTheme(current.view.dom, themeController.getSnapshot().id) : undefined;
-        const { buildExport, printExport } = await import("./exportDocument");
-        const output = await buildExport(doc, documentName, { resolveImage: url => desktop.exportImage(path, url), theme: exportTheme });
-        if (format === "html") await desktop.exportHtml(documentName.replace(/\.[^.]+$/u, "") + ".html", output.html);
-        else await printExport(output, () => desktop.exportPdf(documentName.replace(/\.[^.]+$/u, "") + ".pdf"), desktop.isNative);
-      });
-    } catch (cause) { showError(cause, "The document could not be exported."); }
-  }, [controller, documentName, showError, themeController, documentBridge]);
+  const exportDocument = useDocumentExport({ controller, editorRef, sourceEditorRef,
+    sourceModeRef, documentBridge, documentName, themeController, finishRichInput, showError });
   useEffect(() => {
     desktop.installMenu({
       newDocument: () => { actions.run("new"); },
@@ -667,37 +591,6 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     });
   }, [actions, themeController, theme.id, exporting, startupReady, sourceMode, pendingAction, recoveryCandidate, sourceEdit, sourceConversionWarning, tableSaveWarning]);
 
-  const closeSearch = useCallback(() => {
-    setSearchOpen(false);
-    if (sourceModeRef.current) sourceEditorRef.current?.focus();
-    else editorRef.current?.focus();
-  }, []);
-  const nextMatch = (direction: 1 | -1) => {
-    const handle = editorRef.current?.extensions.get(searchExtension);
-    if (!sourceModeRef.current) handle?.commands.configure(searchOptions);
-    const result = sourceModeRef.current ? sourceMatches : handle?.state.getMatches() ?? EMPTY_SEARCH;
-    if (!result.matches.length) return;
-    const index = (searchIndex < 0 ? direction > 0 ? 0 : result.matches.length - 1 : searchIndex + direction + result.matches.length) % result.matches.length;
-    setSearchIndex(index);
-    if (sourceModeRef.current) sourceEditorRef.current?.selectMatch(result.matches[index]);
-    else handle?.commands.select(index);
-  };
-  const replaceMatches = (all: boolean) => {
-    if (savingCopy || sourceEditorRef.current?.isComposing() || editorRef.current?.view.composing) return;
-    controller.history.breakGroup();
-    if (sourceModeRef.current) {
-      const matches = findTextMatches(sourceEditorRef.current?.getMarkdown() ?? "", searchOptions);
-      if (all && matches.truncated) return;
-      sourceEditorRef.current?.replaceMatches(all ? matches.matches : matches.matches.slice(searchIndex, searchIndex + 1), replacement);
-    } else {
-      const handle = editorRef.current?.extensions.get(searchExtension);
-      handle?.commands.configure(searchOptions);
-      handle?.commands.replace(replacement, all ? undefined : searchIndex);
-      editorRef.current?.flushChange();
-    }
-    controller.history.breakGroup();
-    setSearchIndex(-1);
-  };
 
   useEffect(() => {
     const onHistoryInput = (event: InputEvent) => {
@@ -991,7 +884,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
                   <SourceEditor
                     key={documentRevision}
                     markdown={documentSnapshot.markdown}
-                    savedView={sourceViewRef.current}
+                    savedView={sourceSession.savedView}
                     onChange={updateLiveMarkdown}
                     onHistoryChange={() => setSourceEditorVersion((version) => version + 1)}
                     ref={sourceEditorRef}
@@ -1056,10 +949,10 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       }} />}
       {sourceConversionWarning && (
         <Dialog title="Review source conversion" message={`${sourceConversionWarning} Editing Markdown source may flatten this structure. You can undo the change to recover the rich document.`}
-          onCancel={() => setSourceConversionWarning(null)}>
-          <button autoFocus className="markora-dialog-button" type="button" onClick={() => setSourceConversionWarning(null)}>Keep rich text</button>
+          onCancel={() => sourceSession.dismissWarning()}>
+          <button autoFocus className="markora-dialog-button" type="button" onClick={() => sourceSession.dismissWarning()}>Keep rich text</button>
           <button className="markora-dialog-button markora-dialog-button-primary" type="button" onClick={() => {
-            setSourceConversionWarning(null);
+            sourceSession.dismissWarning();
             toggleSourceMode(true);
           }}>Continue to source</button>
         </Dialog>
@@ -1092,11 +985,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
             const recovered = recoveryCandidate;
             replaceDocument(recovered.path, recovered.savedMarkdown);
             if (recovered.path) desktop.restoreDiskBaseline(recovered.path, recovered.savedMarkdown);
-            sourceModeRef.current = true;
-            updateLiveMarkdown(recovered.markdown);
-            sourceEntryMarkdownRef.current = recovered.savedMarkdown;
-            sourceModeRef.current = true;
-            setSourceMode(true);
+            sourceSession.restoreSource(recovered.markdown, recovered.savedMarkdown);
             recoveryReadyRef.current = true;
             setRecoveryCandidate(null);
           }}>Restore</button>
