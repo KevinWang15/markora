@@ -1,130 +1,109 @@
 import {
-  baseKeymap,
-  chainCommands,
-  liftEmptyBlock,
-  toggleMark,
+baseKeymap,
+chainCommands,
+liftEmptyBlock,
+toggleMark,
 } from "prosemirror-commands";
-import { closeHistory, history, redo, undo } from "prosemirror-history";
+import { closeHistory,history,redo,undo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
 import type {
-  Mark,
-  MarkType,
-  Node as ProseMirrorNode,
-  NodeType,
+Mark,
+MarkType,
+NodeType,
+Node as ProseMirrorNode,
 } from "prosemirror-model";
 import {
-  AllSelection,
-  EditorState,
-  NodeSelection,
-  Plugin,
-  Selection,
-  TextSelection,
-  type Command,
-  type Transaction,
+EditorState,
+NodeSelection,
+Plugin,
+Selection,
+TextSelection,
+type Command
 } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
+import { createInputRobustnessPlugin } from "./androidInput";
+import { createAssetUploadController } from "./assetUploads";
 import { createChangeEmitter } from "./changeEmitter";
 import { createClipboardSemantics } from "./clipboardSemantics";
-import { createHostIdleScheduler } from "./idleScheduler";
-import { createInputRobustnessPlugin } from "./androidInput";
-import { createNativeHistoryPlugin } from "./nativeHistory";
 import { buildReconciledDocumentTransaction } from "./documentUpdate";
+import type {
+CreateEditorOptions,
+MarkdownEditor,
+MarkdownEditorActiveMark,
+MarkdownEditorActiveNode,
+MarkdownEditorCommands,
+MarkdownEditorMark,
+MarkdownEditorMarkdownUpdateOptions,
+MarkdownEditorState,
+UpdateEditorOptions
+} from "./editorApi";
+import { createTypingShortcuts,getMarkInfo,type MarkName } from "./editorCommands";
+import { blurElement,buildEditorDomAttributes,copyEditorAttributes,editorAttributesEqual,getEditorRootActiveElement,isActiveElementInsideEditor,normalizeAccessibleName,normalizePlaceholder } from "./editorDom";
+import {
+createEditorEventDispatcher,
+MarkdownEditorDestroyedError
+} from "./editorEvents";
+import { observeEditorFocus } from "./editorFocus";
+import { normalizeMarkdownEditorMessages } from "./editorMessages";
+import {
+createCodeBlockRecoveryPlugin,
+createCodeFenceEditingPlugin,
+createHeadingEditingPlugin,
+createHorizontalRulePlugin,
+createImagePlugin,
+createInputRuleRecoveryPlugin,
+} from "./editorPlugins";
+import { resolveSelectionTarget,snapshotSelection as snapshotBaseSelection } from "./editorSelection";
+import { createStateEventEmitter } from "./editorStateEvents";
+import { createChangeContext,createTransactionDispatcher } from "./editorTransactionRuntime";
+import { MarkdownEditorExtensionError } from "./extensionApi";
+import { createMarkdownEditorExtensionAssembly } from "./extensionAssembly";
+import { runInitialMarkdownParse } from "./extensionErrorBoundary";
+import { resolveMarkdownEditorExtensions } from "./extensionResolver";
+import { MARKORA_VERSION } from "./extensionVersion";
+import { assertEditorHostAvailable,claimEditorHost } from "./hostOwnership";
+import { createHostIdleScheduler } from "./idleScheduler";
+import { createImageViewClass } from "./imageView";
 import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
 import { ManagedBlockCursor } from "./managedBlockCursor";
 import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
-import type {
-  CreateEditorOptions,
-  MarkdownEditor,
-  MarkdownEditorActiveMark,
-  MarkdownEditorActiveNode,
-  MarkdownEditorCodeBlockOptions,
-  MarkdownEditorCommands,
-  MarkdownEditorDomAttributes,
-  MarkdownEditorHeadingLevel,
-  MarkdownEditorMark,
-  MarkdownEditorMarkdownUpdateOptions,
-  MarkdownEditorSelectionTarget,
-  MarkdownEditorState,
-  MarkdownEditorTableAlignment,
-  MarkdownEditorTableInsertOptions,
-  UpdateEditorOptions,
-} from "./editorApi";
-import {
-  createEditorEventDispatcher,
-  MarkdownEditorDestroyedError,
-  type MarkdownEditorSelectionKind,
-  type MarkdownEditorSelectionSnapshot,
-} from "./editorEvents";
-import { MarkdownEditorExtensionError } from "./extensionApi";
-import { runInitialMarkdownParse } from "./extensionErrorBoundary";
-import { createMarkdownEditorExtensionAssembly } from "./extensionAssembly";
-import { createMinimalMarkdownEditorPreset } from "./minimalExtensionPreset";
-import { resolveMarkdownEditorExtensions } from "./extensionResolver";
-import { MARKORA_VERSION } from "./extensionVersion";
-import { createAssetUploadController } from "./assetUploads";
-import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
-import { createImageViewClass } from "./imageView";
-import { createTypingShortcuts, getMarkInfo, type MarkName } from "./editorCommands";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
+import { createMinimalMarkdownEditorPreset } from "./minimalExtensionPreset";
 import { createMinimalMarkdownCodec } from "./minimalMarkdownCodec";
+import { createNativeHistoryPlugin } from "./nativeHistory";
 import { createPlaceholderPlugin } from "./placeholderPlugin";
-import {
-  createListItemBackspaceCommand,
-  createListItemDeleteCommand,
-  createListItemSplitCommand,
-  createStructuralCommandSet,
-} from "./structuralCommands";
-import {
-  getMarkdownEditorTransactionEmitChange,
-  getMarkdownEditorTransactionOrigin,
-  hasMarkdownEditorExternalUpdatePermission,
-  setBuiltinMarkdownEditorTransactionOrigin,
-  setMarkdownEditorExternalUpdatePermission,
-  setMarkdownEditorTransactionEmitChange,
-  type MarkdownEditorChangeContext,
-  type MarkdownEditorChangeOrigin,
-} from "./transactionOrigin";
+import { destroyProseMirrorView } from "./proseMirrorCompatibility";
 import type { MarkdownEditorResourceErrorPhase } from "./resourceApi";
-import {
-  normalizeMarkdownEditorResources,
-  sanitizeResourceUrl,
-} from "./resourcePolicy";
 import { createResourceOpenPlugin } from "./resourceInteractions";
 import {
-  createMarkdownEditorShortcutKeymap,
-  normalizeMarkdownEditorShortcuts,
+normalizeMarkdownEditorResources,
+sanitizeResourceUrl,
+} from "./resourcePolicy";
+import { createCleanupError,throwCollectedErrors } from "./runtimeErrors";
+import {
+createMarkdownEditorShortcutKeymap,
+normalizeMarkdownEditorShortcuts,
 } from "./shortcutConfig";
 import {
-  createAutoPairPlugin,
-  createTrackedHistoryCommand,
-  normalizeMarkdownEditorTypingOptions,
-} from "./typingErgonomics";
-import { normalizeMarkdownEditorMessages } from "./editorMessages";
+createListItemBackspaceCommand,
+createListItemDeleteCommand,
+createListItemSplitCommand,
+createStructuralCommandSet,
+} from "./structuralCommands";
 import {
-  createCodeBlockRecoveryPlugin,
-  createCodeFenceEditingPlugin,
-  createHeadingEditingPlugin,
-  createHorizontalRulePlugin,
-  createImagePlugin,
-  createInputRuleRecoveryPlugin,
-} from "./editorPlugins";
+hasMarkdownEditorExternalUpdatePermission,
+setBuiltinMarkdownEditorTransactionOrigin,
+setMarkdownEditorExternalUpdatePermission,
+setMarkdownEditorTransactionEmitChange,
+type MarkdownEditorChangeContext
+} from "./transactionOrigin";
+import {
+createAutoPairPlugin,
+createTrackedHistoryCommand,
+normalizeMarkdownEditorTypingOptions,
+} from "./typingErgonomics";
 
-function destroyProseMirrorView(view: EditorView) {
-  const input = (view as EditorView & {
-    input?: { hideSelectionGuard: (() => void) | null };
-  }).input;
-  const selectionGuard = input?.hideSelectionGuard;
-
-  // prosemirror-view's invisible-selection guard is a one-shot document
-  // listener that its normal destroy path does not remove. Release it now so
-  // a host document cannot retain a destroyed embedded editor.
-  if (selectionGuard) {
-    view.dom.ownerDocument.removeEventListener("selectionchange", selectionGuard);
-    input.hideSelectionGuard = null;
-  }
-
-  view.destroy();
-}
+const snapshotSelection = snapshotBaseSelection;
 
 type BrowserWindow = Window & typeof globalThis;
 
@@ -143,212 +122,6 @@ type MarkRange = Readonly<{
   mark: Mark;
   to: number;
 }>;
-
-function copyEditorAttributes(
-  attributes: MarkdownEditorDomAttributes | null | undefined,
-  ownerDocument: Document,
-) {
-  const copied: Record<string, string> = Object.create(null) as Record<string, string>;
-  const probe = ownerDocument.createElement("div");
-
-  for (const [name, value] of Object.entries(attributes ?? {})) {
-    const normalizedName = name.toLowerCase();
-
-    if (typeof value !== "string") {
-      throw new TypeError(`Editor DOM attribute \"${name}\" must be a string.`);
-    }
-
-    if (normalizedName === "nodename" || /^on[a-z]/.test(normalizedName)) {
-      throw new RangeError(`Editor DOM attribute \"${name}\" is not supported.`);
-    }
-
-    try {
-      probe.setAttribute(normalizedName, value);
-    } catch {
-      throw new RangeError(`Editor DOM attribute name \"${name}\" is invalid.`);
-    }
-
-    copied[normalizedName] = value;
-  }
-
-  return copied;
-}
-
-function normalizeAccessibleName(value: string | null | undefined, optionName: string) {
-  if (value == null) {
-    return value;
-  }
-
-  if (!value.trim()) {
-    throw new RangeError(`${optionName} must not be empty.`);
-  }
-
-  return value;
-}
-
-function normalizePlaceholder(value: string | null | undefined) {
-  return value ? value : null;
-}
-
-function buildEditorDomAttributes(runtimeOptions: EditorRuntimeOptions) {
-  const attributes = { ...runtimeOptions.attributes };
-
-  for (const name of Object.keys(attributes)) {
-    if (["aria-placeholder", "aria-readonly", "contenteditable"].includes(name.toLowerCase())) {
-      delete attributes[name];
-    }
-  }
-
-  attributes.role ??= "textbox";
-  attributes["aria-multiline"] ??= "true";
-  attributes.tabindex ??= "0";
-  attributes["aria-readonly"] = runtimeOptions.editable ? "false" : "true";
-
-  if (runtimeOptions.placeholder) {
-    attributes["aria-placeholder"] = runtimeOptions.placeholder;
-  }
-
-  if (runtimeOptions.ariaLabel === null) {
-    delete attributes["aria-label"];
-  } else if (runtimeOptions.ariaLabel !== undefined) {
-    attributes["aria-label"] = runtimeOptions.ariaLabel;
-  }
-
-  if (runtimeOptions.ariaLabelledBy === null) {
-    delete attributes["aria-labelledby"];
-  } else if (runtimeOptions.ariaLabelledBy !== undefined) {
-    attributes["aria-labelledby"] = runtimeOptions.ariaLabelledBy;
-  }
-
-  return attributes;
-}
-
-function editorAttributesEqual(
-  left: Record<string, string>,
-  right: Record<string, string>,
-) {
-  const leftNames = Object.keys(left);
-  const rightNames = Object.keys(right);
-
-  return leftNames.length === rightNames.length
-    && leftNames.every((name) => left[name] === right[name]);
-}
-
-function resolveSelectionTarget(
-  doc: ProseMirrorNode,
-  target: MarkdownEditorSelectionTarget,
-) {
-  if (target === "all") {
-    return new AllSelection(doc);
-  }
-
-  if (target === "start") {
-    return Selection.atStart(doc);
-  }
-
-  if (target === "end") {
-    return Selection.atEnd(doc);
-  }
-
-  const { anchor } = target;
-  const head = target.head ?? anchor;
-
-  if (!Number.isInteger(anchor) || !Number.isInteger(head)) {
-    throw new RangeError("Editor selection positions must be integers.");
-  }
-
-  if (anchor < 0 || anchor > doc.content.size || head < 0 || head > doc.content.size) {
-    throw new RangeError(`Editor selection positions must be between 0 and ${doc.content.size}.`);
-  }
-
-  const $anchor = doc.resolve(anchor);
-  const $head = doc.resolve(head);
-
-  if (!$anchor.parent.inlineContent || !$head.parent.inlineContent) {
-    throw new RangeError("Editor selection positions must resolve inside text blocks.");
-  }
-
-  return TextSelection.create(doc, anchor, head);
-}
-
-function getSelectionKind(selection: Selection): MarkdownEditorSelectionKind {
-  if (selection instanceof ManagedBlockCursor) {
-    return "managed-block";
-  }
-
-  if (selection instanceof AllSelection) {
-    return "all";
-  }
-
-  if (selection instanceof NodeSelection) {
-    return "node";
-  }
-
-  if (selection instanceof TextSelection) {
-    return "text";
-  }
-
-  return "other";
-}
-
-function snapshotSelection(selection: Selection): MarkdownEditorSelectionSnapshot {
-  return {
-    anchor: selection.anchor,
-    empty: selection.empty,
-    from: selection.from,
-    head: selection.head,
-    kind: getSelectionKind(selection),
-    to: selection.to,
-  };
-}
-
-function getEditorRootActiveElement(view: EditorView) {
-  const root = view.dom.getRootNode();
-  const ownerWindow = view.dom.ownerDocument.defaultView;
-
-  if (ownerWindow?.ShadowRoot && root instanceof ownerWindow.ShadowRoot) {
-    return root.activeElement ?? view.dom.ownerDocument.activeElement;
-  }
-
-  return view.dom.ownerDocument.activeElement;
-}
-
-function isActiveElementInsideEditor(view: EditorView, activeElement: Element | null) {
-  return activeElement !== null && view.dom.contains(activeElement);
-}
-
-function blurElement(element: Element | null) {
-  if (!element) {
-    return;
-  }
-
-  const blur = (element as Element & { blur?: unknown }).blur;
-
-  if (typeof blur === "function") {
-    blur.call(element);
-  }
-}
-
-function createCleanupError(message: string, errors: readonly unknown[]) {
-  const error = new Error(message) as Error & { errors: readonly unknown[] };
-  error.name = "AggregateError";
-  error.errors = Object.freeze([...errors]);
-  return error;
-}
-
-function throwCollectedErrors(message: string, errors: readonly unknown[]) {
-  if (errors.length === 1) {
-    throw errors[0];
-  }
-
-  if (errors.length > 1) {
-    throw createCleanupError(message, errors);
-  }
-}
-
-function createChangeContext(origin: MarkdownEditorChangeOrigin): MarkdownEditorChangeContext {
-  return Object.freeze({ origin });
-}
 
 function markIsActive(state: EditorState, markType: MarkType | undefined) {
   if (!markType) {
@@ -958,105 +731,14 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   }
 
   const hostChildrenBeforeView = new Set(element.childNodes);
-  const emitSelectionChange = (
-    previousSelection: Selection,
-    selection: Selection,
-    expectedState: EditorState,
-    origin: MarkdownEditorChangeOrigin,
-  ) => {
-    if (
-      previousSelection.eq(selection)
-      || lifecycle !== "active"
-      || !eventDispatcher.has("selection")
-    ) {
-      return;
-    }
+  const emitStateEvents = createStateEventEmitter({
+    getEditor: () => editor,
+    getView: () => view,
+    isActive: () => lifecycle === "active",
+    dispatcher: eventDispatcher,
+    snapshotSelection,
+  });
 
-    eventDispatcher.emit(
-      "selection",
-      {
-        editor,
-        origin,
-        previousSelection: snapshotSelection(previousSelection),
-        selection: snapshotSelection(selection),
-        type: "selection",
-      },
-      () => (
-        lifecycle === "active"
-        && !view.isDestroyed
-        && view.state.selection.eq(expectedState.selection)
-      ),
-    );
-  };
-  const emitUpdate = (origin: MarkdownEditorChangeOrigin, expectedState: EditorState) => {
-    if (lifecycle !== "active" || !eventDispatcher.has("update")) {
-      return;
-    }
-
-    eventDispatcher.emit(
-      "update",
-      {
-        editor,
-        origin,
-        selection: snapshotSelection(expectedState.selection),
-        type: "update",
-      },
-      () => (
-        lifecycle === "active"
-        && !view.isDestroyed
-        && view.state.doc.eq(expectedState.doc)
-      ),
-    );
-  };
-  const emitStateChange = (
-    previousState: EditorState,
-    nextState: EditorState,
-    documentChanged: boolean,
-    origin: MarkdownEditorChangeOrigin,
-  ) => {
-    if (lifecycle !== "active" || !eventDispatcher.has("state")) {
-      return;
-    }
-
-    eventDispatcher.emit(
-      "state",
-      {
-        docChanged: documentChanged,
-        editor,
-        origin,
-        selection: snapshotSelection(nextState.selection),
-        selectionChanged: !previousState.selection.eq(nextState.selection),
-        type: "state",
-      },
-      () => (
-        lifecycle === "active"
-        && !view.isDestroyed
-        && view.state === nextState
-      ),
-    );
-  };
-  const emitStateEvents = (
-    previousState: EditorState,
-    nextState: EditorState,
-    documentChanged: boolean,
-    origin: MarkdownEditorChangeOrigin,
-  ) => {
-    if (lifecycle !== "active" || view.isDestroyed || !editor) {
-      return;
-    }
-
-    if (view.state === nextState) {
-      emitStateChange(previousState, nextState, documentChanged, origin);
-    }
-
-    if (lifecycle === "active" && !view.isDestroyed && view.state === nextState) {
-      emitSelectionChange(previousState.selection, nextState.selection, nextState, origin);
-    }
-
-    if (documentChanged && view.state.doc.eq(nextState.doc)) {
-      emitUpdate(origin, nextState);
-    }
-  };
   const cleanupConstructionFailure = (primaryError: unknown): never => {
     const errors = [primaryError];
     lifecycle = "destroying";
@@ -1114,60 +796,13 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         ...extensionAssembly.contributions.nodeViews,
       },
       state: initialState,
-      dispatchTransaction(this: EditorView, transaction: Transaction) {
-        const activeView = this;
-        let origin = getMarkdownEditorTransactionOrigin(transaction);
-
-        if (!origin) {
-          origin = clipboard.isPasting() ? "command" : "user";
-          setBuiltinMarkdownEditorTransactionOrigin(transaction, origin);
-        }
-
-        const changeContext = createChangeContext(origin);
-        const shouldEmitChange = (
-          getMarkdownEditorTransactionEmitChange(transaction) ?? (origin !== "external")
-        );
-        const previousState = activeView.state;
-        const nextState = previousState.apply(transaction);
-        const callbackErrors: unknown[] = [];
-
-        try {
-          activeView.updateState(nextState);
-        } catch (error) {
-          callbackErrors.push(error);
-        }
-
-        if (lifecycle === "active" && !activeView.isDestroyed && editor) {
-          try {
-            runtimeOptions.onTransaction?.(transaction, activeView, changeContext);
-          } catch (error) {
-            callbackErrors.push(error);
-          }
-        }
-
-        const documentChanged = !previousState.doc.eq(nextState.doc);
-
-        if (
-          lifecycle === "active"
-          && !activeView.isDestroyed
-          && activeView.state.doc.eq(nextState.doc)
-        ) {
-          if (documentChanged && shouldEmitChange) {
-            try {
-              changeEmitter.schedule(nextState.doc, changeContext);
-            } catch (error) {
-              callbackErrors.push(error);
-            }
-          }
-
-          emitStateEvents(previousState, nextState, documentChanged, origin);
-        }
-
-        throwCollectedErrors(
-          "Multiple Markora callbacks failed for one transaction.",
-          callbackErrors,
-        );
-      },
+      dispatchTransaction: createTransactionDispatcher({
+        isActive: () => lifecycle === "active",
+        isPasting: () => clipboard.isPasting(),
+        onTransaction: (transaction, activeView, context) => runtimeOptions.onTransaction?.(transaction, activeView, context),
+        scheduleChange: (doc, context) => changeEmitter.schedule(doc, context),
+        emitStateEvents,
+      }),
     });
     changeEmitter.cache(view.state.doc);
   } catch (error) {
@@ -1772,63 +1407,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       },
     },
   };
-  let compositeFocused = false;
-  let pendingBlurVersion = 0;
-  const handleFocusIn = (nativeEvent: FocusEvent) => {
-    pendingBlurVersion += 1;
-
-    if (lifecycle !== "active" || compositeFocused || !editor) {
-      return;
-    }
-
-    compositeFocused = true;
-    ownerWindow.queueMicrotask(() => {
-      if (
-        lifecycle === "active"
-        && compositeFocused
-        && !view.isDestroyed
-        && eventDispatcher.has("focus")
-      ) {
-        eventDispatcher.emit("focus", {
-          editor,
-          nativeEvent,
-          type: "focus",
-        }, () => lifecycle === "active" && !view.isDestroyed);
-      }
-    });
-  };
-  const handleFocusOut = (nativeEvent: FocusEvent) => {
-    const nextBlurVersion = ++pendingBlurVersion;
-
-    ownerWindow.queueMicrotask(() => {
-      if (
-        lifecycle !== "active"
-        || !compositeFocused
-        || nextBlurVersion !== pendingBlurVersion
-      ) {
-        return;
-      }
-
-      const activeElement = getEditorRootActiveElement(view);
-
-      if (isActiveElementInsideEditor(view, activeElement)) {
-        return;
-      }
-
-      compositeFocused = false;
-
-      if (eventDispatcher.has("blur")) {
-        eventDispatcher.emit("blur", {
-          editor,
-          nativeEvent,
-          type: "blur",
-        });
-      }
-    });
-  };
-
-  view.dom.addEventListener("focusin", handleFocusIn);
-  view.dom.addEventListener("focusout", handleFocusOut);
+  const stopObservingFocus = observeEditorFocus({
+    view,
+    getEditor: () => editor,
+    isActive: () => lifecycle === "active",
+    dispatcher: eventDispatcher,
+  });
 
   const updateOptions = (nextOptions: UpdateEditorOptions) => {
     assertActive("update editor options");
@@ -1997,9 +1581,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       }
 
       pendingExtensionErrors.length = 0;
-      pendingBlurVersion += 1;
-      view.dom.removeEventListener("focusin", handleFocusIn);
-      view.dom.removeEventListener("focusout", handleFocusOut);
+      stopObservingFocus();
 
       for (const cleanup of [
         () => changeEmitter.flushFinal(),

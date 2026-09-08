@@ -1,190 +1,165 @@
-import { baseKeymap, chainCommands, liftEmptyBlock, toggleMark } from "prosemirror-commands";
-import { closeHistory, history, redo, undo } from "prosemirror-history";
+import { baseKeymap,chainCommands,liftEmptyBlock,toggleMark } from "prosemirror-commands";
+import { closeHistory,history,redo,undo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
-import { type Node as ProseMirrorNode, type NodeType } from "prosemirror-model";
-import { sinkListItem, liftListItem } from "prosemirror-schema-list";
+import { type NodeType,type Node as ProseMirrorNode } from "prosemirror-model";
+import { liftListItem,sinkListItem } from "prosemirror-schema-list";
 import {
-  AllSelection,
-  type Command,
-  EditorState,
-  NodeSelection,
-  Plugin,
-  Selection,
-  TextSelection,
+EditorState,
+NodeSelection,
+Plugin,
+Selection,
+TextSelection
 } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
-import { ManagedBlockCursor } from "./managedBlockCursor";
-export { ManagedBlockCursor } from "./managedBlockCursor";
-import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
-import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
-import { createCodeBlockViewClass } from "./codeBlockView";
+import { createInputRobustnessPlugin } from "./androidInput";
+import { createAssetUploadController } from "./assetUploads";
 import { createChangeEmitter } from "./changeEmitter";
 import { createClipboardSemantics } from "./clipboardSemantics";
-import { createHostIdleScheduler } from "./idleScheduler";
-import { createInputRobustnessPlugin } from "./androidInput";
-import { createNativeHistoryPlugin } from "./nativeHistory";
-import { createAssetUploadController } from "./assetUploads";
-import { assertEditorHostAvailable, claimEditorHost } from "./hostOwnership";
-import {
-  createMarkdownCodec,
-  normalizeTableAlignment,
-  type MarkdownEditorCodec,
-} from "./markdownCodec";
-import { resolveMarkdownEditorExtensions } from "./extensionResolver";
-import {
-  MARKORA_VERSION,
-  createDefaultMarkdownEditorPreset,
-} from "./extensionPresets";
-import { createMarkdownEditorExtensionAssembly } from "./extensionAssembly";
-import { MarkdownEditorExtensionError } from "./extensionApi";
-import { runInitialMarkdownParse } from "./extensionErrorBoundary";
 import { normalizeCodeBlockInfo } from "./codeBlockMarkdown";
+import { createCodeBlockSelectionHelpers } from "./codeBlockSelection";
+import { createCodeBlockViewClass } from "./codeBlockView";
+import { buildReconciledDocumentTransaction } from "./documentUpdate";
 import type {
-  CreateEditorOptions,
-  MarkdownEditor,
-  MarkdownEditorActiveMark,
-  MarkdownEditorActiveNode,
-  MarkdownEditorCodeBlockOptions,
-  MarkdownEditorCommands,
-  MarkdownEditorDomAttributes,
-  MarkdownEditorHeadingLevel,
-  MarkdownEditorMark,
-  MarkdownEditorMarkdownUpdateOptions,
-  MarkdownEditorSelectionTarget,
-  MarkdownEditorState,
-  MarkdownEditorTableAlignment,
-  MarkdownEditorTableInsertOptions,
-  MarkdownEditorUi,
-  UpdateEditorOptions,
+CreateEditorOptions,
+MarkdownEditor,
+MarkdownEditorActiveMark,
+MarkdownEditorActiveNode,
+MarkdownEditorCommands,
+MarkdownEditorMark,
+MarkdownEditorMarkdownUpdateOptions,
+MarkdownEditorState,
+UpdateEditorOptions
 } from "./editorApi";
-export type {
-  CreateEditorOptions,
-  MarkdownEditor,
-  MarkdownEditorActiveMark,
-  MarkdownEditorActiveNode,
-  MarkdownEditorCodeBlockOptions,
-  MarkdownEditorCommands,
-  MarkdownEditorDomAttributes,
-  MarkdownEditorHeadingLevel,
-  MarkdownEditorMark,
-  MarkdownEditorMarkdownUpdateOptions,
-  MarkdownEditorSelectionTarget,
-  MarkdownEditorState,
-  MarkdownEditorTableAlignment,
-  MarkdownEditorTableColumnMoveDirection,
-  MarkdownEditorTableInsertOptions,
-  MarkdownEditorTableInsertSide,
-  MarkdownEditorTableIssue,
-  MarkdownEditorTableIssueCode,
-  MarkdownEditorTableResizeOptions,
-  MarkdownEditorTableRowMoveDirection,
-  MarkdownEditorUi,
-  UpdateEditorOptions,
-} from "./editorApi";
-export type {
-  MarkdownEditorShortcutBinding,
-  MarkdownEditorShortcutMap,
-} from "./shortcutConfig";
-export type {
-  MarkdownEditorAutoPair,
-  MarkdownEditorTypingOptions,
-} from "./typingErgonomics";
-export { defaultMarkdownEditorMessages } from "./editorMessages";
-export type {
-  MarkdownEditorCodeBlockLanguageMessageContext,
-  MarkdownEditorMessageOverrides,
-  MarkdownEditorMessages,
-  MarkdownEditorOpaqueMessageContext,
-} from "./editorMessages";
+import { createTypingShortcuts,getMarkInfo,isLinkActive,isMarkActive as isMarkdownMarkActive,type EditorCommand } from "./editorCommands";
+import { blurElement,buildEditorDomAttributes,copyEditorAttributes,editorAttributesEqual,getEditorRootActiveElement,isActiveElementInsideEditor,normalizeAccessibleName,normalizePlaceholder } from "./editorDom";
 import {
-  normalizeMarkdownEditorMessages,
-  type MarkdownEditorMessages,
+createEditorEventDispatcher,
+MarkdownEditorDestroyedError
+} from "./editorEvents";
+import { observeEditorFocus } from "./editorFocus";
+import {
+normalizeMarkdownEditorMessages,
+type MarkdownEditorMessages,
 } from "./editorMessages";
+import { createCodeBlockOuterSelectionPlugin,createCodeFenceEditingPlugin,createHeadingEditingPlugin,createHorizontalRulePlugin,createImagePlugin,createInputRuleRecoveryPlugin,createMarkBoundaryPlugin,createMarkdownRevealPlugin,type RevealMarkConfig } from "./editorPlugins";
+import { getSelectionKind,resolveSelectionTarget,snapshotSelection as snapshotBaseSelection } from "./editorSelection";
+import { createStateEventEmitter } from "./editorStateEvents";
+import { createChangeContext,createTransactionDispatcher } from "./editorTransactionRuntime";
+import { MarkdownEditorExtensionError } from "./extensionApi";
+import { createMarkdownEditorExtensionAssembly } from "./extensionAssembly";
+import { runInitialMarkdownParse } from "./extensionErrorBoundary";
+import {
+createDefaultMarkdownEditorPreset,
+MARKORA_VERSION,
+} from "./extensionPresets";
+import { resolveMarkdownEditorExtensions } from "./extensionResolver";
+import { assertEditorHostAvailable,claimEditorHost } from "./hostOwnership";
+import { createHostIdleScheduler } from "./idleScheduler";
 import { createImageViewClass } from "./imageView";
+import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
+import { ManagedBlockCursor } from "./managedBlockCursor";
+import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
+import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
+import {
+createMarkdownCodec,
+normalizeTableAlignment,
+type MarkdownEditorCodec,
+} from "./markdownCodec";
+import { createMediaActionHelpers } from "./mediaActionUtils";
+import { createNativeHistoryPlugin } from "./nativeHistory";
+import type { OpaqueMarkdownEditRequest } from "./opaqueMarkdown";
+import { createOpaqueNodeViewClass } from "./opaqueNodeView";
+import { createPipeTableHelpers } from "./pipeTable";
+import { createPlaceholderPlugin } from "./placeholderPlugin";
+import { destroyProseMirrorView } from "./proseMirrorCompatibility";
 import type { MarkdownEditorResourceErrorPhase } from "./resourceApi";
 import {
-  normalizeMarkdownEditorResources,
-  type NormalizedMarkdownEditorResources,
+normalizeMarkdownEditorResources,
+type NormalizedMarkdownEditorResources,
 } from "./resourcePolicy";
-import { createTypingShortcuts, getMarkInfo, isLinkActive, isMarkActive as isMarkdownMarkActive, type EditorCommand } from "./editorCommands";
-import { createCodeBlockOuterSelectionPlugin, createCodeFenceEditingPlugin, createHeadingEditingPlugin, createHorizontalRulePlugin, createImagePlugin, createInputRuleRecoveryPlugin, createMarkdownRevealPlugin, createMarkBoundaryPlugin, type RevealMarkConfig } from "./editorPlugins";
-import { createCodeBlockSelectionHelpers } from "./codeBlockSelection";
-import { createPipeTableHelpers } from "./pipeTable";
-import { createTableNavigation, type TableAlignment } from "./tableNavigation";
-import { createTableEditing, isTableCellSelection } from "./tableEditing";
-import { getTableFidelityIssues } from "./tableFidelity";
-import { getTableSelectionContext as getSharedTableSelectionContext } from "./tableCommands";
-import type { TableCellInfo } from "./tableTypes";
-import type {
-  ActiveImageInfo,
-  CodeBlockLanguageEditorOverlay,
-  EditorUiControllers,
-  ImageEditorOverlay,
-  LinkEditorOverlay,
-  TableToolbarOverlay,
-  TableUiContext,
-} from "./uiTypes";
-import { createNoopUiControllers } from "./uiTypes";
+import { createCleanupError,throwCollectedErrors } from "./runtimeErrors";
 import {
-  createMarkdownEditorShortcutKeymap,
-  normalizeMarkdownEditorShortcuts,
+createMarkdownEditorShortcutKeymap,
+normalizeMarkdownEditorShortcuts,
 } from "./shortcutConfig";
 import {
-  createAutoPairPlugin,
-  createTrackedHistoryCommand,
-  MARKDOWN_EDITOR_HISTORY_ACTION_META,
-  normalizeMarkdownEditorTypingOptions,
-  type MarkdownEditorHistoryAction,
-} from "./typingErgonomics";
-import { createTaskListHelpers } from "./taskListUtils";
-import { createTaskListItemViewClass } from "./taskListItemView";
-import {
-  createListItemBackspaceCommand,
-  createListItemDeleteCommand,
-  createListItemSplitCommand,
-  createStructuralCommandSet,
+createListItemBackspaceCommand,
+createListItemDeleteCommand,
+createListItemSplitCommand,
+createStructuralCommandSet,
 } from "./structuralCommands";
-import { createMediaActionHelpers } from "./mediaActionUtils";
-import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
-import { createOpaqueNodeViewClass } from "./opaqueNodeView";
-import type { OpaqueMarkdownEditRequest } from "./opaqueMarkdown";
-import { createPlaceholderPlugin } from "./placeholderPlugin";
-import { buildReconciledDocumentTransaction } from "./documentUpdate";
+import { getTableSelectionContext as getSharedTableSelectionContext } from "./tableCommands";
+import { createTableEditing,isTableCellSelection } from "./tableEditing";
+import { getTableFidelityIssues } from "./tableFidelity";
+import { createTableNavigation } from "./tableNavigation";
+import type { TableCellInfo } from "./tableTypes";
+import { createTaskListItemViewClass } from "./taskListItemView";
+import { createTaskListHelpers } from "./taskListUtils";
 import {
-  getMarkdownEditorTransactionEmitChange,
-  getMarkdownEditorTransactionOrigin,
-  hasMarkdownEditorExternalUpdatePermission,
-  setBuiltinMarkdownEditorTransactionOrigin,
-  setMarkdownEditorExternalUpdatePermission,
-  setMarkdownEditorTransactionEmitChange,
-  type MarkdownEditorChangeContext,
-  type MarkdownEditorChangeOrigin,
+hasMarkdownEditorExternalUpdatePermission,
+setBuiltinMarkdownEditorTransactionOrigin,
+setMarkdownEditorExternalUpdatePermission,
+setMarkdownEditorTransactionEmitChange,
+type MarkdownEditorChangeContext
 } from "./transactionOrigin";
 import {
-  createEditorEventDispatcher,
-  MarkdownEditorDestroyedError,
-  type MarkdownEditorSelectionKind,
-  type MarkdownEditorSelectionSnapshot,
-} from "./editorEvents";
+createAutoPairPlugin,
+createTrackedHistoryCommand,
+MARKDOWN_EDITOR_HISTORY_ACTION_META,
+normalizeMarkdownEditorTypingOptions,
+type MarkdownEditorHistoryAction,
+} from "./typingErgonomics";
+import type {
+CodeBlockLanguageEditorOverlay,
+EditorUiControllers,
+ImageEditorOverlay,
+LinkEditorOverlay,
+TableToolbarOverlay,
+TableUiContext
+} from "./uiTypes";
+import { createNoopUiControllers } from "./uiTypes";
+export type {
+CreateEditorOptions,
+MarkdownEditor,
+MarkdownEditorActiveMark,
+MarkdownEditorActiveNode,
+MarkdownEditorCodeBlockOptions,
+MarkdownEditorCommands,
+MarkdownEditorDomAttributes,
+MarkdownEditorHeadingLevel,
+MarkdownEditorMark,
+MarkdownEditorMarkdownUpdateOptions,
+MarkdownEditorSelectionTarget,
+MarkdownEditorState,
+MarkdownEditorTableAlignment,
+MarkdownEditorTableColumnMoveDirection,
+MarkdownEditorTableInsertOptions,
+MarkdownEditorTableInsertSide,
+MarkdownEditorTableIssue,
+MarkdownEditorTableIssueCode,
+MarkdownEditorTableResizeOptions,
+MarkdownEditorTableRowMoveDirection,
+MarkdownEditorUi,
+UpdateEditorOptions
+} from "./editorApi";
+export { defaultMarkdownEditorMessages } from "./editorMessages";
+export type {
+MarkdownEditorCodeBlockLanguageMessageContext,
+MarkdownEditorMessageOverrides,
+MarkdownEditorMessages,
+MarkdownEditorOpaqueMessageContext
+} from "./editorMessages";
+export { ManagedBlockCursor } from "./managedBlockCursor";
+export type {
+MarkdownEditorShortcutBinding,
+MarkdownEditorShortcutMap
+} from "./shortcutConfig";
+export type {
+MarkdownEditorAutoPair,
+MarkdownEditorTypingOptions
+} from "./typingErgonomics";
 
-function destroyProseMirrorView(view: EditorView) {
-  const input = (view as EditorView & {
-    input?: { hideSelectionGuard: (() => void) | null };
-  }).input;
-  const selectionGuard = input?.hideSelectionGuard;
-
-  // prosemirror-view 1.41 removes its main DOM observer on destroy, but not
-  // the one-shot guard installed for an invisible selection. That document
-  // listener retains the destroyed view until another selectionchange. An
-  // embedded editor must release it synchronously because the host may keep
-  // the document alive indefinitely.
-  if (selectionGuard) {
-    view.dom.ownerDocument.removeEventListener("selectionchange", selectionGuard);
-    input.hideSelectionGuard = null;
-  }
-
-  view.destroy();
-}
+const snapshotSelection = (selection: Selection) => snapshotBaseSelection(selection, value => isTableCellSelection(value) ? "table-cell" : getSelectionKind(value));
 
 type ActiveLineMarker = {
   pos: number;
@@ -224,195 +199,6 @@ type EditorRuntimeOptions = {
   placeholder: string | null;
 };
 
-function copyEditorAttributes(
-  attributes: MarkdownEditorDomAttributes | null | undefined,
-  ownerDocument: Document,
-) {
-  const copied: Record<string, string> = Object.create(null) as Record<string, string>;
-  const probe = ownerDocument.createElement("div");
-
-  for (const [name, value] of Object.entries(attributes ?? {})) {
-    const normalizedName = name.toLowerCase();
-
-    if (typeof value !== "string") {
-      throw new TypeError(`Editor DOM attribute \"${name}\" must be a string.`);
-    }
-
-    if (normalizedName === "nodename" || /^on[a-z]/.test(normalizedName)) {
-      throw new RangeError(`Editor DOM attribute \"${name}\" is not supported.`);
-    }
-
-    try {
-      probe.setAttribute(normalizedName, value);
-    } catch {
-      throw new RangeError(`Editor DOM attribute name \"${name}\" is invalid.`);
-    }
-
-    copied[normalizedName] = value;
-  }
-
-  return copied;
-}
-
-function normalizeAccessibleName(value: string | null | undefined, optionName: string) {
-  if (value == null) {
-    return value;
-  }
-
-  if (!value.trim()) {
-    throw new RangeError(`${optionName} must not be empty.`);
-  }
-
-  return value;
-}
-
-function normalizePlaceholder(value: string | null | undefined) {
-  return value ? value : null;
-}
-
-function buildEditorDomAttributes(runtimeOptions: EditorRuntimeOptions) {
-  const attributes = { ...runtimeOptions.attributes };
-
-  for (const name of Object.keys(attributes)) {
-    if (["aria-placeholder", "aria-readonly", "contenteditable"].includes(name.toLowerCase())) {
-      delete attributes[name];
-    }
-  }
-
-  attributes.role ??= "textbox";
-  attributes["aria-multiline"] ??= "true";
-  attributes.tabindex ??= "0";
-  attributes["aria-readonly"] = runtimeOptions.editable ? "false" : "true";
-
-  if (runtimeOptions.placeholder) {
-    attributes["aria-placeholder"] = runtimeOptions.placeholder;
-  }
-
-  if (runtimeOptions.ariaLabel === null) {
-    delete attributes["aria-label"];
-  } else if (runtimeOptions.ariaLabel !== undefined) {
-    attributes["aria-label"] = runtimeOptions.ariaLabel;
-  }
-
-  if (runtimeOptions.ariaLabelledBy === null) {
-    delete attributes["aria-labelledby"];
-  } else if (runtimeOptions.ariaLabelledBy !== undefined) {
-    attributes["aria-labelledby"] = runtimeOptions.ariaLabelledBy;
-  }
-
-  return attributes;
-}
-
-function editorAttributesEqual(
-  left: Record<string, string>,
-  right: Record<string, string>,
-) {
-  const leftNames = Object.keys(left);
-  const rightNames = Object.keys(right);
-
-  return leftNames.length === rightNames.length
-    && leftNames.every((name) => left[name] === right[name]);
-}
-
-function resolveSelectionTarget(
-  doc: ProseMirrorNode,
-  target: MarkdownEditorSelectionTarget,
-) {
-  if (target === "all") {
-    return new AllSelection(doc);
-  }
-
-  if (target === "start") {
-    return Selection.atStart(doc);
-  }
-
-  if (target === "end") {
-    return Selection.atEnd(doc);
-  }
-
-  const { anchor } = target;
-  const head = target.head ?? anchor;
-
-  if (!Number.isInteger(anchor) || !Number.isInteger(head)) {
-    throw new RangeError("Editor selection positions must be integers.");
-  }
-
-  if (anchor < 0 || anchor > doc.content.size || head < 0 || head > doc.content.size) {
-    throw new RangeError(`Editor selection positions must be between 0 and ${doc.content.size}.`);
-  }
-
-  const $anchor = doc.resolve(anchor);
-  const $head = doc.resolve(head);
-
-  if (!$anchor.parent.inlineContent || !$head.parent.inlineContent) {
-    throw new RangeError("Editor selection positions must resolve inside text blocks.");
-  }
-
-  return TextSelection.create(doc, anchor, head);
-}
-
-function getSelectionKind(selection: Selection): MarkdownEditorSelectionKind {
-  if (isTableCellSelection(selection)) {
-    return "table-cell";
-  }
-
-  if (selection instanceof ManagedBlockCursor) {
-    return "managed-block";
-  }
-
-  if (selection instanceof AllSelection) {
-    return "all";
-  }
-
-  if (selection instanceof NodeSelection) {
-    return "node";
-  }
-
-  if (selection instanceof TextSelection) {
-    return "text";
-  }
-
-  return "other";
-}
-
-function snapshotSelection(selection: Selection): MarkdownEditorSelectionSnapshot {
-  return {
-    anchor: selection.anchor,
-    empty: selection.empty,
-    from: selection.from,
-    head: selection.head,
-    kind: getSelectionKind(selection),
-    to: selection.to,
-  };
-}
-
-function getEditorRootActiveElement(view: EditorView) {
-  const root = view.dom.getRootNode();
-  const ownerWindow = view.dom.ownerDocument.defaultView;
-
-  if (ownerWindow?.ShadowRoot && root instanceof ownerWindow.ShadowRoot) {
-    return root.activeElement ?? view.dom.ownerDocument.activeElement;
-  }
-
-  return view.dom.ownerDocument.activeElement;
-}
-
-function isActiveElementInsideEditor(view: EditorView, activeElement: Element | null) {
-  return activeElement !== null && view.dom.contains(activeElement);
-}
-
-function blurElement(element: Element | null) {
-  if (!element) {
-    return;
-  }
-
-  const blur = (element as Element & { blur?: unknown }).blur;
-
-  if (typeof blur === "function") {
-    blur.call(element);
-  }
-}
-
 function syncReadonlyControls(view: EditorView) {
   const editable = view.editable;
   const ownerWindow = view.dom.ownerDocument.defaultView;
@@ -425,27 +211,6 @@ function syncReadonlyControls(view: EditorView) {
       control.disabled = !editable;
     }
   }
-}
-
-function createCleanupError(message: string, errors: unknown[]) {
-  const error = new Error(message) as Error & { errors: unknown[] };
-  error.name = "AggregateError";
-  error.errors = errors;
-  return error;
-}
-
-function throwCollectedErrors(message: string, errors: unknown[]) {
-  if (errors.length === 1) {
-    throw errors[0];
-  }
-
-  if (errors.length > 1) {
-    throw createCleanupError(message, errors);
-  }
-}
-
-function createChangeContext(origin: MarkdownEditorChangeOrigin): MarkdownEditorChangeContext {
-  return Object.freeze({ origin });
 }
 
 function createSchemaRuntimeHelpers(
@@ -1692,8 +1457,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   ];
 
   let finalMarkdown = "";
-  let compositeFocused = false;
-  let pendingBlurVersion = 0;
   const changeEmitter = createChangeEmitter<ProseMirrorNode, MarkdownEditorChangeContext>({
     initialDoc: doc,
     initialMarkdown,
@@ -1719,115 +1482,13 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   });
   finalMarkdown = changeEmitter.getMarkdown(doc);
 
-  const emitSelectionChange = (
-    previousSelection: Selection,
-    selection: Selection,
-    expectedState: EditorState,
-    origin: MarkdownEditorChangeOrigin,
-  ) => {
-    if (
-      previousSelection.eq(selection)
-      || lifecycle !== "active"
-      || !eventDispatcher.has("selection")
-    ) {
-      return;
-    }
-
-    eventDispatcher.emit(
-      "selection",
-      {
-        editor,
-        origin,
-        previousSelection: snapshotSelection(previousSelection),
-        selection: snapshotSelection(selection),
-        type: "selection",
-      },
-      () => (
-        lifecycle === "active"
-        && !view.isDestroyed
-        && view.state.selection.eq(expectedState.selection)
-      ),
-    );
-  };
-
-  const emitUpdate = (origin: MarkdownEditorChangeOrigin) => {
-    if (lifecycle !== "active" || !eventDispatcher.has("update")) {
-      return;
-    }
-
-    const expectedState = view.state;
-
-    eventDispatcher.emit(
-      "update",
-      {
-        editor,
-        origin,
-        selection: snapshotSelection(expectedState.selection),
-        type: "update",
-      },
-      () => (
-        lifecycle === "active"
-        && !view.isDestroyed
-        && view.state.doc.eq(expectedState.doc)
-      ),
-    );
-  };
-
-  const emitStateChange = (
-    previousState: EditorState,
-    nextState: EditorState,
-    documentChanged: boolean,
-    origin: MarkdownEditorChangeOrigin,
-  ) => {
-    if (lifecycle !== "active" || !eventDispatcher.has("state")) {
-      return;
-    }
-
-    eventDispatcher.emit(
-      "state",
-      {
-        docChanged: documentChanged,
-        editor,
-        origin,
-        selection: snapshotSelection(nextState.selection),
-        selectionChanged: !previousState.selection.eq(nextState.selection),
-        type: "state",
-      },
-      () => (
-        lifecycle === "active"
-        && !view.isDestroyed
-        && view.state === nextState
-      ),
-    );
-  };
-
-  const emitStateEvents = (
-    previousState: EditorState,
-    nextState: EditorState,
-    documentChanged: boolean,
-    origin: MarkdownEditorChangeOrigin,
-  ) => {
-    if (lifecycle !== "active" || view.isDestroyed) {
-      return;
-    }
-
-    if (view.state === nextState) {
-      emitStateChange(previousState, nextState, documentChanged, origin);
-    }
-
-    if (lifecycle === "active" && !view.isDestroyed && view.state === nextState) {
-      emitSelectionChange(previousState.selection, nextState.selection, nextState, origin);
-    }
-
-    if (
-      documentChanged
-      && lifecycle === "active"
-      && !view.isDestroyed
-      && view.state.doc.eq(nextState.doc)
-    ) {
-      emitUpdate(origin);
-    }
-  };
+  const emitStateEvents = createStateEventEmitter({
+    getEditor: () => editor,
+    getView: () => view,
+    isActive: () => lifecycle === "active",
+    dispatcher: eventDispatcher,
+    snapshotSelection,
+  });
 
   const canRunInteractiveCommand = () => (
     runtimeOptions.editable
@@ -2690,67 +2351,23 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         },
         ...extensionAssembly.contributions.nodeViews,
       },
-      dispatchTransaction(this: EditorView, transaction) {
-        const activeView = this;
-        let origin = getMarkdownEditorTransactionOrigin(transaction);
-
-        if (!origin) {
-          origin = clipboard.isPasting() ? "command" : "user";
-          setBuiltinMarkdownEditorTransactionOrigin(transaction, origin);
-        }
-
-        const changeContext = createChangeContext(origin);
-        const shouldEmitChange = (
-          getMarkdownEditorTransactionEmitChange(transaction) ?? (origin !== "external")
-        );
-        const previousState = activeView.state;
-        const nextState = previousState.apply(transaction);
-        const callbackErrors: unknown[] = [];
-        const transactionHistoryAction = transaction.getMeta(
-          MARKDOWN_EDITOR_HISTORY_ACTION_META,
-        );
-        const previousHistoryAction = codeBlockHistoryAction;
-        codeBlockHistoryAction = transactionHistoryAction === "redo"
-          || transactionHistoryAction === "undo"
-          ? transactionHistoryAction
-          : null;
-
-        try {
-          runWithViewErrorCollector(callbackErrors, () => activeView.updateState(nextState));
-        } finally {
-          codeBlockHistoryAction = previousHistoryAction;
-        }
-
-        if (lifecycle === "active" && !activeView.isDestroyed) {
+      dispatchTransaction: createTransactionDispatcher({
+        isActive: () => lifecycle === "active",
+        isPasting: () => clipboard.isPasting(),
+        onTransaction: (transaction, activeView, context) => runtimeOptions.onTransaction?.(transaction, activeView, context),
+        scheduleChange: (doc, context) => changeEmitter.schedule(doc, context),
+        emitStateEvents,
+        updateView(activeView, nextState, transaction, errors) {
+          const action = transaction.getMeta(MARKDOWN_EDITOR_HISTORY_ACTION_META);
+          const previousAction = codeBlockHistoryAction;
+          codeBlockHistoryAction = action === "redo" || action === "undo" ? action : null;
           try {
-            runtimeOptions.onTransaction?.(transaction, activeView, changeContext);
-          } catch (error) {
-            callbackErrors.push(error);
+            runWithViewErrorCollector(errors, () => activeView.updateState(nextState));
+          } finally {
+            codeBlockHistoryAction = previousAction;
           }
-        }
-
-        const documentChanged = !previousState.doc.eq(nextState.doc);
-
-        if (
-          lifecycle === "active"
-          && !activeView.isDestroyed
-          && activeView.state.doc.eq(nextState.doc)
-        ) {
-          if (documentChanged && shouldEmitChange) {
-            try {
-              changeEmitter.schedule(nextState.doc, changeContext);
-            } catch (error) {
-              callbackErrors.push(error);
-            }
-          }
-
-          if (editor) {
-            emitStateEvents(previousState, nextState, documentChanged, origin);
-          }
-        }
-
-        throwCollectedErrors("Multiple Markora callbacks failed for one transaction.", callbackErrors);
-      },
+        },
+      }),
     }));
 
     throwCollectedErrors(
@@ -2767,71 +2384,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   CodeBlockView.setEditable(runtimeOptions.editable);
   syncReadonlyControls(view);
 
-  const handleFocusIn = (nativeEvent: FocusEvent) => {
-    pendingBlurVersion += 1;
-
-    if (lifecycle !== "active" || compositeFocused || !editor) {
-      return;
-    }
-
-    compositeFocused = true;
-
-    if (!eventDispatcher.has("focus")) {
-      return;
-    }
-
-    // ProseMirror and CodeMirror may temporarily pause observers while their
-    // focus methods dispatch native events. Host callbacks must not destroy
-    // either view inside that internal focus stack, or the library can resume
-    // an observer after teardown. Deliver once the native focus operation has
-    // fully returned instead.
-    ownerWindow.queueMicrotask(() => {
-      if (lifecycle !== "active" || !compositeFocused || view.isDestroyed) {
-        return;
-      }
-
-      eventDispatcher.emit("focus", {
-        editor,
-        nativeEvent,
-        type: "focus",
-      }, () => lifecycle === "active" && !view.isDestroyed);
-    });
-  };
-
-  const handleFocusOut = (nativeEvent: FocusEvent) => {
-    const nextBlurVersion = ++pendingBlurVersion;
-
-    ownerWindow.queueMicrotask(() => {
-      if (
-        lifecycle !== "active"
-        || !compositeFocused
-        || nextBlurVersion !== pendingBlurVersion
-      ) {
-        return;
-      }
-
-      const activeElement = getEditorRootActiveElement(view);
-
-      if (isActiveElementInsideEditor(view, activeElement)) {
-        return;
-      }
-
-      compositeFocused = false;
-
-      if (!eventDispatcher.has("blur")) {
-        return;
-      }
-
-      eventDispatcher.emit("blur", {
-        editor,
-        nativeEvent,
-        type: "blur",
-      });
-    });
-  };
-
-  view.dom.addEventListener("focusin", handleFocusIn);
-  view.dom.addEventListener("focusout", handleFocusOut);
+  const stopObservingFocus = observeEditorFocus({
+    view,
+    getEditor: () => editor,
+    isActive: () => lifecycle === "active",
+    dispatcher: eventDispatcher,
+  });
 
   const updateOptions = (nextOptions: UpdateEditorOptions) => {
     assertActive("update editor options");
@@ -3090,9 +2648,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       }
 
       pendingExtensionErrors.length = 0;
-      pendingBlurVersion += 1;
-      view.dom.removeEventListener("focusin", handleFocusIn);
-      view.dom.removeEventListener("focusout", handleFocusOut);
+      stopObservingFocus();
 
       for (const cleanup of [
         () => changeEmitter.flushFinal(),
