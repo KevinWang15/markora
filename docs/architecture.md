@@ -49,7 +49,9 @@ Markdown cannot represent. All host history surfaces route through the same acti
 `applicationActions` routes toolbar, keyboard, native-menu and context-menu host
 actions. Availability is checked again at execution time. Context-menu history
 binding walks nested menus and reads current handlers instead of capturing stale
-render state. Dialog-specific confirmations call their explicit operations directly.
+render state. Presentation availability follows React state; the DOM modal guard
+is checked only at execution time, because the DOM still reflects the previous
+commit during render. Dialog-specific confirmations call their explicit operations directly.
 
 ## Browser harness and CI
 
@@ -92,3 +94,9 @@ node --cpu-prof --cpu-prof-dir=performance-results scripts/profile-serialization
 
 The packed Chromium runtime and memory gates remain the production performance
 checks. A faster codec diagnostic alone does not establish browser responsiveness.
+
+Parsing also preserves immutable subtrees during task-list and whitespace
+normalization. Only ancestors of changed content are copied; unchanged nodes and
+attribute objects are reused. This reduces allocation and GC pressure without
+skipping task-prefix handling or imported-resource sanitization. Tests verify both
+node sharing and that the original parsed document remains untouched.

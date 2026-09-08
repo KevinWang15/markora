@@ -52,3 +52,21 @@ test("context menus stay above app chrome when a short viewport forces them upwa
   })).toBe(true);
   await page.keyboard.press("Escape"); await expect(editor(page)).toBeFocused();
 });
+
+test("toolbar history becomes available immediately after cancelling a dialog", async ({ page, context }) => {
+  await openDocument(page, "Original");
+  await editor(page).click();
+  await page.keyboard.press("ControlOrMeta+End");
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("Input.insertText", { text: " changed" });
+  const undo = page.getByRole("button", { name: "Undo", exact: true });
+  await expect(undo).toBeEnabled();
+  await page.getByRole("button", { name: "Insert math", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Insert math", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(undo).toBeEnabled();
+  await undo.click();
+  await expect(editor(page)).toHaveText("Original");
+  await expect(page.getByRole("button", { name: "Redo", exact: true })).toBeEnabled();
+});

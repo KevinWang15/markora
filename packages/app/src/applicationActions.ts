@@ -25,11 +25,12 @@ export type ApplicationActionBindings = Readonly<
  * time, including for native menu callbacks installed before the latest render. */
 export function createApplicationActions(
   getBindings: () => ApplicationActionBindings,
+  canExecute: () => boolean = () => true,
 ) {
   const can = (id: ApplicationActionId) => getBindings()[id].enabled();
   const run = (id: ApplicationActionId) => {
     const action = getBindings()[id];
-    if (!action.enabled()) return false;
+    if (!canExecute() || !action.enabled()) return false;
     return action.run();
   };
   const bindHistoryMenu = (

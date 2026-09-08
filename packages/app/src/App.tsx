@@ -161,7 +161,10 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const [documentBridge] = useState(() => createDocumentBridge());
   const [controller] = useState(() => new DocumentController(welcomeMarkdown));
   const actionBindings = useRef<ApplicationActionBindings>(null!);
-  const [actions] = useState(() => createApplicationActions(() => actionBindings.current));
+  const [actions] = useState(() => createApplicationActions(
+    () => actionBindings.current,
+    () => !document.querySelector("dialog[open]"),
+  ));
   const { document: documentSnapshot, saving, savingCopy, exporting } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const applyingHistoryRef = useRef(false);
   const resourcePathRef = useRef<string | null>(null);
@@ -744,7 +747,11 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   void sourceEditorVersion;
 
   const sourceShortcut = desktop.isMac ? "⌘/" : "Ctrl+/";
-  const canInteract = () => !document.querySelector("dialog[open]")
+  // Presentation follows React state. Reading the previous committed DOM here
+  // can leave toolbar actions disabled after a dialog unmounts.
+  const hasOpenDialog = Boolean(pendingAction || recoveryCandidate || sourceEdit || mathEdit
+    || sourceConversionWarning || tableSaveWarning);
+  const canInteract = () => !hasOpenDialog
     && !editorRef.current?.view.composing && !sourceEditorRef.current?.isComposing();
   const canEditHistory = () => canInteract() && (sourceModeRef.current || !!editorRef.current?.view.editable);
   actionBindings.current = {

@@ -27,6 +27,14 @@ describe("application command routing", () => {
     expect(old).not.toHaveBeenCalled();
   });
 
+  it("keeps execution-only DOM guards out of presentation availability", () => {
+    const run = vi.fn();
+    const actions = createApplicationActions(() => bindings({ enabled: () => true, run }), () => false);
+    expect(actions.can("undo")).toBe(true);
+    expect(actions.run("undo")).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it("leaves input history, composition and unsupported modifiers alone", () => {
     const event = { key: "z", code: "KeyZ", ctrlKey: true, metaKey: false, shiftKey: false, altKey: false, isComposing: false };
     expect(matchApplicationShortcut(event, false)).toBeNull();
