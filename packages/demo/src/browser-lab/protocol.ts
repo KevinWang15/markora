@@ -143,6 +143,7 @@ export type BrowserLabDiagramCommandRequest =
     };
 
 export type BrowserLabEditorSpec = {
+  localRenderers?: boolean;
   contextMenu?: false | ContextMenuConfig;
   ariaLabel?: string;
   ariaLabelledBy?: string;

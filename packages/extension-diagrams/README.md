@@ -1,6 +1,6 @@
 # markora-extension-diagrams
 
-Optional semantic diagram fences for embedded Markora editors. The package recognizes the four case-sensitive GitHub fenced-code kinds `mermaid`, `geojson`, `topojson`, and `stl`, keeps their complete normalized info string and body as editable model data, and can show host-rendered previews without bundling a renderer.
+Optional semantic diagram fences for embedded Markora editors. The package recognizes the case-sensitive fenced-code kinds `mermaid`, `plantuml`, `geojson`, `topojson`, and `stl`, keeps their complete normalized info string and body as editable model data, and can show host-rendered previews without bundling a renderer.
 
 ## Install and use
 
@@ -38,6 +38,10 @@ if (first) handle.commands.togglePreview(first);
 
 The same extension definition works with `markora/minimal`. Keep `editor.extensions.manifest` beside persisted Markdown so a later editor loads the same syntax before editing.
 
+For ready-to-use lazy local Mermaid and PlantUML previews, use
+[`markora-renderers`](../renderers/README.md). The app, playground and export
+path share these adapters; this syntax package remains engine-free.
+
 ## Syntax and fidelity
 
 The first whitespace-delimited token of the trimmed fence info must be exactly one of:
@@ -52,7 +56,7 @@ graph TD; A-->B
 ```
 ````
 
-Matching is case-sensitive. `Mermaid`, `plantuml`, and `json mermaid` remain ordinary code blocks. The model retains the full normalized info (`geojson viewport=fit`, not only `geojson`) and the complete normalized body. CommonMark parsing normalizes line endings to LF, replaces NUL with U+FFFD, removes the fence's structural final line break, and canonicalizes delimiter spelling. Authored backtick/tilde choice, indentation, and fence length are not exact-source data.
+Matching is case-sensitive. `Mermaid`, unknown kinds, and `json mermaid` remain ordinary code blocks. The model retains the full normalized info (`geojson viewport=fit`, not only `geojson`) and the complete normalized body. CommonMark parsing normalizes line endings to LF, replaces NUL with U+FFFD, removes the fence's structural final line break, and canonicalizes delimiter spelling. Authored backtick/tilde choice, indentation, and fence length are not exact-source data.
 
 Serialization uses a safe generic fence. It chooses tildes when the info contains a backtick and otherwise uses backticks, then makes the delimiter longer than every same-delimiter run in the body. A body delimiter can therefore never close the output early. Without this package, root and minimal retain these forms as ordinary normalized code blocks.
 
@@ -81,7 +85,7 @@ Use `onEditSource(request)` to open a host editor. Its bound `convert`, `update`
 
 ```ts
 type DiagramRenderRequest = Readonly<{
-  kind: "mermaid" | "geojson" | "topojson" | "stl";
+  kind: "mermaid" | "plantuml" | "geojson" | "topojson" | "stl";
   info: string;
   source: string;
   ownerDocument: Document;

@@ -144,8 +144,8 @@ void requestRemoved;
 // @ts-expect-error Insertion requires a complete string info/source object.
 commands.insert({ info: "mermaid", source: 42 });
 
-// @ts-expect-error Diagram kinds are a closed GitHub-compatible vocabulary.
-commands.convert(target, "plantuml");
+// @ts-expect-error Diagram kinds are a closed supported vocabulary.
+commands.convert(target, "unknown-diagram");
 
 // @ts-expect-error Stale-safe targets require an opaque occurrence identity.
 commands.remove({ info: "mermaid", kind: "mermaid", position: 0, source: "x" });

@@ -31,7 +31,8 @@ import { useDocumentAnalysis } from "./useDocumentAnalysis";
 import { createFootnotesExtension } from "markora-extension-footnotes";
 import { createMathExtension } from "markora-extension-math";
 import { createDiagramsExtension } from "markora-extension-diagrams";
-import { renderMath, renderMermaid } from "./renderers";
+import { createRenderers, type MarkoraRenderers } from "markora-renderers";
+import "markora-renderers/styles.css";
 import { SourceDialog, type SourceEdit } from "./SourceDialog";
 import { createDocumentBridge } from "./documentBridge";
 import { FindBar } from "./FindBar";
@@ -39,6 +40,7 @@ import { createSearchExtension } from "./searchExtension";
 import { findTextMatches, type SearchOptions, type SearchResults } from "./search";
 import { DocumentController } from "./DocumentController";
 import { createMathContextMenuProvider } from "@markora/react-ui/mathContextMenu";
+import { createDiagramContextMenuProvider } from "@markora/react-ui/diagramContextMenu";
 import { createDefaultUi } from "markora-ui";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import type { MarkdownThemeController } from "markora/themes";
@@ -141,8 +143,9 @@ function ToolbarButton({
 export function App({ themeController }: Readonly<{ themeController: MarkdownThemeController }>) {
   const theme = useSyncExternalStore(themeController.subscribe, themeController.getSnapshot);
   const [sourceEdit, setSourceEdit] = useState<SourceEdit | null>(null);
-  const [mathExtension] = useState(() => createMathExtension({ renderer: renderMath }));
-  const [diagramsExtension] = useState(() => createDiagramsExtension({ renderers: { mermaid: renderMermaid }, onEditSource: request =>
+  const renderersRef = useRef<MarkoraRenderers | null>(null);
+  const [mathExtension] = useState(() => createMathExtension({ renderer: request => renderersRef.current!.math(request) }));
+  const [diagramsExtension] = useState(() => createDiagramsExtension({ renderers: { mermaid: request => renderersRef.current!.diagrams.mermaid(request), plantuml: request => renderersRef.current!.diagrams.plantuml(request) }, onEditSource: request =>
     setSourceEdit({ title: `Edit ${request.kind}`, source: request.source, update: source => request.update({ source }) }) }));
   const editorHostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MarkdownEditor | null>(null);
@@ -217,6 +220,8 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     const host = editorHostRef.current;
     if (!host) return;
 
+    const renderers = createRenderers();
+    renderersRef.current = renderers;
     const editor = createEditor({
       element: host,
       ariaLabel: "Markdown document",
@@ -226,7 +231,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       attributes: { "data-markora-app-editor": "true" },
       ui: createDefaultUi({ contextMenu: {
         clipboard: desktop.getClipboard(),
-        providers: [createMathContextMenuProvider(mathExtension, () => { actions.run("math"); })],
+        providers: [createMathContextMenuProvider(mathExtension, () => { actions.run("math"); }), createDiagramContextMenuProvider(diagramsExtension)],
         onError: cause => showError(cause, "This editor action could not be completed."),
         transform: items => actions.bindHistoryMenu(items),
       } }),
@@ -282,6 +287,8 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       untrackAssets();
       untrackErrors();
       editor.destroy();
+      renderers.destroy();
+      renderersRef.current = null;
       editorRef.current = null;
     };
   }, [updateLiveMarkdown]);

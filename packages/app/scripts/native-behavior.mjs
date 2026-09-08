@@ -183,6 +183,21 @@ try {
   await page.getByRole("alertdialog").waitFor(); await page.keyboard.press("Escape");
   await expect(source).toContainText("RECOVER 中文 🙂");
   pass("native recovery, Unicode input, and unsaved-close cancellation");
+  const diagrams = "```mermaid\nflowchart LR\n Start --> Finish\n```\n\n```plantuml\n@startuml\nclass User\nclass Account\nUser --> Account\n@enduml\n```";
+  await source.click(); await page.keyboard.press(`${mod}+a`);
+  await cdp.send("Input.insertText", { text: diagrams });
+  await toRich();
+  for (const kind of ["mermaid", "plantuml"]) {
+    const diagram = page.locator(`.app-editor [data-mdw-diagram-kind="${kind}"]`);
+    await diagram.scrollIntoViewIfNeeded();
+    await expect(diagram.locator("[data-mdw-diagram-preview] svg")).toBeVisible({ timeout: 30_000 });
+  }
+  const frame = page.frames().find(frame => frame.url() === "about:srcdoc");
+  assert.ok(frame, "PlantUML must run in its local sandbox");
+  assert.equal(await frame.evaluate(() => typeof window.nw), "undefined");
+  await toSource();
+  assert.equal((await source.locator(".cm-line").allTextContents()).join("\n"), diagrams);
+  pass("packaged local Mermaid and Graphviz-backed PlantUML previews preserve source and isolate the engine");
   await page.screenshot({ path: path.join(diagnostics, "complete.png") });
 } catch (error) {
   const state = await page?.evaluate(() => ({ title: document.title, renames: window.observedRenames, text: document.body.innerText })).catch(() => null);

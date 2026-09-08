@@ -1,5 +1,11 @@
-import { expect, it } from "vitest";
-import { renderMath } from "../src/renderMath";
+import { afterEach, expect, it } from "vitest";
+import { createRenderers, type MarkoraRenderers } from "../src/index";
+const registries: MarkoraRenderers[] = [];
+const renderMath = (...args: Parameters<MarkoraRenderers["math"]>) => {
+  const renderers = createRenderers(); registries.push(renderers);
+  return renderers.math(...args);
+};
+afterEach(() => { for (const renderers of registries.splice(0)) renderers.destroy(); });
 
 it("renders semantic MathML for both hosts without styles, links, or font assets", async () => {
   for (const kind of ["inline", "block"] as const) {

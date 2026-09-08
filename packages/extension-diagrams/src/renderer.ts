@@ -127,7 +127,7 @@ const allowedHtmlElements = new Set(["code", "div", "p", "pre", "span"]);
 const allowedSvgElements = new Set([
   "circle", "clippath", "defs", "desc", "ellipse", "g", "line",
   "lineargradient", "marker", "mask", "path", "polygon", "polyline",
-  "radialgradient", "rect", "stop", "svg", "text", "title", "tspan", "use",
+  "radialgradient", "rect", "stop", "svg", "symbol", "text", "title", "tspan", "use",
 ]);
 const droppedAttributes = new Set([
   "contenteditable", "draggable", "hidden", "inert", "part", "role", "slot", "tabindex",
@@ -136,7 +136,7 @@ const localReferenceAttributes = new Set([
   "clip-path", "fill", "filter", "marker-end", "marker-mid", "marker-start", "mask", "stroke",
 ]);
 const allowedSvgAttributes = new Set([
-  "alignment-baseline", "class", "color", "cx", "cy", "d", "direction",
+  "alignment-baseline", "class", "clip-rule", "color", "cx", "cy", "d", "direction",
   "dominant-baseline", "dx", "dy", "fill", "fill-opacity", "fill-rule",
   "font-family", "font-size", "font-style", "font-weight", "height", "id",
   "gradienttransform", "gradientunits", "marker-end", "markerheight", "marker-mid",
@@ -356,6 +356,9 @@ function safeAttributeValue(source: Element, name: string, value: string, ids: R
   if (name === "title") {
     return value.length <= 1_024 && !/[\u0000-\u001f\u007f]/u.test(value) ? value : null;
   }
+  // Static icon paths can be much longer than presentation metadata. Restrict
+  // their alphabet to SVG path commands/numbers; the total output cap still applies.
+  if (name === "d") return value.length <= 65_536 && /^[MmZzLlHhVvCcSsQqTtAaEe0-9.,+\s-]*$/u.test(value) ? value : null;
   return value.length <= 4_096
     && safePresentationValue.test(value)
     && !unsafeIndirectCssValue.test(value)

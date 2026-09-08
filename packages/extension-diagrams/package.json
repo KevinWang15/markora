@@ -12,7 +12,7 @@
     "directory": "packages/extension-diagrams"
   },
   "bugs": { "url": "https://github.com/KevinWang15/markora/issues" },
-  "keywords": ["markora", "markdown", "mermaid", "geojson", "topojson", "stl", "prosemirror"],
+  "keywords": ["markora", "markdown", "mermaid", "plantuml", "geojson", "topojson", "stl", "prosemirror"],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

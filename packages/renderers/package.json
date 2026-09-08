@@ -1,0 +1,21 @@
+{
+  "name": "markora-renderers",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Optional lazy local rendering engines for Markora math and diagrams.",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }, "./styles.css": "./dist/styles.css" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "sideEffects": ["./dist/styles.css"],
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --root ../.. packages/renderers/test",
+    "prepack": "pnpm build && pnpm typecheck && pnpm test"
+  },
+  "dependencies": { "@plantuml/core": "1.2026.8", "katex": "^0.18.7", "mermaid": "^11.17.2" },
+  "peerDependencies": { "markora-extension-diagrams": "^0.0.1", "markora-extension-math": "^0.0.1" },
+  "devDependencies": { "markora-extension-diagrams": "workspace:*", "markora-extension-math": "workspace:*", "@types/katex": "^0.16.8", "esbuild": "^0.25.12", "typescript": "^5.7.3" }
+}

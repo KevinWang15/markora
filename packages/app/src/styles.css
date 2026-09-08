@@ -778,11 +778,6 @@ button {
 .app-syntax-source { width: 100%; min-height: 10rem; font: 14px/1.6 monospace; padding: .75rem; color: inherit; background: var(--app-bg); border: 1px solid currentColor; border-radius: 6px; }
 .markora-dialog-actions:has(.app-syntax-source) { flex-wrap: wrap; }
 .mdw-math math { font-size: 1.15em; }
-.mdw-diagram__preview svg { max-width: 100%; height: auto; color: var(--app-text); background: var(--app-surface); }
-.mdw-diagram__preview .node rect, .mdw-diagram__preview .node polygon, .mdw-diagram__preview .node circle { fill: var(--app-surface-soft); stroke: var(--app-text-soft); stroke-width: 1px; }
-.mdw-diagram__preview .flowchart-link, .mdw-diagram__preview .messageLine0, .mdw-diagram__preview .messageLine1 { stroke: var(--app-text-soft); fill: none; }
-.mdw-diagram__preview .arrowheadPath, .mdw-diagram__preview marker path { fill: var(--app-text-soft); stroke: var(--app-text-soft); }
-.mdw-diagram__preview text { fill: var(--app-text); font: 16px sans-serif; }
 #markora-print { display: none; }
 @media print {
   body > :not(#markora-print) { display: none !important; }

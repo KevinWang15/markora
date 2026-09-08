@@ -65,7 +65,7 @@ afterEach(() => {
 });
 
 describe.each(entries)("%s diagram codec", (_entry, createEditor) => {
-  it("claims all four exact case-sensitive first info tokens and retains full info/body", () => {
+  it("claims all supported exact case-sensitive first info tokens and retains full info/body", () => {
     const markdown = [
       "~~~mermaid theme=neutral",
       "graph TD; A-->B",
@@ -77,6 +77,10 @@ describe.each(entries)("%s diagram codec", (_entry, createEditor) => {
       "",
       "```topojson",
       '{"type":"Topology","objects":{}}',
+      "```",
+      "",
+      "```plantuml",
+      "@startuml\nAlice -> Bob: hello\n@enduml",
       "```",
       "",
       "```stl binary=false",
@@ -91,6 +95,7 @@ describe.each(entries)("%s diagram codec", (_entry, createEditor) => {
       { info: "mermaid theme=neutral", kind: "mermaid", source: "graph TD; A-->B" },
       { info: "geojson viewport=fit", kind: "geojson", source: '{"type":"Point","coordinates":[0,0]}' },
       { info: "topojson", kind: "topojson", source: '{"type":"Topology","objects":{}}' },
+      { info: "plantuml", kind: "plantuml", source: "@startuml\nAlice -> Bob: hello\n@enduml" },
       { info: "stl binary=false", kind: "stl", source: "solid x\nendsolid x" },
     ]);
     expect(editor.getMarkdown()).toContain("```mermaid theme=neutral\ngraph TD; A-->B\n```");
@@ -108,7 +113,7 @@ describe.each(entries)("%s diagram codec", (_entry, createEditor) => {
       markdown: [
         "```Mermaid\nx\n```",
         "",
-        "```plantuml\ny\n```",
+        "```unknown-diagram\ny\n```",
         "",
         "```json mermaid\nz\n```",
       ].join("\n"),
@@ -246,7 +251,7 @@ it("normalizes source, validates complete info, and publishes frozen vocabulary"
   expect(classifyDiagramInfo("Mermaid")).toBeNull();
   expect(() => normalizeDiagramInfo("mermaid\nother")).toThrow();
   expect(Object.isFrozen(defaultDiagramMessages)).toBe(true);
-  expect(diagramKinds).toEqual(["mermaid", "geojson", "topojson", "stl"]);
+  expect(diagramKinds).toEqual(["mermaid", "plantuml", "geojson", "topojson", "stl"]);
   expect(diagramDiagnosticCodes).toEqual(["source-too-large"]);
   expect(diagramRenderErrorCodes).toContain("unsafe-output");
 });
@@ -348,7 +353,7 @@ it("reports semantic-invalid info without mutation and throws for malformed comm
   editor.subscribe("error", (event) => errors.push(event.error.code));
   editor.subscribe("transaction", () => { transactions += 1; });
 
-  expect(handle.commands.insert({ info: "plantuml", source: "A-->B" }))
+  expect(handle.commands.insert({ info: "unknown-diagram", source: "A-->B" }))
     .toBe(false);
   expect(handle.commands.update(handle.state.getNodes()[0]!, { info: "mermaid\ninvalid" }))
     .toBe(false);
@@ -361,7 +366,7 @@ it("reports semantic-invalid info without mutation and throws for malformed comm
   expect(transactions).toBe(0);
 
   expectCommandTypeError(() => handle.commands.insert({ info: 42, source: "x" } as never));
-  expectCommandTypeError(() => handle.commands.insert({ info: "plantuml", source: 42 } as never));
+  expectCommandTypeError(() => handle.commands.insert({ info: "unknown-diagram", source: 42 } as never));
   expectCommandTypeError(() => handle.commands.insert({
     info: "mermaid",
     source: "x",
@@ -377,7 +382,7 @@ it("reports semantic-invalid info without mutation and throws for malformed comm
   ));
   expectCommandTypeError(() => handle.commands.update(
     handle.state.getNodes()[0]!,
-    { info: "plantuml", source: 42 } as never,
+    { info: "unknown-diagram", source: 42 } as never,
   ));
   expect(editor.getMarkdown()).toBe(before);
   expect(transactions).toBe(0);

@@ -1,6 +1,7 @@
 import { DOMSerializer, type Node as MarkdownNode } from "prosemirror-model";
 import DOMPurify from "dompurify";
-import { renderMath, renderMermaid } from "./renderers";
+import { createRenderers } from "markora-renderers";
+import rendererStyles from "markora-renderers/styles.css?inline";
 import type { ExportTheme } from "./exportTheme";
 
 export const exportStyles = `
@@ -33,9 +34,7 @@ th { background:var(--mdw-color-surface-muted,#f5f5f5); }
 img,svg { max-width:100%; height:auto; } math { font-size:1.15em; }
 a { color:var(--mdw-color-accent,#245c9c); } hr { border:0; border-top:1px solid var(--mdw-color-border,#ccc); }
 .export-diagram { background:var(--mdw-color-surface,white); color:var(--mdw-color-text,#222); margin:1em 0; }
-.export-diagram .node rect,.export-diagram .node polygon,.export-diagram .node circle { fill:var(--mdw-color-surface-subtle,#f4f4f4); stroke:var(--mdw-color-muted,#555); }
-.export-diagram .flowchart-link,.export-diagram .messageLine0,.export-diagram .messageLine1 { stroke:var(--mdw-color-muted,#555); fill:none; }
-.export-diagram marker path { fill:var(--mdw-color-muted,#555); stroke:var(--mdw-color-muted,#555); } .export-diagram text { fill:var(--mdw-color-text,#222); font:16px sans-serif; }
+${rendererStyles}
 @media print { article { margin:0 auto; padding:0; } pre,blockquote,img,svg { break-inside:avoid; } }
 `;
 
@@ -53,6 +52,7 @@ export async function buildExport(doc: MarkdownNode, title: string, options: Exp
   const article = ownerDocument.createElement("article");
   if (theme) article.dataset.theme = theme.id;
   const renderJobs: (() => Promise<void>)[] = [];
+  const renderers = createRenderers();
   const nodes = DOMSerializer.nodesFromSchema(doc.type.schema);
   for (const name of ["math_inline", "math_block", "diagram"]) if (nodes[name]) {
     nodes[name] = node => {
@@ -60,17 +60,19 @@ export async function buildExport(doc: MarkdownNode, title: string, options: Exp
       const source = math ? String(node.attrs.source) : node.textContent;
       const element = ownerDocument.createElement(name === "math_inline" ? "span" : "div");
       element.className = math ? "export-math" : "export-diagram";
+      if (!math) element.dataset.mdwDiagramKind = String(node.attrs.kind);
       const fallback = ownerDocument.createElement(name === "math_inline" ? "code" : "pre");
       fallback.textContent = source;
       element.append(fallback);
       renderJobs.push(async () => {
-        if (!math && node.attrs.kind !== "mermaid") return;
+        const diagramKind = node.attrs.kind;
+        if (!math && diagramKind !== "mermaid" && diagramKind !== "plantuml") return;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15_000);
         try {
           const request = { source, ownerDocument, signal: controller.signal };
-          const output = math ? await renderMath({ ...request, kind: name === "math_inline" ? "inline" : "block" })
-            : await renderMermaid({ ...request, kind: "mermaid", info: String(node.attrs.info ?? "mermaid") });
+          const output = math ? await renderers.math({ ...request, kind: name === "math_inline" ? "inline" : "block" })
+            : await renderers.diagrams[diagramKind as "mermaid" | "plantuml"]({ ...request, kind: diagramKind, info: String(node.attrs.info ?? diagramKind) });
           element.replaceChildren(output);
         } catch { element.setAttribute("data-export-fallback", "true"); }
         finally { clearTimeout(timeout); }
@@ -81,7 +83,8 @@ export async function buildExport(doc: MarkdownNode, title: string, options: Exp
   const serializer = new DOMSerializer(nodes, DOMSerializer.marksFromSchema(doc.type.schema));
   article.append(serializer.serializeFragment(doc.content, { document: ownerDocument }));
   // Serialize work deliberately: each renderer can allocate a substantial layout tree.
-  for (const job of renderJobs) await job();
+  try { for (const job of renderJobs) await job(); }
+  finally { renderers.destroy(); }
   for (const image of article.querySelectorAll("img")) {
     image.src = await resolveImage(image.getAttribute("src") ?? "");
   }

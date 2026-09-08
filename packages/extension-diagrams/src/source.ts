@@ -9,6 +9,7 @@ import type {
 export const DIAGRAM_MAX_SOURCE_BYTES = 262_144;
 export const diagramKinds = Object.freeze([
   "mermaid",
+  "plantuml",
   "geojson",
   "topojson",
   "stl",
@@ -46,7 +47,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 export function assertDiagramKind(value: unknown): DiagramKind {
   if (typeof value !== "string" || !kindSet.has(value)) {
-    throw new TypeError('Diagram kind must be "mermaid", "geojson", "topojson", or "stl".');
+    throw new TypeError('Diagram kind must be "mermaid", "plantuml", "geojson", "topojson", or "stl".');
   }
   return value as DiagramKind;
 }

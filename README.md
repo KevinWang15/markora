@@ -14,12 +14,13 @@ Write Markdown at the speed of thought, inside your product.
 - `packages/ui` — the npm package published as `markora-ui`
 - `packages/app` — the installable NW.js desktop application published as a self-contained distribution
 - `packages/extension-alerts` — GitHub-style alerts
-- `packages/extension-diagrams` — Mermaid, GeoJSON, TopoJSON, and STL fences
+- `packages/extension-diagrams` — Mermaid, PlantUML, GeoJSON, TopoJSON, and STL fences
 - `packages/extension-footnotes` — GitHub-style footnotes
 - `packages/extension-frontmatter` — exact-source YAML front matter
 - `packages/extension-html` — exact-source HTML with optional host previews
 - `packages/extension-math` — inline and block math with optional host rendering
 - `packages/extension-toc` — generated tables of contents
+- [`packages/renderers`](./packages/renderers/README.md) — optional lazy local Mermaid, PlantUML, and KaTeX engines shared by the playground, desktop app, and export
 - `packages/demo` — the Vite docs site, live playground, and internal regression surface
 
 ## Highlights

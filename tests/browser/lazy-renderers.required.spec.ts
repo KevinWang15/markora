@@ -1,0 +1,82 @@
+import { test, expect, mountEditor, resetEditor, editorLocator, destroyEditorOnly,
+  getMarkdown, focusEditor, getDiagramSnapshot } from "./fixtures";
+
+test("@required local engines load independently on demand and release PlantUML on teardown", async ({ labPage, context, browserName }, testInfo) => {
+  test.setTimeout(60_000);
+  const requests: string[] = [];
+  labPage.on("request", request => requests.push(request.url()));
+  const engines = () => requests.filter(url => /\/(?:math-engine|mermaid-engine|plantuml-frame)-/u.test(url));
+  await mountEditor(labPage, { id: "local", extensionMode: "all-advanced", localRenderers: true,
+    mathEditMode: "in-place", markdown: "Ordinary Markdown", root: "shadow" });
+  await labPage.waitForTimeout(400); // Observe the deferred-preview scheduling window.
+  expect(engines()).toEqual([]);
+  const host = editorLocator(labPage, "local");
+  await resetEditor(labPage, "local", "$\\frac{a}{b}$");
+  await expect(host.locator("math mfrac")).toBeVisible();
+  expect(engines().filter(url => url.includes("math-engine"))).toHaveLength(1);
+  expect(engines().some(url => /mermaid-engine|plantuml-frame/u.test(url))).toBe(false);
+
+  await resetEditor(labPage, "local", "```mermaid\nflowchart LR\n Start --> Finish\n```");
+  await expect(host.locator("[data-mdw-diagram-preview] svg")).toBeVisible({ timeout: 20_000 });
+  expect(engines().filter(url => url.includes("mermaid-engine"))).toHaveLength(1);
+  expect(engines().some(url => url.includes("plantuml-frame"))).toBe(false);
+
+  const source = "@startuml\nAlice -> Bob: Hello\n@enduml";
+  await resetEditor(labPage, "local", `\`\`\`plantuml\n${source}\n\`\`\`\n\nAfter`);
+  const shell = host.locator('[data-mdw-diagram-kind="plantuml"]');
+  await expect(shell.locator("[data-mdw-diagram-preview] svg")).toBeVisible({ timeout: 20_000 });
+  await expect(shell.locator("[data-mdw-diagram-preview]")).toContainText("Hello");
+  expect(engines().filter(url => url.includes("plantuml-frame"))).toHaveLength(1);
+
+  await shell.getByRole("button", { name: "Show diagram source", exact: true }).click();
+  const target = (await getDiagramSnapshot(labPage, "local")).nodes[0]!;
+  const anchor = target.position + 1 + source.indexOf("Hello");
+  await focusEditor(labPage, "local", { anchor, head: anchor + 5 });
+  if (browserName === "chromium") {
+    const cdp = await context.newCDPSession(labPage);
+    await cdp.send("Input.insertText", { text: "Updated" });
+    await cdp.detach();
+  } else await labPage.keyboard.insertText("Updated");
+  expect(await getMarkdown(labPage, "local")).toContain("Alice -> Bob: Updated");
+  await host.locator("p").last().click();
+  await shell.getByRole("button", { name: "Show diagram preview", exact: true }).click();
+  await expect(shell.locator("[data-mdw-diagram-preview]")).toContainText("Updated", { timeout: 20_000 });
+  await labPage.screenshot({ path: testInfo.outputPath("local-plantuml.png") });
+  expect(requests.every(url => new URL(url).origin === "http://127.0.0.1:4173")).toBe(true);
+  await destroyEditorOnly(labPage, "local");
+  await expect(labPage.locator('iframe[title="Local PlantUML rendering engine"]')).toHaveCount(0);
+});
+
+test("@required public playground supports Mermaid and PlantUML previews", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  await page.goto("/demo");
+  await page.locator("#source").fill("```mermaid\nsequenceDiagram\n Alice->>Bob: Mermaid\n```\n\n```plantuml\n@startuml\nclass User\nclass Account\nUser --> Account\n@enduml\n```");
+  await page.getByRole("button", { name: "Apply Markdown", exact: true }).click();
+  for (const kind of ["mermaid", "plantuml"]) {
+    const shell = page.locator(`#editor [data-mdw-diagram-kind="${kind}"]`);
+    await shell.scrollIntoViewIfNeeded();
+    await expect(shell.locator("[data-mdw-diagram-preview] svg")).toBeVisible({ timeout: 20_000 });
+  }
+  await expect(page.locator('#editor [data-mdw-diagram-kind="plantuml"] [data-mdw-diagram-preview]')).toContainText("Account");
+  await page.locator(".docs-theme-picker select").selectOption("night");
+  await expect(page.locator('#editor [data-mdw-diagram-kind="mermaid"] svg text').first()).toHaveCSS("fill", "rgb(220, 226, 235)");
+  await page.screenshot({ path: testInfo.outputPath("playground-diagrams-night.png"), fullPage: true });
+});
+
+test("@required diagram menu insertion uses shared commands and document undo", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto("/demo");
+  for (const kind of ["Mermaid", "PlantUML"]) {
+    const initial = `Before ${kind}`;
+    await page.locator("#source").fill(initial);
+    await page.getByRole("button", { name: "Apply Markdown", exact: true }).click();
+    await page.locator("#editor .ProseMirror p").click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Shift+F10");
+    await page.getByRole("menuitem", { name: `Insert ${kind} diagram`, exact: true }).click();
+    await expect(page.locator(`#editor [data-mdw-diagram-kind="${kind.toLowerCase()}"] svg`)).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator("#output")).toContainText(`\`\`\`${kind.toLowerCase()}`);
+    await page.getByRole("button", { name: /^Undo \(/ }).click();
+    await expect(page.locator("#output")).toHaveText(initial);
+  }
+});

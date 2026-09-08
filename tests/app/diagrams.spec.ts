@@ -1,0 +1,47 @@
+import { expect, test } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
+
+test("lazy local diagrams survive themed PDF export and preserve source", async ({ page, context }, testInfo) => {
+  test.setTimeout(60_000);
+  const requests: string[] = [];
+  page.on("request", request => requests.push(request.url()));
+  await page.goto("/");
+  await expect(page.locator(".markora-app")).not.toHaveAttribute("inert");
+  expect(requests.some(url => /plantuml-frame|mermaid-engine/u.test(url))).toBe(false);
+  const source = "```mermaid\nflowchart LR\n Start --> Finish\n```\n\n```plantuml\n@startuml\nAlice -> Bob: Hello\n@enduml\n```\n\n$\\frac{a}{b}$\n\nAfter";
+  const picker = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Open document", exact: true }).click();
+  await (await picker).setFiles({ name: "diagrams.md", mimeType: "text/markdown", buffer: Buffer.from(source) });
+  for (const kind of ["mermaid", "plantuml"]) {
+    const diagram = page.locator(`.app-editor [data-mdw-diagram-kind="${kind}"]`);
+    await diagram.scrollIntoViewIfNeeded();
+    await expect(diagram.locator("[data-mdw-diagram-preview] svg")).toBeVisible({ timeout: 20_000 });
+  }
+  const theme = page.getByRole("combobox", { name: "Theme", exact: true });
+  await theme.selectOption("night");
+  const text = page.locator('.app-editor [data-mdw-diagram-kind="plantuml"] svg text').first();
+  await expect(text).toHaveCSS("fill", "rgb(244, 244, 244)");
+  await page.evaluate(() => { window.print = () => { document.body.dataset.printRequested = "true"; }; });
+  await page.getByRole("button", { name: "Print / Save as PDF", exact: true }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-print-requested", "true", { timeout: 20_000 });
+  const print = page.locator("#markora-print");
+  await expect(print.locator(".export-diagram svg")).toHaveCount(2);
+  await expect(print.locator("math mfrac")).toHaveCount(1);
+  await expect(print.locator("[data-export-fallback]")).toHaveCount(0);
+  await expect(print.locator('[data-mdw-diagram-kind="plantuml"] svg text').first()).toHaveCSS("fill", "rgb(244, 244, 244)");
+  await expect(page.locator('iframe[title="Local PlantUML rendering engine"]')).toHaveCount(1);
+  const cdp = await context.newCDPSession(page);
+  const { data } = await cdp.send("Page.printToPDF", { printBackground: true, preferCSSPageSize: true });
+  const pdf = Buffer.from(data, "base64");
+  expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+  await writeFile(testInfo.outputPath("diagrams-night.pdf"), pdf);
+  await cdp.detach();
+  await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
+  await page.screenshot({ path: testInfo.outputPath("diagrams-night.png"), fullPage: true });
+  expect(requests.every(url => new URL(url).origin === "http://127.0.0.1:4174")).toBe(true);
+  await page.getByRole("button", { name: "Edit Markdown source", exact: true }).click();
+  const sourceEditor = page.getByRole("textbox", { name: "Markdown source", exact: true });
+  await expect(sourceEditor).toBeVisible();
+  const lines = sourceEditor.locator(".cm-line");
+  expect((await lines.allTextContents()).join("\n")).toBe(source);
+});

@@ -83,11 +83,13 @@ import type {
 
 const BROWSER_LAB_DIAGRAM_KINDS = [
   "mermaid",
+  "plantuml",
   "geojson",
   "topojson",
   "stl",
 ] as const;
 export type MountedEditor = {
+  localRenderers?: import("markora-renderers").MarkoraRenderers;
   activationObserver: MutationObserver;
   alertsExtension: AlertsExtension | null;
   changeCount: number;

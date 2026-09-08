@@ -57,7 +57,7 @@ const FIDELITY_SOURCE = [
   "case-sensitive negative",
   "```",
   "",
-  "```plantuml",
+  "```unknown-diagram",
   "unknown negative",
   "```",
 ].join("\n");
@@ -87,7 +87,7 @@ const FIDELITY_CANONICAL = [
   "case-sensitive negative",
   "```",
   "",
-  "```plantuml",
+  "```unknown-diagram",
   "unknown negative",
   "```",
 ].join("\n");

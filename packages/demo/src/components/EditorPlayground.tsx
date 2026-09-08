@@ -16,7 +16,11 @@ import { buildLucideIconElement } from "@lucide/icons/build";
 import { createEditor, type MarkdownEditor } from "markora";
 import { createMathExtension } from "markora-extension-math";
 import { createMathContextMenuProvider } from "@markora/react-ui/mathContextMenu";
-import { renderMath } from "@markora/react-ui/renderMath";
+import { createDiagramContextMenuProvider } from "@markora/react-ui/diagramContextMenu";
+import { createRenderers } from "markora-renderers";
+import { createDiagramsExtension } from "markora-extension-diagrams";
+import "markora-extension-diagrams/styles.css";
+import "markora-renderers/styles.css";
 import "markora-extension-math/styles.css";
 import "@markora/react-ui/styles.css";
 import { createDefaultUi } from "markora-ui";
@@ -590,7 +594,9 @@ export function EditorPlayground() {
       imagePopover.close(refocusEditor);
     };
 
-    const math = createMathExtension({ renderer: renderMath });
+    const renderers = createRenderers();
+    const math = createMathExtension({ renderer: renderers.math });
+    const diagrams = createDiagramsExtension({ renderers: renderers.diagrams });
     const openMath = () => {
       closeAllPopovers(false);
       editorRef.current?.extensions.get(math).commands.editSelection();
@@ -785,8 +791,8 @@ export function EditorPlayground() {
       element: editorElement,
       markdown: mountedSession.editorMarkdown,
       ariaLabel: "Markdown document editor",
-      ui: createDefaultUi({ contextMenu: { providers: [createMathContextMenuProvider(math, openMath)] } }),
-      extensions: [math],
+      ui: createDefaultUi({ contextMenu: { providers: [createMathContextMenuProvider(math, openMath), createDiagramContextMenuProvider(diagrams)] } }),
+      extensions: [math, diagrams],
       onChange(markdown) {
         const sourceMarkdown = sourceTextareaRef.current?.value
           ?? playgroundRouteSession.sourceMarkdown;
@@ -902,6 +908,7 @@ export function EditorPlayground() {
       codeEditorObserver.disconnect();
       stopState();
       editor.destroy();
+      renderers.destroy();
       editorRef.current = null;
       toolbarElement.innerHTML = "";
       tooltipController.destroy();
@@ -927,7 +934,7 @@ export function EditorPlayground() {
         <section className="panel panel-editor">
           <div className="panel-header">
             <h2>Visual editor</h2>
-            <p>Try headings, tasks, tables, code, and math. Use the Σ button to insert a formula or edit one below.</p>
+            <p>Try headings, tasks, tables, math, and diagrams. Use the Σ button to insert a formula or edit one below.</p>
           </div>
           <div ref={toolbarElementRef} className="mdw-toolbar" />
           <div ref={editorElementRef} id="editor" />
@@ -978,7 +985,7 @@ export function EditorPlayground() {
       <section className="panel panel-output">
         <div className="panel-header">
           <h2>Serialized output</h2>
-          <p>The editor’s Markdown appears here after you pause typing. This playground includes the math extension: inline formulas use $…$, and display formulas use $$…$$.</p>
+          <p>The editor’s Markdown appears here after you pause typing. Math uses $…$ or $$…$$. Mermaid and PlantUML fences render locally; their engines load only when a preview is needed.</p>
         </div>
         <pre id="output" role="region" tabIndex={0} aria-label="Serialized Markdown output">{output}</pre>
       </section>

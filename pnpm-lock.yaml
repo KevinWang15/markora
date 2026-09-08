@@ -80,12 +80,12 @@ importers:
       markora-extension-toc:
         specifier: workspace:*
         version: link:../extension-toc
+      markora-renderers:
+        specifier: workspace:*
+        version: link:../renderers
       markora-ui:
         specifier: workspace:*
         version: link:../ui
-      mermaid:
-        specifier: ^11.17.2
-        version: 11.17.2
       prosemirror-model:
         specifier: ^1.25.4
         version: 1.25.4
@@ -240,6 +240,9 @@ importers:
       markora-extension-toc:
         specifier: workspace:*
         version: link:../extension-toc
+      markora-renderers:
+        specifier: workspace:*
+        version: link:../renderers
       markora-ui:
         specifier: workspace:*
         version: link:../ui
@@ -319,9 +322,9 @@ importers:
       '@lucide/icons':
         specifier: ^1.37.0
         version: 1.37.0
-      katex:
-        specifier: ^0.18.7
-        version: 0.18.7
+      markora-extension-diagrams:
+        specifier: workspace:*
+        version: link:../extension-diagrams
       markora-extension-math:
         specifier: workspace:^
         version: link:../extension-math
@@ -329,15 +332,40 @@ importers:
         specifier: workspace:*
         version: link:../ui
     devDependencies:
-      '@types/katex':
-        specifier: ^0.16.8
-        version: 0.16.8
       '@types/react':
         specifier: ^19.1.10
         version: 19.2.14
       react:
         specifier: ^19.1.1
         version: 19.2.4
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
+  packages/renderers:
+    dependencies:
+      '@plantuml/core':
+        specifier: 1.2026.8
+        version: 1.2026.8
+      katex:
+        specifier: ^0.18.7
+        version: 0.18.7
+      mermaid:
+        specifier: ^11.17.2
+        version: 11.17.2
+    devDependencies:
+      '@types/katex':
+        specifier: ^0.16.8
+        version: 0.16.8
+      esbuild:
+        specifier: ^0.25.12
+        version: 0.25.12
+      markora-extension-diagrams:
+        specifier: workspace:*
+        version: link:../extension-diagrams
+      markora-extension-math:
+        specifier: workspace:*
+        version: link:../extension-math
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
@@ -892,6 +920,9 @@ packages:
 
   '@nwutils/runner@0.2.4':
     resolution: {integrity: sha512-UHrHtfHDQEezP8/7ffvi3rJgzQ+BcDrUa26HmWqPOKec3g5cFCsUyQe6NevbwjeMQYxt2C/m08SCE/kj2jiHHQ==}
+
+  '@plantuml/core@1.2026.8':
+    resolution: {integrity: sha512-md2wGuaIJnAq1yKkedSpQE68cLsvZvctwzWHkDAnC3DTVLe/MSd/2vr4ETwr6jtc1av8cdxCohFuW4VGejMHyw==}
 
   '@playwright/test@1.61.1':
     resolution: {integrity: sha512-8nKv6+0RJSL9FE4jYOEGXnPeM/Hg12qZpmqzZjRh3qM0Y7c3z1mrOTfFLids72RDQYVh9WpLEfR5WdpNX4fkig==}
@@ -2909,6 +2940,8 @@ snapshots:
       yauzl-promise: 4.0.0
 
   '@nwutils/runner@0.2.4': {}
+
+  '@plantuml/core@1.2026.8': {}
 
   '@playwright/test@1.61.1':
     dependencies:

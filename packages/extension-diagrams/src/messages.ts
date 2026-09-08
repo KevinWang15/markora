@@ -25,6 +25,7 @@ export type DiagramMessageOverrides = Partial<DiagramMessages>;
 function englishKind(kind: DiagramKind) {
   return kind === "mermaid"
     ? "Mermaid"
+    : kind === "plantuml" ? "PlantUML"
     : kind === "geojson"
       ? "GeoJSON"
       : kind === "topojson" ? "TopoJSON" : "STL";
@@ -33,7 +34,7 @@ function englishKind(kind: DiagramKind) {
 export const defaultDiagramMessages: DiagramMessages = Object.freeze({
   editSource: "Edit diagram source",
   invalidDocumentDiagnostic: "Diagram nodes must retain a supported kind, a normalized complete fence info string, and canonical code text.",
-  invalidInfoDiagnostic: "Diagram info must be a normalized one-line fenced-code info string whose first token is mermaid, geojson, topojson, or stl.",
+  invalidInfoDiagnostic: "Diagram info must be a normalized one-line fenced-code info string whose first token is mermaid, plantuml, geojson, topojson, or stl.",
   invalidRendererOutputDiagnostic: (kind) => `${englishKind(kind)} renderer returned an invalid DOM result; source remains available.`,
   kindLabel: (kind) => `${englishKind(kind)} diagram`,
   previewFailed: "Diagram preview failed; source remains available.",

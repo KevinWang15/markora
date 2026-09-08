@@ -1,3 +1,5 @@
+import { createRenderers } from "markora-renderers";
+import "markora-renderers/styles.css";
 import { createEditor, type MarkdownEditor } from "markora";
 import { createAlertsExtension } from "markora-extension-alerts";
 import "markora-extension-alerts/styles.css";
@@ -94,6 +96,8 @@ export function mountBrowserLab(labRoot: HTMLElement) {
       "direction" | "entry" | "id" | "placement" | "portal" | "root"
     >,
   ) => {
+    mounted.localRenderers?.destroy();
+    mounted.localRenderers = spec.localRenderers ? createRenderers() : undefined;
     mounted.controlledEcho = spec.controlledEcho ?? false;
     const extensionMode = spec.extensionMode ?? mounted.extensionMode;
     const allAdvanced = extensionMode === "all-advanced";
@@ -129,7 +133,7 @@ export function mountBrowserLab(labRoot: HTMLElement) {
               mounted.diagramEditRequest = request;
               mounted.section.dataset.pendingDiagramEdit = "true";
             },
-            renderers: createBrowserLabDiagramRenderers(
+            renderers: mounted.localRenderers?.diagrams ?? createBrowserLabDiagramRenderers(
               mounted,
               spec.diagramRendererModes,
             ),
@@ -179,7 +183,7 @@ export function mountBrowserLab(labRoot: HTMLElement) {
               mounted.mathEditRequest = request;
               mounted.section.dataset.pendingMathEdit = "true";
             } }),
-            renderer: createBrowserLabMathRenderer(
+            renderer: mounted.localRenderers?.math ?? createBrowserLabMathRenderer(
               mounted,
               spec.mathRendererMode,
             ),
@@ -303,6 +307,7 @@ export function mountBrowserLab(labRoot: HTMLElement) {
       }
 
       mounted.editor.destroy();
+      mounted.localRenderers?.destroy();
     } finally {
       clearDiagramRendererArtifacts(mounted);
       clearHtmlRendererArtifacts(mounted);
@@ -666,6 +671,7 @@ export function mountBrowserLab(labRoot: HTMLElement) {
       const mounted = requireEditor(editors, id);
       const wasDestroyed = mounted.editor.isDestroyed;
       mounted.editor.destroy();
+      mounted.localRenderers?.destroy();
       clearDiagramRendererArtifacts(mounted);
       clearHtmlRendererArtifacts(mounted);
       clearMathRendererArtifacts(mounted);

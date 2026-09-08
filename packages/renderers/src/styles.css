@@ -1,0 +1,11 @@
+/* Mermaid's local SVG output has no embedded stylesheet. Scoped host tokens
+ * supply theme colors in document and Shadow DOM previews. PlantUML retains its
+ * own SVG presentation attributes. No renderer fonts or network CSS are needed. */
+[data-mdw-diagram-kind="mermaid"] svg { color: var(--mdw-color-text); background: var(--mdw-color-surface); }
+[data-mdw-diagram-kind="mermaid"] .node rect, [data-mdw-diagram-kind="mermaid"] .node polygon, [data-mdw-diagram-kind="mermaid"] .node circle { fill: var(--mdw-color-surface-subtle); stroke: var(--mdw-color-muted); stroke-width: 1px; }
+[data-mdw-diagram-kind="mermaid"] .flowchart-link, [data-mdw-diagram-kind="mermaid"] .messageLine0, [data-mdw-diagram-kind="mermaid"] .messageLine1 { stroke: var(--mdw-color-muted); fill: none; }
+[data-mdw-diagram-kind="mermaid"] marker path { fill: var(--mdw-color-muted); stroke: var(--mdw-color-muted); }
+[data-mdw-diagram-kind="mermaid"] text { fill: var(--mdw-color-text); }
+
+[data-mdw-diagram-kind="mermaid"] :is(rect.actor, .labelBox, .note, .cluster rect) { fill: var(--mdw-color-surface-subtle,#f4f4f4); stroke: var(--mdw-color-muted,#555); }
+[data-mdw-diagram-kind="mermaid"] :is(.actor-line, .loopLine) { stroke: var(--mdw-color-muted,#555); }

@@ -250,6 +250,7 @@ function copyWorkspaceDependencies() {
     if (
       entry === "markora"
       || entry === "markora-ui"
+      || entry === "markora-renderers"
       || entry === "demo"
       || entry === ".bin"
       || entry.startsWith("markora-extension-")
@@ -1281,6 +1282,9 @@ const tocPackage = packPackage(join(
   "packages/extension-toc",
 ));
 rememberPackage(tocPackage);
+currentPhase = "renderers-package";
+const renderersPackage = packPackage(join(rootDir, "packages/renderers"));
+rememberPackage(renderersPackage);
 
 currentPhase = "packed-dependency-isolation";
 copyWorkspaceDependencies();
@@ -1293,6 +1297,23 @@ unpackPackage(htmlPackage.name, htmlPackage.tarballPath);
 unpackPackage(mathPackage.name, mathPackage.tarballPath);
 unpackPackage(alertsPackage.name, alertsPackage.tarballPath);
 unpackPackage(tocPackage.name, tocPackage.tarballPath);
+unpackPackage(renderersPackage.name, renderersPackage.tarballPath);
+assertPackedPackage(renderersPackage);
+const rendererRoot = join(smokeNodeModulesDir, renderersPackage.name);
+for (const file of ["index.js", "index.d.ts", "styles.css", "plantuml-frame.js", "math-engine.js", "mermaid-engine.js"]) {
+  if (!existsSync(join(rendererRoot, "dist", file))) throw new Error(`Packed renderers omitted ${file}.`);
+}
+run("node", ["--check", join(rendererRoot, "dist/plantuml-frame.js")]);
+// Importing/constructing the packed API in Node must not load DOM-based engines.
+run("node", ["--input-type=module", "-e", `
+  const { createRenderers, createLazyRenderer } = await import("markora-renderers");
+  const registry = createRenderers();
+  if (typeof registry.math !== "function" || typeof registry.diagrams.plantuml !== "function"
+    || typeof registry.diagrams.mermaid !== "function" || typeof createLazyRenderer !== "function") {
+    throw new Error("Packed renderer API is incomplete.");
+  }
+  registry.destroy();
+`], { cwd: smokeAppDir });
 assertPackedPackage(corePackage);
 assertPackedPackage(uiPackage);
 assertPackedPackage(frontmatterPackage, {
@@ -2709,7 +2730,7 @@ rootFrontmatterHandle.commands.update(42);
 // @ts-expect-error Front matter messages reject undeclared keys.
 createFrontmatterExtension({ messages: { unknownLabel: "Unknown" } });
 // @ts-expect-error Diagram kinds are a closed public union.
-const invalidDiagramKind: DiagramKind = "plantuml";
+const invalidDiagramKind: DiagramKind = "unknown-diagram";
 // @ts-expect-error Diagram insert source must be a string.
 rootDiagramsHandle.commands.insert({ info: "mermaid", source: 42 });
 // @ts-expect-error Diagram targets require their stale-safe occurrence identity.
@@ -3493,7 +3514,7 @@ run("node", ["--input-type=module", "-e", `
   });
   if (
     diagramsDefinition.name !== "markora-extension-diagrams"
-    || diagrams.diagramKinds.join(":") !== "mermaid:geojson:topojson:stl"
+    || diagrams.diagramKinds.join(":") !== "mermaid:plantuml:geojson:topojson:stl"
     || typeof diagrams.defaultDiagramMessages.sourceLabel(
       "mermaid",
       "mermaid theme=neutral",
@@ -3706,7 +3727,7 @@ run("node", ["--input-type=module", "-e", `
   if (names?.join(":") !== "markora-extension-diagrams:markora-extension-diagrams") {
     throw new Error("Packed diagrams feature bundle did not execute");
   }
-  if (!consumer.packedDiagramSurface?.includes("mermaid,geojson,topojson,stl")) {
+  if (!consumer.packedDiagramSurface?.includes("mermaid,plantuml,geojson,topojson,stl")) {
     throw new Error("Packed diagrams feature bundle omitted its public kind surface");
   }
 `], { cwd: smokeAppDir });
