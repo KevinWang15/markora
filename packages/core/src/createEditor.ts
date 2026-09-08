@@ -1285,7 +1285,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     takeExtensionFailure: extensionAssembly.contributions.takeClipboardFailure,
   });
   const builtinTypingShortcuts = createTypingShortcuts({
-    schema,
+    codec,
     linkify: codec.tokenizer.linkify,
     resources,
   });
@@ -1346,7 +1346,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     createInputRuleRecoveryPlugin({ inputRulePlugins }),
     ...(autoPairPlugin ? [autoPairPlugin] : []),
     createHeadingEditingPlugin({ schema, convertPipeTable }),
-    createCodeFenceEditingPlugin({ schema }),
+    createCodeFenceEditingPlugin({ codec }),
     createHorizontalRulePlugin({
       schema,
       createManagedBlockCursor: (doc, blockPos, side) => ManagedBlockCursor.create(doc, blockPos, side, isManagedBlockNode),

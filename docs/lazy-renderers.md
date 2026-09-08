@@ -15,6 +15,12 @@ text; every supported PlantUML diagram family uses the same node type and editin
 rules. Unsupported engines still display source. Adding a rendering engine does
 not create another editor selection model or duplicate node-view lifecycle code.
 
+Typing an opening fence and pressing Enter resolves the empty block through the
+same Markdown codec used for imports. Registered diagram kinds therefore become
+diagram nodes immediately; other language labels remain ordinary code blocks.
+This works in both editor entries, keeps the caret in editable source, and lets
+undo restore the literal opening fence. The Space shortcut uses the same resolver.
+
 `createLazyRenderer` caches a loader promise, clears failed loads, and gives each
 caller independent cancellation. KaTeX returns MathML. Mermaid's module is lazy,
 its automatic page scan is disabled, and singleton layout work is serialized.

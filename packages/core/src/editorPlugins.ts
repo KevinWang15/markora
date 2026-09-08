@@ -10,12 +10,14 @@ import {
 } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import type { ImageEditorOverlay, LinkEditorOverlay, TableToolbarOverlay } from "./uiTypes";
-import { convertFenceToCodeBlock, type MarkInfo, type MarkName } from "./editorCommands";
+import { type MarkInfo, type MarkName } from "./editorCommands";
 import {
   normalizeMarkdownEditorResources,
   sanitizeResourceUrl,
   type NormalizedMarkdownEditorResources,
 } from "./resourcePolicy";
+
+import { convertFenceToBlock, type FenceInputCodec } from "./fenceInput";
 
 export type RevealMarkConfig = {
   markName: MarkName;
@@ -474,8 +476,8 @@ export function createHeadingEditingPlugin(options: {
   });
 }
 
-export function createCodeFenceEditingPlugin(options: { schema: Schema }) {
-  const { schema } = options;
+export function createCodeFenceEditingPlugin(options: { codec: FenceInputCodec }) {
+  const { codec } = options;
 
   return new Plugin({
     props: {
@@ -483,7 +485,7 @@ export function createCodeFenceEditingPlugin(options: { schema: Schema }) {
         return (
           event.key === "Enter"
           && isPlainStructuralKey(view, event)
-          && convertFenceToCodeBlock(schema, view)
+          && convertFenceToBlock(codec, view)
         );
       },
     },

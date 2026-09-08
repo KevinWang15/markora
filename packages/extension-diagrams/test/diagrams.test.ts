@@ -65,6 +65,23 @@ afterEach(() => {
 });
 
 describe.each(entries)("%s diagram codec", (_entry, createEditor) => {
+  it.each(diagramKinds)("Enter creates an editable %s fence and undo restores its source", kind => {
+    const extension = createDiagramsExtension();
+    const editor = track(createEditor({ element: host(), extensions: [extension], markdown: "" }));
+    const fence = `\`\`\`${kind}`;
+    editor.view.dispatch(editor.view.state.tr.insertText(fence));
+    const enter = () => editor.view.someProp("handleKeyDown", handler => handler(editor.view, new KeyboardEvent("keydown", { key: "Enter" })));
+    expect(enter()).toBe(true);
+    expect(editor.extensions.get(extension).state.getNodes()).toMatchObject([{ kind, source: "" }]);
+    expect(editor.view.state.selection.$from.parent.type.spec.code).toBe(true);
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.view.state.doc.firstChild?.type.name).toBe("paragraph");
+    expect(editor.view.state.doc.textContent).toBe(fence);
+    expect(editor.commands.redo()).toBe(true);
+    editor.view.dispatch(editor.view.state.tr.insertText("body"));
+    expect(editor.extensions.get(extension).state.getNodes()).toMatchObject([{ kind, source: "body" }]);
+  });
+
   it("claims all supported exact case-sensitive first info tokens and retains full info/body", () => {
     const markdown = [
       "~~~mermaid theme=neutral",

@@ -5,6 +5,7 @@ import {
   wrappingInputRule,
 } from "prosemirror-inputrules";
 import type { EditorView } from "prosemirror-view";
+import { createFenceInputTransaction, type FenceInputCodec } from "./fenceInput";
 import type MarkdownIt from "markdown-it";
 import { TextSelection, type EditorState } from "prosemirror-state";
 import type { Mark, MarkType, NodeType, Schema } from "prosemirror-model";
@@ -143,48 +144,10 @@ function createBareAutolinkInputRule(
   });
 }
 
-function getFenceMatch(text: string) {
-  return text.match(/^```([A-Za-z0-9_-]+)?$/);
-}
-
-export function convertFenceToCodeBlock(schema: Schema, view: EditorView) {
-  const { state } = view;
-  const { selection } = state;
-
-  if (!selection.empty) {
-    return false;
-  }
-
-  const { $from } = selection;
-  const parent = $from.parent;
-
-  if (!parent.isTextblock || parent.type !== schema.nodes.paragraph) {
-    return false;
-  }
-
-  const fenceMatch = getFenceMatch(parent.textContent);
-
-  if (!fenceMatch || $from.parentOffset !== parent.content.size) {
-    return false;
-  }
-
-  const language = typeof fenceMatch[1] === "string" ? fenceMatch[1] : "";
-  const start = $from.start();
-  const end = $from.end();
-  const tr = state.tr.delete(start, end);
-  tr.setBlockType(start, start, schema.nodes.code_block, { params: language });
-  tr.setSelection(TextSelection.create(tr.doc, start));
-  view.dispatch(tr);
-  return true;
-}
-
-function createCodeBlockInputRule(schema: Schema) {
-  return new InputRule(/^```([A-Za-z0-9_-]+)?\s$/, (state, match, start, end) => {
-    const language = typeof match[1] === "string" ? match[1] : "";
-    const tr = state.tr.delete(start, end);
-    tr.setBlockType(start, start, schema.nodes.code_block, { params: language });
-    return tr;
-  });
+function createCodeBlockInputRule(codec: FenceInputCodec) {
+  return new InputRule(/^(`{3,}|~{3,})([A-Za-z0-9_.+#-]+)?[ \t]$/, (state, match) => (
+    createFenceInputTransaction(state, match[0].trimEnd(), codec)
+  ));
 }
 
 function createHeadingInputRule(level: number, nodeType: NodeType) {
@@ -192,15 +155,16 @@ function createHeadingInputRule(level: number, nodeType: NodeType) {
 }
 
 export function createTypingShortcuts(options: {
-  schema: Schema;
+  codec: FenceInputCodec;
   linkify: MarkdownIt["linkify"];
   resources?: NormalizedMarkdownEditorResources;
 }) {
   const {
     linkify,
     resources = normalizeMarkdownEditorResources(undefined),
-    schema,
+    codec,
   } = options;
+  const { schema } = codec;
   const getAncestorInfo = (state: EditorState, nodeType: NodeType) => {
     const { selection } = state;
 
@@ -256,7 +220,7 @@ export function createTypingShortcuts(options: {
   const { marks, nodes } = schema;
 
   if (nodes.code_block) {
-    rules.push(createCodeBlockInputRule(schema));
+    rules.push(createCodeBlockInputRule(codec));
   }
   if (nodes.heading) {
     for (let level = 6; level >= 1; level -= 1) {

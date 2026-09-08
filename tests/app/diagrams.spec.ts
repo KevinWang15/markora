@@ -1,6 +1,31 @@
 import { expect, test } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 
+for (const [kind, body] of [["mermaid", "flowchart LR; Start --> Finish"], ["plantuml", "Alice -> Bob: Hello"]]) {
+  test(`typed ${kind} fence creates a diagram in the app`, async ({ page, context }, testInfo) => {
+    test.setTimeout(60_000);
+    await page.goto("/");
+    await expect(page.locator(".markora-app")).not.toHaveAttribute("inert");
+    const picker = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Open document", exact: true }).click();
+    await (await picker).setFiles({ name: "blank.md", mimeType: "text/markdown", buffer: Buffer.from("") });
+    await page.locator(".app-editor .ProseMirror p").click();
+    const cdp = await context.newCDPSession(page);
+    try {
+      for (const text of `\`\`\`${kind}`) await cdp.send("Input.insertText", { text });
+      await page.keyboard.press("Enter");
+      const shell = page.locator(`.app-editor [data-mdw-diagram-kind="${kind}"]`);
+      await expect(shell).toHaveCount(1);
+      await cdp.send("Input.insertText", { text: body! });
+      await expect(shell.locator("[data-mdw-diagram-preview] svg")).toBeVisible({ timeout: 20_000 });
+      await page.screenshot({ path: testInfo.outputPath("typed-diagram.png") });
+      await page.getByRole("button", { name: "Edit Markdown source", exact: true }).click();
+      const lines = page.getByRole("textbox", { name: "Markdown source", exact: true }).locator(".cm-line");
+      await expect.poll(async () => (await lines.allTextContents()).join("\n")).toBe(`\`\`\`${kind}\n${body}\n\`\`\``);
+    } finally { await cdp.detach(); }
+  });
+}
+
 test("lazy local diagrams survive themed PDF export and preserve source", async ({ page, context }, testInfo) => {
   test.setTimeout(60_000);
   const requests: string[] = [];

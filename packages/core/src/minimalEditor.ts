@@ -534,7 +534,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const trackedUndo = createTrackedHistoryCommand(undo, "undo");
   const trackedRedo = createTrackedHistoryCommand(redo, "redo");
   const builtinTypingShortcuts = createTypingShortcuts({
-    schema: codec.schema,
+    codec,
     linkify: codec.tokenizer.linkify,
     resources,
   });
@@ -652,7 +652,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       createInputRuleRecoveryPlugin({ inputRulePlugins }),
       ...(autoPairPlugin ? [autoPairPlugin] : []),
       createHeadingEditingPlugin({ schema: codec.schema }),
-      createCodeFenceEditingPlugin({ schema: codec.schema }),
+      createCodeFenceEditingPlugin({ codec }),
       createCodeBlockRecoveryPlugin({ schema: codec.schema }),
       createHorizontalRulePlugin({
         schema: codec.schema,
