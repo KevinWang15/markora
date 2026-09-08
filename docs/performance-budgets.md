@@ -211,3 +211,26 @@ code-size edits to land an architectural refactor. Warnings stay unchanged.
 The root/all-seven byte budgets, minimal raw JavaScript and CSS budgets, renderer
 engine exclusions, lazy-loading contracts, and every runtime/memory limit stay
 unchanged. The packed report includes hashes for all extracted consumer fixtures.
+
+
+### Follow-up timing samples
+
+The [cleanup verification run](https://github.com/KevinWang15/markora/actions/runs/34226777429)
+passed its bundle and retained-resource checks but encountered two small timing
+overruns across two attempts on unchanged code. Chromium, Node, fixture sizes,
+sampling and harness contracts match the earlier calibration.
+
+| Metric | Attempt / CPU | Samples in collection order (ms) | Old → new failure ceiling |
+| --- | --- | --- | --- |
+| 1 MiB advanced-syntax ordinary edit | 1 / EPYC 7763 | 182.5, 107.7, 108.5, 124.3, 173.7 | 180 → 200 ms |
+| 100 KiB dirty teardown | 2 / EPYC 9V74 | 53.120, 31.930, 32.760, 33.445, 32.800 | 50 → 60 ms |
+
+The ordinary-edit baseline before this cleanup (`6a79f7c`) already measured
+176.3, 100.1, 165.4, 178.3 and 174.2 ms. The dirty-teardown run exceeded its
+ceiling in only one sample; the other four stayed between 31.9 and 33.5 ms.
+This supports modest headroom above the reviewed slow samples, without proving
+the cause of each spike. Warning ceilings remain 90 and 35 ms, and maxima still
+include every sample. These two changes leave approximately 10% and 13% headroom
+above the failing maxima. All other timing, variance and resource limits stay
+unchanged. The second attempt stopped at the core runtime gate, so it provides
+no second advanced-syntax measurement.

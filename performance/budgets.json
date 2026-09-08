@@ -47,7 +47,7 @@
         "codecParseMs": { "statistic": "maximum", "warning": 20, "failure": 65 },
         "codecSerializeMs": { "statistic": "maximum", "warning": 12, "failure": 35 },
         "keydownToPresentationProxyMs": { "statistic": "maximum", "warning": 45, "failure": 70 },
-        "dirtyTeardownMs": { "statistic": "maximum", "warning": 35, "failure": 50 }
+        "dirtyTeardownMs": { "statistic": "maximum", "warning": 35, "failure": 60 }
       },
       "512000": {
         "initialParseRenderSyncMs": { "statistic": "maximum", "warning": 560, "failure": 1250 },
@@ -163,7 +163,7 @@
       },
       "1048576": {
         "mountSyncMs": { "statistic": "maximum", "warning": 1550, "failure": 5400 },
-        "ordinaryEditSyncMs": { "statistic": "maximum", "warning": 90, "failure": 180 },
+        "ordinaryEditSyncMs": { "statistic": "maximum", "warning": 90, "failure": 200 },
         "footnoteStructuralEditSyncMs": { "statistic": "maximum", "warning": 90, "failure": 250 },
         "tocHeadingEditSyncMs": { "statistic": "maximum", "warning": 90, "failure": 180 },
         "diagramRemovalSyncMs": { "statistic": "maximum", "warning": 90, "failure": 180 },
