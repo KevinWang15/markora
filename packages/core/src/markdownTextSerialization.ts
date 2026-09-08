@@ -1,4 +1,5 @@
 import type Token from "markdown-it/lib/token.mjs";
+import { bufferMarkdownSerializerOutput } from "./markdownSerializerBuffer";
 import {
   MarkdownSerializer,
   MarkdownSerializerState,
@@ -85,6 +86,7 @@ export function createEntitySafeMarkdownSerializerState(
   unescapeAll: MarkdownEntityDecoder,
 ) {
   const state = new MarkdownSerializerStateRuntimeConstructor(nodes, marks, options);
+  bufferMarkdownSerializerOutput(state);
   const baseEscape = state.esc.bind(state);
 
   state.esc = (source: string, startOfLine = false) => {

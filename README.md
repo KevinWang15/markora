@@ -313,7 +313,7 @@ Document activity is classified as `"user"`, `"command"`, `"external"`, `"reset"
 
 ## Production contracts
 
-The implemented [extension system RFC](./docs/extension-system-rfc.md) defines creation-time composition, lifecycle, version validation, and packaging. The [performance budgets](./docs/performance-budgets.md) define the packed runtime and bundle gates. Package-level examples and minimal-entry guidance live in the [`markora` README](./packages/core/README.md#extensions-and-the-minimal-entry).
+The [architecture guide](./docs/architecture.md) describes runtime, application, command and test-harness ownership. The implemented [extension system RFC](./docs/extension-system-rfc.md) defines creation-time composition, lifecycle, version validation, and packaging. The [performance budgets](./docs/performance-budgets.md) define the packed runtime and bundle gates. Package-level examples and minimal-entry guidance live in the [`markora` README](./packages/core/README.md#extensions-and-the-minimal-entry).
 
 Hosts preparing a release should also review the [embedded input and accessibility contract](./docs/input-accessibility-certification.md) and run the [assistive-technology checklist](./docs/assistive-technology-checklist.md) on their supported platform matrix.
 

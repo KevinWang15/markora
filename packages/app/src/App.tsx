@@ -144,11 +144,11 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const [sourceEdit, setSourceEdit] = useState<SourceEdit | null>(null);
   const [mathEdit, setMathEdit] = useState<MathEdit | null>(null);
   const mathDialogOpenRef = useRef(false);
-  const mathRef = useRef(createMathExtension({ renderer: renderMath, onEditSource: request => {
+  const [mathExtension] = useState(() => createMathExtension({ renderer: renderMath, onEditSource: request => {
     mathDialogOpenRef.current = true;
     setMathEdit({ mode: "edit", kind: request.kind, source: request.source, apply: request.update, remove: request.remove });
   } }));
-  const diagramsRef = useRef(createDiagramsExtension({ renderers: { mermaid: renderMermaid }, onEditSource: request =>
+  const [diagramsExtension] = useState(() => createDiagramsExtension({ renderers: { mermaid: renderMermaid }, onEditSource: request =>
     setSourceEdit({ title: `Edit ${request.kind}`, source: request.source, update: source => request.update({ source }) }) }));
   const editorHostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MarkdownEditor | null>(null);
@@ -156,9 +156,9 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const sourceViewRef = useRef<SourceViewState | undefined>(undefined);
   const richScrollRef = useRef(0);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef(createSearchExtension());
-  const tocRef = useRef(createTocExtension());
-  const bridgeRef = useRef(createDocumentBridge());
+  const [searchExtension] = useState(() => createSearchExtension());
+  const [tocExtension] = useState(() => createTocExtension());
+  const [documentBridge] = useState(() => createDocumentBridge());
   const [controller] = useState(() => new DocumentController(welcomeMarkdown));
   const actionBindings = useRef<ApplicationActionBindings>(null!);
   const [actions] = useState(() => createApplicationActions(() => actionBindings.current));
@@ -195,7 +195,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const documentName = documentNameFromPath(documentSnapshot.path);
   const analysis = useDocumentAnalysis(documentSnapshot.markdown, sourceMode && sidebarOpen && sidebarTab === "outline");
   const outline: readonly DocumentOutlineItem[] = sourceMode ? analysis.outline
-    : editorRef.current?.extensions.get(tocRef.current).state.getSnapshot().headings.map(heading => ({
+    : editorRef.current?.extensions.get(tocExtension).state.getSnapshot().headings.map(heading => ({
       id: `heading-${heading.position}`, level: heading.level, text: heading.label, position: heading.position, offset: 0,
     })) ?? [];
   const { words: wordCount, characters: characterCount } = analysis;
@@ -229,11 +229,11 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       attributes: { "data-markora-app-editor": "true" },
       ui: createDefaultUi({ contextMenu: {
         clipboard: desktop.getClipboard(),
-        providers: [createMathContextMenuProvider(mathRef.current, () => { actions.run("math"); })],
+        providers: [createMathContextMenuProvider(mathExtension, () => { actions.run("math"); })],
         onError: cause => showError(cause, "This editor action could not be completed."),
         transform: items => actions.bindHistoryMenu(items),
       } }),
-      extensions: [createFootnotesExtension(), tocRef.current, bridgeRef.current, searchRef.current, mathRef.current, diagramsRef.current],
+      extensions: [createFootnotesExtension(), tocExtension, documentBridge, searchExtension, mathExtension, diagramsExtension],
       resources: {
         images: { allowedProtocols: ["http:", "https:", "data:", "file:"] },
         links: { allowedProtocols: ["http:", "https:", "mailto:", "tel:", "file:"] },
@@ -340,7 +340,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
         write: async snapshot => {
           let assets: { sourcePath: string; urls: string[] } | undefined;
           if (saveAs && snapshot.path && editor) {
-            const doc = sourceModeRef.current ? editor.extensions.get(bridgeRef.current).state.parse(snapshot.markdown) : editor.view.state.doc;
+            const doc = sourceModeRef.current ? editor.extensions.get(documentBridge).state.parse(snapshot.markdown) : editor.view.state.doc;
             const urls: string[] = [];
             doc?.descendants(node => { if (node.type.name === "image") urls.push(String(node.attrs.src)); });
             assets = { sourcePath: snapshot.path, urls };
@@ -558,7 +558,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     const entry = controller.history[direction]();
     if (!entry) return;
     const markdown = typeof entry.source === "string"
-      ? entry.source : editor.extensions.get(bridgeRef.current).state.serialize(entry.source);
+      ? entry.source : editor.extensions.get(documentBridge).state.serialize(entry.source);
     applyingHistoryRef.current = true;
     try {
       if (!sourceModeRef.current) {
@@ -590,10 +590,10 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const sourceMatches = useMemo(() => searchOpen && sourceMode
     ? findTextMatches(documentSnapshot.markdown.replace(/\r\n?/gu, "\n"), searchOptions) : EMPTY_SEARCH,
   [documentSnapshot.markdown, searchOptions, searchOpen, sourceMode]);
-  const searchResults = sourceMode ? sourceMatches : editorRef.current?.extensions.get(searchRef.current).state.getMatches() ?? EMPTY_SEARCH;
+  const searchResults = sourceMode ? sourceMatches : editorRef.current?.extensions.get(searchExtension).state.getMatches() ?? EMPTY_SEARCH;
 
   useEffect(() => {
-    editorRef.current?.extensions.get(searchRef.current).commands.configure(searchOpen && !sourceMode ? searchOptions : null);
+    editorRef.current?.extensions.get(searchExtension).commands.configure(searchOpen && !sourceMode ? searchOptions : null);
     setSearchIndex(-1);
   }, [searchOpen, sourceMode, searchOptions]);
   useEffect(() => {
@@ -610,7 +610,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     if (!current || sourceModeRef.current || controller.getSnapshot().exporting || mathDialogOpenRef.current
       || current.view.composing || document.querySelector("dialog[open]")) return;
     const { doc, selection } = current.view.state;
-    const handle = current.extensions.get(mathRef.current);
+    const handle = current.extensions.get(mathExtension);
     const selected = handle.state.getNodes().find(node => node.position === selection.from
       && doc.nodeAt(node.position)?.nodeSize === selection.to - selection.from);
     mathDialogOpenRef.current = true;
@@ -641,16 +641,16 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     const path = controller.snapshot.path;
     try {
       await controller.export(async () => {
-      const doc = sourceModeRef.current ? current.extensions.get(bridgeRef.current).state.parse(sourceEditorRef.current?.getMarkdown() ?? controller.markdown) : current.view.state.doc;
-      if (!doc) throw new Error("This source could not be parsed for export.");
-      const exportTheme = format === "pdf" ? captureExportTheme(current.view.dom, themeController.getSnapshot().id) : undefined;
-      const { buildExport, printExport } = await import("./exportDocument");
-      const output = await buildExport(doc, documentName, { resolveImage: url => desktop.exportImage(path, url), theme: exportTheme });
-      if (format === "html") await desktop.exportHtml(documentName.replace(/\.[^.]+$/u, "") + ".html", output.html);
-      else await printExport(output, () => desktop.exportPdf(documentName.replace(/\.[^.]+$/u, "") + ".pdf"), desktop.isNative);
+        const doc = sourceModeRef.current ? current.extensions.get(documentBridge).state.parse(sourceEditorRef.current?.getMarkdown() ?? controller.markdown) : current.view.state.doc;
+        if (!doc) throw new Error("This source could not be parsed for export.");
+        const exportTheme = format === "pdf" ? captureExportTheme(current.view.dom, themeController.getSnapshot().id) : undefined;
+        const { buildExport, printExport } = await import("./exportDocument");
+        const output = await buildExport(doc, documentName, { resolveImage: url => desktop.exportImage(path, url), theme: exportTheme });
+        if (format === "html") await desktop.exportHtml(documentName.replace(/\.[^.]+$/u, "") + ".html", output.html);
+        else await printExport(output, () => desktop.exportPdf(documentName.replace(/\.[^.]+$/u, "") + ".pdf"), desktop.isNative);
       });
     } catch (cause) { showError(cause, "The document could not be exported."); }
-  }, [documentName, showError, themeController]);
+  }, [controller, documentName, showError, themeController, documentBridge]);
   useEffect(() => {
     desktop.installMenu({
       newDocument: () => { actions.run("new"); },
@@ -668,7 +668,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       theme: theme.id,
       setTheme: themeController.setTheme,
     });
-  }, [actions, themeController, theme.id, exporting, startupReady, sourceMode]);
+  }, [actions, themeController, theme.id, exporting, startupReady, sourceMode, pendingAction, recoveryCandidate, sourceEdit, mathEdit, sourceConversionWarning, tableSaveWarning]);
 
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
@@ -676,7 +676,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     else editorRef.current?.focus();
   }, []);
   const nextMatch = (direction: 1 | -1) => {
-    const handle = editorRef.current?.extensions.get(searchRef.current);
+    const handle = editorRef.current?.extensions.get(searchExtension);
     if (!sourceModeRef.current) handle?.commands.configure(searchOptions);
     const result = sourceModeRef.current ? sourceMatches : handle?.state.getMatches() ?? EMPTY_SEARCH;
     if (!result.matches.length) return;
@@ -693,7 +693,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       if (all && matches.truncated) return;
       sourceEditorRef.current?.replaceMatches(all ? matches.matches : matches.matches.slice(searchIndex, searchIndex + 1), replacement);
     } else {
-      const handle = editorRef.current?.extensions.get(searchRef.current);
+      const handle = editorRef.current?.extensions.get(searchExtension);
       handle?.commands.configure(searchOptions);
       handle?.commands.replace(replacement, all ? undefined : searchIndex);
       editorRef.current?.flushChange();

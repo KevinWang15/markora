@@ -42,6 +42,7 @@
     "typecheck:browser": "tsc -p tsconfig.browser.json --noEmit",
     "smoke:extensions": "pnpm --filter \"./packages/extension-*\" --if-present smoke:node-esm",
     "pack:smoke": "node ./scripts/pack-smoke.mjs",
-    "test:app:browser": "playwright test -c playwright.app.config.ts"
+    "test:app:browser": "playwright test -c playwright.app.config.ts",
+    "perf:serialization": "pnpm build:core && node scripts/profile-serialization.mjs"
   }
 }

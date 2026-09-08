@@ -206,41 +206,41 @@
   "bundle": {
     "root": {
       "initialJs": {
-        "rawBytes": { "warning": 810000, "failure": 1080000 },
-        "gzipBytes": { "warning": 225000, "failure": 295000 }
+        "rawBytes": { "warning": 1040000, "failure": 1080000 },
+        "gzipBytes": { "warning": 285000, "failure": 295000 }
       },
       "lazyJs": {
         "rawBytes": { "warning": 1090000, "failure": 1120000 },
-        "gzipBytes": { "warning": 345000, "failure": 355000 }
+        "gzipBytes": { "warning": 348000, "failure": 355000 }
       },
       "totalJs": {
-        "rawBytes": { "warning": 1880000, "failure": 2220000 },
-        "gzipBytes": { "warning": 560000, "failure": 660000 }
+        "rawBytes": { "warning": 2140000, "failure": 2220000 },
+        "gzipBytes": { "warning": 635000, "failure": 660000 }
       },
       "css": {
-        "rawBytes": { "warning": 16750, "failure": 48000 },
-        "gzipBytes": { "warning": 3300, "failure": 7100 }
+        "rawBytes": { "warning": 45500, "failure": 48000 },
+        "gzipBytes": { "warning": 6800, "failure": 7100 }
       },
-      "staticModuleCount": { "warning": 148, "failure": 190 }
+      "staticModuleCount": { "warning": 197, "failure": 199 }
     },
     "minimal": {
       "initialJs": {
-        "rawBytes": { "warning": 690000, "failure": 810000 },
-        "gzipBytes": { "warning": 194000, "failure": 225000 }
+        "rawBytes": { "warning": 800000, "failure": 810000 },
+        "gzipBytes": { "warning": 224000, "failure": 225000 }
       },
       "lazyJs": {
         "rawBytes": { "warning": 0, "failure": 0 },
         "gzipBytes": { "warning": 0, "failure": 0 }
       },
       "totalJs": {
-        "rawBytes": { "warning": 690000, "failure": 810000 },
-        "gzipBytes": { "warning": 194000, "failure": 225000 }
+        "rawBytes": { "warning": 800000, "failure": 810000 },
+        "gzipBytes": { "warning": 224000, "failure": 225000 }
       },
       "css": {
-        "rawBytes": { "warning": 4800, "failure": 11750 },
-        "gzipBytes": { "warning": 1250, "failure": 2425 }
+        "rawBytes": { "warning": 11700, "failure": 11750 },
+        "gzipBytes": { "warning": 2420, "failure": 2425 }
       },
-      "staticModuleCount": { "warning": 128, "failure": 142 }
+      "staticModuleCount": { "warning": 149, "failure": 150 }
     },
     "alerts": {
       "initialJs": {

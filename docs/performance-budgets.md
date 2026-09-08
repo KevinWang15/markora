@@ -84,3 +84,26 @@ pnpm perf:benchmark --profile quick
 Reports are written under the ignored `performance-results/` directory and
 include environment, fixture, package, tarball, and harness provenance. Review
 raw samples and variance before changing a budget.
+
+## Runtime consolidation and buffered serialization review
+
+The shared-runtime refactor extracts nine additional root modules and eight
+minimal modules without adding third-party dependencies. The reviewed graphs
+contain 196 and 148 static modules. Their failure ceilings move by exactly those
+extraction deltas (190 → 199 and 142 → 150). All JavaScript/CSS byte failure
+ceilings and dependency-exclusion invariants remain unchanged.
+
+The measured full editor/default UI initial output is 1,026,935 raw / 281,396 gzip
+bytes; minimal is 794,333 raw / 222,605 gzip bytes. Root CSS remains 44,903 raw /
+6,694 gzip; minimal CSS remains 11,639 raw / 2,411 gzip. Root/minimal warning
+thresholds now reflect these reviewed baselines, with smaller headroom than the
+failure ceilings, instead of warning continuously against obsolete feature sets.
+
+CPU profiling of the representative 1 MiB document on the local Xeon E5-2650 v4,
+Node 24.18 host identified repeated output-string flattening in the serializer's
+line-ending checks. A chunked writer retains a two-character suffix and preserves
+ProseMirror's output semantics, including custom serializer reads/writes. In the
+focused CPU-profiled diagnostic, five warmed serializations changed from
+3,885–3,966 ms to 159–226 ms. This is a codec measurement, not an end-to-end browser
+latency claim. `pnpm perf:serialization` records fixture sizes, samples, environment
+and output hashes; the packed Chromium benchmarks validate product behavior.
