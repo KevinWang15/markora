@@ -33,7 +33,10 @@ if [ "$1" = tee ]; then cat > "$MARKORA_PREPARE_TEST_POLICY"; fi
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 
-for (const environment of [{ GITHUB_ACTIONS: "" }, { RUNNER_ENVIRONMENT: "self-hosted" }, { RUNNER_OS: "Windows" }]) {
+const unsupportedHosts: Array<Record<string, string>> = [
+  { GITHUB_ACTIONS: "" }, { RUNNER_ENVIRONMENT: "self-hosted" }, { RUNNER_OS: "Windows" },
+];
+for (const environment of unsupportedHosts) {
   linuxTest(`rejects runner preparation outside its authorized host: ${JSON.stringify(environment)}`, () => {
     const result = prepare(environment);
     expect(result.status).toBe(1);
