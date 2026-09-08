@@ -1,23 +1,58 @@
+import {
+  createMenuTypeahead,
+  nextMenuIndex,
+  type MenuNavigationKey,
+} from "./contextMenuNavigation";
 import type { MarkdownEditor } from "markora";
 import { createBrowserClipboard } from "./contextMenuClipboard";
 import { createDefaultMenuProviders } from "./contextMenuDefaults";
-import { composeMenuItems, reportMenuError, type NormalizedContextMenuConfig } from "./contextMenuModel";
+import {
+  composeMenuItems,
+  reportMenuError,
+  type NormalizedContextMenuConfig,
+} from "./contextMenuModel";
 import { ownsMenuEvent, targetPointerSelection } from "./contextMenuTarget";
-import type { ContextMenuAction, ContextMenuContext, ContextMenuItem, ContextMenuSubmenu } from "./contextMenuTypes";
+import type {
+  ContextMenuAction,
+  ContextMenuContext,
+  ContextMenuItem,
+  ContextMenuSubmenu,
+} from "./contextMenuTypes";
 import { measurePositionSpace, setViewportPosition } from "./positioning";
 
-type Panel = { dom: HTMLDivElement; buttons: HTMLButtonElement[]; items: Exclude<ContextMenuItem, { type: "separator" }>[]; trigger?: HTMLButtonElement; scaleY: number };
-type Session = { context: ContextMenuContext; abort: AbortController; panels: Panel[]; x: number; y: number; executing: boolean; scrollOffsets: Map<EventTarget, readonly [number, number]> };
+type Panel = {
+  dom: HTMLDivElement;
+  buttons: HTMLButtonElement[];
+  items: Exclude<ContextMenuItem, { type: "separator" }>[];
+  trigger?: HTMLButtonElement;
+  scaleY: number;
+  typeahead: ReturnType<typeof createMenuTypeahead>;
+};
+type Session = {
+  context: ContextMenuContext;
+  abort: AbortController;
+  panels: Panel[];
+  x: number;
+  y: number;
+  executing: boolean;
+  scrollOffsets: Map<EventTarget, readonly [number, number]>;
+};
 let nextMenuId = 0;
 
-export function createContextMenu(options: Readonly<{
-  editor: MarkdownEditor;
-  config: NormalizedContextMenuConfig;
-  portalRoot: HTMLElement | ShadowRoot;
-  syncEnvironment: (target: HTMLElement, view: MarkdownEditor["view"], onInvalidated?: () => void) => void;
-  beforeOpen: () => void;
-  releaseEnvironment: (target: HTMLElement) => void;
-}>) {
+export function createContextMenu(
+  options: Readonly<{
+    editor: MarkdownEditor;
+    config: NormalizedContextMenuConfig;
+    portalRoot: HTMLElement | ShadowRoot;
+    syncEnvironment: (
+      target: HTMLElement,
+      view: MarkdownEditor["view"],
+      onInvalidated?: () => void,
+    ) => void;
+    beforeOpen: () => void;
+    releaseEnvironment: (target: HTMLElement) => void;
+  }>,
+) {
   const { editor, config, portalRoot, syncEnvironment } = options;
   const doc = editor.view.dom.ownerDocument;
   const win = doc.defaultView as Window & typeof globalThis;
@@ -25,27 +60,36 @@ export function createContextMenu(options: Readonly<{
   let session: Session | null = null;
   let destroyed = false;
   let hoverTimer: number | undefined;
-  let search = "";
-  let searchTime = 0;
 
   function activeElement(): Element | null {
     let active = doc.activeElement;
-    while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+    while (active?.shadowRoot?.activeElement)
+      active = active.shadowRoot.activeElement;
     return active;
   }
   function containsEvent(event: Event) {
-    return !!session?.panels.some(panel => event.composedPath().includes(panel.dom));
+    return !!session?.panels.some((panel) =>
+      event.composedPath().includes(panel.dom),
+    );
   }
-  function clearHover() { win.clearTimeout(hoverTimer); hoverTimer = undefined; }
+  function clearHover() {
+    win.clearTimeout(hoverTimer);
+    hoverTimer = undefined;
+  }
   function close(refocus = false) {
     const current = session;
     if (!current) return;
     const active = activeElement();
-    const ownsFocus = current.panels.some(panel => active && panel.dom.contains(active));
+    const ownsFocus = current.panels.some(
+      (panel) => active && panel.dom.contains(active),
+    );
     session = null;
-    clearHover(); search = "";
+    clearHover();
     current.abort.abort();
-    for (const panel of current.panels) { options.releaseEnvironment(panel.dom); panel.dom.remove(); }
+    for (const panel of current.panels) {
+      options.releaseEnvironment(panel.dom);
+      panel.dom.remove();
+    }
     if (refocus && ownsFocus && !editor.isDestroyed) editor.focus();
   }
   function truncatePanels(depth: number) {
@@ -61,9 +105,13 @@ export function createContextMenu(options: Readonly<{
   function positionPanels() {
     const current = session;
     if (!current) return;
-    if (!current.context.isCurrent()) { close(false); return; }
+    if (!current.context.isCurrent()) {
+      close(false);
+      return;
+    }
     const viewport = win.visualViewport;
-    const left = (viewport?.offsetLeft ?? 0) + 8, top = (viewport?.offsetTop ?? 0) + 8;
+    const left = (viewport?.offsetLeft ?? 0) + 8,
+      top = (viewport?.offsetTop ?? 0) + 8;
     const right = left + (viewport?.width || win.innerWidth) - 16;
     const bottom = top + (viewport?.height || win.innerHeight) - 16;
     for (const panel of current.panels) {
@@ -76,33 +124,50 @@ export function createContextMenu(options: Readonly<{
       const rect = panel.dom.getBoundingClientRect();
       const anchor = panel.trigger?.getBoundingClientRect();
       const rtl = panel.dom.dir === "rtl";
-      let x = anchor ? (rtl ? anchor.left - rect.width : anchor.right) : current.x;
+      let x = anchor
+        ? rtl
+          ? anchor.left - rect.width
+          : anchor.right
+        : current.x;
       let y = anchor?.top ?? current.y;
-      if (anchor && (x < left || x + rect.width > right)) x = rtl ? anchor.right : anchor.left - rect.width;
+      if (anchor && (x < left || x + rect.width > right))
+        x = rtl ? anchor.right : anchor.left - rect.width;
       x = Math.max(left, Math.min(x, right - rect.width));
       y = Math.max(top, Math.min(y, bottom - rect.height));
       setViewportPosition(panel.dom, x, y, space);
     }
   }
   function enabled(item: Panel["items"][number]): boolean {
-    return item.type === "action" ? item.enabled !== false : item.items.some(child => child.type !== "separator" && enabled(child));
+    return item.type === "action"
+      ? item.enabled !== false
+      : item.items.some(
+          (child) => child.type !== "separator" && enabled(child),
+        );
   }
   function focusButton(panel: Panel, button: HTMLButtonElement) {
-    if (!panel.dom.contains(activeElement())) { search = ""; searchTime = 0; }
+    if (!panel.dom.contains(activeElement())) panel.typeahead.reset();
     for (const peer of panel.buttons) peer.tabIndex = peer === button ? 0 : -1;
     button.focus({ preventScroll: true });
     // Scroll only the menu, never an editor/page ancestor (which dismisses it).
     const itemRect = button.getBoundingClientRect();
     const panelRect = panel.dom.getBoundingClientRect();
     const scaleY = panel.scaleY;
-    if (itemRect.top < panelRect.top) panel.dom.scrollTop -= (panelRect.top - itemRect.top) / scaleY;
-    else if (itemRect.bottom > panelRect.bottom) panel.dom.scrollTop += (itemRect.bottom - panelRect.bottom) / scaleY;
+    if (itemRect.top < panelRect.top)
+      panel.dom.scrollTop -= (panelRect.top - itemRect.top) / scaleY;
+    else if (itemRect.bottom > panelRect.bottom)
+      panel.dom.scrollTop += (itemRect.bottom - panelRect.bottom) / scaleY;
   }
   function focusFirst(panel: Panel) {
     const first = panel.buttons[0];
-    if (first) focusButton(panel, first); else panel.dom.focus({ preventScroll: true });
+    if (first) focusButton(panel, first);
+    else panel.dom.focus({ preventScroll: true });
   }
-  function openSubmenu(item: ContextMenuSubmenu, trigger: HTMLButtonElement, depth: number, focus: boolean) {
+  function openSubmenu(
+    item: ContextMenuSubmenu,
+    trigger: HTMLButtonElement,
+    depth: number,
+    focus: boolean,
+  ) {
     if (!session || session.executing) return;
     clearHover();
     if (session.panels[depth + 1]?.trigger === trigger) {
@@ -130,61 +195,118 @@ export function createContextMenu(options: Readonly<{
   async function execute(item: ContextMenuAction) {
     const current = session;
     if (!current || current.executing || item.enabled === false) return;
-    if (!current.context.isCurrent()) { close(false); return; }
+    if (!current.context.isCurrent()) {
+      close(false);
+      return;
+    }
     current.executing = true;
     clearHover();
     try {
       const result = item.run(current.context);
-      if (result && typeof (result as Promise<unknown>).then === "function" && session === current) {
+      if (
+        result &&
+        typeof (result as Promise<unknown>).then === "function" &&
+        session === current
+      ) {
         current.panels[0].dom.setAttribute("aria-busy", "true");
         announce(current, config.messages.pendingLabel);
       }
       const success = await result;
       if (session !== current) return;
-      if (success === false) throw new Error(`Menu action rejected: ${item.id}.`);
+      if (success === false)
+        throw new Error(`Menu action rejected: ${item.id}.`);
       close(true);
     } catch (error) {
       if (session === current && current.context.isCurrent()) {
         reportMenuError(config, error, current.context);
-        announce(current, item.id.startsWith("clipboard.") ? config.messages.clipboardErrorLabel : config.messages.errorLabel, true);
+        announce(
+          current,
+          item.id.startsWith("clipboard.")
+            ? config.messages.clipboardErrorLabel
+            : config.messages.errorLabel,
+          true,
+        );
       }
     } finally {
       current.executing = false;
-      if (session === current) current.panels[0].dom.removeAttribute("aria-busy");
+      if (session === current)
+        current.panels[0].dom.removeAttribute("aria-busy");
     }
   }
-  function createPanel(items: readonly ContextMenuItem[], label: string, depth: number, trigger?: HTMLButtonElement): Panel {
+  function createPanel(
+    items: readonly ContextMenuItem[],
+    label: string,
+    depth: number,
+    trigger?: HTMLButtonElement,
+  ): Panel {
     const dom = doc.createElement("div");
     dom.className = "mdw-context-menu";
     dom.id = `mdw-context-menu-${++nextMenuId}`;
-    dom.setAttribute("role", "menu"); dom.setAttribute("aria-label", label);
+    dom.setAttribute("role", "menu");
+    dom.setAttribute("aria-label", label);
     dom.tabIndex = -1;
-    const panel: Panel = { dom, buttons: [], items: [], trigger, scaleY: 1 };
+    const panel: Panel = {
+      dom,
+      buttons: [],
+      items: [],
+      trigger,
+      scaleY: 1,
+      typeahead: createMenuTypeahead(),
+    };
     session!.panels.push(panel);
     for (const item of items) {
       if (item.type === "separator") {
-        const separator = doc.createElement("div"); separator.setAttribute("role", "separator"); dom.append(separator); continue;
+        const separator = doc.createElement("div");
+        separator.setAttribute("role", "separator");
+        dom.append(separator);
+        continue;
       }
-      const button = doc.createElement("button"); button.type = "button";
+      const button = doc.createElement("button");
+      button.type = "button";
       button.className = "mdw-context-menu-item";
       button.dataset.mdwMenuItem = item.id;
       button.tabIndex = -1;
-      button.setAttribute("role", item.type === "action" && item.checked !== undefined ? "menuitemcheckbox" : "menuitem");
+      button.setAttribute(
+        "role",
+        item.type === "action" && item.checked !== undefined
+          ? "menuitemcheckbox"
+          : "menuitem",
+      );
       button.setAttribute("aria-label", item.label);
       button.setAttribute("aria-disabled", String(!enabled(item)));
-      const check = doc.createElement("span"); check.className = "mdw-context-menu-check"; check.setAttribute("aria-hidden", "true");
-      if (item.type === "action" && item.checked !== undefined) { button.setAttribute("aria-checked", String(item.checked)); check.textContent = item.checked ? "✓" : ""; }
-      if (item.type === "action" && item.danger) button.classList.add("mdw-context-menu-danger");
-      const text = doc.createElement("span"); text.className = "mdw-context-menu-label"; text.textContent = item.label;
-      const hint = doc.createElement("span"); hint.className = "mdw-context-menu-hint"; hint.setAttribute("aria-hidden", "true");
+      const check = doc.createElement("span");
+      check.className = "mdw-context-menu-check";
+      check.setAttribute("aria-hidden", "true");
+      if (item.type === "action" && item.checked !== undefined) {
+        button.setAttribute("aria-checked", String(item.checked));
+        check.textContent = item.checked ? "✓" : "";
+      }
+      if (item.type === "action" && item.danger)
+        button.classList.add("mdw-context-menu-danger");
+      const text = doc.createElement("span");
+      text.className = "mdw-context-menu-label";
+      text.textContent = item.label;
+      const hint = doc.createElement("span");
+      hint.className = "mdw-context-menu-hint";
+      hint.setAttribute("aria-hidden", "true");
       if (item.type === "submenu") {
-        button.setAttribute("aria-haspopup", "menu"); button.setAttribute("aria-expanded", "false");
-        hint.classList.add("mdw-context-menu-chevron"); hint.textContent = "›";
+        button.setAttribute("aria-haspopup", "menu");
+        button.setAttribute("aria-expanded", "false");
+        hint.classList.add("mdw-context-menu-chevron");
+        hint.textContent = "›";
       } else hint.textContent = item.shortcut ?? "";
-      button.append(check, text, hint); dom.append(button); panel.buttons.push(button); panel.items.push(item);
-      button.addEventListener("pointerenter", event => {
+      button.append(check, text, hint);
+      dom.append(button);
+      panel.buttons.push(button);
+      panel.items.push(item);
+      button.addEventListener("pointerenter", (event) => {
         clearHover();
-        if (session?.executing || !enabled(item) || event.pointerType === "touch") return;
+        if (
+          session?.executing ||
+          !enabled(item) ||
+          event.pointerType === "touch"
+        )
+          return;
         focusButton(panel, button);
         hoverTimer = win.setTimeout(() => {
           if (item.type === "submenu") openSubmenu(item, button, depth, false);
@@ -194,17 +316,22 @@ export function createContextMenu(options: Readonly<{
       button.addEventListener("pointerleave", clearHover);
       button.addEventListener("click", () => {
         if (!enabled(item)) return;
-        if (item.type === "submenu") openSubmenu(item, button, depth, true); else void execute(item);
+        if (item.type === "submenu") openSubmenu(item, button, depth, true);
+        else void execute(item);
       });
     }
-    dom.addEventListener("pointerdown", event => event.preventDefault());
-    dom.addEventListener("contextmenu", event => event.preventDefault());
-    dom.addEventListener("keydown", event => {
+    dom.addEventListener("pointerdown", (event) => event.preventDefault());
+    dom.addEventListener("contextmenu", (event) => event.preventDefault());
+    dom.addEventListener("keydown", (event) => {
       if (event.isComposing || event.keyCode === 229) return;
-      if (event.key === "Tab") { close(true); return; }
+      if (event.key === "Tab") {
+        close(true);
+        return;
+      }
       event.stopPropagation();
       if (event.key === "Escape") {
-        event.preventDefault(); clearHover();
+        event.preventDefault();
+        clearHover();
         if (depth && !session?.executing) {
           truncatePanels(depth);
           const parent = session?.panels[depth - 1];
@@ -212,39 +339,72 @@ export function createContextMenu(options: Readonly<{
         } else close(true);
         return;
       }
-      if (session?.executing) { event.preventDefault(); return; }
+      if (session?.executing) {
+        event.preventDefault();
+        return;
+      }
       const active = activeElement();
-      const index = panel.buttons.findIndex(button => button === active);
+      const index = panel.buttons.findIndex((button) => button === active);
       const available = panel.buttons;
       const position = available.indexOf(active as HTMLButtonElement);
       const forward = dom.dir === "rtl" ? "ArrowLeft" : "ArrowRight";
       const backward = dom.dir === "rtl" ? "ArrowRight" : "ArrowLeft";
       if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-        event.preventDefault(); clearHover(); search = ""; searchTime = 0;
-        const next = event.key === "Home" ? 0 : event.key === "End" ? available.length - 1
-          : (position + (event.key === "ArrowDown" ? 1 : -1) + available.length) % available.length;
-        if (available[next]) { truncatePanels(depth + 1); focusButton(panel, available[next]); }
-      } else if (event.key === forward && panel.items[index]?.type === "submenu" && enabled(panel.items[index])) {
-        event.preventDefault(); openSubmenu(panel.items[index] as ContextMenuSubmenu, panel.buttons[index], depth, true);
+        event.preventDefault();
+        clearHover();
+        panel.typeahead.reset();
+        const next = nextMenuIndex(
+          event.key as MenuNavigationKey,
+          position,
+          available.length,
+        );
+        if (available[next]) {
+          truncatePanels(depth + 1);
+          focusButton(panel, available[next]);
+        }
+      } else if (
+        event.key === forward &&
+        panel.items[index]?.type === "submenu" &&
+        enabled(panel.items[index])
+      ) {
+        event.preventDefault();
+        openSubmenu(
+          panel.items[index] as ContextMenuSubmenu,
+          panel.buttons[index],
+          depth,
+          true,
+        );
       } else if (event.key === backward && depth) {
-        event.preventDefault(); truncatePanels(depth);
+        event.preventDefault();
+        truncatePanels(depth);
         const parent = session?.panels[depth - 1];
         if (parent && panel.trigger) focusButton(parent, panel.trigger);
       } else if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault(); const item = panel.items[index];
-        if (item && enabled(item)) { if (item.type === "submenu") openSubmenu(item, panel.buttons[index], depth, true); else void execute(item); }
-      } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        event.preventDefault(); clearHover();
-        const now = Date.now();
-        const character = event.key.toLocaleLowerCase();
-        search = now - searchTime > 600 ? character : search + character; searchTime = now;
-        const term = [...search].every(char => char === search[0]) ? search[0] : search;
-        // Extending a prefix keeps the current match; repeated single letters
-        // cycle onward through items sharing that initial.
-        const start = term.length === 1 ? position + 1 : Math.max(position, 0);
-        const match = [...available.slice(start), ...available.slice(0, start)]
-          .find(button => button.getAttribute("aria-label")!.toLocaleLowerCase().startsWith(term.toLocaleLowerCase()));
-        if (match) { truncatePanels(depth + 1); focusButton(panel, match); }
+        event.preventDefault();
+        const item = panel.items[index];
+        if (item && enabled(item)) {
+          if (item.type === "submenu")
+            openSubmenu(item, panel.buttons[index], depth, true);
+          else void execute(item);
+        }
+      } else if (
+        event.key.length === 1 &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        clearHover();
+        const match = panel.typeahead.find(
+          panel.items.map((item) => item.label),
+          position,
+          event.key,
+          Date.now(),
+        );
+        if (match >= 0) {
+          truncatePanels(depth + 1);
+          focusButton(panel, panel.buttons[match]);
+        }
       }
     });
     portalRoot.append(dom);
@@ -252,17 +412,25 @@ export function createContextMenu(options: Readonly<{
     return panel;
   }
   function scrollOffset(target: EventTarget): readonly [number, number] {
-    return target === doc ? [win.scrollX, win.scrollY]
+    return target === doc
+      ? [win.scrollX, win.scrollY]
       : [(target as Element).scrollLeft, (target as Element).scrollTop];
   }
   function captureScrollOffsets() {
-    const offsets = new Map<EventTarget, readonly [number, number]>([[doc, scrollOffset(doc)]]);
-    for (const start of [editor.view.dom, portalRoot instanceof win.ShadowRoot ? portalRoot.host : portalRoot]) {
+    const offsets = new Map<EventTarget, readonly [number, number]>([
+      [doc, scrollOffset(doc)],
+    ]);
+    for (const start of [
+      editor.view.dom,
+      portalRoot instanceof win.ShadowRoot ? portalRoot.host : portalRoot,
+    ]) {
       let element: Element | null = start;
       while (element) {
         offsets.set(element, scrollOffset(element));
         const root = element.getRootNode();
-        element = element.parentElement ?? (root instanceof win.ShadowRoot ? root.host : null);
+        element =
+          element.parentElement ??
+          (root instanceof win.ShadowRoot ? root.host : null);
       }
     }
     return offsets;
@@ -274,35 +442,108 @@ export function createContextMenu(options: Readonly<{
     const { doc: documentNode, selection } = editor.view.state;
     const editable = editor.view.editable;
     const abort = new win.AbortController();
-    const context: ContextMenuContext = Object.freeze({ editor, selection, source, signal: abort.signal,
-      isCurrent: () => !abort.signal.aborted && !editor.isDestroyed && editor.view.editable === editable
-        && editor.view.state.doc === documentNode && editor.view.state.selection.eq(selection) });
+    const context: ContextMenuContext = Object.freeze({
+      editor,
+      selection,
+      source,
+      signal: abort.signal,
+      isCurrent: () =>
+        !abort.signal.aborted &&
+        !editor.isDestroyed &&
+        editor.view.editable === editable &&
+        editor.view.state.doc === documentNode &&
+        editor.view.state.selection.eq(selection),
+    });
     try {
-      const items = composeMenuItems(config, context, config.includeDefaults === false ? [] : createDefaultMenuProviders(context, clipboard));
-      if (!items.length || !context.isCurrent()) { abort.abort(); return false; }
-      session = { context, abort, panels: [], x, y, executing: false, scrollOffsets: captureScrollOffsets() };
+      const items = composeMenuItems(
+        config,
+        context,
+        config.includeDefaults === false
+          ? []
+          : createDefaultMenuProviders(context, clipboard),
+      );
+      if (!items.length || !context.isCurrent()) {
+        abort.abort();
+        return false;
+      }
+      session = {
+        context,
+        abort,
+        panels: [],
+        x,
+        y,
+        executing: false,
+        scrollOffsets: captureScrollOffsets(),
+      };
       const root = createPanel(items, config.messages.menuLabel, 0);
-      positionPanels(); focusFirst(root);
+      positionPanels();
+      focusFirst(root);
       return true;
-    } catch (error) { abort.abort(); close(false); reportMenuError(config, error, context); return false; }
+    } catch (error) {
+      abort.abort();
+      close(false);
+      reportMenuError(config, error, context);
+      return false;
+    }
   }
   function onContextMenu(event: MouseEvent) {
     if (!ownsMenuEvent(editor, event) || editor.view.composing) return;
     const keyboard = event.clientX === 0 && event.clientY === 0;
-    if (!keyboard && !targetPointerSelection(editor, event.clientX, event.clientY)) return;
-    const anchor = keyboard ? editor.view.coordsAtPos(editor.view.state.selection.from) : null;
-    if (open(keyboard ? "keyboard" : "pointer", anchor?.left ?? event.clientX, anchor?.bottom ?? event.clientY)) event.preventDefault();
+    if (
+      !keyboard &&
+      !targetPointerSelection(editor, event.clientX, event.clientY)
+    )
+      return;
+    const anchor = keyboard
+      ? editor.view.coordsAtPos(editor.view.state.selection.from)
+      : null;
+    if (
+      open(
+        keyboard ? "keyboard" : "pointer",
+        anchor?.left ?? event.clientX,
+        anchor?.bottom ?? event.clientY,
+      )
+    )
+      event.preventDefault();
   }
   function onKeyDown(event: KeyboardEvent) {
-    if (!ownsMenuEvent(editor, event) || event.isComposing || editor.view.composing) return;
-    if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey)) return;
+    if (
+      !ownsMenuEvent(editor, event) ||
+      event.isComposing ||
+      editor.view.composing
+    )
+      return;
+    if (
+      event.key !== "ContextMenu" &&
+      !(
+        event.key === "F10" &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey
+      )
+    )
+      return;
     const anchor = editor.view.coordsAtPos(editor.view.state.selection.from);
-    if (open("keyboard", anchor.left, anchor.bottom)) { event.preventDefault(); event.stopPropagation(); }
+    if (open("keyboard", anchor.left, anchor.bottom)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
   }
   function preserveSelection(event: MouseEvent) {
-    if ((event.button === 2 || (event.button === 0 && event.ctrlKey && /Mac/u.test(win.navigator.platform))) && ownsMenuEvent(editor, event) && !editor.view.composing) event.preventDefault();
+    if (
+      (event.button === 2 ||
+        (event.button === 0 &&
+          event.ctrlKey &&
+          /Mac/u.test(win.navigator.platform))) &&
+      ownsMenuEvent(editor, event) &&
+      !editor.view.composing
+    )
+      event.preventDefault();
   }
-  const dismissOutside = (event: Event) => { if (session && !containsEvent(event)) close(false); };
+  const dismissOutside = (event: Event) => {
+    if (session && !containsEvent(event)) close(false);
+  };
   const dismissScroll = (event: Event) => {
     if (!session || !event.target || containsEvent(event)) return;
     const previous = session.scrollOffsets.get(event.target);
@@ -314,23 +555,41 @@ export function createContextMenu(options: Readonly<{
   const dismissWindow = () => close(false);
   let untrack = () => {};
   let observer: MutationObserver | undefined;
-  const controller = { destroy() {
-    if (destroyed) return;
-    destroyed = true; close(false); untrack(); observer?.disconnect();
-    editor.view.dom.removeEventListener("contextmenu", onContextMenu);
-    editor.view.dom.removeEventListener("keydown", onKeyDown, true);
-    editor.view.dom.removeEventListener("pointerdown", preserveSelection, true);
-    editor.view.dom.removeEventListener("mousedown", preserveSelection, true);
-    doc.removeEventListener("pointerdown", dismissOutside, true);
-    doc.removeEventListener("focusin", dismissOutside, true);
-    doc.removeEventListener("scroll", dismissScroll, true);
-    win.removeEventListener("blur", dismissWindow); win.removeEventListener("resize", dismissWindow);
-    win.visualViewport?.removeEventListener("resize", dismissWindow); win.visualViewport?.removeEventListener("scroll", dismissWindow);
-  } };
+  const controller = {
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      close(false);
+      untrack();
+      observer?.disconnect();
+      editor.view.dom.removeEventListener("contextmenu", onContextMenu);
+      editor.view.dom.removeEventListener("keydown", onKeyDown, true);
+      editor.view.dom.removeEventListener(
+        "pointerdown",
+        preserveSelection,
+        true,
+      );
+      editor.view.dom.removeEventListener("mousedown", preserveSelection, true);
+      doc.removeEventListener("pointerdown", dismissOutside, true);
+      doc.removeEventListener("focusin", dismissOutside, true);
+      doc.removeEventListener("scroll", dismissScroll, true);
+      win.removeEventListener("blur", dismissWindow);
+      win.removeEventListener("resize", dismissWindow);
+      win.visualViewport?.removeEventListener("resize", dismissWindow);
+      win.visualViewport?.removeEventListener("scroll", dismissWindow);
+    },
+  };
   try {
-    untrack = editor.subscribe("state", () => { if (session && !session.context.isCurrent()) close(session.executing); });
-    observer = new win.MutationObserver(() => { if (session && !session.context.isCurrent()) close(false); });
-    observer.observe(editor.view.dom, { attributes: true, attributeFilter: ["contenteditable"] });
+    untrack = editor.subscribe("state", () => {
+      if (session && !session.context.isCurrent()) close(session.executing);
+    });
+    observer = new win.MutationObserver(() => {
+      if (session && !session.context.isCurrent()) close(false);
+    });
+    observer.observe(editor.view.dom, {
+      attributes: true,
+      attributeFilter: ["contenteditable"],
+    });
     editor.view.dom.addEventListener("contextmenu", onContextMenu);
     editor.view.dom.addEventListener("keydown", onKeyDown, true);
     editor.view.dom.addEventListener("pointerdown", preserveSelection, true);
