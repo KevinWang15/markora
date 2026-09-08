@@ -17,7 +17,7 @@ import {
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import { indentOnInput, syntaxHighlighting } from "@codemirror/language";
 import { Fragment, type Node as ProseMirrorNode, type Schema } from "prosemirror-model";
-import { Selection, TextSelection, type Command, type Transaction } from "prosemirror-state";
+import { NodeSelection, Selection, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import { ManagedBlockCursor } from "./managedBlockCursor";
 import {
@@ -1239,6 +1239,17 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
       return this.exitCodeBlock(forward ? 1 : -1);
     }
 
+    private selectOuterElement() {
+      if (this.cm.compositionStarted || this.outerView.composing) return false;
+      const version = this.beginOuterFocusTransfer();
+      this.parkOuterFocusForTransfer();
+      this.outerView.dispatch(this.outerView.state.tr.setSelection(
+        NodeSelection.create(this.outerView.state.doc, this.getPos()),
+      ).scrollIntoView());
+      this.scheduleOuterFocusAfterExit(version);
+      return true;
+    }
+
     private maybeEscapeVertical(unit: -1 | 1) {
       const selection = this.cm.state.selection.main;
 
@@ -1718,6 +1729,10 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
           {
             key: "Enter",
             run: () => this.forwardManagedBoundaryKey("Enter"),
+          },
+          {
+            key: "Escape",
+            run: () => this.selectOuterElement(),
           },
           {
             key: "ArrowLeft",

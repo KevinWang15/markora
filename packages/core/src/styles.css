@@ -21,7 +21,10 @@
   color: var(--mdw-color-selection-text, HighlightText);
 }
 
-.mdw-host .ProseMirror .mdw-document-selected {
+.mdw-host .ProseMirror .mdw-document-selected,
+.mdw-host .ProseMirror .mdw-element-selected {
+  position: relative;
+  z-index: 1;
   outline: var(--mdw-selection-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
   outline-offset: var(--mdw-selection-ring-width, 2px);
 }
@@ -198,12 +201,6 @@
   transition: border-color var(--mdw-motion-duration-fast, 120ms) ease,
     box-shadow var(--mdw-motion-duration-fast, 120ms) ease,
     background-color var(--mdw-motion-duration-fast, 120ms) ease;
-}
-
-.mdw-host .ProseMirror-selectednode hr {
-  border-block-start-color: var(--mdw-color-accent, #0969da);
-  box-shadow: 0 0 0 var(--mdw-focus-halo-width, 3px) var(--mdw-color-focus-soft, rgba(9, 105, 218, 0.16));
-  background: var(--mdw-color-accent-softer, rgba(9, 105, 218, 0.08));
 }
 
 .mdw-host .ProseMirror.ProseMirror-focused:has(.ProseMirror-selectednode) {

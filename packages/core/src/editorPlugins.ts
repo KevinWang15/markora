@@ -498,7 +498,6 @@ export function createMarkBoundaryPlugin(options: {
   tableToolbar: TableToolbarOverlay;
   enableDefaultUi: boolean;
   maybeExtendSelectionAcrossCodeBlock: (view: EditorView, direction: -1 | 1) => boolean;
-  handleBoundaryKeyDown: (view: EditorView, event: KeyboardEvent) => boolean;
   handleNativeTaskControlKeyDown: (view: EditorView, event: KeyboardEvent) => boolean;
   maybeToggleTaskListItem: (view: EditorView, pos: number, event: MouseEvent) => boolean;
   maybeOpenImage: (view: EditorView, event: MouseEvent) => boolean;
@@ -513,7 +512,6 @@ export function createMarkBoundaryPlugin(options: {
 }) {
   const {
     enableDefaultUi,
-    handleBoundaryKeyDown,
     getActiveImageInfo,
     getMarkInfo,
     handleNativeTaskControlKeyDown,
@@ -585,7 +583,7 @@ export function createMarkBoundaryPlugin(options: {
           return true;
         }
 
-        return handleBoundaryKeyDown(view, event);
+        return false;
       },
       handleClick(view, _pos, event) {
         return (

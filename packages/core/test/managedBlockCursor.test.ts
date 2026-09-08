@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { EditorView as CodeMirrorView, ViewPlugin } from '@codemirror/view';
-import { EditorState, Selection, TextSelection } from 'prosemirror-state';
+import { EditorState, NodeSelection, Selection, TextSelection } from 'prosemirror-state';
 import { createEditor as createMarkoraEditor } from '../src/createEditor';
 import { DocumentRangeSelection } from '../src/documentRangeSelection';
 import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from '../src/managedBlockCursor';
@@ -306,26 +306,23 @@ describe('ManagedBlockCursor', () => {
     const table = findNodeByName(editor.view.state.doc, 'table');
     const tableDom = editor.view.nodeDOM(table.pos) as HTMLElement;
     tableDom.style.direction = 'rtl';
+    editor.view.dom.style.direction = 'rtl';
 
     setSelection(editor, findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, 1));
     expect(pressKey(editor, 'ArrowRight')).toBe(true);
     expectManagedCursor(editor, 'before', table.pos);
 
     expect(pressKey(editor, 'ArrowLeft')).toBe(true);
-    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
-    expect(editor.view.state.selection.from).toBe(
-      findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, 1).from,
-    );
+    expect(editor.view.state.selection).toBeInstanceOf(NodeSelection);
+    expect(editor.view.state.selection.from).toBe(table.pos);
 
     setSelection(editor, findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, -1));
     expect(pressKey(editor, 'ArrowLeft')).toBe(true);
     expectManagedCursor(editor, 'after', table.pos);
 
     expect(pressKey(editor, 'ArrowRight')).toBe(true);
-    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
-    expect(editor.view.state.selection.from).toBe(
-      findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, -1).from,
-    );
+    expect(editor.view.state.selection).toBeInstanceOf(NodeSelection);
+    expect(editor.view.state.selection.from).toBe(table.pos);
   });
 
   it('deletes an empty first paragraph before a table on Backspace', () => {
@@ -403,7 +400,10 @@ describe('ManagedBlockCursor', () => {
     expectManagedCursor(editor, 'before', codeBlock.pos);
 
     (editor.view.nodeDOM(codeBlock.pos) as HTMLElement).style.direction = 'rtl';
+    editor.view.dom.style.direction = 'rtl';
     expect(pressKey(editor, 'ArrowLeft')).toBe(true);
+    expect(editor.view.state.selection).toBeInstanceOf(NodeSelection);
+    expect(pressKey(editor, 'Enter')).toBe(true);
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
 
     const capturedView = codeMirrorView as CodeMirrorView;
@@ -527,7 +527,7 @@ describe('ManagedBlockCursor', () => {
     expectManagedCursor(editor, 'after', table.pos);
   });
 
-  it('re-enters the table on ArrowRight from before-edge cursor', () => {
+  it('selects the table on ArrowRight and enters its contents explicitly', () => {
     const editor = createEditor({
       element: createHost(),
       markdown: ['| A | B |', '| --- | --- |', '| a | b |'].join('\n'),
@@ -537,6 +537,8 @@ describe('ManagedBlockCursor', () => {
     setSelection(editor, ManagedBlockCursor.create(editor.view.state.doc, table.pos, 'before', (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node))!);
 
     expect(pressKey(editor, 'ArrowRight')).toBe(true);
+    expect(editor.view.state.selection).toBeInstanceOf(NodeSelection);
+    expect(pressKey(editor, 'Enter')).toBe(true);
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
     expect(editor.view.state.selection.from).toBe(findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, 1).from);
   });
@@ -753,7 +755,7 @@ describe('ManagedBlockCursor', () => {
     expect(editor.view.state.doc.firstChild?.type.name).toBe('paragraph');
   });
 
-  it('inserts a paragraph after a managed block on Delete from after-edge cursor', () => {
+  it('keeps a terminal after-edge cursor unchanged on outward Delete', () => {
     const editor = createEditor({
       element: createHost(),
       markdown: ['| A | B |', '| --- | --- |', '| a | b |'].join('\n'),
@@ -769,8 +771,8 @@ describe('ManagedBlockCursor', () => {
 
     expect(pressKey(editor, 'Delete')).toBe(true);
     expect(editor.view.state.doc.child(0).type.name).toBe('table');
-    expect(editor.view.state.doc.child(1).type.name).toBe('paragraph');
-    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+    expect(editor.view.state.doc.childCount).toBe(1);
+    expectManagedCursor(editor, 'after', table.pos);
   });
 
   it('inserts a paragraph below the code block on Enter from after-edge cursor even if CodeMirror keeps focus', async () => {

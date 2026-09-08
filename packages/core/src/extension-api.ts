@@ -1,3 +1,4 @@
+export { moveToElementBoundary, type ElementNavigationSpec } from "./elementNavigation";
 export {
   MARKORA_EXTENSION_API_VERSION,
   MarkdownEditorExtensionError,

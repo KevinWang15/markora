@@ -1,4 +1,5 @@
-import { createElementSelectionPlugin } from "./elementSelection";
+import { createElementInteractionPlugins, createManagedBlockBoundaryHelpers } from "./elementInteraction";
+import { moveToElementBoundary } from "./elementNavigation";
 import { baseKeymap,chainCommands,liftEmptyBlock,toggleMark } from "prosemirror-commands";
 import { closeHistory,history,redo,undo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
@@ -8,8 +9,7 @@ import {
 EditorState,
 NodeSelection,
 Plugin,
-Selection,
-TextSelection
+Selection
 } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { createInputRobustnessPlugin } from "./androidInput";
@@ -57,9 +57,7 @@ import { resolveMarkdownEditorExtensions } from "./extensionResolver";
 import { assertEditorHostAvailable,claimEditorHost } from "./hostOwnership";
 import { createHostIdleScheduler } from "./idleScheduler";
 import { createImageViewClass } from "./imageView";
-import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
 import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from "./managedBlockCursor";
-import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import {
 createMarkdownCodec,
@@ -243,7 +241,7 @@ const {
 } = createMediaActionHelpers({ schema, getMarkInfo, resources, onResourceError });
 const {
   isEscapedOutsideBoundary,
-  handleBoundaryKeyDown,
+
   createEscapedBoundaryPlugin,
 } = createMarkBoundaryHelpers({ getMarkInfo });
 
@@ -422,79 +420,23 @@ function getTableUiContext(state: EditorState): TableUiContext | null {
   };
 }
 
-function getTableCellInfo(state: EditorState): TableCellInfo | null {
-  if (!state.selection.empty) {
-    return null;
-  }
-
-  return getTableCellContext(state);
-}
-
 const { maybeExtendSelectionAcrossCodeBlock } = createCodeBlockSelectionHelpers({ schema });
 
 function isManagedBlockNode(node: ProseMirrorNode | null | undefined): node is ProseMirrorNode {
   return isManagedBlockNodeFromSchema(schema, node, codec.managedBlocks);
 }
 
-function findTextSelectionInsideNode(
-  doc: ProseMirrorNode,
-  nodePos: number,
-  node: ProseMirrorNode,
-  direction: -1 | 1,
-) {
-  if (node.type === schema.nodes.raw_block) {
-    return NodeSelection.create(doc, nodePos);
-  }
-
-  const searchPos = direction < 0 ? nodePos + node.nodeSize - 1 : nodePos + 1;
-  const selection = Selection.findFrom(doc.resolve(searchPos), direction, true);
-
-  if (!selection) {
-    return null;
-  }
-
-  const from = nodePos;
-  const to = nodePos + node.nodeSize;
-  return selection.from >= from && selection.to <= to ? selection : null;
-}
-
-function findTextSelectionInImmediatePreviousNode(doc: ProseMirrorNode, boundaryPos: number) {
-  const $boundary = doc.resolve(boundaryPos);
-  const previousNode = $boundary.nodeBefore;
-
-  if (!previousNode) {
-    return null;
-  }
-
-  const previousNodePos = boundaryPos - previousNode.nodeSize;
-
-  if (previousNode.isTextblock) {
-    return TextSelection.create(doc, previousNodePos + previousNode.nodeSize - 1);
-  }
-
-  const selection = Selection.findFrom(doc.resolve(boundaryPos), -1, true);
-
-  if (!selection) {
-    return null;
-  }
-
-  return selection.from >= previousNodePos && selection.to <= boundaryPos ? selection : null;
-}
+const setManagedBlockBoundarySelection = (view: EditorView, pos: number, side: "before" | "after") =>
+  moveToElementBoundary(view, pos, side, codec.managedBlocks);
+const moveBeforeManagedBlock = (view: EditorView, pos: number) => setManagedBlockBoundarySelection(view, pos, "before");
 
 const {
-  setManagedBlockBoundarySelection,
-  moveBeforeManagedBlock,
-  moveInsideManagedBlock,
   insertParagraphAtManagedBlockBoundary,
   removeManagedBlockAtBoundary,
   getManagedBlockBoundary,
-  getTableBoundaryEscapeInfo,
 } = createManagedBlockBoundaryHelpers({
   schema,
   isManagedBlockNode,
-  findTextSelectionInsideNode,
-  findTextSelectionInImmediatePreviousNode,
-  getTableCellInfo,
 });
 
 const {
@@ -545,7 +487,7 @@ const { convertPipeTable } = createPipeTableHelpers({
     maybeOpenLink,
     maybeEditActiveLink,
     isEscapedOutsideBoundary,
-    handleBoundaryKeyDown,
+
     createEscapedBoundaryPlugin,
     revealMarkConfigs,
     ImageView,
@@ -556,11 +498,9 @@ const { convertPipeTable } = createPipeTableHelpers({
     isManagedBlockNode,
     setManagedBlockBoundarySelection,
     moveBeforeManagedBlock,
-    moveInsideManagedBlock,
     insertParagraphAtManagedBlockBoundary,
     removeManagedBlockAtBoundary,
     getManagedBlockBoundary,
-    getTableBoundaryEscapeInfo,
     createEmptyTableRow,
     addTableRow,
     addTableColumn,
@@ -634,7 +574,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     maybeOpenLink,
     maybeEditActiveLink,
     isEscapedOutsideBoundary,
-    handleBoundaryKeyDown,
+
     createEscapedBoundaryPlugin,
     revealMarkConfigs,
     ImageView,
@@ -643,13 +583,9 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     getTableUiContext,
     maybeExtendSelectionAcrossCodeBlock,
     isManagedBlockNode,
-    setManagedBlockBoundarySelection,
-    moveBeforeManagedBlock,
-    moveInsideManagedBlock,
     insertParagraphAtManagedBlockBoundary,
     removeManagedBlockAtBoundary,
     getManagedBlockBoundary,
-    getTableBoundaryEscapeInfo,
     addTableRow,
     addTableColumn,
     insertTableRowAt,
@@ -944,8 +880,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       collectViewError(error);
     },
     schema,
-    moveBeforeManagedBlock,
-    setManagedBlockBoundarySelection,
+    moveBeforeManagedBlock: (view, pos) => moveToElementBoundary(view, pos, "before", codec.managedBlocks),
+    setManagedBlockBoundarySelection: (view, pos, side) => moveToElementBoundary(view, pos, side, codec.managedBlocks),
   });
   const TaskListItemView = createTaskListItemViewClass(schema.nodes.list_item, messages);
   const RawBlockView = createOpaqueNodeViewClass({
@@ -1354,14 +1290,9 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }),
     createImagePlugin({ schema, resources }),
     createEscapedBoundaryPlugin(),
-    createElementSelectionPlugin(codec.managedBlocks),
-    createManagedBlockBoundaryPlugin({
+    ...createElementInteractionPlugins(codec.managedBlocks, {
       isManagedBlockNode,
-      getTableBoundaryEscapeInfo,
-      moveBeforeManagedBlock,
-      setManagedBlockBoundarySelection,
       getManagedBlockBoundary,
-      moveInsideManagedBlock,
       insertParagraphAtManagedBlockBoundary,
       removeManagedBlockAtBoundary,
     }),
@@ -1372,7 +1303,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       enableDefaultUi: uiEnabled,
       handleNativeTaskControlKeyDown,
       maybeExtendSelectionAcrossCodeBlock,
-      handleBoundaryKeyDown,
+
       maybeToggleTaskListItem,
       maybeOpenImage,
       maybeOpenLink,

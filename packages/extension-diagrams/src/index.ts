@@ -5,6 +5,8 @@ import {
   PluginKey,
   TextSelection,
   closeHistory,
+  moveToElementBoundary,
+  type ElementNavigationSpec,
   defineMarkdownEditorExtension,
   type Command,
   type DOMOutputSpec,
@@ -598,6 +600,7 @@ function moveSelectionAtHorizontalDiagramBoundary(
   if (diagram.atStart || diagram.atEnd) {
     const direction = directionForLine(diagram.atStart);
     if ((direction === -1 && diagram.atStart) || (direction === 1 && diagram.atEnd)) {
+      if (!event.shiftKey) return moveToElementBoundary(view, diagram.position, direction < 0 ? "before" : "after");
       const outside = TextSelection.near(view.state.doc.resolve(
         direction === -1
           ? diagram.position
@@ -628,7 +631,11 @@ function moveSelectionIntoAdjacentDiagram(
   event: KeyboardEvent,
   type: NodeType,
 ) {
-  if (event.altKey || event.ctrlKey || event.metaKey || view.composing) return false;
+  if (event.altKey || event.ctrlKey || event.metaKey || view.composing || event.isComposing || event.keyCode === 229) return false;
+  // Plain horizontal traversal belongs to the shared element state machine.
+  if (!event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+    return moveSelectionAtHorizontalDiagramBoundary(view, event, type);
+  }
   if (moveSelectionAtHorizontalDiagramBoundary(view, event, type)) return true;
   let directionElement: Element = view.dom;
   try {
@@ -852,7 +859,8 @@ export function createDiagramsExtension(options?: DiagramExtensionOptions) {
             preserveWhitespace: "full",
             tag: "[data-mdw-diagram]",
           }],
-          selectable: false,
+          selectable: true,
+          elementNavigation: { textArrows: "custom" } satisfies ElementNavigationSpec,
           toDOM: (node) => staticDiagramDom(node, messages),
           whitespace: "pre",
         },

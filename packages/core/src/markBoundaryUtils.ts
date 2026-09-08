@@ -33,35 +33,17 @@ export function createMarkBoundaryHelpers(options: {
     const boundaries: Array<{
       markInfo: BoundaryMarkInfo;
       markName: BoundaryMarkName;
-      pos: number;
-      side: "before" | "after";
     }> = [];
 
     for (const markName of markNames) {
       const markInfo = getMarkInfo(state, markName);
 
-      if (!markInfo) {
-        continue;
-      }
-
-      if (side === "before" && state.selection.from === markInfo.start) {
-        boundaries.push({ markInfo, markName, pos: markInfo.start, side: "before" });
-      }
-
-      if (side === "after" && state.selection.from === markInfo.end) {
-        boundaries.push({ markInfo, markName, pos: markInfo.end, side: "after" });
+      if (markInfo && state.selection.from === (side === "before" ? markInfo.start : markInfo.end)) {
+        boundaries.push({ markInfo, markName });
       }
     }
 
     return boundaries;
-  }
-
-  function getBoundaryMark(state: EditorState, side: LogicalHorizontalSide) {
-    const boundary = getBoundaryMarks(state, side)[0];
-
-    return boundary
-      ? { markName: boundary.markName, pos: boundary.pos, side: boundary.side }
-      : null;
   }
 
   function getEscapedBoundary(state: EditorState) {
@@ -123,9 +105,9 @@ export function createMarkBoundaryHelpers(options: {
     }
 
     const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, boundary.pos));
-    const escapedMarkNames = new Set<string>(boundary.markNames);
+    const escapedMarkNames = boundary.markNames;
     const storedMarks = view.state.selection.$from.marks().filter((mark) => (
-      !escapedMarkNames.has(mark.type.name)
+      !escapedMarkNames.includes(mark.type.name as BoundaryMarkName)
     ));
     tr.setStoredMarks(storedMarks);
     tr.setMeta(escapedBoundaryKey, boundary);
@@ -161,6 +143,7 @@ export function createMarkBoundaryHelpers(options: {
   function createEscapedBoundaryPlugin() {
     return new Plugin<EscapedBoundary | null>({
       key: escapedBoundaryKey,
+      props: { handleKeyDown: handleBoundaryKeyDown },
       state: {
         init() {
           return null;
@@ -187,11 +170,7 @@ export function createMarkBoundaryHelpers(options: {
   }
 
   return {
-    getBoundaryMark,
-    getEscapedBoundary,
     isEscapedOutsideBoundary,
-    escapeBoundaryMark,
-    handleBoundaryKeyDown,
     createEscapedBoundaryPlugin,
   };
 }

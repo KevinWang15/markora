@@ -1,5 +1,6 @@
+import { ManagedBlockCursor } from "./managedBlockCursor";
 import { type Node as ProseMirrorNode, type Schema } from "prosemirror-model";
-import { TextSelection, type Command } from "prosemirror-state";
+import { NodeSelection, TextSelection, type Command } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import type { CodeBlockLanguageRegistry } from "./codeBlockLanguages";
 import {
@@ -907,6 +908,9 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       // through the embedding window before the browser adopts it into an
       // iframe document, and adopted nodes retain their original prototype.
       if (mutation.type === "selection") {
+        if (this.outerView.state.selection instanceof ManagedBlockCursor
+          || this.outerView.state.selection instanceof NodeSelection
+            && this.outerView.state.selection.from === this.getPos()) return true;
         return (
           this.pointerInteraction
           || this.preserveStaticSelection

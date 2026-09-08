@@ -1,3 +1,4 @@
+import { registerManagedBlockTypes } from "./managedBlockCursor";
 import MarkdownIt from "markdown-it";
 import type StateInline from "markdown-it/lib/rules_inline/state_inline.mjs";
 import type Token from "markdown-it/lib/token.mjs";
@@ -224,10 +225,10 @@ function leadingTaskCheckbox(item: HTMLElement) {
     : null;
 }
 
-const nonSelectableCodeBlockSpec = codeBlockSpec
+const editableCodeBlockSpec = codeBlockSpec
   ? {
       ...codeBlockSpec,
-      selectable: false,
+      selectable: true,
       createGapCursor: true,
       parseDOM: [{
         tag: "pre",
@@ -583,7 +584,7 @@ const strikeMarkSpec = {
 function createSchemaNodes(messages: MarkdownEditorMessages) {
   const taskListItemSpec = createTaskListItemSpec(messages);
   return (
-    nonSelectableCodeBlockSpec ? baseSchema.spec.nodes.update("code_block", nonSelectableCodeBlockSpec) : baseSchema.spec.nodes
+    editableCodeBlockSpec ? baseSchema.spec.nodes.update("code_block", editableCodeBlockSpec) : baseSchema.spec.nodes
   )
     .update("list_item", taskListItemSpec ?? listItemSpec!)
     .addBefore("image", "raw_inline", createRawInlineSpec(messages))
@@ -797,7 +798,7 @@ export function createMarkdownCodec(
       cause,
     });
   }
-  const managedBlocks = new Set(["code_block", "table", "raw_block"]);
+  const managedBlocks = new Set(["code_block", "table", "raw_block", "blockquote"]);
 
   for (const { definition } of resolvedExtensions) {
     for (const name of definition.schema?.managedBlocks ?? []) {
@@ -816,6 +817,8 @@ export function createMarkdownCodec(
       managedBlocks.add(name);
     }
   }
+
+registerManagedBlockTypes(schema, managedBlocks);
 
 const markdownTokenizer = new MarkdownIt("commonmark", { html: true, linkify: true })
   .enable("strikethrough")

@@ -13,6 +13,11 @@ export type ManagedBlockBoundary = ManagedBlockBoundaryMeta & {
   node: ProseMirrorNode;
 };
 
+const managedTypes = new WeakMap<ProseMirrorNode["type"]["schema"], ReadonlySet<string>>();
+export function registerManagedBlockTypes(schema: ProseMirrorNode["type"]["schema"], names: ReadonlySet<string>) {
+  managedTypes.set(schema, new Set(names));
+}
+
 export function isManagedBlockNodeFromSchema(
   schema: ProseMirrorNode["type"]["schema"],
   node: ProseMirrorNode | null | undefined,
@@ -20,7 +25,8 @@ export function isManagedBlockNodeFromSchema(
 ): node is ProseMirrorNode {
   return !!node && (
     node.isBlock && node.isAtom ||
-    registered?.has(node.type.name) ||
+    (registered ?? managedTypes.get(schema))?.has(node.type.name) ||
+    node.type === schema.nodes.blockquote ||
     node.type === schema.nodes.table ||
     node.type === schema.nodes.code_block ||
     node.type === schema.nodes.raw_block
@@ -50,17 +56,24 @@ export class ManagedBlockCursor extends Selection {
     }
 
     const pos = side === "before" ? blockPos : blockPos + block.nodeSize;
-    return new ManagedBlockCursor(doc.resolve(pos), blockPos, side, isManagedBlockNode);
+    return ManagedBlockCursor.at(doc, pos, isManagedBlockNode);
+  }
+
+  /** A boundary belongs to its document position, not either neighboring
+   * element. Prefer the following element only as a stable decoration anchor. */
+  static at(doc: ProseMirrorNode, pos: number, isManagedBlockNode: ManagedBlockCursor["isManagedBlockNode"]) {
+    if (pos < 0 || pos > doc.content.size) return null;
+    const $pos = doc.resolve(pos);
+    if ($pos.nodeAfter && isManagedBlockNode($pos.nodeAfter)) return new ManagedBlockCursor($pos, pos, "before", isManagedBlockNode);
+    if ($pos.nodeBefore && isManagedBlockNode($pos.nodeBefore)) return new ManagedBlockCursor($pos, pos - $pos.nodeBefore.nodeSize, "after", isManagedBlockNode);
+    return null;
   }
 
   map(doc: ProseMirrorNode, mapping: Parameters<Selection["map"]>[1]): Selection {
     const assoc = this.side === "before" ? -1 : 1;
-    const mappedBlockPos = mapping.map(this.blockPos, assoc);
-
-    return (
-      ManagedBlockCursor.create(doc, mappedBlockPos, this.side, this.isManagedBlockNode) ??
-      Selection.near(doc.resolve(mappedBlockPos), assoc)
-    );
+    const pos = mapping.map(this.head, assoc);
+    return ManagedBlockCursor.at(doc, pos, this.isManagedBlockNode)
+      ?? Selection.near(doc.resolve(Math.max(0, Math.min(pos, doc.content.size))), assoc);
   }
 
   content() {
@@ -70,9 +83,7 @@ export class ManagedBlockCursor extends Selection {
   eq(other: Selection): boolean {
     return (
       other instanceof ManagedBlockCursor &&
-      other.head === this.head &&
-      other.blockPos === this.blockPos &&
-      other.side === this.side
+      other.head === this.head
     );
   }
 
@@ -86,19 +97,15 @@ export class ManagedBlockCursor extends Selection {
     }
 
     return (
-      ManagedBlockCursor.create(doc, json.blockPos, json.side, (node): node is ProseMirrorNode => {
-        if (!node) {
-          return false;
-        }
-
-        return isManagedBlockNodeFromSchema(doc.type.schema, node);
-      }) ??
+      ManagedBlockCursor.create(doc, json.blockPos, json.side, (node): node is ProseMirrorNode => (
+        isManagedBlockNodeFromSchema(doc.type.schema, node)
+      )) ??
       Selection.near(doc.resolve(json.blockPos), json.side === "before" ? 1 : -1)
     );
   }
 
   getBookmark(): SelectionBookmark {
-    return new ManagedBlockBookmark(this.blockPos, this.side, this.isManagedBlockNode);
+    return new ManagedBlockBookmark(this.head, this.side, this.isManagedBlockNode);
   }
 }
 
@@ -107,19 +114,19 @@ Selection.jsonID("managed-block-cursor", ManagedBlockCursor);
 
 class ManagedBlockBookmark implements SelectionBookmark {
   constructor(
-    readonly blockPos: number,
+    readonly pos: number,
     readonly side: BoundarySide,
     readonly isManagedBlockNode: (node: ProseMirrorNode | null | undefined) => node is ProseMirrorNode,
   ) {}
 
   map(mapping: Parameters<Selection["map"]>[1]) {
-    return new ManagedBlockBookmark(mapping.map(this.blockPos, this.side === "before" ? -1 : 1), this.side, this.isManagedBlockNode);
+    return new ManagedBlockBookmark(mapping.map(this.pos, this.side === "before" ? -1 : 1), this.side, this.isManagedBlockNode);
   }
 
   resolve(doc: ProseMirrorNode) {
     return (
-      ManagedBlockCursor.create(doc, this.blockPos, this.side, this.isManagedBlockNode) ??
-      Selection.near(doc.resolve(this.blockPos), this.side === "before" ? 1 : -1)
+      ManagedBlockCursor.at(doc, this.pos, this.isManagedBlockNode) ??
+      Selection.near(doc.resolve(Math.max(0, Math.min(this.pos, doc.content.size))), this.side === "before" ? 1 : -1)
     );
   }
 }

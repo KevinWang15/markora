@@ -1,4 +1,4 @@
-import { createElementSelectionPlugin } from "./elementSelection";
+import { createElementInteractionPlugins, createManagedBlockBoundaryHelpers } from "./elementInteraction";
 import {
 baseKeymap,
 chainCommands,
@@ -17,7 +17,6 @@ import {
 EditorState,
 NodeSelection,
 Plugin,
-Selection,
 TextSelection,
 type Command
 } from "prosemirror-state";
@@ -65,9 +64,7 @@ import { MARKORA_VERSION } from "./extensionVersion";
 import { assertEditorHostAvailable,claimEditorHost } from "./hostOwnership";
 import { createHostIdleScheduler } from "./idleScheduler";
 import { createImageViewClass } from "./imageView";
-import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
 import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from "./managedBlockCursor";
-import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import { createMinimalMarkdownEditorPreset } from "./minimalExtensionPreset";
 import { createMinimalMarkdownCodec } from "./minimalMarkdownCodec";
@@ -219,49 +216,6 @@ function canInsertNode(state: EditorState, nodeType: NodeType | undefined) {
   return $from.parent.canReplaceWith(index, index, nodeType);
 }
 
-function findTextSelectionInsideNode(
-  doc: ProseMirrorNode,
-  nodePos: number,
-  node: ProseMirrorNode,
-  direction: -1 | 1,
-) {
-  const searchPos = direction < 0 ? nodePos + node.nodeSize - 1 : nodePos + 1;
-  const selection = Selection.findFrom(doc.resolve(searchPos), direction, true);
-
-  if (!selection) {
-    return null;
-  }
-
-  return selection.from >= nodePos && selection.to <= nodePos + node.nodeSize
-    ? selection
-    : null;
-}
-
-function findTextSelectionInImmediatePreviousNode(
-  doc: ProseMirrorNode,
-  boundaryPos: number,
-) {
-  const $boundary = doc.resolve(boundaryPos);
-  const previousNode = $boundary.nodeBefore;
-
-  if (!previousNode) {
-    return null;
-  }
-
-  const previousNodePos = boundaryPos - previousNode.nodeSize;
-
-  if (previousNode.isTextblock) {
-    return TextSelection.create(doc, previousNodePos + previousNode.nodeSize - 1);
-  }
-
-  const selection = Selection.findFrom(doc.resolve(boundaryPos), -1, true);
-  return selection
-    && selection.from >= previousNodePos
-    && selection.to <= boundaryPos
-    ? selection
-    : null;
-}
-
 /**
  * Creates the deliberately small embedded editor entry. Optional syntax and
  * behavior come only from the supplied extension preset and extensions.
@@ -307,18 +261,10 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const structuralCommandSet = createStructuralCommandSet(codec.schema);
   const {
     createEscapedBoundaryPlugin,
-    handleBoundaryKeyDown,
     isEscapedOutsideBoundary,
   } = createMarkBoundaryHelpers({ getMarkInfo });
-  const boundaryMarkNames = new Set<MarkName>([
-    "strong",
-    "em",
-    "code",
-    "link",
-    "strike",
-  ]);
   const isEscapedMarkAtSelection = (state: EditorState, markType: MarkType | undefined) => {
-    if (!markType || !state.selection.empty || !boundaryMarkNames.has(markType.name as MarkName)) {
+    if (!markType || !state.selection.empty) {
       return false;
     }
 
@@ -333,11 +279,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const isMarkActiveAtSelection = (state: EditorState, markType: MarkType | undefined) => (
     markIsActive(state, markType) && !isEscapedMarkAtSelection(state, markType)
   );
-  const markBoundaryKeyPlugin = new Plugin({
-    props: {
-      handleKeyDown: handleBoundaryKeyDown,
-    },
-  });
   const doc = runInitialMarkdownParse(
     () => codec.parse(options.markdown ?? ""),
   );
@@ -355,9 +296,6 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const managedBlockBoundaries = createManagedBlockBoundaryHelpers({
     schema: codec.schema,
     isManagedBlockNode,
-    findTextSelectionInsideNode,
-    findTextSelectionInImmediatePreviousNode,
-    getTableCellInfo: () => null,
   });
 
   const resolvedInitialSelection = options.initialSelection
@@ -627,21 +565,14 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       createPlaceholderPlugin(() => runtimeOptions.placeholder),
       createResourceOpenPlugin({ onError: handleResourceError, resources }),
       createEscapedBoundaryPlugin(),
-      createElementSelectionPlugin(codec.managedBlocks),
-      createManagedBlockBoundaryPlugin({
+      ...createElementInteractionPlugins(codec.managedBlocks, {
         isManagedBlockNode,
-        getTableBoundaryEscapeInfo: managedBlockBoundaries.getTableBoundaryEscapeInfo,
-        moveBeforeManagedBlock: managedBlockBoundaries.moveBeforeManagedBlock,
-        setManagedBlockBoundarySelection:
-          managedBlockBoundaries.setManagedBlockBoundarySelection,
         getManagedBlockBoundary: managedBlockBoundaries.getManagedBlockBoundary,
-        moveInsideManagedBlock: managedBlockBoundaries.moveInsideManagedBlock,
         insertParagraphAtManagedBlockBoundary:
           managedBlockBoundaries.insertParagraphAtManagedBlockBoundary,
         removeManagedBlockAtBoundary:
           managedBlockBoundaries.removeManagedBlockAtBoundary,
       }),
-      markBoundaryKeyPlugin,
       ...(extensionAssembly.contributions.clipboard
         ? [extensionAssembly.contributions.clipboard]
         : []),

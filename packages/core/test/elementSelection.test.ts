@@ -4,7 +4,7 @@ import { EditorState, TextSelection } from "prosemirror-state";
 import type { DecorationSet, EditorView } from "prosemirror-view";
 import { ManagedBlockCursor } from "../src/managedBlockCursor";
 import { DocumentRangeSelection } from "../src/documentRangeSelection";
-import { createElementSelectionPlugin } from "../src/elementSelection";
+import { createElementSelectionPlugin } from "../src/elementInteraction";
 
 const schema = new Schema({ nodes: {
   doc: { content: "block+" },
