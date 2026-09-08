@@ -199,12 +199,13 @@ test("@required context menu and nested controls expose accessible roles and nam
 test("@required playground math menus select the formula and open the shared LaTeX editor", async ({ page }) => {
   await page.goto("/"); await page.locator("#source").fill("$$\nx^2\n$$");
   await page.getByRole("button", { name: "Apply Markdown", exact: true }).click();
-  await page.locator("#editor .mdw-math").click({ button: "right", position: { x: 12, y: 65 } });
-  await menu(page).getByRole("menuitem", { name: "Edit formula…", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Edit math", exact: true });
-  await expect(dialog.getByRole("textbox", { name: "LaTeX source" })).toHaveValue("x^2");
-  await dialog.getByRole("textbox", { name: "LaTeX source" }).fill("y^3");
-  await dialog.getByRole("button", { name: "Apply formula", exact: true }).click();
+  await page.locator("#editor .mdw-math").click({ button: "right", position: { x: 12, y: 12 } });
+  await menu(page).getByRole("menuitem", { name: "Edit formula", exact: true }).click();
+  const source = page.getByRole("textbox", { name: "LaTeX source", exact: true });
+  await expect(source).toBeFocused();
+  await expect(source).toHaveValue("x^2");
+  await source.fill("y^3");
+  await source.press("Escape");
   await expect(page.locator("#output")).toHaveText("$$\ny^3\n$$");
 });
 

@@ -4,6 +4,9 @@ export type MathMessages = Readonly<{
   blockKindLabel: string;
   blockSourceLabel(source: string): string;
   editSource: string;
+  sourceInputLabel: string;
+  editingHint: string;
+  invalidEditingSource: string;
   inlineKindLabel: string;
   inlineSourceLabel(source: string): string;
   invalidBlockSourceDiagnostic: string;
@@ -33,6 +36,9 @@ export const defaultMathMessages: MathMessages = Object.freeze({
   blockKindLabel: "Block math",
   blockSourceLabel: (source) => `Block math source: ${source}`,
   editSource: "Edit math source",
+  sourceInputLabel: "LaTeX source",
+  invalidEditingSource: "This source cannot be saved with Markdown math delimiters. Correct it before leaving, or it will be kept as ordinary text.",
+  editingHint: "Enter TeX without dollar delimiters. Click outside or press Escape to render. Ctrl+Enter or Tab continues writing. Empty formulas are removed; source incompatible with Markdown math delimiters is kept as text.",
   inlineKindLabel: "Inline math",
   inlineSourceLabel: (source) => `Inline math source: ${source}`,
   invalidBlockSourceDiagnostic: "Block math source must use canonical line endings and cannot contain a standalone double-dollar delimiter line.",

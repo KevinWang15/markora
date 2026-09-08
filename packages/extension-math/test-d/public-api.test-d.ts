@@ -80,6 +80,9 @@ const target: MathNodeTarget = {
 };
 const insertedInline: boolean = commands.insertInline("x");
 const insertedBlock: boolean = commands.insertBlock("x\ny");
+const editing: boolean = commands.edit(target);
+const editingSelection: boolean = commands.editSelection("block");
+const finishedEditing: boolean = commands.finishEditing();
 const updated: boolean = commands.update(target, "y");
 const removed: boolean = commands.remove(target);
 const converted: boolean = commands.convert(target, "block");

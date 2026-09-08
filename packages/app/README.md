@@ -128,16 +128,15 @@ are disabled until current positions arrive. See
   labels. Source-edit controls retain the extension's stale-target protection.
   Configuration directives and active/unsupported SVG output fall back to source;
   GeoJSON, TopoJSON and STL remain editable source without a preview renderer.
-- **Insert → Math…**, the Σ toolbar button, or **Ctrl/Cmd+Shift+M** opens a LaTeX
-  editor in rich-text mode. Choose inline or display placement, preview the formula,
-  and insert it at the saved selection. Fraction, root, integral and matrix templates
-  are provided. **Ctrl/Cmd+Enter** applies; **Escape** cancels without changing the
-  document. Select an existing formula and choose **Edit math source** (or use the
-  math toolbar action) to preview changes or remove it. Each applied change is
-  undoable across rich/source mode switches. Inline formulas use `$…$` with space
-  or punctuation at their text boundaries; display formulas use `$$` delimiters.
-  The UI reuses `markora-extension-math`; the editor core and its default dialect
-  remain unchanged.
+- **Insert → Math**, the Σ toolbar button, or **Ctrl/Cmd+Shift+M** inserts a display
+  formula and focuses its highlighted TeX source in the document. Click any existing
+  formula to edit it directly; click elsewhere or press **Escape** to render it.
+  **Ctrl/Cmd+Enter** or **Tab** continues writing after the formula; inline formulas
+  also accept **Enter**. The context menu offers inline insertion and conversion.
+  Edits update the document as you type and remain undoable across rich/source mode
+  switches. Empty formulas are removed on exit. Invalid TeX remains available as
+  source; text incompatible with Markdown's math delimiters is preserved as text.
+  There is no math modal. The app and playground use the same extension-owned UI.
 - **Export HTML** writes a static, sanitized document with inline styles, MathML,
   rendered Mermaid (or source on rendering failure), and embedded native local
   images. Remote images remain remote. Local image embedding accepts PNG, JPEG,

@@ -14,8 +14,7 @@ import {
 } from "@lucide/icons";
 import { buildLucideIconElement } from "@lucide/icons/build";
 import { createEditor, type MarkdownEditor } from "markora";
-import { createMathExtension, type MathKind } from "markora-extension-math";
-import { MathDialog, type MathEdit } from "@markora/react-ui/MathDialog";
+import { createMathExtension } from "markora-extension-math";
 import { createMathContextMenuProvider } from "@markora/react-ui/mathContextMenu";
 import { renderMath } from "@markora/react-ui/renderMath";
 import "markora-extension-math/styles.css";
@@ -533,8 +532,6 @@ export function EditorPlayground() {
   const editorElementRef = useRef<HTMLDivElement | null>(null);
   const toolbarElementRef = useRef<HTMLDivElement | null>(null);
   const sourceTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [mathEdit, setMathEdit] = useState<MathEdit | null>(null);
-  const mathDialogOpenRef = useRef(false);
   const [output, setOutput] = useState(() => playgroundRouteSession.editorMarkdown);
   const [sourceActionState, setSourceActionState] = useState<"applied" | "dirty" | "idle">(
     () => playgroundRouteSession.sourceDirty ? "dirty" : "idle",
@@ -593,40 +590,13 @@ export function EditorPlayground() {
       imagePopover.close(refocusEditor);
     };
 
-    const math = createMathExtension({
-      renderer: renderMath,
-      onEditSource(request) {
-        closeAllPopovers(false);
-        mathDialogOpenRef.current = true;
-        setMathEdit({ mode: "edit", kind: request.kind, source: request.source,
-          apply: request.update, remove: request.remove });
-      },
-    });
+    const math = createMathExtension({ renderer: renderMath });
     const openMath = () => {
-      const current = editorRef.current;
-      if (!current || current.view.composing || mathDialogOpenRef.current) return;
       closeAllPopovers(false);
-      const { doc, selection } = current.view.state;
-      const handle = current.extensions.get(math);
-      const selected = handle.state.getNodes().find(node => node.position === selection.from
-        && doc.nodeAt(node.position)?.nodeSize === selection.to - selection.from);
-      mathDialogOpenRef.current = true;
-      if (selected) {
-        setMathEdit({ mode: "edit", kind: selected.kind, source: selected.source,
-          apply: source => handle.commands.update(selected, source), remove: () => handle.commands.remove(selected) });
-      } else {
-        setMathEdit({ mode: "insert", kind: "block", source: doc.textBetween(selection.from, selection.to, " "),
-          apply(source: string, kind: MathKind) {
-            // A source reconciliation or route replacement must never insert at a stale position.
-            if (current.isDestroyed || current.view.state.doc !== doc) return false;
-            current.view.dispatch(current.view.state.tr.setSelection(selection));
-            return kind === "inline" ? handle.commands.insertInline(source) : handle.commands.insertBlock(source);
-          } });
-      }
+      editorRef.current?.extensions.get(math).commands.editSelection();
     };
     const mathButton = createToolbarButton(tooltipController, createToolbarIcon(Sigma),
       { label: "Insert math", shortcut: "Mod+Shift+M" }, openMath, { compact: true });
-    mathButton.setAttribute("aria-haspopup", "dialog");
     const mathShortcut = (event: KeyboardEvent) => {
       if ((isApplePlatform ? event.metaKey : event.ctrlKey) && event.shiftKey && !event.altKey
         && event.key.toLowerCase() === "m" && !event.isComposing) {
@@ -942,11 +912,6 @@ export function EditorPlayground() {
 
   return (
     <div className="playground-shell">
-      {mathEdit && <MathDialog request={mathEdit} onClose={() => {
-        mathDialogOpenRef.current = false;
-        setMathEdit(null);
-        requestAnimationFrame(() => editorRef.current?.focus());
-      }} onSaved={() => editorRef.current?.flushChange()} />}
       <div className="playground-intro">
         <div>
           <span className="eyebrow">Core playground</span>

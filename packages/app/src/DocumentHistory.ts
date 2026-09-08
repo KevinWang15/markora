@@ -1,9 +1,11 @@
-import type { Node as MarkdownNode } from "markora/extension-api";
+import type { Node as MarkdownNode, Selection } from "markora/extension-api";
 
 export type HistoryEntry = Readonly<{
   source: string | MarkdownNode;
   mode: "source" | "rich";
   selection?: { anchor: number; head: number };
+  /** Rich selections may target atoms or cells, not just text offsets. */
+  richSelection?: ReturnType<Selection["getBookmark"]>;
 }>;
 
 /** A document history shared by the two views. Rich snapshots share immutable nodes. */

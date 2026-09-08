@@ -63,7 +63,7 @@ it.each(["win32", "darwin"])("exports through File on %s and disables export whi
     ? ["Markora", "File", "Edit", "Insert", "View", "Window", "Themes"]
     : ["File", "Insert", "View", "Themes"]);
   const math = () => nativeWindow.menu!.items.find(item => item.label === "Insert")!.submenu!.items[0];
-  expect(math().label).toBe("Math…");
+  expect(math().label).toBe("Math");
   expect(math().modifiers).toBe(platform === "darwin" ? "cmd-shift" : "ctrl-shift");
   math().click!();
   expect(actions.insertMath).toHaveBeenCalledOnce();

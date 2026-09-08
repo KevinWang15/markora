@@ -116,3 +116,14 @@ nodes and avoids rebuilding unchanged task-list/whitespace subtrees and attribut
 The parse ceiling is unchanged. To protect the serialization improvement, the
 512 KiB and 1 MiB serialization failure ceilings are reduced to 250 and 500 ms,
 and the 1 MiB idle snapshot ceiling to 1,000 ms.
+
+## In-place math editing review
+
+The math extension now includes the native TeX input, syntax mirror, focus styling,
+responsive sizing and forced-colors fallback formerly supplied by a host dialog.
+The packed stylesheet measures 8,158 raw / 1,858 gzip bytes. Its CSS warning/failure
+ceilings become 8,500/9,200 raw and 1,950/2,100 gzip bytes, retaining approximately
+12–13% failure headroom for this new feature. This changes only the standalone
+math CSS allowance. JavaScript, combined-extension CSS, dependency exclusions,
+and runtime/memory failure ceilings remain unchanged. No CodeMirror, React or
+rendering-engine dependency was added to math's source editor.

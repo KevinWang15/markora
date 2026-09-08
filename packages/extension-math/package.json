@@ -48,7 +48,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.api.json --noEmit",
     "prepack": "pnpm run build && pnpm run typecheck && pnpm run test && pnpm run smoke:node-esm",
     "smoke:node-esm": "node --input-type=module -e \"const mod = await import('./dist/index.js'); if (typeof mod.createMathExtension !== 'function') throw new Error('createMathExtension export missing'); if (!Object.isFrozen(mod.defaultMathMessages)) throw new Error('frozen defaultMathMessages export missing');\"",
-    "test": "vitest run --root ../.. packages/extension-math/test/math.test.ts"
+    "test": "vitest run --root ../.. packages/extension-math/test"
   },
   "peerDependencies": {
     "markora": "^0.0.1"

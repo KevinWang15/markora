@@ -100,3 +100,13 @@ normalization. Only ancestors of changed content are copied; unchanged nodes and
 attribute objects are reused. This reduces allocation and GC pressure without
 skipping task-prefix handling or imported-resource sanitization. Tests verify both
 node sharing and that the original parsed document remains untouched.
+
+## Math editing
+
+The math extension owns source editing in its NodeViews. `sourceEditor` owns native
+text input, IME, keyboard exit, sizing and the inert syntax mirror; the NodeView
+owns model transactions, focus transitions, render suspension and teardown. Source
+is authoritative; preview DOM never enters serialization. Hosts call the typed
+`edit` / `editSelection` commands and need no math-dialog state. The app lets native
+inputs own their keyboard Undo/Redo and breaks document-history groups at their
+focus boundaries. The existing `onEditSource` API remains available for custom hosts.

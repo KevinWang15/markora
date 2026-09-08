@@ -177,6 +177,7 @@ export type BrowserLabEditorSpec = {
   markdown?: string;
   mathMessages?: BrowserLabMathMessages;
   mathRendererMode?: BrowserLabMathRendererMode;
+  mathEditMode?: "in-place";
   messages?: MarkdownEditorMessageOverrides;
   motion?: "reduce";
   placement?: "bottom-right" | "normal";

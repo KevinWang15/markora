@@ -27,14 +27,7 @@ const math = createMathExtension({
     output.textContent = renderTrustedMathAsText(source, signal);
     return output;
   },
-  onEditSource({ source, update }) {
-    openMathEditor({
-      source,
-      save(nextSource) {
-        if (!update(nextSource)) showSourceConflict();
-      },
-    });
-  },
+
 });
 
 const editor = createEditor({
@@ -44,7 +37,7 @@ const editor = createEditor({
 });
 
 const handle = editor.extensions.get(math);
-handle.commands.insertInline("\\sqrt{x}");
+handle.commands.editSelection("inline"); // insert and immediately edit at the caret
 
 const first = handle.state.getNodes()[0];
 if (first) handle.commands.update(first, "x^3");
@@ -55,6 +48,33 @@ extension definition. They are runtime-only configuration, do not enter the
 extension manifest, and require recreating the editor when changed. The exact
 definition object passed to `createEditor()` provides the typed command and
 state handle.
+
+## In-place TeX editing
+
+With no `onEditSource` override, clicking a formula opens its syntax-highlighted
+TeX source in the document. Tab to a formula and press Enter to edit with the
+keyboard. Source input uses a native textarea, with a non-interactive highlighted
+mirror; clipboard, selection, Undo/Redo and IME remain native. Highlighting uses
+text nodes, never source HTML, and follows the active theme. No React or additional
+editor runtime is required, including with `markora/minimal`.
+
+Valid source edits update the model immediately. Click outside or press Escape to
+render; Escape keeps edits. Ctrl/Cmd+Enter or Tab moves into surrounding prose;
+Shift+Tab moves backwards. Enter alone finishes inline math and inserts a newline
+in display math. Clearing a formula removes it on exit. Invalid TeX stays in the
+model and falls back to visible source when rendering fails. A temporary input
+that cannot use Markdown math delimiters (for example, multiline inline source)
+is retained as ordinary text on exit, so no entered source is silently lost.
+
+`commands.edit(target)` focuses an existing formula using the usual stale-target
+checks. `commands.editSelection(kind = "block")` edits an exactly selected formula,
+or inserts a new one at the selection and focuses its source. The default display
+source is empty; new inline math starts with `{}`, selected for replacement.
+`commands.finishEditing()` commits active input before a host saves or exports
+without a pointer click (for example, from a native menu). It returns `false` while IME
+composition is active; defer the operation in that case.
+Read-only state, external replacement and destruction dispose of active input.
+The optional `onEditSource` callback remains an explicit custom-editor override.
 
 ## Markdown and source fidelity
 

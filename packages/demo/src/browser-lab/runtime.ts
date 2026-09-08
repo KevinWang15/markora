@@ -12,7 +12,7 @@ import { createFrontmatterExtension } from "markora-extension-frontmatter";
 import "markora-extension-frontmatter/styles.css";
 import { createHtmlExtension } from "markora-extension-html";
 import "markora-extension-html/styles.css";
-import { createMathExtension } from "markora-extension-math";
+import { createMathExtension, type MathEditRequest } from "markora-extension-math";
 import "markora-extension-math/styles.css";
 import { createTocExtension } from "markora-extension-toc";
 import "markora-extension-toc/styles.css";
@@ -175,10 +175,10 @@ export function mountBrowserLab(labRoot: HTMLElement) {
       extensionMode === "math" || allAdvanced
         ? createMathExtension({
             messages: normalizeBrowserLabMathMessages(spec.mathMessages),
-            onEditSource(request) {
+            ...(spec.mathEditMode === "in-place" ? {} : { onEditSource(request: MathEditRequest) {
               mounted.mathEditRequest = request;
               mounted.section.dataset.pendingMathEdit = "true";
-            },
+            } }),
             renderer: createBrowserLabMathRenderer(
               mounted,
               spec.mathRendererMode,

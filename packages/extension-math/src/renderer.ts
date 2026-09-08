@@ -1227,9 +1227,9 @@ export function createMathRenderManager(
             observer?.observe(target.dom);
           }
 
+          if (entry.kind !== nextKind) entry.nearViewport = nextKind === "inline";
           entry.kind = nextKind;
           entry.source = nextSource;
-          entry.nearViewport = nextKind === "inline";
           entry.diagnosticVersion = -1;
           entry.generation += 1;
           abortGeneration(entry);

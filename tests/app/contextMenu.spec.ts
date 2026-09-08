@@ -33,9 +33,9 @@ test("app context menu formats a selected range and edits math in the active the
   await menu(page).getByRole("menuitem", { name: "Format", exact: true }).click();
   await page.getByRole("menuitemcheckbox", { name: "Bold", exact: true }).click();
   await expect(editor(page).locator("strong")).toContainText("hello");
-  await editor(page).locator(".mdw-math").click({ button: "right", position: { x: 12, y: 65 } });
-  await menu(page).getByRole("menuitem", { name: "Edit formula…", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Edit math", exact: true })).toBeVisible();
+  await editor(page).locator(".mdw-math").click({ button: "right", position: { x: 12, y: 12 } });
+  await menu(page).getByRole("menuitem", { name: "Edit formula", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: "LaTeX source", exact: true })).toBeFocused();
 });
 
@@ -53,7 +53,7 @@ test("context menus stay above app chrome when a short viewport forces them upwa
   await page.keyboard.press("Escape"); await expect(editor(page)).toBeFocused();
 });
 
-test("toolbar history becomes available immediately after cancelling a dialog", async ({ page, context }) => {
+test("toolbar history remains available after leaving in-place math", async ({ page, context }) => {
   await openDocument(page, "Original");
   await editor(page).click();
   await page.keyboard.press("ControlOrMeta+End");
@@ -62,11 +62,16 @@ test("toolbar history becomes available immediately after cancelling a dialog", 
   const undo = page.getByRole("button", { name: "Undo", exact: true });
   await expect(undo).toBeEnabled();
   await page.getByRole("button", { name: "Insert math", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Insert math", exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "LaTeX source", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(undo).toBeEnabled();
   await undo.click();
-  await expect(editor(page)).toHaveText("Original");
-  await expect(page.getByRole("button", { name: "Redo", exact: true })).toBeEnabled();
+  await expect(editor(page)).toContainText("Original");
+  const redo = page.getByRole("button", { name: "Redo", exact: true });
+  await expect(redo).toBeEnabled();
+  await expect(editor(page).locator(".mdw-math")).toHaveCount(1);
+  await redo.click();
+  await expect(editor(page).locator(".mdw-math")).toHaveCount(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });

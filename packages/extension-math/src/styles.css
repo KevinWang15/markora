@@ -236,3 +236,87 @@
     transition: none;
   }
 }
+
+/* Native textarea and syntax mirror have identical layout. Only the textarea is
+ * interactive; the mirror never participates in selection or accessibility. */
+.mdw-math[data-mdw-math-editing="true"] {
+  border-color: var(--mdw-color-focus, #0969da);
+}
+.mdw-math--inline[data-mdw-math-editing="true"] {
+  inline-size: min(32rem, 100%);
+  vertical-align: middle;
+}
+.mdw-math__editor {
+  display: block;
+  position: relative;
+  inline-size: 100%;
+  min-inline-size: 0;
+  background: var(--mdw-color-surface-muted, #f6f8fa);
+  color: var(--mdw-color-text, #24292f);
+}
+.mdw-math .mdw-math__input,
+.mdw-math .mdw-math__highlight {
+  box-sizing: border-box;
+  display: block;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0.75rem 1rem;
+  font-family: var(--mdw-font-mono, ui-monospace, monospace);
+  font-size: var(--mdw-code-font-size, 0.875rem);
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1.6;
+  letter-spacing: normal;
+  tab-size: 2;
+  text-align: start;
+  scrollbar-gutter: stable;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  inline-size: 100%;
+}
+.mdw-math .mdw-math__input {
+  position: relative;
+  z-index: 1;
+  min-block-size: 5rem;
+  max-block-size: 24rem;
+  resize: none;
+  overflow: auto;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--mdw-color-text, #24292f);
+  outline: none;
+  -webkit-text-fill-color: transparent;
+}
+.mdw-math--inline .mdw-math__input { min-block-size: 2.5rem; }
+.mdw-math .mdw-math__highlight {
+  position: absolute;
+  inset: 0;
+  block-size: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.mdw-math__input::selection { background: var(--mdw-color-selection, #0969da33); }
+.mdw-math__input[aria-invalid="true"] { box-shadow: inset 0 -2px var(--mdw-color-danger, #cf222e); }
+.mdw-tex-command { color: var(--mdw-syntax-keyword, var(--mdw-color-accent, #0550ae)); }
+.mdw-tex-number { color: var(--mdw-syntax-literal, var(--mdw-color-accent, #0550ae)); }
+.mdw-tex-punctuation { color: var(--mdw-syntax-operator, var(--mdw-color-text, #24292f)); }
+.mdw-tex-comment { color: var(--mdw-syntax-comment, var(--mdw-color-muted, #59636e)); }
+@media (forced-colors: active) {
+  .mdw-math .mdw-math__input { color: CanvasText; -webkit-text-fill-color: CanvasText; caret-color: CanvasText; }
+  .mdw-math__highlight { visibility: hidden; }
+}
+
+.mdw-math .mdw-math__input::placeholder { color: var(--mdw-color-muted, #59636e); -webkit-text-fill-color: var(--mdw-color-muted, #59636e); }
+
+.mdw-math[data-mdw-math-state="rendered"][data-mdw-math-editing="false"] {
+  background: transparent;
+  border-color: transparent;
+  cursor: text;
+}
+.mdw-math:focus-visible {
+  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
+  outline-offset: 2px;
+}

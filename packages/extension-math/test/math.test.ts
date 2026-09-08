@@ -648,6 +648,18 @@ describe("math render manager", () => {
     expect(renderer).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps visible display math visible when its source changes", async () => {
+    const { manager } = renderManager(({ source }) => renderedText(source));
+    const view = renderTarget("block", "x");
+    const registration = manager.register(view.target, "block", "x");
+    registration.setNearViewport(true);
+    await vi.waitFor(() => expect(registration.snapshot().status).toBe("rendered"));
+    view.setCurrent("block", "y");
+    registration.sync("block", "y");
+    await vi.waitFor(() => expect(view.preview.textContent).toBe("y"));
+    expect(registration.snapshot().status).toBe("rendered");
+  });
+
   it("defers composition work and suppresses oversized source", async () => {
     const renderer: MathRenderer = vi.fn(({ source }) => renderedText(source));
     const compositionHarness = renderManager(renderer);

@@ -29,11 +29,10 @@ import { createEditor, type MarkdownEditor, type MarkdownEditorHeadingLevel } fr
 import { createTocExtension } from "markora-extension-toc";
 import { useDocumentAnalysis } from "./useDocumentAnalysis";
 import { createFootnotesExtension } from "markora-extension-footnotes";
-import { createMathExtension, type MathKind } from "markora-extension-math";
+import { createMathExtension } from "markora-extension-math";
 import { createDiagramsExtension } from "markora-extension-diagrams";
 import { renderMath, renderMermaid } from "./renderers";
 import { SourceDialog, type SourceEdit } from "./SourceDialog";
-import { MathDialog, type MathEdit } from "./MathDialog";
 import { createDocumentBridge } from "./documentBridge";
 import { FindBar } from "./FindBar";
 import { createSearchExtension } from "./searchExtension";
@@ -142,12 +141,7 @@ function ToolbarButton({
 export function App({ themeController }: Readonly<{ themeController: MarkdownThemeController }>) {
   const theme = useSyncExternalStore(themeController.subscribe, themeController.getSnapshot);
   const [sourceEdit, setSourceEdit] = useState<SourceEdit | null>(null);
-  const [mathEdit, setMathEdit] = useState<MathEdit | null>(null);
-  const mathDialogOpenRef = useRef(false);
-  const [mathExtension] = useState(() => createMathExtension({ renderer: renderMath, onEditSource: request => {
-    mathDialogOpenRef.current = true;
-    setMathEdit({ mode: "edit", kind: request.kind, source: request.source, apply: request.update, remove: request.remove });
-  } }));
+  const [mathExtension] = useState(() => createMathExtension({ renderer: renderMath }));
   const [diagramsExtension] = useState(() => createDiagramsExtension({ renderers: { mermaid: renderMermaid }, onEditSource: request =>
     setSourceEdit({ title: `Edit ${request.kind}`, source: request.source, update: source => request.update({ source }) }) }));
   const editorHostRef = useRef<HTMLDivElement>(null);
@@ -267,10 +261,15 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     const untrackAssets = editor.subscribe("asset", event => {
       if (event.upload.error) setError(event.upload.error.message);
     });
+    const breakInputHistory = (event: FocusEvent) => {
+      if (event.target instanceof Element && event.target.matches("textarea, input")) controller.history.breakGroup();
+    };
+    editor.view.dom.addEventListener("focusin", breakInputHistory);
+    editor.view.dom.addEventListener("focusout", breakInputHistory);
     const untrackHistory = editor.subscribe("update", event => {
       if (applyingHistoryRef.current || event.origin === "reset" || sourceModeRef.current) return;
       const { doc, selection } = editor.view.state;
-      controller.history.record({ source: doc, mode: "rich", selection: { anchor: selection.anchor, head: selection.head } },
+      controller.history.record({ source: doc, mode: "rich", richSelection: selection.getBookmark() },
         event.origin === "user" ? "rich" : null);
     });
     const unsubscribe = editor.subscribe("state", () => setEditorVersion((version) => version + 1));
@@ -278,6 +277,8 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     return () => {
       unsubscribe();
       untrackHistory();
+      editor.view.dom.removeEventListener("focusin", breakInputHistory);
+      editor.view.dom.removeEventListener("focusout", breakInputHistory);
       untrackAssets();
       untrackErrors();
       editor.destroy();
@@ -327,8 +328,11 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     });
   }, [rememberPath]);
 
+  const finishRichInput = () => sourceModeRef.current
+    || (editorRef.current?.extensions.get(mathExtension).commands.finishEditing() ?? true);
+
   const saveDocument = useCallback(async (saveAs = false, acceptTableLoss = false) => {
-    if (controller.getSnapshot().saving) return false;
+    if (controller.getSnapshot().saving || !finishRichInput()) return false;
     const editor = editorRef.current;
     const issues = !sourceModeRef.current ? editor?.state.tableIssues() ?? [] : [];
     if (issues.length && !acceptTableLoss) {
@@ -367,7 +371,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   }, [controller, rememberPath, showError]);
 
   const guardUnsaved = useCallback((action: PendingAction["action"], title: string, message: string) => {
-    if (document.querySelector("dialog[open]")) return;
+    if (document.querySelector("dialog[open]") || !finishRichInput()) return;
     if (!sourceModeRef.current) editorRef.current?.flushChange();
     const run = async () => {
       try { await action(); }
@@ -434,6 +438,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     }
 
     const editor = editorRef.current;
+    if (!finishRichInput()) return;
     const issues = editor?.state.tableIssues() ?? [];
     if (issues.length && !acceptConversion) {
       setSourceConversionWarning([...new Set(issues.map(issue => issue.message))].join(" "));
@@ -556,7 +561,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
 
   const navigateHistory = useCallback((direction: "undo" | "redo") => {
     const editor = editorRef.current;
-    if (!editor || editor.view.composing || sourceEditorRef.current?.isComposing()) return;
+    if (!editor || editor.view.composing || sourceEditorRef.current?.isComposing() || !finishRichInput()) return;
     if (!sourceModeRef.current) editor.flushChange();
     const entry = controller.history[direction]();
     if (!entry) return;
@@ -581,7 +586,10 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
         sourceEditorRef.current?.setMarkdown(markdown, entry.mode === "source" ? entry.selection : undefined);
         sourceEditorRef.current?.focus();
       } else {
-        editor.focus(entry.mode === "rich" ? entry.selection : undefined);
+        if (entry.mode === "rich" && entry.richSelection) {
+          editor.view.dispatch(editor.view.state.tr.setSelection(entry.richSelection.resolve(editor.view.state.doc)));
+        }
+        editor.focus();
       }
       setEditorVersion(version => version + 1);
     } catch (cause) {
@@ -610,36 +618,15 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   }, []);
   const openMath = useCallback(() => {
     const current = editorRef.current;
-    if (!current || sourceModeRef.current || controller.getSnapshot().exporting || mathDialogOpenRef.current
+    if (!current || sourceModeRef.current || controller.getSnapshot().exporting
       || current.view.composing || document.querySelector("dialog[open]")) return;
-    const { doc, selection } = current.view.state;
-    const handle = current.extensions.get(mathExtension);
-    const selected = handle.state.getNodes().find(node => node.position === selection.from
-      && doc.nodeAt(node.position)?.nodeSize === selection.to - selection.from);
-    mathDialogOpenRef.current = true;
-    if (selected) {
-      setMathEdit({ mode: "edit", kind: selected.kind, source: selected.source,
-        apply: source => handle.commands.update(selected, source), remove: () => handle.commands.remove(selected) });
-    } else {
-      setMathEdit({ mode: "insert", kind: "block", source: doc.textBetween(selection.from, selection.to, " "),
-        apply: (source: string, kind: MathKind) => {
-          // A modal can outlive an external document replacement. Never insert at a stale position.
-          if (current.isDestroyed || current.view.state.doc !== doc) return false;
-          current.view.dispatch(current.view.state.tr.setSelection(selection));
-          controller.history.breakGroup();
-          return kind === "inline" ? handle.commands.insertInline(source) : handle.commands.insertBlock(source);
-        } });
-    }
-  }, []);
-  const closeMath = useCallback(() => {
-    mathDialogOpenRef.current = false;
-    setMathEdit(null);
-    requestAnimationFrame(() => editorRef.current?.focus());
+    controller.history.breakGroup();
+    current.extensions.get(mathExtension).commands.editSelection();
   }, []);
   const exportDocument = useCallback(async (format: "html" | "pdf") => {
     if (controller.getSnapshot().exporting || document.querySelector("dialog[open]") || editorRef.current?.view.composing || sourceEditorRef.current?.isComposing()) return;
     const current = editorRef.current;
-    if (!current) return;
+    if (!current || !finishRichInput()) return;
     current.flushChange();
     const path = controller.snapshot.path;
     try {
@@ -671,7 +658,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       theme: theme.id,
       setTheme: themeController.setTheme,
     });
-  }, [actions, themeController, theme.id, exporting, startupReady, sourceMode, pendingAction, recoveryCandidate, sourceEdit, mathEdit, sourceConversionWarning, tableSaveWarning]);
+  }, [actions, themeController, theme.id, exporting, startupReady, sourceMode, pendingAction, recoveryCandidate, sourceEdit, sourceConversionWarning, tableSaveWarning]);
 
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
@@ -708,6 +695,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   useEffect(() => {
     const onHistoryInput = (event: InputEvent) => {
       if (event.isComposing || !(event.target instanceof Element) || !event.target.closest(".app-editor, .app-source-editor")) return;
+      if (event.target.closest("textarea, input")) return;
       if (event.inputType !== "historyUndo" && event.inputType !== "historyRedo") return;
       event.preventDefault();
       event.stopPropagation();
@@ -723,7 +711,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
         event.preventDefault(); closeSearch(); return;
       }
       if (document.querySelector("dialog[open]") || event.isComposing) return;
-      const ownsHistory = event.target instanceof Element && !!event.target.closest(".app-editor, .app-source-editor");
+      const ownsHistory = event.target instanceof Element && !event.target.closest("textarea, input") && !!event.target.closest(".app-editor, .app-source-editor");
       const action = matchApplicationShortcut(event, ownsHistory);
       if (!action) return;
       event.preventDefault();
@@ -749,7 +737,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const sourceShortcut = desktop.isMac ? "⌘/" : "Ctrl+/";
   // Presentation follows React state. Reading the previous committed DOM here
   // can leave toolbar actions disabled after a dialog unmounts.
-  const hasOpenDialog = Boolean(pendingAction || recoveryCandidate || sourceEdit || mathEdit
+  const hasOpenDialog = Boolean(pendingAction || recoveryCandidate || sourceEdit
     || sourceConversionWarning || tableSaveWarning);
   const canInteract = () => !hasOpenDialog
     && !editorRef.current?.view.composing && !sourceEditorRef.current?.isComposing();
@@ -1056,9 +1044,6 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
         </Dialog>
       )}
 
-      {mathEdit && <MathDialog request={mathEdit} onClose={closeMath} onSaved={() => {
-        editorRef.current?.flushChange(); controller.history.breakGroup();
-      }} />}
       {sourceEdit && <SourceDialog request={sourceEdit} onClose={() => setSourceEdit(null)} onSaved={() => {
         editorRef.current?.flushChange(); controller.history.breakGroup();
       }} />}

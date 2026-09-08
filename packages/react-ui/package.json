@@ -3,11 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Shared React dialogs and math editing UI for the Markora app and playground.",
+  "description": "Shared React dialogs and editor host adapters for the Markora app and playground.",
   "exports": {
     "./Dialog": "./src/Dialog.tsx",
     "./Icon": "./src/Icon.tsx",
-    "./MathDialog": "./src/MathDialog.tsx",
     "./renderMath": "./src/renderMath.ts",
     "./styles.css": "./src/styles.css",
     "./mathContextMenu": "./src/mathContextMenu.ts"

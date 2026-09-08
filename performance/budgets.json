@@ -370,8 +370,8 @@
         "gzipBytes": { "warning": 35000, "failure": 39000 }
       },
       "css": {
-        "rawBytes": { "warning": 5750, "failure": 6400 },
-        "gzipBytes": { "warning": 1350, "failure": 1500 }
+        "rawBytes": { "warning": 8500, "failure": 9200 },
+        "gzipBytes": { "warning": 1950, "failure": 2100 }
       },
       "staticModuleCount": { "warning": 99, "failure": 108 }
     },

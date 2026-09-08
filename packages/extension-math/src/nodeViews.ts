@@ -1,3 +1,6 @@
+import { NodeSelection, Selection, closeHistory } from "markora/extension-api";
+import { isValidInlineMathSource, isValidBlockMathSource, normalizeMathSource } from "./source";
+import { createMathSourceEditor, type MathSourceEditor } from "./sourceEditor";
 import type {
   EditorView,
   Node as ProseMirrorNode,
@@ -24,7 +27,9 @@ export type MathNodeViewController = Readonly<{
   getRenderSnapshot(): MathRenderSnapshot;
   isCurrent(): boolean;
   refresh(): boolean;
-  requestEdit(): boolean;
+  resetEditing(): void;
+  finishEditing(): boolean;
+  requestEdit(joinHistory?: boolean): boolean;
   retryPreview(): boolean;
   togglePreview(): boolean;
 }>;
@@ -33,6 +38,7 @@ export type CreateMathNodeViewOptions = Readonly<{
   kind: MathKind;
   manager: MathRenderManager;
   messages: MathMessages;
+  rendererAvailable: boolean;
   nodeType: NodeType;
   onCreate?(controller: MathNodeViewController): void;
   onDestroy?(controller: MathNodeViewController): void;
@@ -95,6 +101,7 @@ export function createMathNodeView(
     kind,
     manager,
     messages,
+    rendererAvailable,
     nodeType,
     onCreate,
     onDestroy,
@@ -111,6 +118,9 @@ export function createMathNodeView(
     private readonly actions: HTMLElement;
     private readonly controller: MathNodeViewController;
     private destroyed = false;
+    private sourceEditor: MathSourceEditor | null = null;
+    private writingSource = false;
+    private finishing = false;
     private readonly editButton: HTMLButtonElement | null;
     private readonly header: HTMLElement;
     private readonly kindElement: HTMLElement;
@@ -149,6 +159,8 @@ export function createMathNodeView(
       this.dom.dataset.mdwMath = "";
       this.dom.dataset.mdwMathKind = kind;
       this.dom.dataset.mdwMathState = "source";
+      this.dom.addEventListener("click", this.handleClick);
+      this.dom.addEventListener("keydown", this.handleNodeKeyDown);
       this.dom.setAttribute("role", "group");
 
       this.header = ownerDocument.createElement("span");
@@ -165,15 +177,13 @@ export function createMathNodeView(
       this.actions.className = "mdw-math__actions";
       this.actions.addEventListener("keydown", this.handleActionKeyDown);
 
-      if (onEditSource) {
+      {
         this.editButton = this.createActionButton(
           "edit",
           messages.editSource,
           this.handleEdit,
         );
         this.actions.append(this.editButton);
-      } else {
-        this.editButton = null;
       }
 
       this.toggleButton = this.createActionButton(
@@ -246,7 +256,13 @@ export function createMathNodeView(
         getRenderSnapshot: () => instance.getRenderSnapshot(),
         isCurrent: () => instance.isCurrent(kind, readSource(instance.nodeValue)),
         refresh: () => instance.refresh(),
-        requestEdit: () => instance.requestEdit(),
+        resetEditing: () => instance.resetEditing(),
+        finishEditing: () => {
+          if (instance.sourceEditor?.composing) return false;
+          instance.finishEditing(null);
+          return true;
+        },
+        requestEdit: (joinHistory) => instance.requestEdit(joinHistory),
         retryPreview: () => instance.retryPreview(),
         togglePreview: () => instance.togglePreview(),
       });
@@ -273,6 +289,7 @@ export function createMathNodeView(
 
       if (source !== previousSource) {
         this.renderSource(source);
+        if (!this.writingSource) this.sourceEditor?.sync(source);
         this.registration.sync(kind, source);
       }
 
@@ -293,7 +310,7 @@ export function createMathNodeView(
     }
 
     stopEvent(event: Event) {
-      return isInside(event.target, this.actions);
+      return isInside(event.target, this.actions) || !!this.sourceEditor && isInside(event.target, this.sourceEditor.dom);
     }
 
     ignoreMutation() {
@@ -319,7 +336,7 @@ export function createMathNodeView(
     }
 
     isComposing() {
-      return !this.destroyed && !this.view.isDestroyed && this.view.composing;
+      return !this.destroyed && !this.view.isDestroyed && (this.view.composing || !!this.sourceEditor?.composing);
     }
 
     isCurrent(expectedKind: MathKind, expectedSource: string) {
@@ -363,35 +380,133 @@ export function createMathNodeView(
       return Object.freeze({ ...this.renderSnapshot });
     }
 
+    private resetEditing() {
+      if (!this.sourceEditor) return;
+      this.sourceEditor.destroy();
+      this.sourceEditor = null;
+      if (rendererAvailable && !this.registration.snapshot().previewRequested) this.registration.togglePreview();
+      this.render(this.registration.snapshot());
+    }
+
     private refresh() {
       if (this.destroyed) {
         return false;
       }
 
+      if (!this.view.editable) this.resetEditing();
       this.render(this.registration.snapshot());
       return true;
     }
 
-    private requestEdit() {
+    private requestEdit(joinHistory = false) {
       if (
         this.destroyed
         || this.view.isDestroyed
         || !this.view.editable
         || this.view.composing
-        || !onEditSource
         || !this.isCurrent(kind, readSource(this.nodeValue))
       ) {
         return false;
       }
 
       try {
-        onEditSource(this.controller);
+        if (onEditSource) {
+          onEditSource(this.controller);
+          return true;
+        }
+        if (this.sourceEditor) { this.sourceEditor.focus(); return true; }
+        const position = this.getCurrentPosition()!;
+        const transaction = this.view.state.tr.setSelection(NodeSelection.create(this.view.state.doc, position));
+        this.view.dispatch(joinHistory ? transaction : closeHistory(transaction));
+        if (!this.canRunAction()) return false;
+        this.sourceEditor = createMathSourceEditor({
+          document: this.dom.ownerDocument,
+          source: readSource(this.nodeValue),
+          inline: kind === "inline",
+          label: messages.sourceInputLabel,
+          hint: messages.editingHint,
+          onChange: (source) => this.writeSource(source),
+          onExit: (direction) => this.finishEditing(direction),
+        });
+        this.dom.append(this.sourceEditor.dom);
+        if (this.registration.snapshot().previewRequested) this.registration.togglePreview();
+        this.render(this.registration.snapshot());
+        this.sourceEditor.focus();
         return true;
       } catch (error) {
         this.report(error, "edit-source");
         return false;
       }
     }
+
+    private writeSource(value: string) {
+      if (!this.canRunAction()) return;
+      const source = normalizeMathSource(value);
+      const valid = kind === "inline" ? isValidInlineMathSource(source) : isValidBlockMathSource(source);
+      this.sourceEditor?.input.setAttribute("aria-invalid", valid || !source ? "false" : "true");
+      this.status.textContent = !valid && source ? messages.invalidEditingSource : "";
+      this.status.hidden = valid || !source;
+      if (!valid || source === readSource(this.nodeValue)) return;
+      const position = this.getCurrentPosition()!;
+      this.writingSource = true;
+      try {
+        this.view.dispatch(this.view.state.tr.setNodeMarkup(position, undefined, { ...this.nodeValue.attrs, source }));
+      } finally { this.writingSource = false; }
+    }
+
+    private finishEditing(direction: -1 | 1 | null) {
+      const editor = this.sourceEditor;
+      if (!editor || this.finishing || editor.composing) return;
+      this.finishing = true;
+      const focused = (editor.input.getRootNode() as Document | ShadowRoot).activeElement === editor.input;
+      const source = normalizeMathSource(editor.input.value);
+      const position = this.getCurrentPosition();
+      this.sourceEditor = null;
+      try {
+        if (position === null || this.view.isDestroyed) return;
+        const valid = kind === "inline" ? isValidInlineMathSource(source) : isValidBlockMathSource(source);
+        let endPosition = position + this.nodeValue.nodeSize;
+        // Empty formulas are removed. Source that cannot round-trip through a math
+        // delimiter is kept as ordinary text, never silently discarded on blur.
+        if (this.view.editable && (!source.trim() || !valid)) {
+          const replacement = source ? (kind === "inline"
+            ? this.view.state.schema.text(source, this.nodeValue.marks)
+            : this.view.state.schema.nodes.paragraph.create(null, this.view.state.schema.text(source))) : null;
+          const replacementTransaction = this.view.state.tr.replaceWith(position, endPosition, replacement ? [replacement] : []);
+          endPosition = replacementTransaction.mapping.map(endPosition);
+          this.view.dispatch(replacementTransaction);
+        }
+        if (this.view.isDestroyed) return;
+        let tr = this.view.state.tr;
+        if (focused && direction !== null) {
+          let next = Math.min((direction > 0 ? endPosition : position), tr.doc.content.size);
+          if (direction > 0 && kind === "block" && next === tr.doc.content.size) {
+            tr = tr.insert(next, this.view.state.schema.nodes.paragraph.create());
+          }
+          next = Math.min(next, tr.doc.content.size);
+          tr = tr.setSelection(Selection.near(tr.doc.resolve(next), direction));
+        }
+        this.view.dispatch(tr);
+        if (!this.view.isDestroyed) this.view.dispatch(closeHistory(this.view.state.tr));
+        if (!this.destroyed) {
+          if (rendererAvailable && !this.registration.snapshot().previewRequested) this.registration.togglePreview();
+          this.render(this.registration.snapshot());
+        }
+        if (focused && !this.view.isDestroyed) this.view.focus();
+      } finally { editor.destroy(); this.finishing = false; }
+    }
+
+    private readonly handleNodeKeyDown = (event: KeyboardEvent) => {
+      if (event.target !== this.dom || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+      if ((event.key === "Enter" || event.key === " ") && this.requestEdit()) {
+        event.preventDefault(); event.stopPropagation();
+      }
+    };
+
+    private readonly handleClick = (event: MouseEvent) => {
+      if (event.button !== 0 || this.sourceEditor || isInside(event.target, this.actions)) return;
+      this.handleEdit(event);
+    };
 
     private retryPreview() {
       if (!this.canRunAction()) {
@@ -484,6 +599,7 @@ export function createMathNodeView(
         snapshot.previewRequested ? "preview" : "source",
         disabled ? "disabled" : "enabled",
         this.renderedSelected ? "selected" : "unselected",
+        this.sourceEditor ? "editing" : "reading",
       ].join(":");
 
       if (uiKey === this.renderedUiKey) {
@@ -492,6 +608,8 @@ export function createMathNodeView(
 
       this.renderedUiKey = uiKey;
       this.dom.dataset.mdwMathState = snapshot.status;
+      this.dom.dataset.mdwMathEditing = this.sourceEditor ? "true" : "false";
+      if (this.sourceEditor) this.sourceEditor.input.readOnly = disabled;
       this.dom.dataset.mdwMathPreviewRequested = snapshot.previewRequested ? "true" : "false";
 
       if (disabled !== this.renderedDisabled) {
@@ -517,11 +635,13 @@ export function createMathNodeView(
 
       const retryVisible = snapshot.status === "error";
       this.retryButton.hidden = !retryVisible;
-      this.header.hidden = kind === "inline" && !this.renderedSelected && !retryVisible;
+      this.header.hidden = !!this.sourceEditor || (!onEditSource && !retryVisible)
+        || (kind === "inline" && !this.renderedSelected && !retryVisible);
+      this.dom.tabIndex = disabled ? -1 : 0;
 
-      const showPreview = snapshot.status === "rendered";
+      const showPreview = !this.sourceEditor && snapshot.status === "rendered";
       this.preview.hidden = !showPreview;
-      this.sourceShell.hidden = showPreview;
+      this.sourceShell.hidden = !!this.sourceEditor || showPreview;
 
       const text = this.statusText(snapshot);
 
@@ -529,7 +649,7 @@ export function createMathNodeView(
         this.status.textContent = text;
       }
 
-      this.status.hidden = !text;
+      this.status.hidden = !!this.sourceEditor || !text;
     }
 
     private report(error: unknown, contribution: string) {
@@ -546,6 +666,10 @@ export function createMathNodeView(
       }
 
       this.destroyed = true;
+      this.sourceEditor?.destroy();
+      this.sourceEditor = null;
+      this.dom.removeEventListener("click", this.handleClick);
+      this.dom.removeEventListener("keydown", this.handleNodeKeyDown);
       this.actions.removeEventListener("keydown", this.handleActionKeyDown);
       this.editButton?.removeEventListener("click", this.handleEdit);
       this.toggleButton.removeEventListener("click", this.handleToggle);

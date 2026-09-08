@@ -167,7 +167,7 @@ function createNativeMenu(actions: DesktopMenuActions) {
   else menu.append(fileItem);
 
   const insert = new runtime.Menu();
-  appendItem(insert, { label: "Math…", key: "m", modifiers: `${modifier}-shift`, enabled: actions.canInsertMath, click: actions.insertMath });
+  appendItem(insert, { label: "Math", key: "m", modifiers: `${modifier}-shift`, enabled: actions.canInsertMath, click: actions.insertMath });
   const insertItem = new runtime.MenuItem({ label: "Insert", submenu: insert });
   if (isMac && menu.createMacBuiltin) menu.insert(insertItem, 3);
   else menu.append(insertItem);

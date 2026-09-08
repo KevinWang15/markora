@@ -151,23 +151,22 @@ try {
   await page.getByRole("textbox", { name: "Markdown document", exact: true }).click();
   await page.keyboard.press(end);
   await page.evaluate(() => {
-    const math = window.nw.Window.get().menu.items.find(item => item.label === "Insert").submenu.items.find(item => item.label === "Math…");
+    const math = window.nw.Window.get().menu.items.find(item => item.label === "Insert").submenu.items.find(item => item.label === "Math");
     if (!math.enabled) throw new Error("Math insertion must be available in rich text");
     math.click();
   });
-  const mathDialog = page.getByRole("dialog", { name: "Insert math", exact: true });
-  const mathSource = mathDialog.getByRole("textbox", { name: "LaTeX source", exact: true });
+  const mathSource = page.getByRole("textbox", { name: "LaTeX source", exact: true });
   await expect(mathSource).toBeFocused();
   await cdp.send("Input.insertText", { text: String.raw`\frac{1}{2}` });
-  await expect(mathDialog.locator("math mfrac")).toHaveCount(1);
+  await expect(page.locator(".mdw-tex-command")).toHaveText("\\frac");
   await mathSource.press(`${mod}+Enter`);
-  await expect(mathDialog).toHaveCount(0);
+  await expect(mathSource).toHaveCount(0);
   await expect(page.locator('.app-editor [data-mdw-math-kind="block"] math')).toHaveCount(1);
   await toSource();
   await expect(source).toContainText(String.raw`\frac{1}{2}`);
   await source.press(`${mod}+z`);
   await expect(source).not.toContainText(String.raw`\frac{1}{2}`);
-  pass("native Insert → Math opens a live LaTeX preview and inserts one undoable formula");
+  pass("native Insert → Math opens highlighted TeX in place and inserts an undoable formula");
   await page.bringToFront(); await source.click(); await page.keyboard.press(end); await cdp.send("Input.insertText", { text: " RECOVER 中文 🙂" });
   await expect(source).toContainText("RECOVER 中文 🙂");
   await expect.poll(() => page.evaluate(async () => {

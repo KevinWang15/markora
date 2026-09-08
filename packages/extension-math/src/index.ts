@@ -137,11 +137,18 @@ export type MathEditRequest = Readonly<{
 
 export type MathExtensionOptions = Readonly<{
   messages?: MathMessageOverrides;
+  /** Optional custom editor override. Omit to edit highlighted TeX in place. */
   onEditSource?: (request: MathEditRequest) => void;
   renderer?: MathRenderer;
 }>;
 
 export type MathCommands = Readonly<{
+  /** Focus an existing formula's source editor. Stale targets are rejected. */
+  edit(target: MathNodeTarget): boolean;
+  /** Edit the selected formula, or insert and focus one at the current selection. */
+  editSelection(kind?: MathKind): boolean;
+  /** Commit active source input before saving/exporting. False during IME composition. */
+  finishEditing(): boolean;
   convert(target: MathNodeTarget, kind: MathKind): boolean;
   insertBlock(source: string): boolean;
   insertInline(source: string): boolean;
@@ -791,6 +798,25 @@ export function createMathExtension(options?: MathExtensionOptions) {
           : []
       )));
       const commands: MathCommands = {
+        finishEditing() {
+          return [...controllers].every(controller => controller.finishEditing());
+        },
+        edit(target) {
+          const normalized = normalizeMathNodeTarget(target);
+          if (!findMathNodeSnapshot(getState().doc, types, normalized, identities(getState()))) return false;
+          return findController(normalized)?.requestEdit() ?? false;
+        },
+        editSelection(kind = "block") {
+          assertKind(kind);
+          const { doc, selection } = getState();
+          const selected = baseNodes().find(node => node.position === selection.from
+            && doc.nodeAt(node.position)?.nodeSize === selection.to - selection.from);
+          if (selected) return commands.edit(selected);
+          const source = doc.textBetween(selection.from, selection.to, " ") || (kind === "inline" ? "{}" : "");
+          if (!(kind === "inline" ? commands.insertInline(source) : commands.insertBlock(source))) return false;
+          const inserted = baseNodes().find(node => node.position === getState().selection.from);
+          return !!inserted && (findController(inserted)?.requestEdit(true) ?? false);
+        },
         convert(target, kind) {
           const normalized = normalizeMathNodeTarget(target);
           return runCommand(createConvertCommand(
@@ -1047,6 +1073,14 @@ export function createMathExtension(options?: MathExtensionOptions) {
                 }));
                 return false;
               },
+              props: {
+                handleKeyDown(view, event) {
+                  if (event.key !== "Enter" || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
+                    || event.isComposing || !(view.state.selection instanceof NodeSelection)) return false;
+                  const target = baseNodes().find(node => node.position === view.state.selection.from);
+                  return !!target && commands.edit(target);
+                },
+              },
               view(editorView) {
                 let editable = editorView.editable;
                 let composing = editorView.composing;
@@ -1082,6 +1116,7 @@ export function createMathExtension(options?: MathExtensionOptions) {
               kind: "inline",
               manager,
               messages,
+              rendererAvailable: !!renderer,
               nodeType: types.inline,
               onCreate: (controller) => controllers.add(controller),
               onDestroy(controller) {
@@ -1100,6 +1135,7 @@ export function createMathExtension(options?: MathExtensionOptions) {
               kind: "block",
               manager,
               messages,
+              rendererAvailable: !!renderer,
               nodeType: types.block,
               onCreate: (controller) => controllers.add(controller),
               onDestroy(controller) {
@@ -1116,6 +1152,7 @@ export function createMathExtension(options?: MathExtensionOptions) {
           return editor.subscribe("state", (event) => {
             if (event.origin === "external" || event.origin === "reset") {
               editVersion += 1;
+              for (const controller of controllers) controller.resetEditing();
               manager.invalidateAll();
             }
           });
