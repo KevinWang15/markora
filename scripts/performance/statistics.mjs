@@ -52,3 +52,8 @@ export function summarizeSamples(samples) {
     standardDeviation: rounded(standardDeviation),
   });
 }
+export function summarizeRecords(records, metricNames) {
+  return Object.freeze(Object.fromEntries(metricNames.map(metric => [
+    metric, summarizeSamples(records.map(record => record.metrics[metric])),
+  ])));
+}

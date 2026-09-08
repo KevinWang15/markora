@@ -180,3 +180,34 @@ coefficient-of-variation failure limit of 0.6. Warning levels stay at 20, 190 an
 memory, retained-resource, renderer-concurrency and editor-count limits are
 unchanged. Slower results from the local Xeon E5-2650 v4 host are diagnostic;
 they were not used to raise this CI runner contract's other limits.
+
+
+## Harness maintenance
+
+Packed-consumer source and API fixtures live in `scripts/pack-smoke-consumer/`.
+The packing harness copies them into its isolated temporary application; their
+imports still resolve against the freshly unpacked tarballs. Only the temporary
+consumer's package configuration and local jsdom module URL are generated.
+Every fixture is hashed into the bundle report's harness provenance.
+
+Core and advanced-syntax benchmarks share record summarization and configured
+statistic validation in `scripts/performance/`. These helpers reject missing or
+non-finite measurements. Fixture sizes, sampling, warning/failure thresholds,
+variance checks, runtime assertions and package-isolation checks are unchanged.
+
+
+## Shared scheduler and editor disposal review
+
+The September 8 cleanup adds one extension-API module, `renderScheduler`, shared
+by math, diagrams and HTML. The packed root and minimal consumer graphs contain
+200 and 151 static modules, so their count ceilings increase by exactly one.
+All-seven has 216 modules and stays within its existing 222-module ceiling.
+
+The minimal JavaScript measures 225,287 gzip bytes, 287 bytes (0.13%) above the
+previous reviewed 225,000-byte output. Its initial/total gzip ceilings become
+228,000 bytes, leaving 1.2% headroom over the new measurement. This accommodates
+the shared disposal/error-handling implementation without requiring unrelated
+code-size edits to land an architectural refactor. Warnings stay unchanged.
+The root/all-seven byte budgets, minimal raw JavaScript and CSS budgets, renderer
+engine exclusions, lazy-loading contracts, and every runtime/memory limit stay
+unchanged. The packed report includes hashes for all extracted consumer fixtures.

@@ -18,8 +18,8 @@ import { cpus, homedir, platform, release, tmpdir, totalmem } from "node:os";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
-import { evaluateBudget, reportBudgetEvaluations } from "./performance/budget-evaluator.mjs";
-import { summarizeSamples } from "./performance/statistics.mjs";
+import { evaluateBudget, selectStatistic, reportBudgetEvaluations } from "./performance/budget-evaluator.mjs";
+import { summarizeRecords } from "./performance/statistics.mjs";
 import {
   ADVANCED_SYNTAX_DOCUMENT_TARGETS,
   ADVANCED_SYNTAX_DOCUMENT_VERSION,
@@ -858,13 +858,7 @@ function rotate(values, offset) {
   return [...values.slice(normalized), ...values.slice(0, normalized)];
 }
 
-function summarizeRecords(records, metricNames) {
-  const summaries = {};
-  for (const metric of metricNames) {
-    summaries[metric] = summarizeSamples(records.map((record) => record.metrics[metric]));
-  }
-  return Object.freeze(summaries);
-}
+
 
 function summarizeByTarget(records, metricNames) {
   return Object.freeze(Object.fromEntries(ADVANCED_SYNTAX_DOCUMENT_TARGETS.map((target) => [
@@ -954,14 +948,7 @@ function loadBudgets() {
   return config;
 }
 
-function selectStatistic(summary, budget, label) {
-  const statistic = budget?.statistic;
-  const value = typeof statistic === "string" ? summary?.[statistic] : undefined;
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new Error(`${label} has no valid configured summary statistic.`);
-  }
-  return value;
-}
+
 
 function evaluateBudgets(config, timing, memory) {
   const evaluations = [];

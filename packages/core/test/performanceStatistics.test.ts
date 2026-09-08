@@ -1,11 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   evaluateBudget,
+  selectStatistic,
   reportBudgetEvaluations,
 } from "../../../scripts/performance/budget-evaluator.mjs";
-import { summarizeSamples } from "../../../scripts/performance/statistics.mjs";
+import { summarizeRecords, summarizeSamples } from "../../../scripts/performance/statistics.mjs";
 
 describe("performance statistics", () => {
+  it("summarizes each metric and rejects missing measurements", () => {
+    const summary = summarizeRecords([{ metrics: { time: 1 } }, { metrics: { time: 5 } }], ["time"]);
+    expect(summary.time).toMatchObject({ count: 2, median: 3, maximum: 5 });
+    expect(() => summarizeRecords([{ metrics: {} }], ["time"])).toThrow(/finite/u);
+  });
   it("retains every sample and reports nearest-rank variance summaries", () => {
     expect(summarizeSamples([1, 2, 3, 4, 100])).toEqual({
       coefficientOfVariation: 1.773,
@@ -28,6 +34,14 @@ describe("performance statistics", () => {
 });
 
 describe("performance budgets", () => {
+  it("requires a finite configured statistic and only uses an explicit fallback", () => {
+    const summary = { maximum: 15, median: 10, p95: Number.NaN };
+    expect(selectStatistic(summary, { statistic: "maximum" }, "metric")).toBe(15);
+    expect(selectStatistic(summary, {}, "metric", "median")).toBe(10);
+    for (const statistic of [undefined, "missing", "p95"]) {
+      expect(() => selectStatistic(summary, { statistic }, "metric")).toThrow(/statistic/u);
+    }
+  });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
   it("distinguishes pass, warning, and failure ceilings", () => {
     const budget = { failure: 120, warning: 100 };

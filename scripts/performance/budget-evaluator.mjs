@@ -61,3 +61,11 @@ export function reportBudgetEvaluations(evaluations, { title = "Markora performa
     warnings: Object.freeze(warnings),
   });
 }
+export function selectStatistic(summary, budget, label, fallbackStatistic) {
+  const statistic = budget?.statistic ?? fallbackStatistic;
+  const value = typeof statistic === "string" ? summary?.[statistic] : undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${label} has no valid configured summary statistic.`);
+  }
+  return value;
+}

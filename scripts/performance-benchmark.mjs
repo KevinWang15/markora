@@ -18,13 +18,13 @@ import { cpus, freemem, homedir, platform, release, tmpdir, totalmem } from "nod
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
-import { evaluateBudget, reportBudgetEvaluations } from "./performance/budget-evaluator.mjs";
+import { evaluateBudget, selectStatistic, reportBudgetEvaluations } from "./performance/budget-evaluator.mjs";
 import {
   REPRESENTATIVE_DOCUMENT_TARGETS,
   REPRESENTATIVE_DOCUMENT_VERSION,
   createRepresentativeDocument,
 } from "./performance/representative-document.mjs";
-import { summarizeSamples } from "./performance/statistics.mjs";
+import { summarizeRecords } from "./performance/statistics.mjs";
 
 const BENCHMARK_VERSION = "packed-embedded-v3";
 const CODE_BLOCK_ACTIVATION_CONTRACT = Object.freeze({
@@ -988,13 +988,7 @@ async function runMemorySample(context, baseUrl, fixture) {
   }
 }
 
-function summarizeRecords(records, metricNames) {
-  const summaries = {};
-  for (const metricName of metricNames) {
-    summaries[metricName] = summarizeSamples(records.map((record) => record.metrics[metricName]));
-  }
-  return Object.freeze(summaries);
-}
+
 
 async function collectTiming(context, baseUrl, fixtures, sampling, progress) {
   const { hotPath: hotPathProgress, timing: timingProgress } = progress.runtime;
@@ -1305,12 +1299,9 @@ function evaluateRuntimeBudgets(runtime, budgets, targets, sampling) {
         }
         const statistic = budget.statistic ?? (category === "timing" ? "p95" : "median");
         const summary = runtime[category].summaries[targetBytes]?.[metricName];
-        if (!summary || typeof summary[statistic] !== "number") {
-          throw new Error(`Missing ${category}.${targetBytes}.${metricName}.${statistic} result.`);
-        }
         evaluations.push(evaluateBudget(
           `${targetBytes} B ${metricName} ${statistic}`,
-          summary[statistic],
+          selectStatistic(summary, budget, `${category}.${targetBytes}.${metricName}`, statistic),
           budget,
         ));
         const varianceBudget = budgets.runtime?.variance?.[category];
