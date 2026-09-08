@@ -66,7 +66,7 @@ npm install markora-extension-footnotes markora-extension-math
 | [`markora-extension-alerts`](./packages/extension-alerts/README.md) | Semantic `NOTE`, `TIP`, `IMPORTANT`, `WARNING`, and `CAUTION` blockquotes | Root and minimal | None |
 | [`markora-extension-toc`](./packages/extension-toc/README.md) | A generated outline backed by `[TOC]` | Root and minimal | None |
 | [`markora-extension-html`](./packages/extension-html/README.md) | Exact-source CommonMark HTML atoms and bounded block previews | Root default runtime only | No HTML parser; previews require a host renderer and sanitizer |
-| [`markora-extension-diagrams`](./packages/extension-diagrams/README.md) | Semantic Mermaid, GeoJSON, TopoJSON, and STL fences | Root and minimal | No diagram engine; host callbacks optional |
+| [`markora-extension-diagrams`](./packages/extension-diagrams/README.md) | Semantic Mermaid, PlantUML, GeoJSON, TopoJSON, and STL fences | Root and minimal | No diagram engine; host callbacks optional |
 
 Extensions are creation-time configuration. Import each installed package's stylesheet, and persist `editor.extensions.manifest` beside Markdown that depends on optional syntax:
 
