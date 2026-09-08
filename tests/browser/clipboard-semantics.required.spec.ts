@@ -1,5 +1,5 @@
 import type { CDPSession, Page } from "@playwright/test";
-import {
+import { chromiumTest,
   canRunEditorCommand,
   clearEditorEvents,
   copyEditorSelection,
@@ -310,12 +310,7 @@ test("@required trusted cut writes all representations, mutates once, and undoes
   expect(await runEditorCommand(labPage, id, { type: "undo" })).toBe(false);
 });
 
-test("@required Chromium CDP copy and paste survive the native clipboard as one semantic edit", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP input commands.");
+chromiumTest("@required Chromium CDP copy and paste survive the native clipboard as one semantic edit", async ({ context, labPage }) => {
 
   const source = "clipboard-cdp-copy-source";
   const target = "clipboard-cdp-copy-target";
@@ -384,12 +379,7 @@ test("@required Chromium CDP copy and paste survive the native clipboard as one 
   await cdp.detach();
 });
 
-test("@required Chromium CDP cut and paste retain a linked slice with independent history", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP input commands.");
+chromiumTest("@required Chromium CDP cut and paste retain a linked slice with independent history", async ({ context, labPage }) => {
 
   const source = "clipboard-cdp-cut-source";
   const target = "clipboard-cdp-cut-target";

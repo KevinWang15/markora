@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import {
+import { chromiumTest,
   copyEditorSelection,
   dispatchTransfer,
   editorLocator,
@@ -401,15 +401,7 @@ test("@required localized RTL alerts expose visible kind text, editable content,
   ).toEqual([]);
 });
 
-test("@required Chromium CDP edits alert content and copies canonical semantic data", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(
-    browserName !== "chromium",
-    "Chromium is the only Playwright engine exposing CDP input commands.",
-  );
+chromiumTest("@required Chromium CDP edits alert content and copies canonical semantic data", async ({ context, labPage }) => {
 
   const id = "alerts-cdp";
   await mountEditor(labPage, {

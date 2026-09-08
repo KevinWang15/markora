@@ -10,3 +10,4 @@ performance-results
 .cache
 packages/app/release
 packages/app/release.tgz
+ci-results

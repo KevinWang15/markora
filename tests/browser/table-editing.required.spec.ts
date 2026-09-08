@@ -1,5 +1,5 @@
 import type { CDPSession, Locator, Page } from "@playwright/test";
-import {
+import { chromiumTest,
   canRunEditorCommand,
   copyEditorSelection,
   dispatchTransfer,
@@ -108,12 +108,7 @@ async function releasePointerWithCdp(cdp: CDPSession, point: { x: number; y: num
   });
 }
 
-test("@required Chromium table edge controls pass selection, insertion, deletion, focus, and visual acceptance", async ({
-  browserName,
-  context,
-  labPage,
-}, testInfo) => {
-  test.skip(browserName !== "chromium", "This acceptance test drives the Chromium DevTools Protocol.");
+chromiumTest("@required Chromium table edge controls pass selection, insertion, deletion, focus, and visual acceptance", async ({ context, labPage }, testInfo) => {
 
   const id = "table-edge-controls";
   await mountEditor(labPage, { id, markdown: TABLE_MARKDOWN, root: "shadow" });
@@ -316,12 +311,7 @@ test("@required Chromium table edge controls pass selection, insertion, deletion
   }
 });
 
-test("@required Chromium table edge handles drag rows and columns to a visual drop position", async ({
-  browserName,
-  context,
-  labPage,
-}, testInfo) => {
-  test.skip(browserName !== "chromium", "This acceptance test drives the Chromium DevTools Protocol.");
+chromiumTest("@required Chromium table edge handles drag rows and columns to a visual drop position", async ({ context, labPage }, testInfo) => {
 
   const id = "table-edge-reorder";
   await mountEditor(labPage, { id, markdown: TABLE_MARKDOWN, root: "shadow" });
@@ -590,12 +580,7 @@ test("@required table creation and dimension controls validate safe resize in Sh
   expect(await getMarkdown(labPage, id)).toContain("tail");
 });
 
-test("@required Chromium CDP drives rectangular table selection and clipboard export", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP input commands.");
+chromiumTest("@required Chromium CDP drives rectangular table selection and clipboard export", async ({ context, labPage }) => {
 
   const id = "table-cdp-selection";
   await mountEditor(labPage, { id, markdown: TABLE_MARKDOWN, root: "shadow" });

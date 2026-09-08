@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import {
+import { chromiumTest,
   copyEditorSelection,
   dispatchTransfer,
   editorLocator,
@@ -584,15 +584,7 @@ test("@required localized RTL Shadow DOM TOC navigation handles duplicates by ke
   await cdp?.detach();
 });
 
-test("@required Chromium CDP activates a TOC entry and copies only canonical marker data", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(
-    browserName !== "chromium",
-    "Chromium is the only Playwright engine exposing CDP input commands.",
-  );
+chromiumTest("@required Chromium CDP activates a TOC entry and copies only canonical marker data", async ({ context, labPage }) => {
 
   const id = "toc-cdp";
   await mountEditor(labPage, {

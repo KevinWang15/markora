@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import {
+import { chromiumTest,
   blurEditor,
   editorLocator,
   expect,
@@ -308,11 +308,7 @@ test("@required inactive code-block click hands the caret to a warm lazy editor"
 
 for (const root of ["document", "shadow"] as const) {
   for (const handoff of ["host control", "public blur"] as const) {
-    test(`@required cold lazy activation respects ${handoff} in a ${root} root`, async ({
-      browserName,
-      labPage,
-    }) => {
-      test.skip(browserName !== "chromium", "The delayed runtime handoff is certified in Chromium.");
+    chromiumTest(`@required cold lazy activation respects ${handoff} in a ${root} root`, async ({ labPage }) => {
       await reloadWithoutIntersectionObserver(labPage);
 
       let releaseRuntime!: () => void;
@@ -369,11 +365,7 @@ for (const root of ["document", "shadow"] as const) {
   }
 }
 
-test("@required passive code-block drag keeps the native range and does not activate", async ({
-  browserName,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Trusted drag geometry is asserted in Chromium.");
+chromiumTest("@required passive code-block drag keeps the native range and does not activate", async ({ labPage }) => {
   await reloadWithoutIntersectionObserver(labPage);
   const id = "passive-drag";
   const target = "drag-target-value";

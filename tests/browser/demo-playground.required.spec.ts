@@ -1,3 +1,4 @@
+import { chromiumTest } from "./fixtures";
 import { expect, test, type CDPSession, type Locator, type Page } from "@playwright/test";
 import { initialMarkdown, quickStartCode } from "../../packages/demo/src/lib/content";
 
@@ -275,11 +276,7 @@ test("@required the desktop sidebar exposes documentation navigation", async ({ 
   );
 });
 
-test("@required public routes reflow with WCAG text spacing at a 400-percent equivalent viewport", async ({
-  browserName,
-  page,
-}) => {
-  test.skip(browserName !== "chromium", "The route-wide production reflow audit is certified in Chromium.");
+chromiumTest("@required public routes reflow with WCAG text spacing at a 400-percent equivalent viewport", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 256 });
 
   for (const route of [
@@ -427,12 +424,7 @@ test("@required code headers are direct figure captions", async ({ page }) => {
   }
 });
 
-test("@required Chromium native code copy preserves exact blank lines", async ({
-  browserName,
-  context,
-  page,
-}) => {
-  test.skip(browserName !== "chromium", "The trusted native clipboard path is verified through Chromium CDP.");
+chromiumTest("@required Chromium native code copy preserves exact blank lines", async ({ context, page }) => {
   await page.goto("/docs/getting-started");
   await context.grantPermissions(["clipboard-read", "clipboard-write"], {
     origin: new URL(page.url()).origin,
@@ -966,12 +958,7 @@ test("@required playground work survives route history without durable storage",
   await expect(page.locator("#playground-source-status")).toHaveText("No source changes to apply.");
 });
 
-test("@required coarse-pointer toolbar taps preserve the editor selection", async ({
-  browserName,
-  context,
-  page,
-}) => {
-  test.skip(browserName !== "chromium", "Raw touch input is exercised through Chromium CDP.");
+chromiumTest("@required coarse-pointer toolbar taps preserve the editor selection", async ({ context, page }) => {
   const cdp = await context.newCDPSession(page);
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
   await cdp.send("Emulation.setEmulatedMedia", {
@@ -999,12 +986,7 @@ test("@required coarse-pointer toolbar taps preserve the editor selection", asyn
   await expect(page.locator("#output")).toHaveText("hello [world](https://example.test/touch)");
 });
 
-test("@required coarse-pointer controls and short-viewport popovers stay reachable", async ({
-  browserName,
-  context,
-  page,
-}) => {
-  test.skip(browserName !== "chromium", "Pointer media and visual viewport are exercised through Chromium CDP.");
+chromiumTest("@required coarse-pointer controls and short-viewport popovers stay reachable", async ({ context, page }) => {
   const cdp = await context.newCDPSession(page);
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
   await cdp.send("Emulation.setEmulatedMedia", {

@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Request } from "@playwright/test";
-import {
+import { chromiumTest,
   convertPendingDiagramEdit,
   copyEditorSelection,
   destroyEditorOnly,
@@ -1082,12 +1082,7 @@ test("@required each diagram source line owns physical arrows at its node bounda
   }
 });
 
-test("@required Chromium CDP invokes diagram editing and copies source-only Markdown", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP input commands.");
+chromiumTest("@required Chromium CDP invokes diagram editing and copies source-only Markdown", async ({ context, labPage }) => {
 
   const id = "diagram-cdp";
   const initialSource = "graph TD; CDP-->initial";

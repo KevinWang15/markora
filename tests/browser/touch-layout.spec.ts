@@ -1,5 +1,5 @@
 import type { Locator } from "@playwright/test";
-import {
+import { chromiumTest,
   editorLocator,
   expect,
   getMarkdown,
@@ -124,8 +124,7 @@ test.describe("coarse-pointer layouts", () => {
   });
 });
 
-test("Chromium 200 percent page zoom preserves overlay access", async ({ browserName, context, labPage }) => {
-  test.skip(browserName !== "chromium", "Page-scale CDP is Chromium-specific; other engines are covered manually.");
+chromiumTest("Chromium 200 percent page zoom preserves overlay access", async ({ context, labPage }) => {
   await labPage.setViewportSize({ width: 640, height: 640 });
   const id = "zoom";
   await mountEditor(labPage, {

@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import {
+import { chromiumTest,
   clearEditorEvents,
   editorLocator,
   expect,
@@ -143,12 +143,7 @@ test("@required CJK composition stays textual until commit", async ({ labPage })
   expect(await getMarkdown(labPage, id)).toBe(imageSyntax);
 });
 
-test("@required Chromium CDP preserves active IME image syntax", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP IME control.");
+chromiumTest("@required Chromium CDP preserves active IME image syntax", async ({ context, labPage }) => {
 
   const id = "cdp-composition";
   const imageSyntax = "![中文](/cdp.png)";
@@ -213,12 +208,7 @@ test("@required Chromium CDP preserves active IME image syntax", async ({
   expect(await getMarkdown(labPage, id)).toBe(imageSyntax);
 });
 
-test("@required Chromium CDP preserves rich text across IME replacement and cancellation", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP IME control.");
+chromiumTest("@required Chromium CDP preserves rich text across IME replacement and cancellation", async ({ context, labPage }) => {
 
   const id = "cdp-selection-composition";
   const original = "before **selected** after";
@@ -279,12 +269,7 @@ test("@required Chromium CDP preserves rich text across IME replacement and canc
   expect(await getMarkdown(labPage, id)).toBe(original);
 });
 
-test("@required Chromium CDP continues completed tasks as unchecked items", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing raw CDP key events.");
+chromiumTest("@required Chromium CDP continues completed tasks as unchecked items", async ({ context, labPage }) => {
 
   const id = "cdp-task-continuation";
   const original = "* [x] completed";
@@ -388,12 +373,7 @@ test("@required native history stays synchronized across browser engines", async
   )).toBe(false);
 });
 
-test("@required Chromium CDP deletes across a managed table and restores it natively", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP native input control.");
+chromiumTest("@required Chromium CDP deletes across a managed table and restores it natively", async ({ context, labPage }) => {
 
   const id = "cdp-managed-range-delete";
   const original = [

@@ -68,7 +68,7 @@ export type LabTransferSpec = Parameters<BrowserLabWindowApi["dispatchTransfer"]
 
 type BrowserFailure = {
   detail: string;
-  kind: "console" | "pageerror" | "requestfailed" | "response";
+  kind: "console" | "pageerror" | "requestfailed" | "response" | "crash";
 };
 
 type BrowserFixtures = {
@@ -124,41 +124,59 @@ export const test = base.extend<BrowserFixtures>({
       }
     };
 
+    const onCrash = () => failures.push({ kind: "crash", detail: `Page crashed at ${page.url()}` });
+    page.on("crash", onCrash);
     page.on("console", onConsole);
     page.on("pageerror", onPageError);
     page.on("requestfailed", onRequestFailed);
     page.on("response", onResponse);
 
-    await page.goto("/__browser");
-    await expect(page.locator("[data-e2e-browser-lab]")).toHaveAttribute("data-ready", "true");
+    try {
+      await page.goto("/__browser");
+      await expect(page.locator("[data-e2e-browser-lab]")).toHaveAttribute("data-ready", "true");
 
-    await use(page);
+      await use(page);
 
-    await page.evaluate(async () => {
-      const lab = window.__MARKORA_BROWSER_LAB__;
-      lab?.destroyAll();
-      await lab?.settle();
-    });
+      await page.evaluate(async () => {
+        const lab = window.__MARKORA_BROWSER_LAB__;
+        lab?.destroyAll();
+        await lab?.settle();
+      });
 
-    const teardown = await page.evaluate(() => ({
-      editors: document.querySelectorAll("[data-e2e-editor], .ProseMirror, .cm-editor").length,
-      listeners: window.__MARKORA_BROWSER_LAB__?.listenerSnapshot() ?? { total: -1, byTargetAndType: {} },
-      overlays: document.querySelectorAll(".mdw-link-editor, .mdw-image-editor, .mdw-table-size-editor, .mdw-table-toolbar, .mdw-table-edge-controls, .mdw-context-menu").length,
-    }));
+      const teardown = await page.evaluate(() => ({
+        editors: document.querySelectorAll("[data-e2e-editor], .ProseMirror, .cm-editor").length,
+        listeners: window.__MARKORA_BROWSER_LAB__?.listenerSnapshot() ?? { total: -1, byTargetAndType: {} },
+        overlays: document.querySelectorAll(".mdw-link-editor, .mdw-image-editor, .mdw-table-size-editor, .mdw-table-toolbar, .mdw-table-edge-controls, .mdw-context-menu").length,
+      }));
 
-    await attachDiagnostics(testInfo, failures, page);
-    page.off("console", onConsole);
-    page.off("pageerror", onPageError);
-    page.off("requestfailed", onRequestFailed);
-    page.off("response", onResponse);
-
-    expect(teardown, "browser lab teardown must release editor DOM, overlays, and global listeners").toEqual({
-      editors: 0,
-      listeners: { total: 0, byTargetAndType: {} },
-      overlays: 0,
-    });
-    expect(failures, "browser runtime failures").toEqual([]);
+      expect(teardown, "browser lab teardown must release editor DOM, overlays, and global listeners").toEqual({
+        editors: 0,
+        listeners: { total: 0, byTargetAndType: {} },
+        overlays: 0,
+      });
+      expect(failures, "browser runtime failures").toEqual([]);
+    } finally {
+      // Include startup failures too: previously a failed goto/readiness check
+      // bypassed the evidence attachment and listener cleanup entirely.
+      try { await attachDiagnostics(testInfo, failures, page); }
+      finally {
+        page.off("crash", onCrash);
+        page.off("console", onConsole);
+        page.off("pageerror", onPageError);
+        page.off("requestfailed", onRequestFailed);
+        page.off("response", onResponse);
+      }
+    }
   },
+});
+
+/** Automatic, worker-only dependency: exclusions run before page/context setup.
+ * A body-level test.skip still creates those fixtures and can fail doing so. */
+export const chromiumTest = test.extend<{ _chromiumSupport: void }>({
+  _chromiumSupport: [async ({ browserName }, use, testInfo) => {
+    testInfo.skip(browserName !== "chromium", "This scenario is certified in Chromium; skip before browser setup.");
+    await use();
+  }, { auto: true }],
 });
 
 export { expect } from "@playwright/test";

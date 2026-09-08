@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import {
+import { chromiumTest,
   editorLocator,
   expect,
   getMarkdown,
@@ -80,12 +80,7 @@ async function dispatchNoMutationDeletion(
   return result.result.value as { defaultPrevented: boolean; userAgent: string };
 }
 
-test("@required Android CDP fallback deletes complete grapheme clusters", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing Android CDP input control.");
+chromiumTest("@required Android CDP fallback deletes complete grapheme clusters", async ({ context, labPage }) => {
 
   const id = "android-grapheme-backspace";
   await mountEditor(labPage, { id, markdown: "" });
@@ -136,12 +131,7 @@ test("@required Android CDP fallback deletes complete grapheme clusters", async 
   await expect.poll(() => getMarkdown(labPage, shadowId)).toBe("A");
 });
 
-test("@required Android CDP fallback deletes graphemes across mark boundaries", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing Android CDP input control.");
+chromiumTest("@required Android CDP fallback deletes graphemes across mark boundaries", async ({ context, labPage }) => {
 
   const id = "android-marked-grapheme";
   await mountEditor(labPage, { id, markdown: "" });
@@ -203,12 +193,7 @@ test("@required Android CDP fallback deletes graphemes across mark boundaries", 
   expect(await getMarkdown(labPage, id)).toBe(atomBoundaryMarkdown);
 });
 
-test("@required Android CDP fallback deletes forward graphemes and inline atoms", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing Android CDP input control.");
+chromiumTest("@required Android CDP fallback deletes forward graphemes and inline atoms", async ({ context, labPage }) => {
 
   const id = "android-forward-delete";
   await mountEditor(labPage, { id, markdown: "" });
@@ -323,12 +308,7 @@ test("@required Android CDP fallback deletes forward graphemes and inline atoms"
   expect(await getMarkdown(labPage, id)).toBe(codeMarkdown);
 });
 
-test("@required Android CDP forward fallback preserves managed-block deletion", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing Android CDP input control.");
+chromiumTest("@required Android CDP forward fallback preserves managed-block deletion", async ({ context, labPage }) => {
 
   const id = "android-forward-managed";
   const table = [
@@ -362,12 +342,7 @@ test("@required Android CDP forward fallback preserves managed-block deletion", 
   expect(await getMarkdown(labPage, id)).toBe(table);
 });
 
-test("@required Android CDP fallback preserves structural Backspace commands", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing Android CDP input control.");
+chromiumTest("@required Android CDP fallback preserves structural Backspace commands", async ({ context, labPage }) => {
 
   const id = "android-structural-backspace";
   const table = [
@@ -398,12 +373,7 @@ test("@required Android CDP fallback preserves structural Backspace commands", a
   await expect.poll(() => getMarkdown(labPage, id)).toBe("");
 });
 
-test("@required Android CDP fallback expires after editor state changes", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing Android CDP input control.");
+chromiumTest("@required Android CDP fallback expires after editor state changes", async ({ context, labPage }) => {
 
   const id = "android-stale-backspace";
   const editor = editorLocator(labPage, id);
@@ -449,12 +419,7 @@ test("@required Android CDP fallback expires after editor state changes", async 
   await expect(labPage.locator("#android-external-focus")).toBeFocused();
 });
 
-test("@required Android CDP fallback preserves auto-pairs and active code graphemes", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing Android CDP input control.");
+chromiumTest("@required Android CDP fallback preserves auto-pairs and active code graphemes", async ({ context, labPage }) => {
 
   const pairId = "android-auto-pair-backspace";
   await mountEditor(labPage, {

@@ -1,5 +1,5 @@
 import type { Locator } from "@playwright/test";
-import {
+import { chromiumTest,
   editorLocator,
   expect,
   focusEditor,
@@ -192,12 +192,7 @@ test("@required code-language UI preserves content, exact metadata, history, IME
   expect(await getMarkdown(labPage, id)).toBe(pythonMarkdown);
 });
 
-test("@required Chromium CDP commits an auto-pair trigger literally during IME", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP IME control.");
+chromiumTest("@required Chromium CDP commits an auto-pair trigger literally during IME", async ({ context, labPage }) => {
 
   const id = "typing-cdp-composition";
   await mountEditor(labPage, {

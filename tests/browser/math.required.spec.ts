@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import {
+import { chromiumTest,
   convertPendingMathEdit,
   copyEditorSelection,
   destroyEditorOnly,
@@ -574,12 +574,7 @@ test("@required localized RTL math actions are keyboard operable and accessible"
   expect(results.violations.map(({ id: rule }) => rule)).toEqual([]);
 });
 
-test("@required Chromium CDP invokes math editing and copies source-only Markdown", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP input commands.");
+chromiumTest("@required Chromium CDP invokes math editing and copies source-only Markdown", async ({ context, labPage }) => {
 
   const id = "math-cdp";
   await mountEditor(labPage, {

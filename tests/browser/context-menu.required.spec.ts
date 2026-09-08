@@ -1,4 +1,4 @@
-import { test, expect, mountEditor, focusEditor, editorLocator, getMarkdown, snapshotEditor, resetEditor, updateEditorOptions, destroyEditorOnly } from "./fixtures";
+import { chromiumTest, test, expect, mountEditor, focusEditor, editorLocator, getMarkdown, snapshotEditor, resetEditor, updateEditorOptions, destroyEditorOnly } from "./fixtures";
 import type { Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 const menu = (page: Page) => page.getByRole("menu", { name: "Editor context menu", exact: true });
@@ -194,8 +194,7 @@ test("@required failed Cut reports an error without deletion and stale pending P
   await expect(menu(labPage)).toHaveCount(0); expect(await getMarkdown(labPage, "clipboard-fail")).toBe("replacement");
 });
 
-test("@required browser clipboard menus copy rich content, paste it, cut it, and restore it with undo", async ({ labPage, browserName, context }) => {
-  test.skip(browserName !== "chromium", "Automated browser clipboard permissions are Chromium-specific.");
+chromiumTest("@required browser clipboard menus copy rich content, paste it, cut it, and restore it with undo", async ({ labPage, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await mountEditor(labPage, { id: "clipboard", markdown: "hello **world**" });
   await focusEditor(labPage, "clipboard", { anchor: 7, head: 12 }); await openKeyboard(labPage, "clipboard");

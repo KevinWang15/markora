@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Request } from "@playwright/test";
-import {
+import { chromiumTest,
   copyEditorSelection,
   destroyEditorOnly,
   editorLocator,
@@ -818,12 +818,7 @@ test("@required inline HTML inside links has no nested controls or selection nav
   expect(results.violations.map(({ id: rule }) => rule)).toEqual([]);
 });
 
-test("@required Chromium CDP invokes HTML editing and copies source-only Markdown", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP input commands.");
+chromiumTest("@required Chromium CDP invokes HTML editing and copies source-only Markdown", async ({ context, labPage }) => {
 
   const id = "html-cdp";
   const initialSource = "<div>CDP</div>";

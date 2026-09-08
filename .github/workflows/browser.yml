@@ -123,6 +123,7 @@ jobs:
           path: |
             playwright-report
             test-results
+            ci-results
           if-no-files-found: ignore
           retention-days: 14
 
@@ -178,5 +179,6 @@ jobs:
           path: |
             playwright-report
             test-results
+            ci-results
           if-no-files-found: ignore
           retention-days: 14

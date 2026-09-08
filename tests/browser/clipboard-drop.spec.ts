@@ -1,5 +1,5 @@
 import type { CDPSession, Page } from "@playwright/test";
-import {
+import { chromiumTest,
   dispatchTransfer,
   editorLocator,
   expect,
@@ -290,12 +290,7 @@ test("external rich and plain drops insert undoable content", async ({ labPage }
   expect(await getMarkdown(labPage, id)).toBe("Dropped plain");
 });
 
-test("@required Chromium CDP external drops honor exact outer and active-code coordinates", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP drag commands.");
+chromiumTest("@required Chromium CDP external drops honor exact outer and active-code coordinates", async ({ context, labPage }) => {
   const cdp = await context.newCDPSession(labPage);
 
   const outerId = "native-drop-outer";
@@ -358,12 +353,7 @@ test("@required Chromium CDP external drops honor exact outer and active-code co
   await cdp.detach();
 });
 
-test("@required Chromium CDP external drop enters exact passive-code coordinates", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP drag commands.");
+chromiumTest("@required Chromium CDP external drop enters exact passive-code coordinates", async ({ context, labPage }) => {
   await reloadWithoutIntersectionObserver(labPage);
   const id = "native-drop-passive-code";
   const original = "```text\nalpha omega\n```";
@@ -394,12 +384,7 @@ test("@required Chromium CDP external drop enters exact passive-code coordinates
   await cdp.detach();
 });
 
-test("@required Chromium CDP trusted file drop uses the host uploader at its outer coordinate", async ({
-  browserName,
-  context,
-  labPage,
-}, testInfo) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP drag commands.");
+chromiumTest("@required Chromium CDP trusted file drop uses the host uploader at its outer coordinate", async ({ context, labPage }, testInfo) => {
   const id = "native-file-upload";
   const original = "alpha omega";
   await mountEditor(labPage, {
@@ -449,12 +434,7 @@ test("@required Chromium CDP trusted file drop uses the host uploader at its out
   await cdp.detach();
 });
 
-test("@required Chromium CDP trusted file drops are rejected by outer and nested-code guards", async ({
-  browserName,
-  context,
-  labPage,
-}, testInfo) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP drag commands.");
+chromiumTest("@required Chromium CDP trusted file drops are rejected by outer and nested-code guards", async ({ context, labPage }, testInfo) => {
   await reloadWithoutIntersectionObserver(labPage);
   const cdp = await context.newCDPSession(labPage);
   const file = `${testInfo.config.rootDir}/../../banner.png`;

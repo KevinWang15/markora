@@ -7,7 +7,7 @@ report_disk_usage() {
   df -i . /tmp
   # Include temporary browser recordings and the preinstalled SDKs so a full
   # runner can be diagnosed even when Playwright cannot write an artifact.
-  for path in test-results playwright-report node_modules /tmp /usr/local/lib/android /usr/share/dotnet /opt/ghc; do
+  for path in test-results playwright-report node_modules /tmp /var/crash /var/lib/systemd/coredump /var/log /usr/local/lib/android /usr/share/dotnet /opt/ghc; do
     if [[ -e "$path" ]]; then
       du -sh "$path" 2>/dev/null || true
     fi

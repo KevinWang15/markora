@@ -1,4 +1,4 @@
-import {
+import { chromiumTest,
   dispatchTransfer,
   editorLocator,
   expect,
@@ -115,12 +115,7 @@ test("@required resource protocol policy is isolated per editor and opening is h
   }]);
 });
 
-test("@required Chromium CDP observes proxy-only image loading", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP network events.");
+chromiumTest("@required Chromium CDP observes proxy-only image loading", async ({ context, labPage }) => {
 
   const proxyPath = "/__markora_resource_proxy.png";
   await labPage.route(`**${proxyPath}`, async (route) => {

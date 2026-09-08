@@ -29,7 +29,7 @@ export default defineConfig({
     },
   ],
   reporter: isCI
-    ? [["github"], ["html", { open: "never", outputFolder: "playwright-report" }]]
+    ? [["github"], ["html", { open: "never", outputFolder: "playwright-report" }], ["./scripts/ci/browser-resources.mjs"]]
     : [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
   retries: isCI ? 2 : 0,
   testDir: "./tests/browser",
@@ -37,8 +37,10 @@ export default defineConfig({
   use: {
     baseURL,
     screenshot: "only-on-failure",
-    trace: "retain-on-failure",
-    video: "retain-on-failure",
+    // Recording every passing case adds browser and disk work to the first run.
+    // Keep first-failure screenshots and record the first retry for diagnosis.
+    trace: isCI ? "on-first-retry" : "retain-on-failure",
+    video: isCI ? "on-first-retry" : "retain-on-failure",
   },
   webServer: {
     command: (process.env.MARKORA_BROWSER_BUILD === "reuse" ? "" : "pnpm build:packages && pnpm --filter demo build && ")

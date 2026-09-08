@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import {
+import { chromiumTest,
   copyEditorSelection,
   editorLocator,
   expect,
@@ -204,12 +204,7 @@ test("@required front matter commands and localized host editing are guarded, st
   expect(await getMarkdown(labPage, id)).toBe(`${FIRST_SOURCE}\n\n${body}`);
 });
 
-test("@required Chromium CDP invokes front matter editing and copies its exact Markdown", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  test.skip(browserName !== "chromium", "Chromium is the only Playwright engine exposing CDP input commands.");
+chromiumTest("@required Chromium CDP invokes front matter editing and copies its exact Markdown", async ({ context, labPage }) => {
 
   const id = "frontmatter-cdp";
   await mountEditor(labPage, {
