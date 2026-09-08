@@ -1324,16 +1324,21 @@ function stripTaskPrefixFromInline(fragment: Fragment, count: number) {
 }
 
 function normalizeTaskListNode(node: ProseMirrorNode, parentTypeName?: string): ProseMirrorNode {
-  if (node.isText) {
+  if (node.isLeaf) {
     return node;
   }
 
   const children: ProseMirrorNode[] = [];
+  let changed = false;
   node.content.forEach((child) => {
-    children.push(normalizeTaskListNode(child, node.type.name));
+    const normalized = normalizeTaskListNode(child, node.type.name);
+    changed ||= normalized !== child;
+    children.push(normalized);
   });
 
-  let nextNode = node.type.create(node.attrs, children, node.marks);
+  // ProseMirror nodes are immutable. Preserve unchanged subtrees instead of
+  // recreating every node and attribute object on each Markdown parse.
+  let nextNode = changed ? node.copy(Fragment.fromArray(children)) : node;
 
   if (
     parentTypeName === "bullet_list"
@@ -1364,6 +1369,7 @@ function normalizeTaskListNode(node: ProseMirrorNode, parentTypeName?: string): 
 }
 
 function sanitizeImportedMarks(marks: readonly Mark[]) {
+  if (marks.length === 0) return marks;
   let changed = false;
   const nextMarks: Mark[] = [];
 
@@ -1397,6 +1403,7 @@ function sanitizeImportedMarks(marks: readonly Mark[]) {
 }
 
 function sanitizeImportedFragment(fragment: Fragment) {
+  if (fragment.childCount === 0) return fragment;
   const children: ProseMirrorNode[] = [];
   let changed = false;
 

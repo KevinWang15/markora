@@ -236,8 +236,11 @@ export function normalizeExpelledMarkdownWhitespace(
   }
 
   const children: ProseMirrorNode[] = [];
+  let changed = false;
   node.forEach((child) => {
-    children.push(normalizeExpelledMarkdownWhitespace(child, expellableMarkNames));
+    const normalized = normalizeExpelledMarkdownWhitespace(child, expellableMarkNames);
+    changed ||= normalized !== child;
+    children.push(normalized);
   });
 
   if (
@@ -282,11 +285,11 @@ export function normalizeExpelledMarkdownWhitespace(
       }
     });
 
-    return node.type.create(node.attrs, Fragment.fromArray(normalized), node.marks);
+    const content = Fragment.fromArray(normalized);
+    return content.eq(node.content) ? node : node.copy(content);
   }
 
-  const content = Fragment.fromArray(children);
-  return content.eq(node.content) ? node : node.copy(content);
+  return changed ? node.copy(Fragment.fromArray(children)) : node;
 }
 
 export function serializeEntitySafeMarkdownImage(

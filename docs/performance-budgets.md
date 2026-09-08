@@ -107,3 +107,12 @@ focused CPU-profiled diagnostic, five warmed serializations changed from
 3,885–3,966 ms to 159–226 ms. This is a codec measurement, not an end-to-end browser
 latency claim. `pnpm perf:serialization` records fixture sizes, samples, environment
 and output hashes; the packed Chromium benchmarks validate product behavior.
+
+The Chromium report at `80d064b` measured a 1 MiB serialization maximum of 115.195 ms,
+mounting maximum of 556.86 ms, and idle snapshot latency maximum of 425.73 ms. All
+memory checks passed. That run failed one parse sample (329.025 ms against 280 ms;
+the other four were 173.67–191.165 ms). Follow-up normalization now reuses immutable
+nodes and avoids rebuilding unchanged task-list/whitespace subtrees and attributes.
+The parse ceiling is unchanged. To protect the serialization improvement, the
+512 KiB and 1 MiB serialization failure ceilings are reduced to 250 and 500 ms,
+and the 1 MiB idle snapshot ceiling to 1,000 ms.
