@@ -144,3 +144,39 @@ Unicode prefixes with all three line-ending forms. Task normalization stops at
 text blocks, and whitespace normalization analyzes crossing mark runs only when
 marked text actually has whitespace at an edge. The checked fixtures and all
 runtime, memory and bundle budgets remain unchanged.
+
+## September 2026 CI timing calibration
+
+The September 8 review compared the raw five-sample timing series from two
+successful runs ([`6a79f7c`](https://github.com/KevinWang15/markora/actions/runs/34204208678),
+[`65b32cb`](https://github.com/KevinWang15/markora/actions/runs/34207710744)) with
+the navigation refactor runs
+([`42a3636`](https://github.com/KevinWang15/markora/actions/runs/34216164885),
+[`9649def`](https://github.com/KevinWang15/markora/actions/runs/34217399710)).
+These used the same fixtures, sampling contracts, Chromium 149.0.7827.55,
+Node 24.20.0 and Ubuntu 24.04 runner label. The reported CPUs were AMD EPYC 7763
+and 9V74 with two logical CPUs exposed to the runner.
+
+Only three maximum-time failure ceilings change:
+
+| Metric | Reviewed samples (ms, collection order) | Old ceiling | New ceiling |
+| --- | --- | ---: | ---: |
+| 100 KiB codec parse, `42a3636` | 42.955, 38.135, 38.640, 42.135, 61.110 | 50 ms | 65 ms |
+| 1 MiB codec parse, `42a3636` | 178.090, 180.160, 182.050, 330.860, 193.885 | 280 ms | 350 ms |
+| 500 KiB advanced-syntax teardown, `9649def` | 25.9, 68.2, 27.9, 26.7, 61.4 | 50 ms | 75 ms |
+
+The two successful baselines had parse maxima of 41.090–44.765 ms at 100 KiB
+and 191.015–194.305 ms at 1 MiB. The subsequent `9649def` run, which changes
+only browser tests relative to `42a3636`, measured maxima of 41.825 and
+182.470 ms. Advanced-syntax teardown already varied from 25.6 to 48.0 ms in
+the `6a79f7c` baseline. The later samples support a bounded allowance for
+occasional slow measurements rather than establishing a sustained parse
+slowdown. They do not establish the cause of each spike.
+
+The new ceilings leave approximately 6–10% headroom above the reviewed failing
+maxima. All samples still count: the gate uses the maximum, with the existing
+coefficient-of-variation failure limit of 0.6. Warning levels stay at 20, 190 and
+35 ms respectively, so slower results remain visible. Input-latency, bundle,
+memory, retained-resource, renderer-concurrency and editor-count limits are
+unchanged. Slower results from the local Xeon E5-2650 v4 host are diagnostic;
+they were not used to raise this CI runner contract's other limits.

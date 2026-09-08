@@ -44,7 +44,7 @@
       "102400": {
         "initialParseRenderSyncMs": { "statistic": "maximum", "warning": 140, "failure": 200 },
         "initialParseRenderToPresentationMs": { "statistic": "maximum", "warning": 260, "failure": 380 },
-        "codecParseMs": { "statistic": "maximum", "warning": 20, "failure": 50 },
+        "codecParseMs": { "statistic": "maximum", "warning": 20, "failure": 65 },
         "codecSerializeMs": { "statistic": "maximum", "warning": 12, "failure": 35 },
         "keydownToPresentationProxyMs": { "statistic": "maximum", "warning": 45, "failure": 70 },
         "dirtyTeardownMs": { "statistic": "maximum", "warning": 35, "failure": 50 }
@@ -60,7 +60,7 @@
       "1048576": {
         "initialParseRenderSyncMs": { "statistic": "maximum", "warning": 1550, "failure": 4250 },
         "initialParseRenderToPresentationMs": { "statistic": "maximum", "warning": 2300, "failure": 5100 },
-        "codecParseMs": { "statistic": "maximum", "warning": 190, "failure": 280 },
+        "codecParseMs": { "statistic": "maximum", "warning": 190, "failure": 350 },
         "codecSerializeMs": { "statistic": "maximum", "warning": 250, "failure": 500 },
         "keydownToPresentationProxyMs": { "statistic": "maximum", "warning": 1150, "failure": 3750 },
         "dirtyTeardownMs": { "statistic": "maximum", "warning": 1300, "failure": 3800 }
@@ -159,7 +159,7 @@
         "footnoteStructuralEditSyncMs": { "statistic": "maximum", "warning": 50, "failure": 100 },
         "tocHeadingEditSyncMs": { "statistic": "maximum", "warning": 50, "failure": 100 },
         "diagramRemovalSyncMs": { "statistic": "maximum", "warning": 50, "failure": 100 },
-        "destroySyncMs": { "statistic": "maximum", "warning": 35, "failure": 50 }
+        "destroySyncMs": { "statistic": "maximum", "warning": 35, "failure": 75 }
       },
       "1048576": {
         "mountSyncMs": { "statistic": "maximum", "warning": 1550, "failure": 5400 },
