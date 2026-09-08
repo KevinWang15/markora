@@ -29,3 +29,17 @@ case that should have skipped before page creation. The old start/end disk
 reports did not establish what consumed the transient space. The new report
 includes temporary recordings and crash-report directories so a recurrence can
 be investigated without assuming that cleanup of installed SDKs will solve it.
+
+The [instrumented follow-up](https://github.com/KevinWang15/markora/actions/runs/34241754563)
+still encountered pressure: GitHub reported 5 MiB available, the ten-second
+sampler observed 203 MiB, and two different WebKit cases needed retries. The
+runner used `systemd-coredump`, with multiple active coredump service directories
+during the spikes; stored dumps grew from zero to 156 MiB. Temporary core images
+are not represented by the final compressed dump sizes or a later `du` result.
+
+Preparation now sets `Storage=none` and `ProcessSizeMax=0` in a systemd drop-in,
+following [systemd's documented way to disable costly dump processing](https://www.freedesktop.org/software/systemd/man/250/systemd-coredump.socket.html#Disabling%20coredump%20processing).
+This is guarded to run only on disposable GitHub-hosted Linux machines. It
+preserves journal crash metadata, test failures, retry traces and screenshots;
+WebKit additionally logs native browser stderr with `DEBUG=pw:browser`. The
+resource report records the installed policy so subsequent runs can verify it.

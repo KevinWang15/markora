@@ -61,6 +61,7 @@ export default class BrowserResourcesReporter {
     try { mkdirSync(outputDirectory, { recursive: true }); }
     catch (error) { this.disabled = true; console.warn("Cannot create browser resource report:", String(error)); return; }
     this.write({ event: "environment", corePattern: read("/proc/sys/kernel/core_pattern"),
+      coredumpPolicy: read("/etc/systemd/coredump.conf.d/99-markora-ci.conf"),
       workers: config.workers, projects: config.projects.map(project => ({ name: project.name,
         trace: project.use.trace, video: project.use.video })) });
     this.sample("begin");

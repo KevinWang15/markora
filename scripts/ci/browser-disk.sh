@@ -30,6 +30,17 @@ case "${1:-report}" in
       echo "Disk preparation requires a GitHub-hosted Linux runner." >&2
       exit 1
     fi
+    # systemd-coredump writes a temporary process image before compressing it.
+    # WebKit's large virtual address space can exhaust the disk even when the
+    # final compressed dump is small. Keep crash metadata in the journal and
+    # use Playwright traces/native logs, rather than full process memory dumps.
+    # A new coredump service reads this drop-in for each crash; no reboot needed.
+    sudo mkdir -p /etc/systemd/coredump.conf.d
+    sudo tee /etc/systemd/coredump.conf.d/99-markora-ci.conf >/dev/null <<'EOF'
+[Coredump]
+Storage=none
+ProcessSizeMax=0
+EOF
     report_disk_usage
     if (( $(available_kib) < 20 * 1024 * 1024 )); then
       echo "Reclaiming unused Android, .NET, and Haskell SDKs for browser tests."

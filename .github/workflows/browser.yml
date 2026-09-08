@@ -112,6 +112,7 @@ jobs:
         run: pnpm exec playwright test --project=${{ matrix.browser }} --grep @required
         env:
           MARKORA_BROWSER_BUILD: reuse
+          DEBUG: ${{ matrix.browser == 'webkit' && 'pw:browser' || '' }}
       - name: Report final disk usage
         if: ${{ !cancelled() }}
         run: bash scripts/ci/browser-disk.sh report
@@ -168,6 +169,7 @@ jobs:
         run: pnpm exec playwright test --project=${{ matrix.browser }}
         env:
           MARKORA_BROWSER_BUILD: reuse
+          DEBUG: ${{ matrix.browser == 'webkit' && 'pw:browser' || '' }}
       - name: Report final disk usage
         if: ${{ !cancelled() }}
         run: bash scripts/ci/browser-disk.sh report
