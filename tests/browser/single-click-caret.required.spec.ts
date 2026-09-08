@@ -8,16 +8,12 @@ import {
   test,
 } from "./fixtures";
 
-test("@required trusted single-click caret placement survives revealed inline markers", async ({
-  browserName,
-  context,
-  labPage,
-}) => {
-  const id = "single-click-caret";
-  await mountEditor(labPage, { id, markdown: "", root: "shadow" });
-  const cdp = browserName === "chromium" ? await context.newCDPSession(labPage) : null;
+import type { CDPSession, Page } from "@playwright/test";
 
-  const clickCharacter = async (
+const id = "single-click-caret";
+
+function createClickProbe(labPage: Page, cdp: CDPSession | null) {
+  return async (
     markdown: string,
     needle: string,
     offset: number,
@@ -115,14 +111,28 @@ test("@required trusted single-click caret placement survives revealed inline ma
       selection: (await snapshotEditor(labPage, id)).selection,
     };
   };
+}
 
-  for (const testCase of [
-    { marked: "pre**fixmid**suffix", needle: "fixmid" },
-    { marked: "pre*fixmid*suffix", needle: "fixmid" },
-    { marked: "pre`fixmid`suffix", needle: "fixmid" },
-    { marked: "pre~~fixmid~~suffix", needle: "fixmid" },
-    { marked: "pre[fixmid](/target)suffix", needle: "fixmid" },
-  ]) {
+const caretTest = test.extend<{ clickCharacter: ReturnType<typeof createClickProbe> }>({
+  clickCharacter: async ({ browserName, context, labPage }, use) => {
+    await mountEditor(labPage, { id, markdown: "", root: "shadow" });
+    const cdp = browserName === "chromium" ? await context.newCDPSession(labPage) : null;
+    try {
+      await use(createClickProbe(labPage, cdp));
+    } finally {
+      await cdp?.detach();
+    }
+  },
+});
+
+for (const testCase of [
+  { marked: "pre**fixmid**suffix", needle: "fixmid" },
+  { marked: "pre*fixmid*suffix", needle: "fixmid" },
+  { marked: "pre`fixmid`suffix", needle: "fixmid" },
+  { marked: "pre~~fixmid~~suffix", needle: "fixmid" },
+  { marked: "pre[fixmid](/target)suffix", needle: "fixmid" },
+]) {
+  caretTest(`@required single-click caret placement survives ${testCase.marked}`, async ({ clickCharacter }) => {
     for (const offset of [0, 2, 5]) {
       for (const fraction of [0.2, 0.8]) {
         const plain = await clickCharacter("prefixmidsuffix", "prefixmidsuffix", offset + 3, fraction);
@@ -133,8 +143,10 @@ test("@required trusted single-click caret placement survives revealed inline ma
         });
       }
     }
-  }
+  });
+}
 
+caretTest("@required single-click collapses a document selection through revealed inline markers", async ({ clickCharacter }) => {
   const plainFromRange = await clickCharacter(
     "prefixmidsuffix",
     "prefixmidsuffix",
@@ -153,6 +165,4 @@ test("@required trusted single-click caret placement survives revealed inline ma
     ...plainFromRange,
     markdown: "pre**fixmid**suffix",
   });
-
-  await cdp?.detach();
 });
