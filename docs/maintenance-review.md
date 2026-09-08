@@ -36,6 +36,13 @@ keydown handler. Investigate native/model selection synchronization and the test
 document-open readiness before deciding whether this is a test race or a product
 bug. Do not weaken the expected caret position.
 
+The CI-green follow-up reproduced the selection-ordering bug in both document
+and Shadow DOM editors: opening the keyboard menu in the same task as a native
+caret change captured the old model position. The menu now flushes ProseMirror's
+pending input before capturing its keyboard target. A private UI compatibility
+adapter isolates the observer dependency; unit checks cover caret, backward-range,
+and node-selection behavior, and browser regressions enforce the event ordering.
+
 The [performance run](https://github.com/KevinWang15/markora/actions/runs/34188013098)
 failed the 100 KiB codec-parse and dirty-teardown maxima (78.03 ms and 72.985 ms,
 respectively, against 50 ms limits). Larger-document failure ceilings passed.

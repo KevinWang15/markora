@@ -9,6 +9,30 @@ async function openKeyboard(page: Page, id: string) {
   await expect(menu(page)).toBeVisible();
 }
 
+for (const root of ["document", "shadow"] as const) {
+  test(`@required keyboard context menus capture pending native selection in ${root}`, async ({ labPage }) => {
+    await mountEditor(labPage, { id: "pending-menu", markdown: "Formula: .", root });
+    await focusEditor(labPage, "pending-menu", { anchor: 11 });
+    await editorLocator(labPage, "pending-menu").evaluate(element => {
+      const selectionRoot = element.getRootNode() as Document & { getSelection(): Selection | null };
+      const selection = selectionRoot.getSelection?.() ?? element.ownerDocument.getSelection();
+      // Change the native caret and open the menu in the same task, before the
+      // queued selectionchange can bring ProseMirror's model up to date.
+      selection!.collapse(element.querySelector("p")!.firstChild!, 9);
+      element.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "F10", code: "F10", shiftKey: true, bubbles: true, cancelable: true,
+      }));
+    });
+    await expect(menu(labPage)).toBeVisible();
+    expect((await snapshotEditor(labPage, "pending-menu")).selection).toEqual({
+      anchor: 10, head: 10, from: 10, to: 10,
+    });
+    await labPage.keyboard.press("Escape");
+    await labPage.keyboard.type("here");
+    expect(await getMarkdown(labPage, "pending-menu")).toBe("Formula: here.");
+  });
+}
+
 test("@required context menu preserves a selected range through nested keyboard formatting", async ({ labPage }) => {
   await mountEditor(labPage, { id: "menu", markdown: "hello world" });
   await focusEditor(labPage, "menu", { anchor: 7, head: 12 });

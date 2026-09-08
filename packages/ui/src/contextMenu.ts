@@ -19,6 +19,7 @@ import type {
   ContextMenuSubmenu,
 } from "./contextMenuTypes";
 import { measurePositionSpace, setViewportPosition } from "./positioning";
+import { flushProseMirrorInput } from "./proseMirrorCompatibility";
 
 type Panel = {
   dom: HTMLDivElement;
@@ -489,6 +490,7 @@ export function createContextMenu(
   function onContextMenu(event: MouseEvent) {
     if (!ownsMenuEvent(editor, event) || editor.view.composing) return;
     const keyboard = event.clientX === 0 && event.clientY === 0;
+    if (keyboard) flushProseMirrorInput(editor.view);
     if (
       !keyboard &&
       !targetPointerSelection(editor, event.clientX, event.clientY)
@@ -524,6 +526,7 @@ export function createContextMenu(
       )
     )
       return;
+    flushProseMirrorInput(editor.view);
     const anchor = editor.view.coordsAtPos(editor.view.state.selection.from);
     if (open("keyboard", anchor.left, anchor.bottom)) {
       event.preventDefault();
