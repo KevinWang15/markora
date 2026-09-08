@@ -76,7 +76,7 @@ import {
 normalizeMarkdownEditorResources,
 type NormalizedMarkdownEditorResources,
 } from "./resourcePolicy";
-import { createCleanupError,throwCollectedErrors } from "./runtimeErrors";
+import { createCleanupError,disposeEditorRuntime,throwCollectedErrors } from "./runtimeErrors";
 import {
 createMarkdownEditorShortcutKeymap,
 normalizeMarkdownEditorShortcuts,
@@ -2171,53 +2171,44 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
 
   const hostChildrenBeforeView = new Set(element.childNodes);
 
-  const cleanupConstructionFailure = (primaryError: unknown) => {
-    const errors = [primaryError];
-    lifecycle = "destroying";
-    pendingExtensionErrors.length = 0;
-    extensionAssembly.beginDestroy();
-
-    for (const cleanup of [
-      () => changeEmitter.cancel(),
-      () => { errors.push(...extensionAssembly.cleanupSetup()); },
-      () => {
+  const cleanupConstructionFailure = (primaryError: unknown): never => {
+    disposeEditorRuntime({
+      message: "Markora creation failed and one or more cleanup operations also failed.",
+      errors: [primaryError],
+      begin: () => {
+        lifecycle = "destroying";
+        pendingExtensionErrors.length = 0;
+      },
+      assembly: extensionAssembly,
+      beforeView: [() => changeEmitter.cancel()],
+      destroyView: errors => {
         if (view && !view.isDestroyed) {
           runWithViewErrorCollector(errors, () => destroyProseMirrorView(view));
         }
       },
-      () => codeBlockLanguageEditor?.destroy(),
-      () => linkEditor.destroy(),
-      () => imageEditor.destroy(),
-      () => tableToolbar.destroy(),
-      () => { errors.push(...extensionAssembly.cleanupAssembly()); },
-    ]) {
-      try {
-        cleanup();
-      } catch (error) {
-        errors.push(error);
-      }
-    }
-
-    errors.push(
-      ...pendingLanguageLoadErrors.splice(0).map(({ error }) => error),
-      ...pluginInitializationErrors.splice(0),
-      ...deferredViewErrors.splice(0),
-    );
-
-    for (const child of [...element.childNodes]) {
-      if (!hostChildrenBeforeView.has(child)) {
-        child.remove();
-      }
-    }
-
-    releaseHostOwnership();
-    lifecycle = "destroyed";
-
-    if (errors.length === 1) {
-      throw primaryError;
-    }
-
-    throw createCleanupError("Markora creation failed and one or more cleanup operations also failed.", errors);
+      afterView: [
+        () => codeBlockLanguageEditor?.destroy(),
+        () => linkEditor.destroy(),
+        () => imageEditor.destroy(),
+        () => tableToolbar.destroy(),
+      ],
+      finalize: [
+        errors => { errors.push(
+          ...pendingLanguageLoadErrors.splice(0).map(({ error }) => error),
+          ...pluginInitializationErrors.splice(0),
+          ...deferredViewErrors.splice(0),
+        ); },
+        () => eventDispatcher.clear(),
+        () => {
+          for (const child of [...element.childNodes]) {
+            if (!hostChildrenBeforeView.has(child)) child.remove();
+          }
+        },
+        () => releaseHostOwnership(),
+        () => { lifecycle = "destroyed"; },
+      ],
+    });
+    throw primaryError;
   };
 
   try {
@@ -2528,59 +2519,37 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     },
     updateOptions,
     destroy() {
-      if (lifecycle !== "active") {
-        return;
-      }
-
-      const cleanupErrors: unknown[] = [];
-
-      lifecycle = "destroying";
-      creationComplete = false;
-      pendingExtensionErrors.length = 0;
-      extensionAssembly.beginDestroy();
-
-      try {
-        finalMarkdown = changeEmitter.getMarkdown(view.state.doc);
-      } catch (error) {
-        cleanupErrors.push(error);
-      }
-
-      pendingExtensionErrors.length = 0;
-      stopObservingFocus();
-
-      for (const cleanup of [
-        () => changeEmitter.flushFinal(),
-        () => assetController.cancelAll({ dispatch: false, emit: false }),
-        () => { const cleanup = unmountUi; unmountUi = undefined; cleanup?.(); },
-        () => uiControllers.clearSelectionAnchor(),
-        () => { cleanupErrors.push(...extensionAssembly.cleanupSetup()); },
-        () => runWithViewErrorCollector(cleanupErrors, () => destroyProseMirrorView(view)),
-        () => codeBlockLanguageEditor?.destroy(),
-        () => linkEditor.destroy(),
-        () => imageEditor.destroy(),
-        () => tableToolbar.destroy(),
-        () => { cleanupErrors.push(...extensionAssembly.cleanupAssembly()); },
-      ]) {
-        try {
-          cleanup();
-        } catch (error) {
-          cleanupErrors.push(error);
-        }
-      }
-
-      cleanupErrors.push(...deferredViewErrors.splice(0));
-
-      eventDispatcher.clear();
-      releaseHostOwnership();
-      lifecycle = "destroyed";
-
-      if (cleanupErrors.length === 1) {
-        throw cleanupErrors[0];
-      }
-
-      if (cleanupErrors.length > 1) {
-        throw createCleanupError("One or more Markora cleanup operations failed.", cleanupErrors);
-      }
+      if (lifecycle !== "active") return;
+      disposeEditorRuntime({
+        message: "One or more Markora cleanup operations failed.",
+        begin: () => {
+          lifecycle = "destroying";
+          creationComplete = false;
+          pendingExtensionErrors.length = 0;
+        },
+        assembly: extensionAssembly,
+        beforeView: [
+          () => { finalMarkdown = changeEmitter.getMarkdown(view.state.doc); },
+          () => { pendingExtensionErrors.length = 0; stopObservingFocus(); },
+          () => changeEmitter.flushFinal(),
+          () => assetController.cancelAll({ dispatch: false, emit: false }),
+          () => { const cleanup = unmountUi; unmountUi = undefined; cleanup?.(); },
+          () => uiControllers.clearSelectionAnchor(),
+        ],
+        destroyView: errors => runWithViewErrorCollector(errors, () => destroyProseMirrorView(view)),
+        afterView: [
+          () => codeBlockLanguageEditor?.destroy(),
+          () => linkEditor.destroy(),
+          () => imageEditor.destroy(),
+          () => tableToolbar.destroy(),
+        ],
+        finalize: [
+          errors => { errors.push(...deferredViewErrors.splice(0)); },
+          () => eventDispatcher.clear(),
+          () => releaseHostOwnership(),
+          () => { lifecycle = "destroyed"; },
+        ],
+      });
     },
   };
 

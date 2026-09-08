@@ -6,6 +6,7 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import { TextSelection } from "prosemirror-state";
+import { disposeEditorRuntime } from "../src/runtimeErrors";
 import {
   ManagedBlockCursor,
   isManagedBlockNodeFromSchema,
@@ -23,6 +24,31 @@ import {
 } from "./codeBlockTestUtils";
 
 const editors: MarkdownEditor[] = [];
+
+it("finishes all disposal phases and preserves failure order when cleanup throws", () => {
+  const calls: string[] = [];
+  const primary = new Error("construction");
+  const setup = new Error("setup");
+  const view = new Error("view");
+  const host = new Error("host");
+  expect(() => disposeEditorRuntime({
+    message: "cleanup failed", errors: [primary],
+    begin: () => { calls.push("begin"); },
+    beforeView: [() => { calls.push("snapshot"); }],
+    assembly: {
+      beginDestroy: () => { calls.push("abort"); },
+      cleanupSetup: () => { calls.push("setup"); throw setup; },
+      cleanupAssembly: () => { calls.push("assembly"); return []; },
+    },
+    destroyView: () => { calls.push("view"); throw view; },
+    afterView: [() => { calls.push("ui"); }],
+    finalize: [
+      () => { calls.push("host"); throw host; },
+      () => { calls.push("destroyed"); },
+    ],
+  })).toThrow(expect.objectContaining({ errors: [primary, setup, view, host] }));
+  expect(calls).toEqual(["begin", "abort", "snapshot", "setup", "view", "ui", "assembly", "host", "destroyed"]);
+});
 
 function installDomStubs() {
   if (!Range.prototype.getClientRects) {

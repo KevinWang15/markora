@@ -77,7 +77,7 @@ import {
 normalizeMarkdownEditorResources,
 sanitizeResourceUrl,
 } from "./resourcePolicy";
-import { createCleanupError,throwCollectedErrors } from "./runtimeErrors";
+import { createCleanupError,disposeEditorRuntime,throwCollectedErrors } from "./runtimeErrors";
 import {
 createMarkdownEditorShortcutKeymap,
 normalizeMarkdownEditorShortcuts,
@@ -646,43 +646,33 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   });
 
   const cleanupConstructionFailure = (primaryError: unknown): never => {
-    const errors = [primaryError];
-    lifecycle = "destroying";
-    resourceDestroyErrors = errors;
-    pendingExtensionErrors.length = 0;
-    extensionAssembly.beginDestroy();
-    changeEmitter.cancel();
-    errors.push(...extensionAssembly.cleanupSetup());
-
-    if (view && !view.isDestroyed) {
-      try {
-        destroyProseMirrorView(view);
-      } catch (error) {
-        errors.push(error);
-      }
-    }
-
-    errors.push(...extensionAssembly.cleanupAssembly());
-    eventDispatcher.clear();
-
-    for (const child of [...element.childNodes]) {
-      if (!hostChildrenBeforeView.has(child)) {
-        child.remove();
-      }
-    }
-
-    releaseHostOwnership();
-    lifecycle = "destroyed";
-    resourceDestroyErrors = null;
-
-    if (errors.length === 1) {
-      throw primaryError;
-    }
-
-    throw createCleanupError(
-      "Markora creation failed and one or more cleanup operations also failed.",
-      errors,
-    );
+    disposeEditorRuntime({
+      message: "Markora creation failed and one or more cleanup operations also failed.",
+      errors: [primaryError],
+      begin: errors => {
+        lifecycle = "destroying";
+        resourceDestroyErrors = errors;
+        pendingExtensionErrors.length = 0;
+      },
+      assembly: extensionAssembly,
+      beforeView: [() => changeEmitter.cancel()],
+      destroyView: () => {
+        if (view && !view.isDestroyed) {
+          destroyProseMirrorView(view);
+        }
+      },
+      finalize: [
+        () => eventDispatcher.clear(),
+        () => {
+          for (const child of [...element.childNodes]) {
+            if (!hostChildrenBeforeView.has(child)) child.remove();
+          }
+        },
+        () => releaseHostOwnership(),
+        () => { lifecycle = "destroyed"; resourceDestroyErrors = null; },
+      ],
+    });
+    throw primaryError;
   };
 
   try {
@@ -1468,49 +1458,29 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     },
     updateOptions,
     destroy() {
-      if (lifecycle !== "active") {
-        return;
-      }
-
-      const cleanupErrors: unknown[] = [];
-
-      lifecycle = "destroying";
-      resourceDestroyErrors = cleanupErrors;
-      creationComplete = false;
-      pendingExtensionErrors.length = 0;
-      extensionAssembly.beginDestroy();
-
-      try {
-        finalMarkdown = changeEmitter.getMarkdown(view.state.doc);
-      } catch (error) {
-        cleanupErrors.push(error);
-      }
-
-      pendingExtensionErrors.length = 0;
-      stopObservingFocus();
-
-      for (const cleanup of [
-        () => changeEmitter.flushFinal(),
-        () => assetController.cancelAll({ dispatch: false, emit: false }),
-        () => { cleanupErrors.push(...extensionAssembly.cleanupSetup()); },
-        () => destroyProseMirrorView(view),
-        () => { cleanupErrors.push(...extensionAssembly.cleanupAssembly()); },
-      ]) {
-        try {
-          cleanup();
-        } catch (error) {
-          cleanupErrors.push(error);
-        }
-      }
-
-      eventDispatcher.clear();
-      releaseHostOwnership();
-      lifecycle = "destroyed";
-      resourceDestroyErrors = null;
-      throwCollectedErrors(
-        "One or more Markora cleanup operations failed.",
-        cleanupErrors,
-      );
+      if (lifecycle !== "active") return;
+      disposeEditorRuntime({
+        message: "One or more Markora cleanup operations failed.",
+        begin: errors => {
+          lifecycle = "destroying";
+          resourceDestroyErrors = errors;
+          creationComplete = false;
+          pendingExtensionErrors.length = 0;
+        },
+        assembly: extensionAssembly,
+        beforeView: [
+          () => { finalMarkdown = changeEmitter.getMarkdown(view.state.doc); },
+          () => { pendingExtensionErrors.length = 0; stopObservingFocus(); },
+          () => changeEmitter.flushFinal(),
+          () => assetController.cancelAll({ dispatch: false, emit: false }),
+        ],
+        destroyView: () => destroyProseMirrorView(view),
+        finalize: [
+          () => eventDispatcher.clear(),
+          () => releaseHostOwnership(),
+          () => { lifecycle = "destroyed"; resourceDestroyErrors = null; },
+        ],
+      });
     },
   };
 

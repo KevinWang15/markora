@@ -1,3 +1,4 @@
+import { blurElement, getEditorRootActiveElement as getActiveElement } from "./editorDom";
 import type { Node as ProseMirrorNode, ResolvedPos, Schema } from "prosemirror-model";
 import { closeHistory } from "prosemirror-history";
 import { NodeSelection, Plugin, Selection, TextSelection, type EditorState } from "prosemirror-state";
@@ -238,11 +239,6 @@ function getEditorRoot(view: EditorView) {
   };
 }
 
-function getActiveElement(view: EditorView) {
-  const root = getEditorRoot(view);
-  return root.activeElement ?? view.dom.ownerDocument.activeElement;
-}
-
 function isNeutralFocusAfterInternalBlur(view: EditorView, activeElement: Element | null) {
   const root = getEditorRoot(view);
   return (
@@ -250,14 +246,6 @@ function isNeutralFocusAfterInternalBlur(view: EditorView, activeElement: Elemen
     || activeElement === view.dom.ownerDocument.body
     || (root.nodeType === 11 && activeElement === root.host)
   );
-}
-
-function blurElement(element: Element) {
-  const blur = (element as Element & { blur?: unknown }).blur;
-
-  if (typeof blur === "function") {
-    blur.call(element);
-  }
 }
 
 function focusOuterViewForManagedCursor(view: EditorView) {
