@@ -14,9 +14,31 @@ permissions:
 
 concurrency:
   group: browser-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
+  build-demo:
+    name: Build shared browser fixture
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:packages && pnpm --filter demo build
+      - uses: actions/upload-artifact@v5
+        with:
+          name: browser-demo-build
+          path: packages/demo/dist
+          if-no-files-found: error
+          retention-days: 1
+
   desktop-and-unit:
     name: Unit checks and desktop browser behavior
     runs-on: ubuntu-24.04
@@ -38,6 +60,8 @@ jobs:
       - name: Report disk space before browser tests
         run: bash scripts/ci/browser-disk.sh report
       - run: pnpm test:app:browser
+        env:
+          MARKORA_BROWSER_BUILD: reuse
       - name: Report final disk usage
         if: ${{ !cancelled() }}
         run: bash scripts/ci/browser-disk.sh report
@@ -48,6 +72,7 @@ jobs:
           path: test-results/app
 
   required:
+    needs: build-demo
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     name: Required / ${{ matrix.browser }}
     runs-on: ubuntu-24.04
@@ -77,10 +102,16 @@ jobs:
         run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
       - name: Typecheck browser tests
         run: pnpm typecheck:browser
+      - uses: actions/download-artifact@v5
+        with:
+          name: browser-demo-build
+          path: packages/demo/dist
       - name: Report disk space before browser tests
         run: bash scripts/ci/browser-disk.sh report
       - name: Run required browser tests
         run: pnpm exec playwright test --project=${{ matrix.browser }} --grep @required
+        env:
+          MARKORA_BROWSER_BUILD: reuse
       - name: Report final disk usage
         if: ${{ !cancelled() }}
         run: bash scripts/ci/browser-disk.sh report
@@ -96,6 +127,7 @@ jobs:
           retention-days: 14
 
   full-matrix:
+    needs: build-demo
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     name: Full / ${{ matrix.browser }}
     runs-on: ubuntu-24.04
@@ -125,10 +157,16 @@ jobs:
         run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
       - name: Typecheck browser tests
         run: pnpm typecheck:browser
+      - uses: actions/download-artifact@v5
+        with:
+          name: browser-demo-build
+          path: packages/demo/dist
       - name: Report disk space before browser tests
         run: bash scripts/ci/browser-disk.sh report
       - name: Run full browser suite
         run: pnpm exec playwright test --project=${{ matrix.browser }}
+        env:
+          MARKORA_BROWSER_BUILD: reuse
       - name: Report final disk usage
         if: ${{ !cancelled() }}
         run: bash scripts/ci/browser-disk.sh report

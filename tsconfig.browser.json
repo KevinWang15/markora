@@ -8,6 +8,36 @@
     "paths": {
       "markora": [
         "./packages/core/src/index.ts"
+      ],
+      "markora/*": [
+        "./packages/core/src/*"
+      ],
+      "markora-ui": [
+        "./packages/ui/src/index.ts"
+      ],
+      "markora-extension-alerts": [
+        "./packages/extension-alerts/src/index.ts"
+      ],
+      "markora-extension-footnotes": [
+        "./packages/extension-footnotes/src/index.ts"
+      ],
+      "markora-extension-toc": [
+        "./packages/extension-toc/src/index.ts"
+      ],
+      "markora-extension-math": [
+        "./packages/extension-math/src/index.ts"
+      ],
+      "markora-extension-frontmatter": [
+        "./packages/extension-frontmatter/src/index.ts"
+      ],
+      "markora-extension-diagrams": [
+        "./packages/extension-diagrams/src/index.ts"
+      ],
+      "markora-extension-html": [
+        "./packages/extension-html/src/index.ts"
+      ],
+      "@lucide/icons/icons/*": [
+        "./packages/ui/src/lucide-icon-data.d.ts"
       ]
     }
   },
@@ -17,6 +47,7 @@
     "tests/browser/**/*.tsx",
     "playwright.app.config.ts",
     "tests/app/**/*.ts",
-    "packages/core/src/**/*.d.ts"
+    "packages/core/src/**/*.d.ts",
+    "packages/ui/src/**/*.d.ts"
   ]
 }

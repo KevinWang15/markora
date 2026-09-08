@@ -41,7 +41,8 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   webServer: {
-    command: "pnpm build && pnpm --filter demo exec vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    command: (process.env.MARKORA_BROWSER_BUILD === "reuse" ? "" : "pnpm build:packages && pnpm --filter demo build && ")
+      + "pnpm --filter demo exec vite preview --host 127.0.0.1 --port 4173 --strictPort",
     gracefulShutdown: {
       signal: "SIGTERM",
       timeout: 1_000,
