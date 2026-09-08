@@ -104,7 +104,6 @@ export function createDiagramNodeView(options: CreateDiagramNodeViewOptions): No
     private renderSnapshot: InternalDiagramRenderSnapshot;
     private renderedUiKey: string | null = null;
     private readonly retryButton: HTMLButtonElement;
-    private selected = false;
     private readonly sourceLabelElement: HTMLElement;
     private readonly sourceShell: HTMLElement;
     private readonly status: HTMLElement;
@@ -247,7 +246,6 @@ export function createDiagramNodeView(options: CreateDiagramNodeViewOptions): No
     }
 
     deselectNode() {
-      this.selected = false;
       this.dom.classList.remove("mdw-diagram--selected");
     }
 
@@ -285,7 +283,6 @@ export function createDiagramNodeView(options: CreateDiagramNodeViewOptions): No
     }
 
     selectNode() {
-      this.selected = true;
       this.dom.classList.add("mdw-diagram--selected");
     }
 

@@ -726,10 +726,6 @@ export function createMathRenderManager(
     }
   };
 
-  const canAutomaticallyRender = (entry: RenderEntry) => (
-    entry.kind === "inline" || entry.nearViewport
-  );
-
   const isCurrent = (entry: RenderEntry, generation: number) => (
     !destroyed
     && !lifecycle.signal.aborted

@@ -433,13 +433,6 @@ function findAncestor($pos: ResolvedPos, nodeType: NodeType | undefined): Ancest
   return null;
 }
 
-function commonAncestorOfType(state: EditorState, nodeType: NodeType | undefined) {
-  const from = findAncestor(state.selection.$from, nodeType);
-  const to = findAncestor(state.selection.$to, nodeType);
-
-  return from && to && from.pos === to.pos ? from : null;
-}
-
 function findNearestListAncestor(
   $pos: ResolvedPos,
   bulletType: NodeType | undefined,

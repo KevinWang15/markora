@@ -10,7 +10,6 @@ import {
   type MarkdownEditorClipboardHandlerContribution,
   type MarkdownEditorClipboardTransformContribution,
   type MarkdownEditorExtensionAssemblyContext,
-  type MarkdownEditorExtensionHandle,
   type MarkdownEditorExtensionRegistry,
   type MarkdownEditorExtensionRuntime,
   type MarkdownEditorInputRuleContribution,

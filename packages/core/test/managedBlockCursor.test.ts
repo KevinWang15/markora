@@ -269,9 +269,6 @@ function createTestTableNavigation(editor: ReturnType<typeof createEditor>) {
         cellIndex: $from.index(rowDepth),
       };
     },
-    normalizeTableAlignment(value) {
-      return value === 'left' || value === 'center' || value === 'right' ? value : null;
-    },
     moveBeforeManagedBlock: () => false,
     moveAfterManagedBlock: () => false,
   });

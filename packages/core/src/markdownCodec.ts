@@ -1171,7 +1171,7 @@ const serializerMarks: Record<
       const open = defaultMarkdownSerializer.marks.link.open;
       return typeof open === "function" ? open(state, mark, parent, index) : open;
     },
-    close(state, mark, parent, index) {
+    close(state, mark) {
       const runtime = state as MarkdownSerializerStateRuntime;
       if (runtime.bareAutolink) {
         runtime.bareAutolink = false;

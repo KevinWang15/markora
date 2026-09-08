@@ -208,31 +208,6 @@ function getMarkRange(state: EditorState, markType: MarkType | undefined): MarkR
   };
 }
 
-function selectionTouchesNodeType(state: EditorState, nodeType: NodeType | undefined) {
-  if (!nodeType) {
-    return false;
-  }
-
-  const { selection } = state;
-
-  if (selection instanceof NodeSelection && selection.node.type === nodeType) {
-    return true;
-  }
-
-  for (let depth = selection.$from.depth; depth >= 0; depth -= 1) {
-    if (selection.$from.node(depth).type === nodeType) {
-      return true;
-    }
-  }
-
-  let active = false;
-  state.doc.nodesBetween(selection.from, selection.to, (node) => {
-    active ||= node.type === nodeType;
-    return !active;
-  });
-  return active;
-}
-
 function canInsertNode(state: EditorState, nodeType: NodeType | undefined) {
   if (!nodeType) {
     return false;

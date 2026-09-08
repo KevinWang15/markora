@@ -14,13 +14,12 @@ export type { TableAlignment } from "./tableCommands";
 export type CreateTableNavigationOptions = {
   schema: Schema;
   getTableCellContext: (state: EditorState) => TableCellInfo | null;
-  normalizeTableAlignment: (value: unknown) => TableAlignment | null;
   moveBeforeManagedBlock: (view: EditorView, blockPos: number) => boolean;
   moveAfterManagedBlock: (view: EditorView, blockPos: number) => boolean;
 };
 
 export function createTableNavigation(options: CreateTableNavigationOptions) {
-  const { schema, getTableCellContext, normalizeTableAlignment, moveBeforeManagedBlock, moveAfterManagedBlock } = options;
+  const { schema, getTableCellContext, moveBeforeManagedBlock, moveAfterManagedBlock } = options;
   const tableCommands = createTableCommandSet(schema);
 
   function getTableCellSelection(doc: ProseMirrorNode, cellPos: number) {

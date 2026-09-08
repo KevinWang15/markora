@@ -585,7 +585,7 @@ export function createMarkBoundaryPlugin(options: {
 
         return handleBoundaryKeyDown(view, event);
       },
-      handleClick(view, pos, event) {
+      handleClick(view, _pos, event) {
         return (
           (view.editable && enableDefaultUi && maybeEditActiveImage(view, event, imageEditor)) ||
           (view.editable && enableDefaultUi && maybeEditActiveLink(view, event, linkEditor))

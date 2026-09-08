@@ -340,19 +340,6 @@ function getActiveListItemInfo(state: EditorState): ActiveListItemInfo | null {
   return null;
 }
 
-function getOrderedListMarker(listNode: ProseMirrorNode, listDepth: number, state: EditorState) {
-  const { $from } = state.selection;
-  const listItemDepth = listDepth + 1;
-
-  if (listItemDepth > $from.depth || $from.node(listItemDepth).type !== schema.nodes.list_item) {
-    return null;
-  }
-
-  const itemIndex = $from.index(listDepth);
-  const order = typeof listNode.attrs.order === "number" ? listNode.attrs.order : 1;
-  return `${order + itemIndex}. `;
-}
-
 function getActiveLineMarker(state: EditorState): ActiveLineMarker | null {
   const { selection } = state;
 
@@ -440,21 +427,6 @@ function getTableCellInfo(state: EditorState): TableCellInfo | null {
   }
 
   return getTableCellContext(state);
-}
-
-function selectionTouchesNodeType(state: EditorState, nodeType: NodeType) {
-  const { selection } = state;
-  const matchesResolvedPos = (resolvedPos: typeof selection.$from) => {
-    for (let depth = resolvedPos.depth; depth > 0; depth -= 1) {
-      if (resolvedPos.node(depth).type === nodeType) {
-        return true;
-      }
-    }
-
-    return false;
-  };
-
-  return matchesResolvedPos(selection.$from) || matchesResolvedPos(selection.$to);
 }
 
 const { maybeExtendSelectionAcrossCodeBlock } = createCodeBlockSelectionHelpers({ schema });
@@ -545,7 +517,6 @@ const {
 } = createTableNavigation({
   schema,
   getTableCellContext,
-  normalizeTableAlignment,
   moveBeforeManagedBlock,
   moveAfterManagedBlock: (view, blockPos) => setManagedBlockBoundarySelection(view, blockPos, "after"),
 });
@@ -577,12 +548,9 @@ const { convertPipeTable } = createPipeTableHelpers({
     createEscapedBoundaryPlugin,
     revealMarkConfigs,
     ImageView,
-    getAncestorInfo,
     getActiveListItemInfo,
     getActiveLineMarker,
-    getTableCellContext,
     getTableUiContext,
-    selectionTouchesNodeType,
     maybeExtendSelectionAcrossCodeBlock,
     isManagedBlockNode,
     setManagedBlockBoundarySelection,
@@ -669,12 +637,9 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     createEscapedBoundaryPlugin,
     revealMarkConfigs,
     ImageView,
-    getAncestorInfo,
     getActiveListItemInfo,
     getActiveLineMarker,
-    getTableCellContext,
     getTableUiContext,
-    selectionTouchesNodeType,
     maybeExtendSelectionAcrossCodeBlock,
     isManagedBlockNode,
     setManagedBlockBoundarySelection,

@@ -1672,7 +1672,6 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
     }
 
     private getExtensions(): Extension[] {
-      const language = this.getLanguageLabel();
       return [
         lineNumbers(),
         drawSelection(),

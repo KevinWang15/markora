@@ -1,12 +1,10 @@
 import MarkdownIt from "markdown-it";
 import {
   MarkdownParser,
-  MarkdownSerializer,
   defaultMarkdownParser,
   defaultMarkdownSerializer,
   schema as commonMarkSchema,
   type MarkdownSerializerState,
-  type ParseSpec,
 } from "prosemirror-markdown";
 import {
   Fragment,

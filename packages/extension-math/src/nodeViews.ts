@@ -121,7 +121,7 @@ export function createMathNodeView(
     private sourceEditor: MathSourceEditor | null = null;
     private writingSource = false;
     private finishing = false;
-    private readonly editButton: HTMLButtonElement | null;
+    private readonly editButton: HTMLButtonElement;
     private readonly header: HTMLElement;
     private readonly kindElement: HTMLElement;
     private nodeValue: ProseMirrorNode;
@@ -176,13 +176,8 @@ export function createMathNodeView(
       this.actions = ownerDocument.createElement("span");
       this.actions.className = "mdw-math__actions";
 
-      {
-        this.editButton = this.createActionButton(
-          "edit",
-          messages.editSource,
-        );
-        this.actions.append(this.editButton);
-      }
+      this.editButton = this.createActionButton("edit", messages.editSource);
+      this.actions.append(this.editButton);
 
       this.toggleButton = this.createActionButton(
         "toggle",
@@ -510,7 +505,7 @@ export function createMathNodeView(
       // Per-button listeners would multiply with every formula in large documents.
       let handled = false;
       if (isInside(event.target, this.actions)) {
-        if (this.editButton && !this.editButton.disabled && isInside(event.target, this.editButton)) {
+        if (!this.editButton.disabled && isInside(event.target, this.editButton)) {
           handled = this.requestEdit();
         } else if (!this.toggleButton.disabled && isInside(event.target, this.toggleButton)) {
           handled = this.togglePreview();
@@ -604,10 +599,6 @@ export function createMathNodeView(
 
       if (disabled !== this.renderedDisabled) {
         for (const button of [this.editButton, this.toggleButton, this.retryButton]) {
-          if (!button) {
-            continue;
-          }
-
           button.disabled = disabled;
           button.setAttribute("aria-disabled", disabled ? "true" : "false");
         }

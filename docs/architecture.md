@@ -32,6 +32,12 @@ do not introduce a universal feature container or import the full assembly from
 minimal. `sharedRuntime.test.ts` runs common behavior through both public factories.
 Packed-consumer checks enforce the actual dependency boundary.
 
+Core, math, and diagram source builds reject unused locals and parameters. Keep
+these checks on their source configurations: API type fixtures may intentionally
+declare bindings solely to check assignability. Removing an exported API still
+requires a compatibility review; lack of repository callers is not proof that a
+published extension contract is unused.
+
 ## Application operations and commands
 
 `DocumentController` owns the document session, application history, save/export
