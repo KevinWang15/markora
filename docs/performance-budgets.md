@@ -133,3 +133,14 @@ ceilings become 8,500/9,200 raw and 1,950/2,100 gzip bytes, retaining approximat
 math CSS allowance. JavaScript, combined-extension CSS, dependency exclusions,
 and runtime/memory failure ceilings remain unchanged. No CodeMirror, React or
 rendering-engine dependency was added to math's source editor.
+
+## Parser allocation review
+
+CPU profiling after the interaction audit found avoidable allocation in ordinary
+Markdown parsing. Opaque inline source hydration now skips paragraphs without
+opaque tokens and uses direct offsets for LF-only source; CR and CRLF still use
+an exact offset map. The source-fidelity tests cover repeated inline spans and
+Unicode prefixes with all three line-ending forms. Task normalization stops at
+text blocks, and whitespace normalization analyzes crossing mark runs only when
+marked text actually has whitespace at an edge. The checked fixtures and all
+runtime, memory and bundle budgets remain unchanged.

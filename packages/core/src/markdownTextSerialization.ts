@@ -246,6 +246,9 @@ export function normalizeExpelledMarkdownWhitespace(
   if (
     node.inlineContent
     && expellableMarkNames.size > 0
+    // Crossing-mark analysis allocates runs for every mark. It cannot change
+    // inline content unless a marked text node has whitespace at an edge.
+    && children.some(child => child.isText && child.marks.length > 0 && /(^\s|\s$)/u.test(child.text!))
     && (
       hasCrossingExpellableMarkRuns(children, expellableMarkNames)
       || hasLeadingWhitespaceAfterExpellableMarkReduction(children, expellableMarkNames)

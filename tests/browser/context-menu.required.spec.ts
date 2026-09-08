@@ -197,6 +197,12 @@ test("@required context menu and nested controls expose accessible roles and nam
 });
 
 test("@required playground math menus select the formula and open the shared LaTeX editor", async ({ page }) => {
+  // Exercise the idle scheduler's five-second watchdog deterministically.
+  // Editing updates the model immediately; serialized host output is coalesced.
+  await page.addInitScript(() => {
+    window.requestIdleCallback = () => 0;
+    window.cancelIdleCallback = () => {};
+  });
   await page.goto("/"); await page.locator("#source").fill("$$\nx^2\n$$");
   await page.getByRole("button", { name: "Apply Markdown", exact: true }).click();
   await page.locator("#editor .mdw-math").click({ button: "right", position: { x: 12, y: 12 } });
@@ -205,8 +211,9 @@ test("@required playground math menus select the formula and open the shared LaT
   await expect(source).toBeFocused();
   await expect(source).toHaveValue("x^2");
   await source.fill("y^3");
+  await expect(page.locator("#editor [data-mdw-math-source]")).toHaveText("$$\ny^3\n$$");
   await source.press("Escape");
-  await expect(page.locator("#output")).toHaveText("$$\ny^3\n$$");
+  await expect(page.locator("#output")).toHaveText("$$\ny^3\n$$", { timeout: 10_000 });
 });
 
 

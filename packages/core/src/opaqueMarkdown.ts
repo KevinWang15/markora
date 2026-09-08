@@ -395,7 +395,8 @@ function createNormalizedSourceMap(source: string) {
 
 function hydrateInlineSources(state: StateCore) {
   for (const token of state.tokens) {
-    if (token.type !== "inline" || token.level !== 1 || !token.map || !token.children) {
+    if (token.type !== "inline" || token.level !== 1 || !token.map || !token.children
+      || !token.children.some(child => child.type === "html_inline" || child.type === "markora_opaque_inline")) {
       continue;
     }
 
@@ -409,7 +410,11 @@ function hydrateInlineSources(state: StateCore) {
       continue;
     }
 
-    const { boundaries, normalized } = createNormalizedSourceMap(originalSlice);
+    // Most paragraphs have no opaque inline content, and LF-only source needs
+    // no character-by-character offset map. Preserve exact CR/CRLF offsets only
+    // for tokens that actually need rehydration.
+    const sourceMap = originalSlice.includes("\r") ? createNormalizedSourceMap(originalSlice) : null;
+    const normalized = sourceMap?.normalized ?? originalSlice;
     const contentStart = normalized.indexOf(token.content);
 
     if (contentStart < 0) {
@@ -431,8 +436,10 @@ function hydrateInlineSources(state: StateCore) {
         continue;
       }
 
-      const sourceStart = boundaries[contentStart + childStart];
-      const sourceEnd = boundaries[contentStart + childStart + normalizedSource.length];
+      const start = contentStart + childStart;
+      const end = start + normalizedSource.length;
+      const sourceStart = sourceMap ? sourceMap.boundaries[start] : start;
+      const sourceEnd = sourceMap ? sourceMap.boundaries[end] : end;
 
       if (sourceStart === undefined || sourceEnd === undefined) {
         continue;

@@ -114,7 +114,7 @@ describe('opaque token exact-source API', () => {
     expect(sourceReads).toBe(0);
   });
 
-  it('exposes hydrated block and inline HTML spans with exact authored line endings', () => {
+  it.each(['\n', '\r\n', '\r'])('exposes hydrated block and inline HTML spans with exact authored %j line endings', (ending) => {
     const captured: string[] = [];
     const probe = defineMarkdownEditorExtension({
       name: 'acme-opaque-source-probe',
@@ -150,12 +150,12 @@ describe('opaque token exact-source API', () => {
       markoraVersion: MARKORA_VERSION,
     });
     const codec = createMarkdownCodec(resolution.extensions);
-    const block = '<div data-kind="exact">\r\nblock\r\n</div>';
-    const inline = '<!-- inline\r\ncomment -->';
+    const block = ['<div data-kind="exact">', 'block', '</div>'].join(ending);
+    const inline = ['<!-- inline', 'comment -->'].join(ending);
 
-    codec.parse(`${block}\r\n\r\nBefore ${inline} after.\r\n`);
+    codec.parse(`${block}${ending}${ending}Before 📝 ${inline} between ${inline} after.${ending}`);
 
-    expect(captured).toEqual([block, inline]);
+    expect(captured).toEqual([block, inline, inline]);
   });
 });
 

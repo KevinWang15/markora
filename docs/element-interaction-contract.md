@@ -85,8 +85,11 @@ technologies; retain the separate platform validation checklist.
 - The broad Chromium suite passed 292 checks with one skip and one intermittent
   math-menu output failure (`x^2` remained after editing to `y^3`). That check
   passed three immediate isolated reruns and the later 43-check clipboard,
-  HTML, math and context-menu regression pass. This does not establish the cause
-  of the intermittent failure; keep investigating it if it recurs.
+  HTML, math and context-menu regression pass. The CI follow-up reproduced the cause: the test's five-second assertion raced
+  the coalesced output scheduler's five-second watchdog. The regression now
+  withholds idle callbacks, verifies the model updates immediately, and allows
+  the serialized output to arrive after the watchdog. It passes in all three
+  browsers.
 - Separate CDP mouse drags across math, diagrams, HTML, tables, code, alerts,
   horizontal rules and TOC blocks deleted precisely the intended text and block
   range. The public playground also passed real KaTeX/code selection and deletion

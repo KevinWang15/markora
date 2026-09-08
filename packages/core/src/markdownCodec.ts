@@ -1324,7 +1324,8 @@ function stripTaskPrefixFromInline(fragment: Fragment, count: number) {
 }
 
 function normalizeTaskListNode(node: ProseMirrorNode, parentTypeName?: string): ProseMirrorNode {
-  if (node.isLeaf) {
+  // Task items are block containers; inline children cannot contain list items.
+  if (node.isLeaf || node.isTextblock) {
     return node;
   }
 
