@@ -62,7 +62,13 @@ it("bounds a 512-atom source-only HTML workload without renderer work during typ
     expect(renderer).not.toHaveBeenCalled();
 
     const position = textPosition(activeEditor, "Preamble");
-    activeEditor.view.dispatch(activeEditor.view.state.tr.insertText("Expanded ", position));
+    const transaction = activeEditor.view.state.tr.insertText("Expanded ", position);
+    const positionLookups = vi.spyOn(transaction.doc, "nodeAt");
+    activeEditor.view.dispatch(transaction);
+    // Typing must not resolve a document position separately for every HTML
+    // NodeView or identity entry. Those sibling searches become quadratic.
+    expect(positionLookups.mock.calls.length).toBeLessThan(HTML_ATOM_COUNT / 4);
+    positionLookups.mockRestore();
     const mappedViews = [
       ...activeEditor.view.dom.querySelectorAll<HTMLElement>("[data-mdw-html]"),
     ];

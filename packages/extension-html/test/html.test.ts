@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createEditor as createRootEditor,
   createMinimalMarkdownEditorPreset,
@@ -449,6 +449,43 @@ it("adopts equal-document resets while aborting the prior render generation", as
   await waitFor(() => handle.state.getRenderState(after)?.status === "rendered");
   expect(editor.view.dom.querySelector("[data-mdw-html-preview] p")?.textContent)
     .toBe("current");
+});
+
+it("preserves moved HTML generations but invalidates an equal replacement without disturbing its duplicate", async () => {
+  const pending: Array<{ signal: AbortSignal; resolve(node: Node): void }> = [];
+  const extension = createHtmlExtension({ renderer: ({ signal }) => new Promise<Node>(resolve => {
+    pending.push({ signal, resolve });
+  }) });
+  const editor = track(createRootEditor({ element: host(), extensions: [extension],
+    markdown: "intro\n\n<div>same</div>\n\n<div>same</div>" }));
+  const handle = editor.extensions.get(extension);
+  await vi.waitFor(() => expect(pending).toHaveLength(2));
+  const original = handle.state.getNodes("block");
+
+  editor.view.dispatch(editor.view.state.tr.insertText("x", 1));
+  const moved = handle.state.getNodes("block");
+  expect(moved.map(node => node.identity)).toEqual(original.map(node => node.identity));
+  expect(moved.map(node => node.position)).toEqual(original.map(node => node.position + 1));
+  expect(pending.map(job => job.signal.aborted)).toEqual([false, false]);
+
+  const first = moved[0]!;
+  const node = editor.view.state.doc.nodeAt(first.position)!;
+  editor.view.dispatch(editor.view.state.tr.replaceWith(first.position, first.position + node.nodeSize,
+    node.type.create(node.attrs, node.content, node.marks)));
+  await vi.waitFor(() => expect(pending).toHaveLength(3));
+  const replaced = handle.state.getNodes("block");
+  expect(replaced[0]!.identity).not.toBe(first.identity);
+  expect(replaced[1]!.identity).toBe(moved[1]!.identity);
+  expect(pending.map(job => job.signal.aborted)).toEqual([true, false, false]);
+  expect(handle.commands.remove(first)).toBe(false);
+
+  for (const [index, text] of ["stale", "unchanged duplicate", "fresh replacement"].entries()) {
+    const output = document.createElement("p");
+    output.textContent = text;
+    pending[index]!.resolve(output);
+  }
+  await vi.waitFor(() => expect([...editor.view.dom.querySelectorAll("[data-mdw-html-preview] p")]
+    .map(element => element.textContent)).toEqual(["fresh replacement", "unchanged duplicate"]));
 });
 
 it("rejects invalid HTML nodes in every intermediate transaction document", () => {

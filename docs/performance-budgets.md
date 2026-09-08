@@ -283,3 +283,28 @@ warning/failure pairs for already collected summary statistics. Both runtime
 harnesses use the same evaluator; missing/non-finite statistics and malformed
 thresholds fail validation. This adds no sampling, changes no measurement code,
 and does not discard or automatically retry slow samples.
+
+## HTML identity and NodeView refresh cost
+
+Follow-up CPU profiling identified avoidable work in the 1 MiB ordinary-edit
+probe: the HTML plugin refreshed every NodeView, resolving each position by
+searching its siblings, and its identity index separately called `nodeAt` for
+each HTML occurrence. In one local profile, HTML refresh accounted for about
+100 ms of the 172 ms synchronous edit. Repeating sibling searches for many
+atoms makes that part of the update quadratic in a wide document.
+
+The identity index now validates mapped occurrences during one document walk
+and retains a NodeView revision when the same HTML node objects merely move.
+Ordinary typing still refreshes UI state but skips occurrence adoption and its
+position searches. Replacements, changed HTML and hard resets invalidate that
+revision; equal-source replacements continue to cancel stale render generations.
+Public source snapshots and occurrence identities keep their previous contract.
+
+Three local diagnostic samples of the same packed, minified all-seven consumer
+were 172.2, 160.0 and 195.6 ms before, and 49.3, 50.6 and 50.4 ms after. These
+used source maps and Chromium's CPU profiler around `ordinaryEdit`, so they are
+diagnostic comparisons, not a replacement CI baseline. No timing thresholds,
+sample counts, measurement code or resource gates changed for this optimization.
+Regression tests bound position lookups during a 512-atom edit and check that
+moving two identical HTML atoms preserves their renderer generations while an
+equal replacement invalidates only the replaced occurrence.

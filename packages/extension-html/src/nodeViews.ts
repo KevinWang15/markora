@@ -26,7 +26,7 @@ export type HtmlNodeViewController = Readonly<{
   getPosition(): number | null;
   getRenderSnapshot(): HtmlRenderSnapshot;
   isCurrent(): boolean;
-  refresh(): boolean;
+  refresh(adoptCurrentNode?: boolean): boolean;
   requestEdit(): boolean;
   retryPreview(): boolean;
   togglePreview(): boolean;
@@ -218,7 +218,7 @@ export function createHtmlNodeView(
         getPosition: () => this.getPosition(),
         getRenderSnapshot: () => this.renderSnapshot,
         isCurrent: () => this.isCurrent(readSource(this.nodeValue)),
-        refresh: () => this.refresh(),
+        refresh: (adoptCurrentNode = true) => this.refresh(adoptCurrentNode),
         requestEdit: () => this.requestEdit(),
         retryPreview: () => this.retryPreview(),
         togglePreview: () => this.togglePreview(),
@@ -273,9 +273,9 @@ export function createHtmlNodeView(
         && this.getPosition() !== null;
     }
 
-    refresh() {
+    refresh(adoptCurrentNode = true) {
       if (this.destroyed) return false;
-      this.adoptEqualCurrentNode();
+      if (adoptCurrentNode) this.adoptEqualCurrentNode();
       this.renderUi();
       return true;
     }

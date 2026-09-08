@@ -654,8 +654,9 @@ export function createHtmlExtension(options?: HtmlExtensionOptions) {
             view() {
               for (const controller of [...controllers]) controller.refresh();
               return {
-                update() {
-                  for (const controller of [...controllers]) controller.refresh();
+                update(view, previousState) {
+                  const adopt = identities(previousState).nodeViewRevision !== identities(view.state).nodeViewRevision;
+                  for (const controller of [...controllers]) controller.refresh(adopt);
                 },
                 destroy() {},
               };
@@ -703,7 +704,7 @@ export function createHtmlExtension(options?: HtmlExtensionOptions) {
         const source = controller.source;
         const kind = controller.kind;
         if (position === null) return;
-        const current = identities(getState()).get(position);
+        const current = identities(getState()).byPosition.get(position)?.snapshot;
         if (!current || current.source !== source || current.kind !== kind) return;
         const target = normalizeHtmlNodeTarget(current);
         const render = renderSnapshot(target);

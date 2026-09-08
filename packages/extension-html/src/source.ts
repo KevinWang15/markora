@@ -27,7 +27,12 @@ export type HtmlNodeTarget = Readonly<{
 }>;
 
 export type HtmlSourceSnapshot = HtmlNodeTarget;
-export type HtmlNodeIdentityIndex = ReadonlyMap<number, HtmlSourceSnapshot>;
+type HtmlIdentityEntry = Readonly<{ node: ProseMirrorNode; snapshot: HtmlSourceSnapshot }>;
+export type HtmlNodeIdentityIndex = Readonly<{
+  byPosition: ReadonlyMap<number, HtmlIdentityEntry>;
+  /** Changes when HTML occurrences change, not when text merely moves them. */
+  nodeViewRevision: object;
+}>;
 
 const utf8Encoder = new TextEncoder();
 const validator = new MarkdownIt("commonmark", { html: true });
@@ -161,27 +166,36 @@ function snapshotAt(
 export function createHtmlNodeIdentityIndex(
   doc: ProseMirrorNode,
   types: HtmlNodeTypes,
-  preserved: ReadonlyMap<number, number> = new Map(),
+  preserved: ReadonlyMap<number, HtmlIdentityEntry> = new Map(),
+  previous?: HtmlNodeIdentityIndex,
 ) {
-  const index = new Map<number, HtmlSourceSnapshot>();
+  const byPosition = new Map<number, HtmlIdentityEntry>();
+  let sameNodes = previous !== undefined;
 
   doc.descendants((node, position) => {
     if (node.type !== types.block && node.type !== types.inline) {
       return;
     }
 
+    const prior = preserved.get(position);
+    const keepIdentity = prior?.snapshot.display === displayForNode(node, types)
+      && prior.snapshot.kind === readHtmlNodeKind(node)
+      && prior.snapshot.source === readHtmlNodeSource(node);
     const snapshot = snapshotAt(
       node,
       position,
       types,
-      preserved.get(position) ?? allocateIdentity(),
+      keepIdentity ? prior!.snapshot.identity : allocateIdentity(),
     );
 
     if (snapshot) {
-      index.set(position, snapshot);
+      byPosition.set(position, Object.freeze({ node, snapshot }));
+      sameNodes &&= keepIdentity && prior?.node === node;
     }
   });
-  return index as HtmlNodeIdentityIndex;
+  const nodeViewRevision = previous && sameNodes && byPosition.size === previous.byPosition.size
+    ? previous.nodeViewRevision : Object.freeze({});
+  return Object.freeze({ byPosition, nodeViewRevision });
 }
 
 export function mapHtmlNodeIdentityIndex(
@@ -193,34 +207,26 @@ export function mapHtmlNodeIdentityIndex(
     return previous;
   }
 
-  const preserved = new Map<number, number>();
+  const preserved = new Map<number, HtmlIdentityEntry>();
 
-  for (const snapshot of previous.values()) {
+  for (const entry of previous.byPosition.values()) {
+    const { snapshot } = entry;
     const mapped = transaction.mapping.mapResult(snapshot.position, 1);
 
     if (mapped.deleted || mapped.deletedAcross || preserved.has(mapped.pos)) {
       continue;
     }
 
-    const node = transaction.doc.nodeAt(mapped.pos);
-    const current = node
-      ? snapshotAt(node, mapped.pos, types, snapshot.identity)
-      : null;
-
-    if (
-      current?.display === snapshot.display
-      && current.kind === snapshot.kind
-      && current.source === snapshot.source
-    ) {
-      preserved.set(mapped.pos, snapshot.identity);
-    }
+    preserved.set(mapped.pos, entry);
   }
 
-  return createHtmlNodeIdentityIndex(transaction.doc, types, preserved);
+  // Validate mapped identities during one document walk. Calling nodeAt for
+  // every atom repeatedly searches the same siblings in a large document.
+  return createHtmlNodeIdentityIndex(transaction.doc, types, preserved, previous);
 }
 
 export function collectHtmlNodeSnapshots(index: HtmlNodeIdentityIndex) {
-  return Object.freeze([...index.values()]);
+  return Object.freeze([...index.byPosition.values()].map(entry => entry.snapshot));
 }
 
 export function normalizeHtmlNodeTarget(value: unknown): HtmlNodeTarget {
@@ -279,7 +285,7 @@ export function findHtmlNodeSnapshot(
   identities: HtmlNodeIdentityIndex,
 ) {
   const normalized = normalizeHtmlNodeTarget(target);
-  const current = identities.get(normalized.position);
+  const current = identities.byPosition.get(normalized.position)?.snapshot;
   const node = doc.nodeAt(normalized.position);
   const expectedType = normalized.display === "block" ? types.block : types.inline;
 
