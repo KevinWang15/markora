@@ -18,7 +18,7 @@ import { cpus, freemem, homedir, platform, release, tmpdir, totalmem } from "nod
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
-import { evaluateBudget, selectStatistic, reportBudgetEvaluations } from "./performance/budget-evaluator.mjs";
+import { evaluateBudget, evaluateSummaryBudgets, reportBudgetEvaluations } from "./performance/budget-evaluator.mjs";
 import {
   REPRESENTATIVE_DOCUMENT_TARGETS,
   REPRESENTATIVE_DOCUMENT_VERSION,
@@ -1299,10 +1299,8 @@ function evaluateRuntimeBudgets(runtime, budgets, targets, sampling) {
         }
         const statistic = budget.statistic ?? (category === "timing" ? "p95" : "median");
         const summary = runtime[category].summaries[targetBytes]?.[metricName];
-        evaluations.push(evaluateBudget(
-          `${targetBytes} B ${metricName} ${statistic}`,
-          selectStatistic(summary, budget, `${category}.${targetBytes}.${metricName}`, statistic),
-          budget,
+        evaluations.push(...evaluateSummaryBudgets(
+          `${targetBytes} B ${metricName} ${statistic}`, summary, budget, statistic,
         ));
         const varianceBudget = budgets.runtime?.variance?.[category];
         if (varianceBudget) {

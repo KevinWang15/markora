@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   evaluateBudget,
+  evaluateSummaryBudgets,
   selectStatistic,
   reportBudgetEvaluations,
 } from "../../../scripts/performance/budget-evaluator.mjs";
@@ -34,6 +35,21 @@ describe("performance statistics", () => {
 });
 
 describe("performance budgets", () => {
+  it("independently rejects a sustained slowdown and an excessive single sample", () => {
+    const budget = { statistic: "maximum", warning: 90, failure: 250,
+      additionalStatistics: { median: { warning: 90, failure: 180 } } };
+    const check = (samples: number[]) => evaluateSummaryBudgets("edit", summarizeSamples(samples), budget);
+    expect(check([110, 110, 110, 110, 208]).map(result => result.severity)).toEqual(["warning", "warning"]);
+    expect(check([181, 181, 181, 181, 208]).map(result => result.severity)).toEqual(["warning", "failure"]);
+    expect(check([110, 110, 110, 110, 251]).map(result => result.severity)).toEqual(["failure", "warning"]);
+    expect(() => evaluateSummaryBudgets("edit", {}, budget)).toThrow(/statistic/u);
+    expect(() => evaluateSummaryBudgets("edit", { maximum: 1 }, {
+      ...budget, additionalStatistics: { missing: { warning: 1, failure: 2 } },
+    })).toThrow(/statistic/u);
+    expect(() => evaluateSummaryBudgets("edit", { maximum: 1 }, {
+      ...budget, additionalStatistics: [],
+    })).toThrow(/record/u);
+  });
   it("requires a finite configured statistic and only uses an explicit fallback", () => {
     const summary = { maximum: 15, median: 10, p95: Number.NaN };
     expect(selectStatistic(summary, { statistic: "maximum" }, "metric")).toBe(15);

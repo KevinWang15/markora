@@ -69,3 +69,20 @@ export function selectStatistic(summary, budget, label, fallbackStatistic) {
   }
   return value;
 }
+
+/** Keep typical performance and occasional slow samples independently bounded. */
+export function evaluateSummaryBudgets(label, summary, budget, fallbackStatistic) {
+  const evaluations = [evaluateBudget(label, selectStatistic(summary, budget, label, fallbackStatistic), budget)];
+  const additional = budget.additionalStatistics;
+  if (additional !== undefined) {
+    if (!additional || typeof additional !== "object" || Array.isArray(additional)) {
+      throw new TypeError(`${label} additionalStatistics must be a statistic-to-budget record.`);
+    }
+    for (const [statistic, thresholds] of Object.entries(additional)) {
+      const statisticLabel = `${label}.${statistic}`;
+      evaluations.push(evaluateBudget(statisticLabel,
+        selectStatistic(summary, { statistic }, statisticLabel), thresholds));
+    }
+  }
+  return Object.freeze(evaluations);
+}

@@ -18,7 +18,7 @@ import { cpus, homedir, platform, release, tmpdir, totalmem } from "node:os";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
-import { evaluateBudget, selectStatistic, reportBudgetEvaluations } from "./performance/budget-evaluator.mjs";
+import { evaluateBudget, evaluateSummaryBudgets, reportBudgetEvaluations } from "./performance/budget-evaluator.mjs";
 import { summarizeRecords } from "./performance/statistics.mjs";
 import {
   ADVANCED_SYNTAX_DOCUMENT_TARGETS,
@@ -957,10 +957,8 @@ function evaluateBudgets(config, timing, memory) {
     for (const metric of timingMetricNames) {
       const budget = timingBudgets?.[metric];
       const metricSummary = timing.summaries[String(target)]?.[metric];
-      evaluations.push(evaluateBudget(
-        `advancedSyntax.timing.${target}.${metric}`,
-        selectStatistic(metricSummary, budget, `advancedSyntax.timing.${target}.${metric}`),
-        budget,
+      evaluations.push(...evaluateSummaryBudgets(
+        `advancedSyntax.timing.${target}.${metric}`, metricSummary, budget,
       ));
       evaluations.push(evaluateBudget(
         `advancedSyntax.variance.timing.${target}.${metric}`,
@@ -971,14 +969,9 @@ function evaluateBudgets(config, timing, memory) {
     const memoryBudgets = config.advancedSyntax.memory[String(target)];
     for (const metric of memoryMetricNames) {
       const budget = memoryBudgets?.[metric];
-      evaluations.push(evaluateBudget(
+      evaluations.push(...evaluateSummaryBudgets(
         `advancedSyntax.memory.${target}.${metric}`,
-        selectStatistic(
-          memory.summaries[String(target)]?.[metric],
-          budget,
-          `advancedSyntax.memory.${target}.${metric}`,
-        ),
-        budget,
+        memory.summaries[String(target)]?.[metric], budget,
       ));
     }
   }

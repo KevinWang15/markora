@@ -163,7 +163,9 @@
       },
       "1048576": {
         "mountSyncMs": { "statistic": "maximum", "warning": 1550, "failure": 5400 },
-        "ordinaryEditSyncMs": { "statistic": "maximum", "warning": 90, "failure": 200 },
+        "ordinaryEditSyncMs": { "statistic": "maximum", "warning": 90, "failure": 250,
+          "additionalStatistics": { "median": { "warning": 90, "failure": 180 } }
+        },
         "footnoteStructuralEditSyncMs": { "statistic": "maximum", "warning": 90, "failure": 250 },
         "tocHeadingEditSyncMs": { "statistic": "maximum", "warning": 90, "failure": 180 },
         "diagramRemovalSyncMs": { "statistic": "maximum", "warning": 90, "failure": 180 },

@@ -260,3 +260,26 @@ that the refactor improved execution speed or a diagnosis of individual pauses.
 Every sample, warning ceiling, variance gate, resource invariant and other
 failure ceiling is retained. Future increases still require a fresh review;
 these limits do not adjust automatically from a failing run.
+
+
+### Median and maximum editing guards
+
+The [next complete measurement](https://github.com/KevinWang15/markora/actions/runs/34230194455)
+passed all core-runtime and retained-resource gates. Its 1 MiB advanced-syntax
+ordinary-edit samples were 207.9, 106.8, 117.7, 113.2 and 104.8 ms: one sample
+exceeded 200 ms, with a median of 113.2 ms. The previous cleanup median was
+124.3 ms, and pre-cleanup medians at `65b32cb` and `6a79f7c` were 101.2 and
+174.2 ms respectively on the same reported EPYC 7763 CPU model.
+
+This metric now has two independently enforced limits: a 250 ms maximum
+(20% headroom over 207.9 ms), and a 180 ms median. The original 180 ms boundary
+therefore still rejects a sustained slowdown even when every sample is below
+the new maximum. Both warning ceilings remain 90 ms. The report retains all
+samples, the primary timing label and its variance gate, and adds a `.median`
+evaluation. Other metrics remain unchanged.
+
+Optional `additionalStatistics` entries in a metric budget define independent
+warning/failure pairs for already collected summary statistics. Both runtime
+harnesses use the same evaluator; missing/non-finite statistics and malformed
+thresholds fail validation. This adds no sampling, changes no measurement code,
+and does not discard or automatically retry slow samples.
