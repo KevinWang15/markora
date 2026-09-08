@@ -1,7 +1,7 @@
 # Markora Extension System RFC
 
 - Status: Accepted design for `EE-009`
-- Extension API version: `1.3.0`
+- Extension API version: `1.4.0`
 - Accepted: 2026-07-15
 - Implemented: `EE-010`; host resource boundary integrated by `EE-012`; additive source, tokenizer-anchor, serializer literal-escape, and exact opaque-token source contracts integrated for `EE-021`
 
@@ -72,7 +72,7 @@ Parsing during creation, reconciliation, and reset must use the same immutable a
 The following is the approved public boundary. Supporting contribution interfaces may be split across files, but the branded carrier, definition identity, typed lookup, and behavioral rules are normative. `EE-010` must add declaration tests before refining any mechanical generic shape.
 
 ```ts
-export const MARKORA_EXTENSION_API_VERSION = "1.3.0" as const;
+export const MARKORA_EXTENSION_API_VERSION = "1.4.0" as const;
 
 export type MarkdownEditorExtensionName = string;
 
@@ -804,3 +804,18 @@ The prototype intentionally could not install these definitions into the pre-EE-
 | Storage/state and cleanup lifecycle | Per-editor storage, plugin state boundary, post-view setup, reverse idempotent cleanup, and reset semantics |
 | Package/version compatibility and failure reporting | Independent extension API SemVer, peer/runtime ranges, `markora/extension-api`, and phase-attributed errors |
 | One block and one inline syntax outside core | Private executable callout and highlight prototype using only public upstream packages |
+
+
+### Shared renderer scheduling (extension API 1.4)
+
+`createMarkdownRenderScheduler({ ownerWindow, maxConcurrent })` supplies the
+queue used by math, diagrams and HTML. Tasks provide an `AbortSignal`, an
+`isCurrent` guard, `run`, `onError`, and optional `high` priority. Calls start on
+separate timer turns; explicit tasks precede normal tasks in FIFO order.
+Cancellation removes queued work or releases an active slot immediately. Late
+settlement cannot release it again. The cap counts non-cancelled jobs; renderers
+must honor the signal to stop their underlying work. The scheduler does not
+validate output or decide whether a source generation can commit a preview.
+Those responsibilities remain with each extension, including its sanitization,
+viewport and composition rules. Owners abort their tasks on teardown and call
+`destroy()` to clear the scheduler's timers, queues and abort listeners.

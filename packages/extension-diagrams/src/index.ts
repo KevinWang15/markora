@@ -837,7 +837,7 @@ export function createDiagramsExtension(options?: DiagramExtensionOptions) {
   return defineMarkdownEditorExtension({
     name: "markora-extension-diagrams",
     version: "0.0.1",
-    compatibility: { extensionApi: "^1.3.0", markora: "^0.0.1" },
+    compatibility: { extensionApi: "^1.4.0", markora: "^0.0.1" },
     schema: {
       nodes: [{
         name: "diagram",

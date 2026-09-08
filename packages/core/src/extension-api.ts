@@ -101,3 +101,5 @@ export type {
   NodeView,
   NodeViewConstructor,
 } from "prosemirror-view";
+export { createMarkdownRenderScheduler } from "./renderScheduler";
+export type { MarkdownRenderTask, MarkdownRenderSchedulerOptions } from "./renderScheduler";

@@ -1,6 +1,7 @@
 import {
   MARKORA_EXTENSION_API_VERSION,
   closeHistory,
+  createMarkdownRenderScheduler,
   defineMarkdownEditorExtension,
   defineMarkdownEditorPreset,
   readMarkdownEditorOpaqueTokenSource,
@@ -26,7 +27,7 @@ interface CalloutStorage {
   insertions: number;
 }
 
-const extensionApiVersion: "1.3.0" = MARKORA_EXTENSION_API_VERSION;
+const extensionApiVersion: "1.4.0" = MARKORA_EXTENSION_API_VERSION;
 const opaqueSource: string | null = readMarkdownEditorOpaqueTokenSource({
   meta: { markoraOpaqueSource: "<aside>\r\n" },
 });
@@ -248,3 +249,8 @@ void staticStorage;
 void rejectedCarrier;
 void rejectedPreset;
 void (null as unknown as InternalMarkdownEditorExtensionDefinition);
+
+const renderScheduler = createMarkdownRenderScheduler({ ownerWindow: window, maxConcurrent: 4 });
+renderScheduler.enqueue({ signal: new AbortController().signal, priority: "high",
+  isCurrent: () => true, run: async () => {}, onError: (_cause: unknown) => {} });
+renderScheduler.destroy();

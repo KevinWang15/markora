@@ -1,3 +1,4 @@
+import { createMarkdownRenderScheduler } from "markora/extension-api";
 import type { MarkdownEditorLifecycleScope } from "markora/extension-api";
 import { HTML_MAX_SOURCE_BYTES, htmlSourceUtf8Bytes } from "./source";
 
@@ -377,18 +378,10 @@ type RenderEntry = {
   errorCode: HtmlRenderErrorCode | null;
   generation: number;
   nearViewport: boolean;
-  pending: RenderJob | null;
   previewRequested: boolean;
   source: string;
   status: HtmlRenderStatus;
   target: HtmlRenderTarget;
-};
-
-type RenderJob = {
-  cancelled: boolean;
-  entry: RenderEntry;
-  explicit: boolean;
-  generation: number;
 };
 
 function snapshot(entry: RenderEntry): HtmlRenderSnapshot {
@@ -412,13 +405,9 @@ export function createHtmlRenderManager(
 
   const entries = new Set<RenderEntry>();
   const byDom = new Map<HTMLElement, RenderEntry>();
-  const high: RenderJob[] = [];
-  const normal: RenderJob[] = [];
   const AbortControllerConstructor = ownerWindow.AbortController;
-  let active = 0;
   let destroyed = false;
   let observer: IntersectionObserver | null = null;
-  let pumpHandle: number | null = null;
   let compositionRoot: HTMLElement | null = null;
 
   const safelyReport = (failure: HtmlRenderFailure) => {
@@ -445,8 +434,6 @@ export function createHtmlRenderManager(
     entry.target.setRenderSnapshot(snapshot(entry));
   };
   const abortGeneration = (entry: RenderEntry, clear = true) => {
-    if (entry.pending) entry.pending.cancelled = true;
-    entry.pending = null;
     entry.controller?.abort();
     entry.controller = null;
     if (clear) entry.target.clearPreview();
@@ -465,29 +452,8 @@ export function createHtmlRenderManager(
     safelyReport(Object.freeze({ cause, code }));
   };
 
-  const nextJob = () => {
-    const take = (queue: RenderJob[]) => {
-      while (queue.length > 0) {
-        const job = queue.shift()!;
-        if (!job.cancelled && job.entry.pending === job && isCurrent(job.entry, job.generation)) {
-          return job;
-        }
-      }
-      return null;
-    };
-    return take(high) ?? take(normal);
-  };
-
-  let schedulePump = () => {};
-
-  const finish = () => {
-    active = Math.max(0, active - 1);
-    schedulePump();
-  };
-
-  const startJob = (job: RenderJob) => {
-    const { entry, generation } = job;
-    entry.pending = null;
+  const scheduler = createMarkdownRenderScheduler({ ownerWindow, maxConcurrent: HTML_MAX_CONCURRENT_RENDERS });
+  const startJob = (entry: RenderEntry, generation: number, controller: AbortController) => {
 
     if (!renderer || !isCurrent(entry, generation)) return;
     if (entry.target.isComposing()) {
@@ -499,11 +465,7 @@ export function createHtmlRenderManager(
       return;
     }
 
-    const controller = new AbortControllerConstructor();
-    entry.controller?.abort();
-    entry.controller = controller;
     transition(entry, "rendering");
-    active += 1;
     let result: unknown;
 
     try {
@@ -515,11 +477,10 @@ export function createHtmlRenderManager(
       }));
     } catch (cause) {
       reportFailure(entry, generation, "renderer-failed", cause);
-      finish();
       return;
     }
 
-    void Promise.resolve(result).then((output) => {
+    return Promise.resolve(result).then((output) => {
       if (!isCurrent(entry, generation) || controller.signal.aborted) return;
       let approved: DocumentFragment;
 
@@ -552,27 +513,7 @@ export function createHtmlRenderManager(
       if (isCurrent(entry, generation) && !controller.signal.aborted) {
         transition(entry, "rendered");
       }
-    }, (cause) => reportFailure(entry, generation, "renderer-failed", cause)).finally(finish);
-  };
-
-  const pump = () => {
-    pumpHandle = null;
-    if (destroyed || lifecycle.signal.aborted || active >= HTML_MAX_CONCURRENT_RENDERS) return;
-    const job = nextJob();
-    if (!job) return;
-    startJob(job);
-    if (active < HTML_MAX_CONCURRENT_RENDERS) schedulePump();
-  };
-
-  schedulePump = () => {
-    if (
-      destroyed
-      || lifecycle.signal.aborted
-      || pumpHandle !== null
-      || active >= HTML_MAX_CONCURRENT_RENDERS
-      || (high.length === 0 && normal.length === 0)
-    ) return;
-    pumpHandle = ownerWindow.setTimeout(pump, 0);
+    }, (cause) => reportFailure(entry, generation, "renderer-failed", cause));
   };
 
   const enqueue = (entry: RenderEntry, explicit: boolean) => {
@@ -612,17 +553,18 @@ export function createHtmlRenderManager(
       return true;
     }
 
-    if (entry.pending) entry.pending.cancelled = true;
-    const job: RenderJob = {
-      cancelled: false,
-      entry,
-      explicit,
-      generation: entry.generation,
-    };
-    entry.pending = job;
-    (explicit ? high : normal).push(job);
+    entry.controller?.abort();
+    const controller = new AbortControllerConstructor();
+    entry.controller = controller;
+    const generation = entry.generation;
     transition(entry, "queued");
-    if (!entry.target.isComposing()) schedulePump();
+    scheduler.enqueue({
+      signal: controller.signal,
+      priority: explicit ? "high" : "normal",
+      isCurrent: () => isCurrent(entry, generation),
+      run: () => startJob(entry, generation, controller),
+      onError: cause => reportFailure(entry, generation, "renderer-failed", cause),
+    });
     return true;
   };
 
@@ -660,14 +602,13 @@ export function createHtmlRenderManager(
         enqueue(entry, false);
       }
     }
-    schedulePump();
+
   });
 
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
-    if (pumpHandle !== null) ownerWindow.clearTimeout(pumpHandle);
-    pumpHandle = null;
+    scheduler.destroy();
     observer?.disconnect();
     observer = null;
     compositionRoot?.removeEventListener("compositionend", handleCompositionEnd);
@@ -679,8 +620,8 @@ export function createHtmlRenderManager(
     }
     entries.clear();
     byDom.clear();
-    high.length = 0;
-    normal.length = 0;
+
+
   };
 
   const handleAbort = () => destroy();
@@ -704,7 +645,6 @@ export function createHtmlRenderManager(
         errorCode: null,
         generation: 1,
         nearViewport: observer === null,
-        pending: null,
         previewRequested: Boolean(renderer),
         source,
         status: "source",

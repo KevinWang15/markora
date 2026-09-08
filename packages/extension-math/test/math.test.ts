@@ -1707,7 +1707,7 @@ describe.each(entries)("%s math schema and clipboard", (_entry, createEditor) =>
 });
 
 it("validates factory options, localized messages, and frozen public constants", () => {
-  expect(createMathExtension().compatibility.extensionApi).toBe("^1.2.0");
+  expect(createMathExtension().compatibility.extensionApi).toBe("^1.4.0");
   expect(Object.isFrozen(defaultMathMessages)).toBe(true);
   expect(Object.isFrozen(mathKinds)).toBe(true);
   expect(Object.isFrozen(mathDiagnosticCodes)).toBe(true);
@@ -1725,4 +1725,29 @@ it("validates factory options, localized messages, and frozen public constants",
   expect(() => createMathExtension({
     messages: { previewLabel: () => "" },
   })).toThrow(/non-empty string/);
+});
+
+
+it("starts replacement renders when all cancelled promises remain unsettled", async () => {
+  const tasks: Array<Deferred<Node>> = [];
+  const signals: AbortSignal[] = [];
+  const { manager } = renderManager(request => {
+    const task = deferred<Node>();
+    tasks.push(task);
+    signals.push(request.signal);
+    return task.promise;
+  });
+  const views = Array.from({ length: MATH_MAX_CONCURRENT_RENDERS }, (_, index) => renderTarget("inline", `old-${index}`));
+  const registrations = views.map((view, index) => manager.register(view.target, "inline", `old-${index}`));
+  await vi.waitFor(() => expect(tasks).toHaveLength(MATH_MAX_CONCURRENT_RENDERS));
+  views.forEach((view, index) => {
+    view.setCurrent("inline", `new-${index}`);
+    registrations[index]!.sync("inline", `new-${index}`);
+  });
+  expect(signals.slice(0, 4).every(signal => signal.aborted)).toBe(true);
+  await vi.waitFor(() => expect(tasks).toHaveLength(8));
+  tasks.forEach((task, index) => task.resolve(renderedText(index < 4 ? "stale" : "current")));
+  await vi.waitFor(() => expect(views.every(view => view.preview.textContent === "current")).toBe(true));
+  expect(views.every(view => !view.commits.includes("stale"))).toBe(true);
+  manager.destroy();
 });

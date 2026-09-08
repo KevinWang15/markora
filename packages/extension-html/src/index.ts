@@ -397,7 +397,7 @@ export function createHtmlExtension(options?: HtmlExtensionOptions) {
     name: "markora-extension-html",
     version: "0.0.1",
     compatibility: {
-      extensionApi: "^1.3.0",
+      extensionApi: "^1.4.0",
       markora: "^0.0.1",
     },
     schema: {

@@ -1,3 +1,4 @@
+import { createMarkdownRenderScheduler } from "markora/extension-api";
 import type { MarkdownEditorLifecycleScope } from "markora/extension-api";
 
 export const MATH_MAX_SOURCE_BYTES = 65_536;
@@ -651,18 +652,10 @@ type RenderEntry = {
   generation: number;
   kind: MathKind;
   nearViewport: boolean;
-  pending: RenderJob | null;
   previewRequested: boolean;
   source: string;
   status: MathRenderStatus;
   target: MathRenderTarget;
-};
-
-type RenderJob = {
-  cancelled: boolean;
-  entry: RenderEntry;
-  explicit: boolean;
-  generation: number;
 };
 
 function frozenSnapshot(entry: RenderEntry): MathRenderSnapshot {
@@ -693,15 +686,11 @@ export function createMathRenderManager(
 
   const entries = new Set<RenderEntry>();
   const entriesByDom = new Map<HTMLElement, RenderEntry>();
-  const highPriorityQueue: RenderJob[] = [];
-  const normalPriorityQueue: RenderJob[] = [];
   const AbortControllerConstructor = ownerWindow.AbortController;
   const IntersectionObserverConstructor = ownerWindow.IntersectionObserver;
-  let activeInvocations = 0;
   let compositionRoot: HTMLElement | null = null;
   let destroyed = false;
   let observer: IntersectionObserver | null = null;
-  let pumpHandle: number | null = null;
 
   const safelyReportRenderError = (failure: MathRenderFailure) => {
     try {
@@ -716,13 +705,6 @@ export function createMathRenderManager(
       onSourceTooLarge(event);
     } catch {
       // Diagnostic observers must not destabilize the renderer lifecycle.
-    }
-  };
-
-  const cancelPump = () => {
-    if (pumpHandle !== null) {
-      ownerWindow.clearTimeout(pumpHandle);
-      pumpHandle = null;
     }
   };
 
@@ -743,11 +725,6 @@ export function createMathRenderManager(
     && entry.target.isCurrent(entry.kind, entry.source)
   );
 
-  const editorIsComposing = () => {
-    const first = entries.values().next();
-    return !first.done && first.value.target.isComposing();
-  };
-
   const transition = (
     entry: RenderEntry,
     status: MathRenderStatus,
@@ -759,8 +736,6 @@ export function createMathRenderManager(
   };
 
   const abortGeneration = (entry: RenderEntry, clearPreview = true) => {
-    entry.pending && (entry.pending.cancelled = true);
-    entry.pending = null;
     const controller = entry.controller;
     entry.controller = null;
     controller?.abort();
@@ -788,36 +763,8 @@ export function createMathRenderManager(
     safelyReportRenderError(Object.freeze({ cause, code, kind: entry.kind }));
   };
 
-  const nextJob = () => {
-    const readQueue = (queue: RenderJob[]) => {
-      while (queue.length > 0) {
-        const candidate = queue.shift()!;
-
-        if (
-          !candidate.cancelled
-          && candidate.entry.pending === candidate
-          && isCurrent(candidate.entry, candidate.generation)
-        ) {
-          return candidate;
-        }
-      }
-
-      return null;
-    };
-
-    return readQueue(highPriorityQueue) ?? readQueue(normalPriorityQueue);
-  };
-
-  let schedulePump = () => {};
-
-  const finishInvocation = () => {
-    activeInvocations = Math.max(0, activeInvocations - 1);
-    schedulePump();
-  };
-
-  const startJob = (job: RenderJob) => {
-    const { entry, generation } = job;
-    entry.pending = null;
+  const scheduler = createMarkdownRenderScheduler({ ownerWindow, maxConcurrent: MATH_MAX_CONCURRENT_RENDERS });
+  const startJob = (entry: RenderEntry, generation: number, explicit: boolean, controller: AbortController) => {
 
     if (!renderer || !isCurrent(entry, generation)) {
       return;
@@ -828,21 +775,17 @@ export function createMathRenderManager(
       || (
         entry.kind === "block"
         && !entry.nearViewport
-        && !(job.explicit && !observer)
+        && !(explicit && !observer)
       )
     ) {
-      entry.explicitRequest ||= job.explicit;
+      entry.explicitRequest ||= explicit;
       transition(entry, entry.kind === "block" && !entry.nearViewport
         ? "offscreen"
         : "queued");
       return;
     }
 
-    const controller = new AbortControllerConstructor();
-    entry.controller?.abort();
-    entry.controller = controller;
     transition(entry, "rendering");
-    activeInvocations += 1;
     let result: unknown;
 
     try {
@@ -854,11 +797,10 @@ export function createMathRenderManager(
       }));
     } catch (cause) {
       reportCurrentFailure(entry, generation, "renderer-failed", cause);
-      finishInvocation();
       return;
     }
 
-    void Promise.resolve(result).then(
+    return Promise.resolve(result).then(
       (output) => {
         if (!isCurrent(entry, generation) || controller.signal.aborted) {
           return;
@@ -894,48 +836,7 @@ export function createMathRenderManager(
       (cause) => {
         reportCurrentFailure(entry, generation, "renderer-failed", cause);
       },
-    ).finally(finishInvocation);
-  };
-
-  const pump = () => {
-    pumpHandle = null;
-
-    if (
-      destroyed
-      || lifecycle.signal.aborted
-      || activeInvocations >= MATH_MAX_CONCURRENT_RENDERS
-      || editorIsComposing()
-    ) {
-      return;
-    }
-
-    const job = nextJob();
-
-    if (!job) {
-      return;
-    }
-
-    startJob(job);
-
-    if (activeInvocations < MATH_MAX_CONCURRENT_RENDERS) {
-      schedulePump();
-    }
-  };
-
-  schedulePump = () => {
-    if (
-      destroyed
-      || lifecycle.signal.aborted
-      || pumpHandle !== null
-      || activeInvocations >= MATH_MAX_CONCURRENT_RENDERS
-      || (highPriorityQueue.length === 0 && normalPriorityQueue.length === 0)
-    ) {
-      return;
-    }
-
-    // A full task boundary keeps even a synchronously expensive renderer out
-    // of ProseMirror's constructor, transaction, input, and NodeView-update path.
-    pumpHandle = ownerWindow.setTimeout(pump, 0);
+    );
   };
 
   const enqueue = (entry: RenderEntry, explicit: boolean) => {
@@ -993,22 +894,19 @@ export function createMathRenderManager(
       return true;
     }
 
-    entry.pending && (entry.pending.cancelled = true);
-    const job: RenderJob = {
-      cancelled: false,
-      entry,
-      explicit,
-      generation: entry.generation,
-    };
-    entry.pending = job;
+    entry.controller?.abort();
+    const controller = new AbortControllerConstructor();
+    entry.controller = controller;
+    const generation = entry.generation;
     entry.explicitRequest = false;
-    (explicit ? highPriorityQueue : normalPriorityQueue).push(job);
     transition(entry, "queued");
-
-    if (!entry.target.isComposing()) {
-      schedulePump();
-    }
-
+    scheduler.enqueue({
+      signal: controller.signal,
+      priority: explicit ? "high" : "normal",
+      isCurrent: () => isCurrent(entry, generation),
+      run: () => startJob(entry, generation, explicit, controller),
+      onError: cause => reportCurrentFailure(entry, generation, "renderer-failed", cause),
+    });
     return true;
   };
 
@@ -1080,7 +978,6 @@ export function createMathRenderManager(
         }
       }
 
-      schedulePump();
     });
   };
 
@@ -1090,7 +987,7 @@ export function createMathRenderManager(
     }
 
     destroyed = true;
-    cancelPump();
+    scheduler.destroy();
     observer?.disconnect();
     observer = null;
     compositionRoot?.removeEventListener("compositionend", handleCompositionEnd);
@@ -1104,8 +1001,8 @@ export function createMathRenderManager(
 
     entries.clear();
     entriesByDom.clear();
-    highPriorityQueue.length = 0;
-    normalPriorityQueue.length = 0;
+
+
   };
 
   const handleLifecycleAbort = () => destroy();
@@ -1142,7 +1039,6 @@ export function createMathRenderManager(
         generation: 1,
         kind,
         nearViewport: kind === "inline",
-        pending: null,
         previewRequested: Boolean(renderer),
         source,
         status: "source",
