@@ -1,13 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApplicationActions, matchApplicationShortcut, type ApplicationActionBindings } from "../src/applicationActions";
 
+function bindings(undo: ApplicationActionBindings["undo"]): ApplicationActionBindings {
+  const disabled = { enabled: () => false, run() {} };
+  return { undo, redo: disabled, new: disabled, open: disabled, save: disabled, saveAs: disabled,
+    exportHtml: disabled, exportPdf: disabled, math: disabled, search: disabled, source: disabled, sidebar: disabled };
+}
+
 describe("application command routing", () => {
   it("rechecks availability and uses current handlers for nested menu actions", () => {
     const old = vi.fn();
     const current = vi.fn();
     let enabled = true;
-    let bindings = { undo: { enabled: () => enabled, run: old } } as ApplicationActionBindings;
-    const actions = createApplicationActions(() => bindings);
+    let currentBindings = bindings({ enabled: () => enabled, run: old });
+    const actions = createApplicationActions(() => currentBindings);
     const menu = actions.bindHistoryMenu([{ type: "submenu", id: "edit", label: "Edit", items: [{ type: "action", id: "history.undo", label: "Undo", run: vi.fn() }] }]);
     const submenu = menu[0];
     if (submenu.type !== "submenu" || submenu.items[0].type !== "action") throw Error("missing action");
@@ -15,7 +21,7 @@ describe("application command routing", () => {
     enabled = false;
     invoke();
     expect(old).not.toHaveBeenCalled();
-    bindings = { undo: { enabled: () => true, run: current } } as ApplicationActionBindings;
+    currentBindings = bindings({ enabled: () => true, run: current });
     invoke();
     expect(current).toHaveBeenCalledOnce();
     expect(old).not.toHaveBeenCalled();

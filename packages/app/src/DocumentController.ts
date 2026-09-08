@@ -20,21 +20,40 @@ export class DocumentController {
   constructor(markdown: string) {
     this.session = new DocumentSession(markdown);
     this.history = new DocumentHistory(markdown);
-    this.current = { document: this.session.snapshot, saving: false, savingCopy: false, exporting: false };
+    this.current = {
+      document: this.session.snapshot,
+      saving: false,
+      savingCopy: false,
+      exporting: false,
+    };
   }
 
-  get snapshot() { return this.session.snapshot; }
-  get markdown() { return this.session.markdown; }
-  get path() { return this.session.path; }
-  get dirty() { return this.session.dirty; }
+  get snapshot() {
+    return this.session.snapshot;
+  }
+  get markdown() {
+    return this.session.markdown;
+  }
+  get path() {
+    return this.session.path;
+  }
+  get dirty() {
+    return this.session.dirty;
+  }
   getSnapshot = () => this.current;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
 
   private publish(patch: Partial<DocumentControllerSnapshot> = {}) {
-    this.current = { ...this.current, ...patch, document: this.session.snapshot };
+    this.current = {
+      ...this.current,
+      ...patch,
+      document: this.session.snapshot,
+    };
     for (const listener of this.listeners) listener();
   }
 
@@ -51,7 +70,11 @@ export class DocumentController {
     this.publish();
   }
 
-  async open<T>(load: () => Promise<T | null>, accept: (value: T) => void, onError: (error: unknown) => void) {
+  async open<T>(
+    load: () => Promise<T | null>,
+    accept: (value: T) => void,
+    onError: (error: unknown) => void,
+  ) {
     const version = ++this.openVersion;
     try {
       const value = await load();
