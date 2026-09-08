@@ -59,7 +59,7 @@ test("@required public playground supports Mermaid and PlantUML previews", async
   }
   await expect(page.locator('#editor [data-mdw-diagram-kind="plantuml"] [data-mdw-diagram-preview]')).toContainText("Account");
   await page.locator(".docs-theme-picker select").selectOption("night");
-  await expect(page.locator('#editor [data-mdw-diagram-kind="mermaid"] svg text').first()).toHaveCSS("fill", "rgb(220, 226, 235)");
+  await expect(page.locator('#editor [data-mdw-diagram-kind="mermaid"] svg text tspan').first()).toHaveCSS("fill", "rgb(220, 226, 235)");
   await page.screenshot({ path: testInfo.outputPath("playground-diagrams-night.png"), fullPage: true });
 });
 
@@ -102,6 +102,31 @@ test("@required invalid diagram source stays editable and recovers without uncau
       if (source === invalid) await expect(shell.getByRole("button", { name: "Retry diagram preview", exact: true })).toBeVisible();
       else await expect(shell.locator("[data-mdw-diagram-preview]")).toContainText("Recovered");
     }
+  }
+  expect(errors).toEqual([]);
+});
+
+test("@required Mermaid families retain engine styling, references, and authored colors", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/demo");
+  for (const [name, source] of [
+    ["er", "erDiagram\n CUSTOMER ||--o{ ORDER : places"],
+    ["mindmap", "mindmap\n root((Idea))\n  First\n  Second"],
+    ["gantt", "gantt\n title Plan\n dateFormat YYYY-MM-DD\n section Work\n Task :a1, 2026-09-01, 5d"],
+    ["authored", "flowchart LR\n 客户[Client]:::red --> 订单[Order]\n classDef red fill:#ff0000,stroke:#000000"],
+  ]) {
+    await page.locator("#source").fill(`\`\`\`mermaid\n${source}\n\`\`\``);
+    await page.getByRole("button", { name: "Apply Markdown", exact: true }).click();
+    const shell = page.locator('#editor [data-mdw-diagram-kind="mermaid"]');
+    await shell.scrollIntoViewIfNeeded();
+    await expect(shell).toHaveAttribute("data-mdw-diagram-state", "rendered", { timeout: 20_000 });
+    if (name === "er") await expect(shell.locator(".edgePaths path").first()).not.toHaveCSS("stroke", "none");
+    if (name === "authored") await expect(shell.locator(".red rect").first()).toHaveCSS("fill", "rgb(255, 0, 0)");
+    await page.locator(".docs-theme-picker select").selectOption("night");
+    if (name === "authored") await expect(shell.locator(".red rect").first()).toHaveCSS("fill", "rgb(255, 0, 0)");
+    await shell.screenshot({ path: testInfo.outputPath(`mermaid-${name}.png`) });
   }
   expect(errors).toEqual([]);
 });

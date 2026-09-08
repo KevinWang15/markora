@@ -32,7 +32,10 @@ syntax extension; supply their renderers separately if your host needs previews.
 - KaTeX loads on the first math preview. It produces native MathML, without web
   fonts or a KaTeX stylesheet, including in exported documents.
 - Mermaid loads on the first Mermaid preview. Its individual diagram engines
-  retain Mermaid's own lazy loading. Singleton engine calls are serialized.
+  retain Mermaid's own lazy loading. Singleton engine calls are serialized. The
+  adapter captures each family's static SVG presentation before removing engine
+  stylesheets, so previews and exports retain their typography, edges, and fills.
+  Neutral colors adapt to the host theme; authored non-neutral colors survive.
 - PlantUML loads a self-contained local asset only when a preview is requested.
   It runs in a disposable sandboxed frame with no document-origin privileges,
   remote includes, image loads, or network connections. Graphviz is bundled in

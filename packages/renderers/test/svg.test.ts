@@ -29,3 +29,27 @@ it("adapts real Mermaid sequence output to the existing strict SVG contract", ()
   const output = sanitizeDiagramRendererOutput(parseDiagramSvg(svg, document), document);
   expect(output.textContent).toContain("Mermaid");
 });
+
+it.each(["er", "mindmap", "gantt"])("adapts real Mermaid %s output without relaxing active-content checks", name => {
+  const svg = readFileSync(join(dirname(fileURLToPath(import.meta.url)), `fixtures/mermaid-${name}.svg`), "utf8");
+  const host = document.createElement("div");
+  host.append(sanitizeDiagramRendererOutput(parseDiagramSvg(svg, document), document));
+  expect(host.querySelector("svg")).not.toBeNull();
+  const ids = [...host.querySelectorAll("[id]")].map(element => element.id);
+  expect(new Set(ids).size).toBe(ids.length);
+});
+
+it("preserves local references across duplicate and Unicode IDs and namespaces separate exports", () => {
+  const source = '<svg xmlns="http://www.w3.org/2000/svg"><defs><g id="节点"/><g id="节点"/></defs><use href="#节点"/><path stroke="url(#节点)"/></svg>';
+  const first = parseDiagramSvg(source, document);
+  const second = parseDiagramSvg(source, document);
+  const id = first.querySelector("[id]")!.id;
+  expect(first.querySelectorAll("[id]")).toHaveLength(1);
+  expect(first.querySelector("use")!.getAttribute("href")).toBe(`#${id}`);
+  expect(first.querySelector("path")!.getAttribute("stroke")).toBe(`url(#${id})`);
+  expect(second.querySelector("[id]")!.id).not.toBe(id);
+  expect(() => sanitizeDiagramRendererOutput(first, document)).not.toThrow();
+  for (const href of ["#missing", "https://example.com/image.svg#icon"]) {
+    expect(() => sanitizeDiagramRendererOutput(parseDiagramSvg(source.replace('href="#节点"', `href="${href}"`), document), document)).toThrow();
+  }
+});

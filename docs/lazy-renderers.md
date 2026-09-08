@@ -18,6 +18,10 @@ not create another editor selection model or duplicate node-view lifecycle code.
 `createLazyRenderer` caches a loader promise, clears failed loads, and gives each
 caller independent cancellation. KaTeX returns MathML. Mermaid's module is lazy,
 its automatic page scan is disabled, and singleton layout work is serialized.
+The adapter captures Mermaid's computed SVG presentation in its temporary layout
+container, preserving family-specific styling without shipping engine CSS into
+the document or export. Identifiers become unique local tokens (including for
+Unicode names and repeated vendor IDs), and local references follow that mapping.
 PlantUML's generated browser engine depends on DOM layout and shared state, so it
 runs in a local, opaque-origin frame with a small request/result protocol. Sender
 window and request ID must match. The frame can be discarded after abort or

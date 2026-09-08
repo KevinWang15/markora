@@ -1,6 +1,7 @@
 import mermaid from "mermaid";
 import type { DiagramRenderer } from "markora-extension-diagrams";
 import { parseDiagramSvg } from "./svg";
+import { inlineMermaidStyles } from "./mermaid-style";
 
 // This adapter renders explicit requests. Mermaid's automatic page-load scan is
 // unnecessary and otherwise retains a global listener after a late lazy import.
@@ -26,7 +27,7 @@ export const renderMermaid: DiagramRenderer = request => {
     try {
       const { svg } = await mermaid.render(`markora-diagram-${++sequence}`, source, container);
       signal.throwIfAborted();
-      return parseDiagramSvg(svg, ownerDocument);
+      return parseDiagramSvg(inlineMermaidStyles(svg, container), ownerDocument);
     } finally { container.remove(); }
   });
   queue = task.catch(() => undefined);

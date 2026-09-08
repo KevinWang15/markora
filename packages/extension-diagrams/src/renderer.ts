@@ -136,7 +136,7 @@ const localReferenceAttributes = new Set([
   "clip-path", "fill", "filter", "marker-end", "marker-mid", "marker-start", "mask", "stroke",
 ]);
 const allowedSvgAttributes = new Set([
-  "alignment-baseline", "class", "clip-rule", "color", "cx", "cy", "d", "direction",
+  "alignment-baseline", "class", "clip-rule", "color", "cx", "cy", "d", "direction", "transform-origin",
   "dominant-baseline", "dx", "dy", "fill", "fill-opacity", "fill-rule",
   "font-family", "font-size", "font-style", "font-weight", "height", "id",
   "gradienttransform", "gradientunits", "marker-end", "markerheight", "marker-mid",

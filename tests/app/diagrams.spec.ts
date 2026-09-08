@@ -8,12 +8,12 @@ test("lazy local diagrams survive themed PDF export and preserve source", async 
   await page.goto("/");
   await expect(page.locator(".markora-app")).not.toHaveAttribute("inert");
   expect(requests.some(url => /plantuml-frame|mermaid-engine/u.test(url))).toBe(false);
-  const source = "```mermaid\nflowchart LR\n Start --> Finish\n```\n\n```plantuml\n@startuml\nAlice -> Bob: Hello\n@enduml\n```\n\n$\\frac{a}{b}$\n\nAfter";
+  const source = "```mermaid\nflowchart LR\n Start --> Finish\n```\n\n```mermaid\nerDiagram\n CUSTOMER ||--o{ ORDER : places\n```\n\n```plantuml\n@startuml\nAlice -> Bob: Hello\n@enduml\n```\n\n$\\frac{a}{b}$\n\nAfter";
   const picker = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Open document", exact: true }).click();
   await (await picker).setFiles({ name: "diagrams.md", mimeType: "text/markdown", buffer: Buffer.from(source) });
-  for (const kind of ["mermaid", "plantuml"]) {
-    const diagram = page.locator(`.app-editor [data-mdw-diagram-kind="${kind}"]`);
+  await expect(page.locator(".app-editor [data-mdw-diagram-kind]")).toHaveCount(3);
+  for (const diagram of await page.locator(".app-editor [data-mdw-diagram-kind]").all()) {
     await diagram.scrollIntoViewIfNeeded();
     await expect(diagram.locator("[data-mdw-diagram-preview] svg")).toBeVisible({ timeout: 20_000 });
   }
@@ -25,7 +25,10 @@ test("lazy local diagrams survive themed PDF export and preserve source", async 
   await page.getByRole("button", { name: "Print / Save as PDF", exact: true }).click();
   await expect(page.locator("body")).toHaveAttribute("data-print-requested", "true", { timeout: 20_000 });
   const print = page.locator("#markora-print");
-  await expect(print.locator(".export-diagram svg")).toHaveCount(2);
+  await expect(print.locator(".export-diagram svg")).toHaveCount(3);
+  await expect(print.locator(".edgePaths path").first()).not.toHaveCSS("stroke", "none");
+  const ids = await print.locator("svg [id]").evaluateAll(elements => elements.map(element => element.id));
+  expect(new Set(ids).size).toBe(ids.length);
   await expect(print.locator("math mfrac")).toHaveCount(1);
   await expect(print.locator("[data-export-fallback]")).toHaveCount(0);
   await expect(print.locator('[data-mdw-diagram-kind="plantuml"] svg text').first()).toHaveCSS("fill", "rgb(244, 244, 244)");
