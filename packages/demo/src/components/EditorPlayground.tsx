@@ -826,6 +826,13 @@ export function EditorPlayground() {
     exposeNestedCodeEditorsToTabOrder();
 
     editorRef.current = editor;
+    // Preview failures already expose source and retry controls in the document.
+    // Consume the host diagnostic event so invalid authored input does not also
+    // become an uncaught browser error. Keep diagnostics available to developers.
+    const stopErrors = editor.subscribe("error", event => {
+      if (event.recoverable) console.warn("Markora playground:", event.error);
+      else console.error("Markora playground:", event.error);
+    });
     const stopState = editor.subscribe("state", () => {
       closeAllPopovers(false);
       renderToolbar();
@@ -907,6 +914,7 @@ export function EditorPlayground() {
       toolbarKeyboardNavigation.destroy();
       codeEditorObserver.disconnect();
       stopState();
+      stopErrors();
       editor.destroy();
       renderers.destroy();
       editorRef.current = null;

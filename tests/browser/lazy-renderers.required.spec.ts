@@ -80,3 +80,28 @@ test("@required diagram menu insertion uses shared commands and document undo", 
     await expect(page.locator("#output")).toHaveText(initial);
   }
 });
+
+test("@required invalid diagram source stays editable and recovers without uncaught errors", async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/demo");
+  for (const [kind, invalid, valid] of [
+    ["mermaid", "invalid diagram !!!", "flowchart LR\nStart --> Recovered"],
+    ["plantuml", "@startuml\ninvalid UML !!!\n@enduml", "Alice -> Bob: Recovered"],
+    ["plantuml", "@startuml\n!include https://example.invalid/diagram.puml\nAlice -> Bob\n@enduml", "Alice -> Bob: Recovered include"],
+  ]) {
+    const shell = page.locator(`#editor [data-mdw-diagram-kind="${kind}"]`);
+    for (const source of [invalid, valid]) {
+      const markdown = `\`\`\`${kind}\n${source}\n\`\`\``;
+      await page.locator("#source").fill(markdown);
+      await page.getByRole("button", { name: "Apply Markdown", exact: true }).click();
+      await shell.scrollIntoViewIfNeeded();
+      await expect(shell).toHaveAttribute("data-mdw-diagram-state", source === invalid ? "error" : "rendered", { timeout: 20_000 });
+      await expect(page.locator("#output")).toHaveText(markdown);
+      if (source === invalid) await expect(shell.getByRole("button", { name: "Retry diagram preview", exact: true })).toBeVisible();
+      else await expect(shell.locator("[data-mdw-diagram-preview]")).toContainText("Recovered");
+    }
+  }
+  expect(errors).toEqual([]);
+});
