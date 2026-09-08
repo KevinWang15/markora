@@ -1,3 +1,4 @@
+import { createApplicationActions, matchApplicationShortcut, type ApplicationActionBindings } from "./applicationActions";
 import Bold from "@lucide/icons/icons/bold";
 import Check from "@lucide/icons/icons/check";
 import Clock3 from "@lucide/icons/icons/clock-3";
@@ -37,14 +38,14 @@ import { createDocumentBridge } from "./documentBridge";
 import { FindBar } from "./FindBar";
 import { createSearchExtension } from "./searchExtension";
 import { findTextMatches, type SearchOptions, type SearchResults } from "./search";
-import { DocumentHistory } from "./DocumentHistory";
+import { DocumentController } from "./DocumentController";
 import { createMathContextMenuProvider } from "@markora/react-ui/mathContextMenu";
 import { createDefaultUi } from "markora-ui";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import type { MarkdownThemeController } from "markora/themes";
 import { desktop } from "./desktop";
 import { captureExportTheme } from "./exportTheme";
-import { DocumentSession, type DocumentSnapshot } from "./documentSession";
+import { type DocumentSnapshot } from "./documentSession";
 import { Dialog } from "./Dialog";
 import { RecoveryJournal } from "./RecoveryJournal";
 import {
@@ -158,12 +159,12 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const searchRef = useRef(createSearchExtension());
   const tocRef = useRef(createTocExtension());
   const bridgeRef = useRef(createDocumentBridge());
-  const historyRef = useRef(new DocumentHistory(welcomeMarkdown));
+  const [controller] = useState(() => new DocumentController(welcomeMarkdown));
+  const actionBindings = useRef<ApplicationActionBindings>(null!);
+  const [actions] = useState(() => createApplicationActions(() => actionBindings.current));
+  const { document: documentSnapshot, saving, savingCopy, exporting } = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const applyingHistoryRef = useRef(false);
-  const sessionRef = useRef(new DocumentSession(welcomeMarkdown));
   const resourcePathRef = useRef<string | null>(null);
-  const savingRef = useRef(false);
-  const openRequestRef = useRef(0);
   const sourceModeRef = useRef(false);
   const sourceEntryMarkdownRef = useRef(welcomeMarkdown);
   const dragDepthRef = useRef(0);
@@ -172,7 +173,6 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const recoveryRef = useRef<RecoveryJournal | null>(null);
   const [recoveryCandidate, setRecoveryCandidate] = useState<DocumentSnapshot | null>(null);
   const closeRequestedRef = useRef(false);
-  const [documentSnapshot, setDocumentSnapshot] = useState(sessionRef.current.snapshot);
   const [recents, setRecents] = useState<readonly RecentDocument[]>(readStoredRecents);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("outline");
@@ -183,10 +183,6 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   const [dropFileName, setDropFileName] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [savingCopy, setSavingCopy] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const exportingRef = useRef(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchOptions, setSearchOptions] = useState<SearchOptions>({ query: "", caseSensitive: false, wholeWord: false });
   const [replacement, setReplacement] = useState("");
@@ -214,10 +210,10 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   }, [recents]);
 
   const updateLiveMarkdown = useCallback((markdown: string) => {
-    if (sourceModeRef.current && !applyingHistoryRef.current) historyRef.current.record({
+    if (sourceModeRef.current && !applyingHistoryRef.current) controller.history.record({
       source: markdown, mode: "source", selection: sourceEditorRef.current?.getSelection(),
     }, "source");
-    setDocumentSnapshot(sessionRef.current.edit(markdown));
+    controller.edit(markdown);
   }, []);
 
   useEffect(() => {
@@ -227,20 +223,15 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     const editor = createEditor({
       element: host,
       ariaLabel: "Markdown document",
-      markdown: sessionRef.current.markdown,
+      markdown: controller.markdown,
       autofocus: true,
       placeholder: "Start writing…",
       attributes: { "data-markora-app-editor": "true" },
       ui: createDefaultUi({ contextMenu: {
         clipboard: desktop.getClipboard(),
-        providers: [createMathContextMenuProvider(mathRef.current, openMath)],
+        providers: [createMathContextMenuProvider(mathRef.current, () => { actions.run("math"); })],
         onError: cause => showError(cause, "This editor action could not be completed."),
-        transform: (items, context) => items.map(item => {
-          if (item.type !== "action") return item;
-          if (item.id === "history.undo") return { ...item, enabled: context.editor.view.editable && historyRef.current.canUndo, run: () => navigateHistory("undo") };
-          if (item.id === "history.redo") return { ...item, enabled: context.editor.view.editable && historyRef.current.canRedo, run: () => navigateHistory("redo") };
-          return item;
-        }),
+        transform: items => actions.bindHistoryMenu(items),
       } }),
       extensions: [createFootnotesExtension(), tocRef.current, bridgeRef.current, searchRef.current, mathRef.current, diagramsRef.current],
       resources: {
@@ -252,12 +243,12 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
           allowedMimeTypes: ["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"],
           upload: async ({ file, reportProgress, signal }) => {
             reportProgress(0.2);
-            const snapshot = sessionRef.current.snapshot;
+            const snapshot = controller.snapshot;
             const image = { file, path: (file as File & { path?: string }).path ?? null };
             let storedUrl = await desktop.storeImage(image, snapshot.path);
-            if (signal.aborted || snapshot.id !== sessionRef.current.snapshot.id) throw new DOMException("Upload cancelled", "AbortError");
-            if (snapshot.path !== sessionRef.current.path) storedUrl = await desktop.storeImage(image, sessionRef.current.path);
-            if (signal.aborted || snapshot.id !== sessionRef.current.snapshot.id || sourceModeRef.current) throw new DOMException("Upload cancelled", "AbortError");
+            if (signal.aborted || snapshot.id !== controller.snapshot.id) throw new DOMException("Upload cancelled", "AbortError");
+            if (snapshot.path !== controller.path) storedUrl = await desktop.storeImage(image, controller.path);
+            if (signal.aborted || snapshot.id !== controller.snapshot.id || sourceModeRef.current) throw new DOMException("Upload cancelled", "AbortError");
             reportProgress(1);
             return { kind: "image", url: storedUrl, alt: file.name.replace(/\.[^.]+$/u, "") };
           },
@@ -276,7 +267,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     const untrackHistory = editor.subscribe("update", event => {
       if (applyingHistoryRef.current || event.origin === "reset" || sourceModeRef.current) return;
       const { doc, selection } = editor.view.state;
-      historyRef.current.record({ source: doc, mode: "rich", selection: { anchor: selection.anchor, head: selection.head } },
+      controller.history.record({ source: doc, mode: "rich", selection: { anchor: selection.anchor, head: selection.head } },
         event.origin === "user" ? "rich" : null);
     });
     const unsubscribe = editor.subscribe("state", () => setEditorVersion((version) => version + 1));
@@ -324,9 +315,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     setSearchIndex(-1);
     richScrollRef.current = 0;
     if (viewportRef.current) viewportRef.current.scrollTop = 0;
-    historyRef.current.reset(markdown);
-    openRequestRef.current += 1;
-    setDocumentSnapshot(sessionRef.current.replace(path, markdown));
+    controller.replace(path, markdown);
     setDocumentRevision((revision) => revision + 1);
     if (path) rememberPath(path);
     window.requestAnimationFrame(() => {
@@ -336,54 +325,43 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   }, [rememberPath]);
 
   const saveDocument = useCallback(async (saveAs = false, acceptTableLoss = false) => {
-    // Native menus and shortcuts must obey the same lock as the toolbar.
-    if (savingRef.current) return false;
+    if (controller.getSnapshot().saving) return false;
     const editor = editorRef.current;
     const issues = !sourceModeRef.current ? editor?.state.tableIssues() ?? [] : [];
     if (issues.length && !acceptTableLoss) {
       setTableSaveWarning({ saveAs, message: [...new Set(issues.map(issue => issue.message))].join(" ") });
       return false;
     }
-    savingRef.current = true;
     setError(null);
-    setSaving(true);
     try {
-      if (!sourceModeRef.current) editorRef.current?.flushChange();
-      const snapshot = sessionRef.current.snapshot;
-      let assets: { sourcePath: string; urls: string[] } | undefined;
-      if (saveAs && snapshot.path && editor) {
-        setSavingCopy(true);
-        const doc = sourceModeRef.current ? editor.extensions.get(bridgeRef.current).state.parse(snapshot.markdown) : editor.view.state.doc;
-        const urls: string[] = [];
-        doc?.descendants(node => { if (node.type.name === "image") urls.push(String(node.attrs.src)); });
-        assets = { sourcePath: snapshot.path, urls };
-      }
-      const path = await desktop.saveDocument(
-        saveAs ? null : snapshot.path,
-        documentNameFromPath(snapshot.path),
-        snapshot.markdown,
-        assets,
-      );
-      if (desktop.isNative && !path) return false;
-      if (!sourceModeRef.current) editorRef.current?.flushChange();
-      const clean = sessionRef.current.saved(snapshot, path);
-      setDocumentSnapshot(sessionRef.current.snapshot);
-      if (snapshot.id === sessionRef.current.snapshot.id && resourcePathRef.current !== sessionRef.current.path) {
-        resourcePathRef.current = sessionRef.current.path;
-        editorRef.current?.refreshResources();
-      }
-      if (path) rememberPath(path);
-      // Save-and-close/new may proceed only if the current content is on disk.
-      return clean;
+      return await controller.save({
+        flush: () => { if (!sourceModeRef.current) editorRef.current?.flushChange(); },
+        savingCopy: saveAs && !!controller.path && !!editor,
+        write: async snapshot => {
+          let assets: { sourcePath: string; urls: string[] } | undefined;
+          if (saveAs && snapshot.path && editor) {
+            const doc = sourceModeRef.current ? editor.extensions.get(bridgeRef.current).state.parse(snapshot.markdown) : editor.view.state.doc;
+            const urls: string[] = [];
+            doc?.descendants(node => { if (node.type.name === "image") urls.push(String(node.attrs.src)); });
+            assets = { sourcePath: snapshot.path, urls };
+          }
+          const path = await desktop.saveDocument(saveAs ? null : snapshot.path,
+            documentNameFromPath(snapshot.path), snapshot.markdown, assets);
+          return desktop.isNative && !path ? null : { path };
+        },
+        didSave: (snapshot, path) => {
+          if (snapshot.id === controller.snapshot.id && resourcePathRef.current !== controller.path) {
+            resourcePathRef.current = controller.path;
+            editorRef.current?.refreshResources();
+          }
+          if (path) rememberPath(path);
+        },
+      });
     } catch (cause) {
       showError(cause, "The document could not be saved.");
       return false;
-    } finally {
-      savingRef.current = false;
-      setSaving(false);
-      setSavingCopy(false);
     }
-  }, [rememberPath, showError]);
+  }, [controller, rememberPath, showError]);
 
   const guardUnsaved = useCallback((action: PendingAction["action"], title: string, message: string) => {
     if (document.querySelector("dialog[open]")) return;
@@ -392,7 +370,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       try { await action(); }
       catch (cause) { showError(cause, "The document could not be changed."); }
     };
-    if (!sessionRef.current.dirty) {
+    if (!controller.dirty) {
       void run();
       return;
     }
@@ -406,26 +384,18 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   }, [guardUnsaved, replaceDocument]);
 
   const openPath = useCallback(async (path: string) => {
-    const request = ++openRequestRef.current;
-    try {
-      const content = await desktop.readDocument(path);
-      if (request === openRequestRef.current) acceptOpenedDocument(path, content);
-    } catch (cause) {
-      if (request === openRequestRef.current) showError(cause, `Could not open ${documentNameFromPath(path)}.`);
-    }
-  }, [acceptOpenedDocument, showError]);
+    await controller.open(() => desktop.readDocument(path),
+      content => acceptOpenedDocument(path, content),
+      cause => showError(cause, `Could not open ${documentNameFromPath(path)}.`));
+  }, [controller, acceptOpenedDocument, showError]);
 
   const requestOpenPath = openPath;
 
   const openDocument = useCallback(async () => {
-    const request = ++openRequestRef.current;
-    try {
-      const opened = await desktop.openDocument();
-      if (opened && request === openRequestRef.current) acceptOpenedDocument(opened.path, opened.content);
-    } catch (cause) {
-      if (request === openRequestRef.current) showError(cause, "The document could not be opened.");
-    }
-  }, [acceptOpenedDocument, showError]);
+    await controller.open(() => desktop.openDocument(),
+      opened => acceptOpenedDocument(opened.path, opened.content),
+      cause => showError(cause, "The document could not be opened."));
+  }, [controller, acceptOpenedDocument, showError]);
 
   const newDocument = useCallback(() => {
     guardUnsaved(
@@ -439,10 +409,10 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     acceptConversion = acceptConversion === true;
     if (editorRef.current?.view.composing || sourceEditorRef.current?.isComposing()) return;
     if (document.querySelector("dialog[open]") && !acceptConversion) return;
-    historyRef.current.breakGroup();
+    controller.history.breakGroup();
     if (sourceModeRef.current) {
       sourceViewRef.current = sourceEditorRef.current?.captureView();
-      const markdown = sessionRef.current.markdown;
+      const markdown = controller.markdown;
       try {
         if (markdown !== sourceEntryMarkdownRef.current) {
           editorRef.current?.commands.reconcileMarkdown(markdown);
@@ -468,7 +438,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     }
     richScrollRef.current = viewportRef.current?.scrollTop ?? 0;
     editor?.flushChange();
-    const markdown = sessionRef.current.markdown;
+    const markdown = controller.markdown;
     updateLiveMarkdown(markdown);
     sourceEntryMarkdownRef.current = markdown;
     sourceModeRef.current = true;
@@ -480,11 +450,11 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       if (closeRequestedRef.current) return;
       guardUnsaved(() => {
         closeRequestedRef.current = true;
-        const snapshot = sessionRef.current.snapshot;
+        const snapshot = controller.snapshot;
         recoveryRef.current!.schedule({ ...snapshot, savedMarkdown: snapshot.markdown });
         void recoveryRef.current!.flush().then(() => {
           if (!sourceModeRef.current) editorRef.current?.flushChange();
-          const current = sessionRef.current.snapshot;
+          const current = controller.snapshot;
           if (current.id !== snapshot.id || current.revision !== snapshot.revision) {
             closeRequestedRef.current = false;
             recoveryRef.current!.schedule(current);
@@ -522,14 +492,10 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   }, [openPath, requestOpenPath, showError]);
 
   const requestDroppedDocument = useCallback(async (file: File) => {
-    const request = ++openRequestRef.current;
-    try {
-      const opened = await desktop.openDroppedDocument(file);
-      if (request === openRequestRef.current) acceptOpenedDocument(opened.path, opened.content);
-    } catch (cause) {
-      if (request === openRequestRef.current) showError(cause, `Could not open ${file.name}.`);
-    }
-  }, [acceptOpenedDocument, showError]);
+    await controller.open(() => desktop.openDroppedDocument(file),
+      opened => acceptOpenedDocument(opened.path, opened.content),
+      cause => showError(cause, `Could not open ${file.name}.`));
+  }, [controller, acceptOpenedDocument, showError]);
 
   useEffect(() => {
     const resetDropTarget = () => {
@@ -589,7 +555,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     const editor = editorRef.current;
     if (!editor || editor.view.composing || sourceEditorRef.current?.isComposing()) return;
     if (!sourceModeRef.current) editor.flushChange();
-    const entry = historyRef.current[direction]();
+    const entry = controller.history[direction]();
     if (!entry) return;
     const markdown = typeof entry.source === "string"
       ? entry.source : editor.extensions.get(bridgeRef.current).state.serialize(entry.source);
@@ -607,7 +573,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
         }
         sourceEntryMarkdownRef.current = markdown;
       }
-      setDocumentSnapshot(sessionRef.current.edit(markdown));
+      controller.edit(markdown);
       if (sourceModeRef.current) {
         sourceEditorRef.current?.setMarkdown(markdown, entry.mode === "source" ? entry.selection : undefined);
         sourceEditorRef.current?.focus();
@@ -616,7 +582,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       }
       setEditorVersion(version => version + 1);
     } catch (cause) {
-      historyRef.current[direction === "undo" ? "redo" : "undo"]();
+      controller.history[direction === "undo" ? "redo" : "undo"]();
       showError(cause, "This change could not be restored. Try source mode.");
     } finally { applyingHistoryRef.current = false; }
   }, [showError]);
@@ -641,7 +607,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   }, []);
   const openMath = useCallback(() => {
     const current = editorRef.current;
-    if (!current || sourceModeRef.current || exportingRef.current || mathDialogOpenRef.current
+    if (!current || sourceModeRef.current || controller.getSnapshot().exporting || mathDialogOpenRef.current
       || current.view.composing || document.querySelector("dialog[open]")) return;
     const { doc, selection } = current.view.state;
     const handle = current.extensions.get(mathRef.current);
@@ -657,7 +623,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
           // A modal can outlive an external document replacement. Never insert at a stale position.
           if (current.isDestroyed || current.view.state.doc !== doc) return false;
           current.view.dispatch(current.view.state.tr.setSelection(selection));
-          historyRef.current.breakGroup();
+          controller.history.breakGroup();
           return kind === "inline" ? handle.commands.insertInline(source) : handle.commands.insertBlock(source);
         } });
     }
@@ -668,45 +634,41 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
     requestAnimationFrame(() => editorRef.current?.focus());
   }, []);
   const exportDocument = useCallback(async (format: "html" | "pdf") => {
-    if (exportingRef.current || document.querySelector("dialog[open]") || editorRef.current?.view.composing || sourceEditorRef.current?.isComposing()) return;
+    if (controller.getSnapshot().exporting || document.querySelector("dialog[open]") || editorRef.current?.view.composing || sourceEditorRef.current?.isComposing()) return;
     const current = editorRef.current;
     if (!current) return;
     current.flushChange();
-    const path = sessionRef.current.snapshot.path;
-    exportingRef.current = true;
-    setExporting(true);
+    const path = controller.snapshot.path;
     try {
-      const doc = sourceModeRef.current ? current.extensions.get(bridgeRef.current).state.parse(sourceEditorRef.current?.getMarkdown() ?? sessionRef.current.markdown) : current.view.state.doc;
+      await controller.export(async () => {
+      const doc = sourceModeRef.current ? current.extensions.get(bridgeRef.current).state.parse(sourceEditorRef.current?.getMarkdown() ?? controller.markdown) : current.view.state.doc;
       if (!doc) throw new Error("This source could not be parsed for export.");
       const exportTheme = format === "pdf" ? captureExportTheme(current.view.dom, themeController.getSnapshot().id) : undefined;
       const { buildExport, printExport } = await import("./exportDocument");
       const output = await buildExport(doc, documentName, { resolveImage: url => desktop.exportImage(path, url), theme: exportTheme });
       if (format === "html") await desktop.exportHtml(documentName.replace(/\.[^.]+$/u, "") + ".html", output.html);
       else await printExport(output, () => desktop.exportPdf(documentName.replace(/\.[^.]+$/u, "") + ".pdf"), desktop.isNative);
+      });
     } catch (cause) { showError(cause, "The document could not be exported."); }
-    finally {
-      exportingRef.current = false;
-      setExporting(false);
-    }
   }, [documentName, showError, themeController]);
   useEffect(() => {
     desktop.installMenu({
-      newDocument,
-      openDocument,
-      saveDocument: () => void saveDocument(false),
-      saveDocumentAs: () => void saveDocument(true),
-      toggleSidebar: () => setSidebarOpen((open) => !open),
-      toggleSourceMode,
-      exportPdf: () => void exportDocument("pdf"),
-      exportHtml: () => void exportDocument("html"),
-      canExport: !exporting,
-      insertMath: openMath,
-      canInsertMath: startupReady && !sourceMode && !exporting,
+      newDocument: () => { actions.run("new"); },
+      openDocument: () => { actions.run("open"); },
+      saveDocument: () => { actions.run("save"); },
+      saveDocumentAs: () => { actions.run("saveAs"); },
+      toggleSidebar: () => { actions.run("sidebar"); },
+      toggleSourceMode: () => { actions.run("source"); },
+      exportPdf: () => { actions.run("exportPdf"); },
+      exportHtml: () => { actions.run("exportHtml"); },
+      canExport: actions.can("exportPdf"),
+      insertMath: () => { actions.run("math"); },
+      canInsertMath: actions.can("math"),
       themes: themeController.themes,
       theme: theme.id,
       setTheme: themeController.setTheme,
     });
-  }, [newDocument, openDocument, saveDocument, toggleSourceMode, themeController, theme.id, exportDocument, exporting, openMath, startupReady, sourceMode]);
+  }, [actions, themeController, theme.id, exporting, startupReady, sourceMode]);
 
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
@@ -725,7 +687,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   };
   const replaceMatches = (all: boolean) => {
     if (savingCopy || sourceEditorRef.current?.isComposing() || editorRef.current?.view.composing) return;
-    historyRef.current.breakGroup();
+    controller.history.breakGroup();
     if (sourceModeRef.current) {
       const matches = findTextMatches(sourceEditorRef.current?.getMarkdown() ?? "", searchOptions);
       if (all && matches.truncated) return;
@@ -736,7 +698,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       handle?.commands.replace(replacement, all ? undefined : searchIndex);
       editorRef.current?.flushChange();
     }
-    historyRef.current.breakGroup();
+    controller.history.breakGroup();
     setSearchIndex(-1);
   };
 
@@ -746,7 +708,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       if (event.inputType !== "historyUndo" && event.inputType !== "historyRedo") return;
       event.preventDefault();
       event.stopPropagation();
-      navigateHistory(event.inputType === "historyUndo" ? "undo" : "redo");
+      actions.run(event.inputType === "historyUndo" ? "undo" : "redo");
     };
     window.addEventListener("beforeinput", onHistoryInput, true);
     return () => window.removeEventListener("beforeinput", onHistoryInput, true);
@@ -758,36 +720,12 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
         event.preventDefault(); closeSearch(); return;
       }
       if (document.querySelector("dialog[open]") || event.isComposing) return;
-      if (!(event.ctrlKey || event.metaKey)) return;
-      const key = event.key.toLowerCase();
-      if (!event.isComposing && (key === "z" || key === "y") && event.target instanceof Element
-        && event.target.closest(".app-editor, .app-source-editor") && !event.altKey) {
-        event.preventDefault();
-        event.stopPropagation();
-        navigateHistory(key === "y" || event.shiftKey ? "redo" : "undo");
-        return;
-      }
-      if (!event.altKey && event.shiftKey && key === "m") {
-        event.preventDefault(); event.stopPropagation(); openMath();
-      } else if (!event.altKey && (key === "f" || key === "h")) {
-        event.preventDefault(); event.stopPropagation(); openSearch();
-      } else if (!event.altKey && !event.shiftKey && (event.code === "Slash" || key === "/")) {
-        event.preventDefault();
-        event.stopPropagation();
-        toggleSourceMode();
-      } else if (key === "n") {
-        event.preventDefault();
-        newDocument();
-      } else if (key === "o") {
-        event.preventDefault();
-        openDocument();
-      } else if (key === "s") {
-        event.preventDefault();
-        void saveDocument(event.shiftKey);
-      } else if (event.shiftKey && event.key === "\\") {
-        event.preventDefault();
-        setSidebarOpen((open) => !open);
-      }
+      const ownsHistory = event.target instanceof Element && !!event.target.closest(".app-editor, .app-source-editor");
+      const action = matchApplicationShortcut(event, ownsHistory);
+      if (!action) return;
+      event.preventDefault();
+      event.stopPropagation();
+      actions.run(action);
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
@@ -806,8 +744,25 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   void sourceEditorVersion;
 
   const sourceShortcut = desktop.isMac ? "⌘/" : "Ctrl+/";
-  const canUndo = historyRef.current.canUndo;
-  const canRedo = historyRef.current.canRedo;
+  const canInteract = () => !document.querySelector("dialog[open]")
+    && !editorRef.current?.view.composing && !sourceEditorRef.current?.isComposing();
+  const canEditHistory = () => canInteract() && (sourceModeRef.current || !!editorRef.current?.view.editable);
+  actionBindings.current = {
+    new: { enabled: canInteract, run: newDocument },
+    open: { enabled: canInteract, run: openDocument },
+    save: { enabled: () => canInteract() && !controller.getSnapshot().saving, run: async () => { await saveDocument(false); } },
+    saveAs: { enabled: () => canInteract() && !controller.getSnapshot().saving, run: async () => { await saveDocument(true); } },
+    undo: { enabled: () => canEditHistory() && controller.history.canUndo, run: () => navigateHistory("undo") },
+    redo: { enabled: () => canEditHistory() && controller.history.canRedo, run: () => navigateHistory("redo") },
+    exportHtml: { enabled: () => canInteract() && !controller.getSnapshot().exporting, run: () => exportDocument("html") },
+    exportPdf: { enabled: () => canInteract() && !controller.getSnapshot().exporting, run: () => exportDocument("pdf") },
+    math: { enabled: () => canInteract() && startupReady && !sourceModeRef.current && !controller.getSnapshot().exporting, run: openMath },
+    search: { enabled: canInteract, run: openSearch },
+    source: { enabled: canInteract, run: toggleSourceMode },
+    sidebar: { enabled: canInteract, run: () => setSidebarOpen(open => !open) },
+  };
+  const canUndo = actions.can("undo");
+  const canRedo = actions.can("redo");
 
   const insertLink = () => {
     if (editor?.state.isActive.mark("link")) {
@@ -819,14 +774,14 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
   };
 
   const insertImage = async () => {
-    const snapshot = sessionRef.current.snapshot;
+    const snapshot = controller.snapshot;
     try {
       const image = await desktop.chooseImage();
-      if (!image || snapshot.id !== sessionRef.current.snapshot.id) return;
+      if (!image || snapshot.id !== controller.snapshot.id) return;
       let url = await desktop.storeImage(image, snapshot.path);
-      if (snapshot.id !== sessionRef.current.snapshot.id) return;
-      if (snapshot.path !== sessionRef.current.path) url = await desktop.storeImage(image, sessionRef.current.path);
-      if (snapshot.id !== sessionRef.current.snapshot.id || sourceModeRef.current) return;
+      if (snapshot.id !== controller.snapshot.id) return;
+      if (snapshot.path !== controller.path) url = await desktop.storeImage(image, controller.path);
+      if (snapshot.id !== controller.snapshot.id || sourceModeRef.current) return;
       editorRef.current?.commands.insertImage({
         src: url,
         alt: image.file.name.replace(/\.[^.]+$/u, ""),
@@ -957,24 +912,24 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
           )}
 
           <div className="app-sidebar-footer">
-            <button onClick={newDocument} type="button"><Icon icon={FilePlus2} size={16} /> New</button>
-            <button onClick={openDocument} type="button"><Icon icon={FolderOpen} size={16} /> Open</button>
+            <button onClick={() => { actions.run("new"); }} type="button"><Icon icon={FilePlus2} size={16} /> New</button>
+            <button onClick={() => { actions.run("open"); }} type="button"><Icon icon={FolderOpen} size={16} /> Open</button>
           </div>
         </aside>
 
         <main className="app-main">
           <div className="app-toolbar" role="toolbar" aria-label="Document tools">
             <div className="app-toolbar-group app-file-tools">
-              <ToolbarButton icon={FilePlus2} label="New document" onClick={newDocument} shortcut="Ctrl+N" />
-              <ToolbarButton icon={FolderOpen} label="Open document" onClick={openDocument} shortcut="Ctrl+O" />
-              <ToolbarButton disabled={saving} icon={saving ? Check : Save} label="Save document" onClick={() => void saveDocument(false)} shortcut="Ctrl+S" />
-              <ToolbarButton disabled={exporting} icon={Download} label="Export HTML" onClick={() => void exportDocument("html")} />
-              <ToolbarButton disabled={exporting} icon={Printer} label={desktop.isNative ? "Export PDF" : "Print / Save as PDF"} onClick={() => void exportDocument("pdf")} />
+              <ToolbarButton icon={FilePlus2} label="New document" onClick={() => { actions.run("new"); }} shortcut="Ctrl+N" />
+              <ToolbarButton icon={FolderOpen} label="Open document" onClick={() => { actions.run("open"); }} shortcut="Ctrl+O" />
+              <ToolbarButton disabled={saving} icon={saving ? Check : Save} label="Save document" onClick={() => { actions.run("save"); }} shortcut="Ctrl+S" />
+              <ToolbarButton disabled={exporting} icon={Download} label="Export HTML" onClick={() => { actions.run("exportHtml"); }} />
+              <ToolbarButton disabled={exporting} icon={Printer} label={desktop.isNative ? "Export PDF" : "Print / Save as PDF"} onClick={() => { actions.run("exportPdf"); }} />
             </div>
             <span className="app-toolbar-divider" />
             <div className="app-toolbar-group">
-              <ToolbarButton disabled={!canUndo} icon={Undo2} label="Undo" onClick={() => navigateHistory("undo")} shortcut="Ctrl+Z" />
-              <ToolbarButton disabled={!canRedo} icon={Redo2} label="Redo" onClick={() => navigateHistory("redo")} shortcut="Ctrl+Shift+Z" />
+              <ToolbarButton disabled={!canUndo} icon={Undo2} label="Undo" onClick={() => { actions.run("undo"); }} shortcut="Ctrl+Z" />
+              <ToolbarButton disabled={!canRedo} icon={Redo2} label="Redo" onClick={() => { actions.run("redo"); }} shortcut="Ctrl+Shift+Z" />
             </div>
             <span className="app-toolbar-divider" />
             <select
@@ -1004,14 +959,14 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
             </div>
             <span className="app-toolbar-divider" />
             <div className="app-toolbar-group">
-              <ToolbarButton disabled={sourceMode || exporting} icon={Sigma} label="Insert math" onClick={openMath} shortcut={desktop.isMac ? "⌘Shift+M" : "Ctrl+Shift+M"} />
+              <ToolbarButton disabled={sourceMode || exporting} icon={Sigma} label="Insert math" onClick={() => { actions.run("math"); }} shortcut={desktop.isMac ? "⌘Shift+M" : "Ctrl+Shift+M"} />
               <ToolbarButton disabled={sourceMode} icon={Link2} label="Add or edit link" onClick={insertLink} />
               <ToolbarButton disabled={sourceMode} icon={ImagePlus} label="Insert image" onClick={() => void insertImage()} />
               <ToolbarButton disabled={sourceMode} icon={Table2} label="Insert table" onClick={() => editor?.ui?.createTable()} />
             </div>
             <span className="app-toolbar-divider" />
             <div className="app-toolbar-group app-source-tools">
-              <ToolbarButton icon={Search} label="Find and replace" onClick={openSearch} shortcut="Ctrl+F" />
+              <ToolbarButton icon={Search} label="Find and replace" onClick={() => { actions.run("search"); }} shortcut="Ctrl+F" />
               <ToolbarButton
                 active={sourceMode}
                 icon={FileCode}
@@ -1095,10 +1050,10 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
       )}
 
       {mathEdit && <MathDialog request={mathEdit} onClose={closeMath} onSaved={() => {
-        editorRef.current?.flushChange(); historyRef.current.breakGroup();
+        editorRef.current?.flushChange(); controller.history.breakGroup();
       }} />}
       {sourceEdit && <SourceDialog request={sourceEdit} onClose={() => setSourceEdit(null)} onSaved={() => {
-        editorRef.current?.flushChange(); historyRef.current.breakGroup();
+        editorRef.current?.flushChange(); controller.history.breakGroup();
       }} />}
       {sourceConversionWarning && (
         <Dialog title="Review source conversion" message={`${sourceConversionWarning} Editing Markdown source may flatten this structure. You can undo the change to recover the rich document.`}
@@ -1130,7 +1085,7 @@ export function App({ themeController }: Readonly<{ themeController: MarkdownThe
           <button className="markora-dialog-button" type="button" onClick={() => {
             recoveryReadyRef.current = true;
             setRecoveryCandidate(null);
-            recoveryRef.current!.schedule(sessionRef.current.snapshot);
+            recoveryRef.current!.schedule(controller.snapshot);
             const startupPath = desktop.getStartupPath();
             if (startupPath) void openPath(startupPath);
           }}>Discard recovery</button>
