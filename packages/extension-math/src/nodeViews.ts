@@ -175,13 +175,11 @@ export function createMathNodeView(
 
       this.actions = ownerDocument.createElement("span");
       this.actions.className = "mdw-math__actions";
-      this.actions.addEventListener("keydown", this.handleActionKeyDown);
 
       {
         this.editButton = this.createActionButton(
           "edit",
           messages.editSource,
-          this.handleEdit,
         );
         this.actions.append(this.editButton);
       }
@@ -189,13 +187,11 @@ export function createMathNodeView(
       this.toggleButton = this.createActionButton(
         "toggle",
         messages.showPreview,
-        this.handleToggle,
       );
       this.toggleButton.setAttribute("aria-pressed", "false");
       this.retryButton = this.createActionButton(
         "retry",
         messages.retryPreview,
-        this.handleRetry,
       );
       this.retryButton.hidden = true;
       this.actions.append(this.toggleButton, this.retryButton);
@@ -361,14 +357,12 @@ export function createMathNodeView(
     private createActionButton(
       action: "edit" | "retry" | "toggle",
       label: string,
-      listener: (event: MouseEvent) => void,
     ) {
       const button = this.view.dom.ownerDocument.createElement("button");
       button.className = "mdw-math__action";
       button.dataset.mdwMathAction = action;
       button.type = "button";
       button.textContent = label;
-      button.addEventListener("click", listener);
       return button;
     }
 
@@ -497,6 +491,13 @@ export function createMathNodeView(
     }
 
     private readonly handleNodeKeyDown = (event: KeyboardEvent) => {
+      if (isInside(event.target, this.actions)) {
+        if (event.isComposing || event.keyCode === 229 || this.view.composing) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        return;
+      }
       if (event.target !== this.dom || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
       if ((event.key === "Enter" || event.key === " ") && this.requestEdit()) {
         event.preventDefault(); event.stopPropagation();
@@ -504,8 +505,25 @@ export function createMathNodeView(
     };
 
     private readonly handleClick = (event: MouseEvent) => {
-      if (event.button !== 0 || this.sourceEditor || isInside(event.target, this.actions)) return;
-      this.handleEdit(event);
+      if (event.button !== 0 || this.sourceEditor) return;
+      // One shell listener owns both formula activation and its action buttons.
+      // Per-button listeners would multiply with every formula in large documents.
+      let handled = false;
+      if (isInside(event.target, this.actions)) {
+        if (this.editButton && !this.editButton.disabled && isInside(event.target, this.editButton)) {
+          handled = this.requestEdit();
+        } else if (!this.toggleButton.disabled && isInside(event.target, this.toggleButton)) {
+          handled = this.togglePreview();
+        } else if (!this.retryButton.disabled && isInside(event.target, this.retryButton)) {
+          handled = this.retryPreview();
+        }
+      } else {
+        handled = this.requestEdit();
+      }
+      if (handled) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
     };
 
     private retryPreview() {
@@ -533,34 +551,6 @@ export function createMathNodeView(
         && this.isCurrent(kind, readSource(this.nodeValue))
       );
     }
-
-    private readonly handleEdit = (event: MouseEvent) => {
-      if (this.requestEdit()) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
-
-    private readonly handleToggle = (event: MouseEvent) => {
-      if (this.togglePreview()) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
-
-    private readonly handleRetry = (event: MouseEvent) => {
-      if (this.retryPreview()) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
-
-    private readonly handleActionKeyDown = (event: KeyboardEvent) => {
-      if (event.isComposing || event.keyCode === 229 || this.view.composing) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
 
     private renderSource(source: string) {
       const shell = canonicalShell(kind, source);
@@ -670,10 +660,6 @@ export function createMathNodeView(
       this.sourceEditor = null;
       this.dom.removeEventListener("click", this.handleClick);
       this.dom.removeEventListener("keydown", this.handleNodeKeyDown);
-      this.actions.removeEventListener("keydown", this.handleActionKeyDown);
-      this.editButton?.removeEventListener("click", this.handleEdit);
-      this.toggleButton.removeEventListener("click", this.handleToggle);
-      this.retryButton.removeEventListener("click", this.handleRetry);
       this.registration?.destroy();
       this.preview.replaceChildren();
 

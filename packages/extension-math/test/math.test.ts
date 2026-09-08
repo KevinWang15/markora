@@ -931,7 +931,10 @@ describe.each(entries)("%s math renderer integration", (_entry, createEditor) =>
       .toBe("Formula source: x");
     expect(marker.querySelector(".mdw-math__kind")?.textContent).toBe("Inline formula");
     expect(button.textContent).toBe("Edit formula");
-    button.click();
+    const label = button.ownerDocument.createElement("span");
+    label.textContent = button.textContent;
+    button.replaceChildren(label);
+    label.click();
     expect(onEditSource).toHaveBeenCalledTimes(1);
     expect(Object.isFrozen(requests[0])).toBe(true);
     expect(requests[0]).toMatchObject({
