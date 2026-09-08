@@ -234,3 +234,29 @@ include every sample. These two changes leave approximately 10% and 13% headroom
 above the failing maxima. All other timing, variance and resource limits stay
 unchanged. The second attempt stopped at the core runtime gate, so it provides
 no second advanced-syntax measurement.
+
+
+### Cross-run timing headroom
+
+A [third measurement](https://github.com/KevinWang15/markora/actions/runs/34229034256)
+on identical product code passed the adjusted teardown gate but recorded
+100 KiB initial synchronous rendering at 128.270, 125.255, 126.035, 216.115 and
+129.440 ms. One sample exceeded the 200 ms ceiling. This was again an EPYC 7763,
+Chromium 149.0.7827.55 / Node 24.20.0 runner. It stopped at the core runtime gate.
+
+Reviewing all available timing samples from these three measurements together
+found two other ceilings with less than roughly 10% headroom. The following
+changes give each of these metrics at least 10% headroom over its observed
+maximum, while leaving already adequate ceilings in place:
+
+| Metric | Reviewed maximum | Failure ceiling | Headroom |
+| --- | ---: | ---: | ---: |
+| 100 KiB initial synchronous render | 216.115 ms | 200 → 250 ms | 15.7% |
+| 100 KiB codec parse | 61.100 ms | 65 → 70 ms | 14.6% |
+| 1 MiB codec parse | 332.755 ms | 350 → 375 ms | 12.7% |
+
+This is a review of slow samples across the same checked fixtures, not a claim
+that the refactor improved execution speed or a diagnosis of individual pauses.
+Every sample, warning ceiling, variance gate, resource invariant and other
+failure ceiling is retained. Future increases still require a fresh review;
+these limits do not adjust automatically from a failing run.
