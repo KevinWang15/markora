@@ -58,11 +58,24 @@ try {
   }), "Select all must span the complete editor document, including atomic nodes.");
   await editor.locator("p").first().click();
   await page.getByRole("button", { name: /^Insert math/ }).click();
-  const mathDialog = page.getByRole("dialog", { name: "Insert math", exact: true });
-  await expect(mathDialog.getByRole("textbox", { name: "LaTeX source" })).toBeFocused();
+  const mathInput = editor.getByRole("textbox", { name: "LaTeX source", exact: true });
+  await expect(mathInput).toBeFocused();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await cdp.send("Input.insertText", { text: String.raw`\sqrt{x}` });
-  await expect(mathDialog.locator("math msqrt")).toHaveCount(1);
-  await mathDialog.getByRole("button", { name: "Insert formula", exact: true }).click();
+  await expect(editor.locator(".mdw-tex-command")).toHaveText("\\sqrt");
+  await page.keyboard.press("Escape");
+  await expect(mathInput).toHaveCount(0);
+  const insertedMath = editor.locator(".mdw-math").filter({ has: page.locator("math msqrt") });
+  await expect(insertedMath).toHaveCount(1);
+  await insertedMath.click();
+  await expect(mathInput).toBeFocused();
+  await expect(mathInput).toHaveValue(String.raw`\sqrt{x}`);
+  await mathInput.selectText();
+  await cdp.send("Input.insertText", { text: String.raw`\sqrt{y}` });
+  // Real focus transfer exercises the blur-to-preview path used on the deployed site.
+  await page.getByRole("combobox", { name: "Theme", exact: true }).focus();
+  await expect(mathInput).toHaveCount(0);
+  await expect(insertedMath.locator("math mi")).toHaveText("y");
   await expect(editor.locator(".mdw-math math")).toHaveCount(3);
   const picker = page.getByRole("combobox", { name: "Theme", exact: true });
   await picker.selectOption("night");

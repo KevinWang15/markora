@@ -28,6 +28,12 @@ dirty teardown. Memory budgets cover tracked heap growth, mounted CodeMirror
 instances, DOM nodes, event listeners, documents, and retained resources after
 teardown. Warning and failure ceilings are defined per document size.
 
+The idle hot-path probe schedules each trusted key 80 ms after the previous
+key's actual page timestamp. This avoids catch-up intervals after a delayed
+browser dispatch. Every observed interval must still fall within 75–120 ms;
+late input, premature snapshots, and budget overruns continue to fail the run.
+Reports record each adjusted target and its dispatch lateness.
+
 ## Bundle contract
 
 Bundle reporting builds the full root graph with `markora-ui` and the

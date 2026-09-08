@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEditor, type MarkdownEditor } from "markora";
 import { createEditor as createMinimalEditor } from "markora/minimal";
 import { NodeSelection } from "markora/extension-api";
@@ -8,9 +8,15 @@ import { highlightTex } from "../src/sourceEditor";
 Range.prototype.getClientRects ??= () => [] as unknown as DOMRectList;
 Range.prototype.getBoundingClientRect ??= () => new DOMRect();
 const editors: MarkdownEditor[] = [];
+beforeEach(() => {
+  // History groups adjacent edits within 500 ms. Keep simulated typing independent
+  // of how long mounting and focusing take on a busy CI worker; timers stay real.
+  vi.spyOn(Date, "now").mockReturnValue(1_000);
+});
 afterEach(() => {
   editors.splice(0).forEach((editor) => editor.destroy());
   document.body.replaceChildren();
+  vi.restoreAllMocks();
 });
 
 it("highlights TeX without interpreting source as HTML", () => {
@@ -60,6 +66,19 @@ for (const [name, create] of [
       expect(editor.getMarkdown()).toContain("y^3");
       input.blur();
       expect(element.querySelector("textarea")).toBeNull();
+      expect(editor.commands.undo()).toBe(true);
+      expect(editor.getMarkdown()).toContain("x^2");
+    });
+    it("preserves separate Undo groups when typing pauses", () => {
+      const { editor, open } = mount();
+      const input = open();
+      type(input, "y");
+      vi.mocked(Date.now).mockReturnValue(2_000);
+      type(input, "y^3");
+      input.blur();
+      expect(editor.commands.undo()).toBe(true);
+      expect(editor.getMarkdown()).toContain("y");
+      expect(editor.getMarkdown()).not.toContain("y^3");
       expect(editor.commands.undo()).toBe(true);
       expect(editor.getMarkdown()).toContain("x^2");
     });

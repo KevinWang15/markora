@@ -39,7 +39,7 @@ const HOT_PATH_CONTRACT = Object.freeze({
   burstIntervalMaximumMs: 120,
   burstIntervalMinimumMs: 75,
   burstKeys: 4,
-  burstSchedule: "absolute-page-deadlines",
+  burstSchedule: "previous-key-page-deadlines",
   changeDelivery: "idle-coalesced",
   key: "F8",
   snapshotDeadlineMs: 8_000,
@@ -670,11 +670,13 @@ async function runDefaultIdleHotPathSample(context, baseUrl, fixture) {
       const burst = [];
       let anchorEventStart = null;
       for (let index = 0; index < burstKeys; index += 1) {
-        if (index > 0) {
-          await waitForPagePerformanceDeadline(
-            page,
-            anchorEventStart + index * burstIntervalMs,
-          );
+        // Schedule from the actual previous event: catching up to a fixed burst
+        // origin compresses later intervals whenever one dispatch arrives late.
+        const scheduledEventStart = index === 0
+          ? null
+          : burst.at(-1).eventStart + burstIntervalMs;
+        if (scheduledEventStart !== null) {
+          await waitForPagePerformanceDeadline(page, scheduledEventStart);
         }
         await page.keyboard.press(key);
         const telemetry = await page.evaluate(() => (
@@ -690,7 +692,7 @@ async function runDefaultIdleHotPathSample(context, baseUrl, fixture) {
         }
         const keydown = telemetry.keydowns.at(-1);
         anchorEventStart ??= keydown.eventStart;
-        const targetEventStart = anchorEventStart + index * burstIntervalMs;
+        const targetEventStart = scheduledEventStart ?? anchorEventStart;
         burst.push(Object.freeze({
           actualOffsetMs: keydown.eventStart - anchorEventStart,
           deadlineLatenessMs: keydown.eventStart - targetEventStart,
@@ -703,7 +705,7 @@ async function runDefaultIdleHotPathSample(context, baseUrl, fixture) {
           observedAt: keydown.observedAt,
           snapshotCount: telemetry.snapshotCount,
           snapshotCountBeforeDispatch: keydown.snapshotCountBeforeDispatch,
-          targetOffsetMs: index * burstIntervalMs,
+          targetOffsetMs: targetEventStart - anchorEventStart,
           trusted: keydown.trusted,
         }));
       }
@@ -711,10 +713,8 @@ async function runDefaultIdleHotPathSample(context, baseUrl, fixture) {
         (timeoutMs) => window.__MARKORA_PERFORMANCE__.armKeystroke({ timeoutMs }),
         snapshotDeadlineMs,
       );
-      await waitForPagePerformanceDeadline(
-        page,
-        anchorEventStart + burstKeys * burstIntervalMs,
-      );
+      const measuredTargetEventStart = burst.at(-1).eventStart + burstIntervalMs;
+      await waitForPagePerformanceDeadline(page, measuredTargetEventStart);
       await page.keyboard.press(key);
       const measuredTelemetry = await page.evaluate(() => (
         window.__MARKORA_PERFORMANCE__.hotPathTelemetry()
@@ -805,7 +805,7 @@ async function runDefaultIdleHotPathSample(context, baseUrl, fixture) {
             measuredKey: Object.freeze({
               actualOffsetMs: measuredKeydown.eventStart - anchorEventStart,
               deadlineLatenessMs:
-                measuredKeydown.eventStart - (anchorEventStart + burstKeys * burstIntervalMs),
+                measuredKeydown.eventStart - measuredTargetEventStart,
               eventStart: measuredKeydown.eventStart,
               index: burstKeys,
               intervalFromPreviousMs: keyIntervalsMs.at(-1),
@@ -813,7 +813,7 @@ async function runDefaultIdleHotPathSample(context, baseUrl, fixture) {
               observedAt: measuredKeydown.observedAt,
               snapshotCount: measuredTelemetry.snapshotCount,
               snapshotCountBeforeDispatch: measuredKeydown.snapshotCountBeforeDispatch,
-              targetOffsetMs: burstKeys * burstIntervalMs,
+              targetOffsetMs: measuredTargetEventStart - anchorEventStart,
               trusted: measuredKeydown.trusted,
             }),
             schedule: burstSchedule,

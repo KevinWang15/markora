@@ -29,7 +29,7 @@
         "burstIntervalMs": 80,
         "burstIntervalMinimumMs": 75,
         "burstIntervalMaximumMs": 120,
-        "burstSchedule": "absolute-page-deadlines",
+        "burstSchedule": "previous-key-page-deadlines",
         "snapshotDeadlineMs": 8000,
         "changeDelivery": "idle-coalesced"
       },
