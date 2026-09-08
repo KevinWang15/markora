@@ -1,3 +1,4 @@
+import { createElementSelectionPlugin } from "./elementSelection";
 import {
 baseKeymap,
 chainCommands,
@@ -65,7 +66,7 @@ import { assertEditorHostAvailable,claimEditorHost } from "./hostOwnership";
 import { createHostIdleScheduler } from "./idleScheduler";
 import { createImageViewClass } from "./imageView";
 import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
-import { ManagedBlockCursor } from "./managedBlockCursor";
+import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from "./managedBlockCursor";
 import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import { createMinimalMarkdownEditorPreset } from "./minimalExtensionPreset";
@@ -350,9 +351,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
   const initialMarkdown = codec.serialize(doc);
   const isManagedBlockNode = (
     node: ProseMirrorNode | null | undefined,
-  ): node is ProseMirrorNode => Boolean(
-    node && codec.managedBlocks.has(node.type.name),
-  );
+  ): node is ProseMirrorNode => isManagedBlockNodeFromSchema(codec.schema, node, codec.managedBlocks);
   const managedBlockBoundaries = createManagedBlockBoundaryHelpers({
     schema: codec.schema,
     isManagedBlockNode,
@@ -628,6 +627,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       createPlaceholderPlugin(() => runtimeOptions.placeholder),
       createResourceOpenPlugin({ onError: handleResourceError, resources }),
       createEscapedBoundaryPlugin(),
+      createElementSelectionPlugin(codec.managedBlocks),
       createManagedBlockBoundaryPlugin({
         isManagedBlockNode,
         getTableBoundaryEscapeInfo: managedBlockBoundaries.getTableBoundaryEscapeInfo,

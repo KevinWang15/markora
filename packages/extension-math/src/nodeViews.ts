@@ -500,7 +500,7 @@ export function createMathNodeView(
     };
 
     private readonly handleClick = (event: MouseEvent) => {
-      if (event.button !== 0 || this.sourceEditor) return;
+      if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || this.sourceEditor) return;
       // One shell listener owns both formula activation and its action buttons.
       // Per-button listeners would multiply with every formula in large documents.
       let handled = false;

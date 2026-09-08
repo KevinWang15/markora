@@ -912,8 +912,9 @@ test("@required keyboard navigation into a rendered diagram reveals and edits it
   await settleEditor(labPage, id);
   const range = (await snapshotEditor(labPage, id)).selection;
   expect(range.from).toBe(target.position - 1);
-  expect(range.to).toBe(target.position + 2);
-  await expect(sourceShell).not.toHaveClass(/mdw-diagram__source-shell--visually-hidden/);
+  const current = (await getDiagramSnapshot(labPage, id)).nodes[0]!;
+  expect(range.to).toBe(current.position + current.source.length + 3);
+  await expect(sourceShell).toHaveClass(/mdw-diagram__source-shell--visually-hidden/);
 });
 
 test("@required diagram plaintext direction owns physical arrows inside its editor scope", async ({ labPage }) => {
@@ -977,8 +978,8 @@ test("@required diagram plaintext direction owns physical arrows inside its edit
     await settleEditor(labPage, scenario.id);
     const range = (await snapshotEditor(labPage, scenario.id)).selection;
     expect(range.from).toBe(target.position - 1);
-    expect(range.to).toBe(target.position + 2);
-    await expect(sourceShell).not.toHaveClass(/mdw-diagram__source-shell--visually-hidden/);
+    expect(range.to).toBe(target.position + scenario.source.length + 3);
+    await expect(sourceShell).toHaveClass(/mdw-diagram__source-shell--visually-hidden/);
   }
 });
 
@@ -1068,9 +1069,9 @@ test("@required each diagram source line owns physical arrows at its node bounda
     await labPage.keyboard.press(`Shift+${scenario.enter}`);
     await settleEditor(labPage, scenario.id);
     const range = (await snapshotEditor(labPage, scenario.id)).selection;
-    expect(range.from).toBe(contentEnd - scenario.lastGraphemeLength);
+    expect(range.from).toBe(target.position - 1);
     expect(range.to).toBe(afterStart);
-    await expect(sourceShell).not.toHaveClass(/mdw-diagram__source-shell--visually-hidden/);
+    await expect(sourceShell).toHaveClass(/mdw-diagram__source-shell--visually-hidden/);
   }
 });
 

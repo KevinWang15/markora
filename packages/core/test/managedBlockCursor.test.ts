@@ -3,6 +3,7 @@ import { JSDOM } from 'jsdom';
 import { EditorView as CodeMirrorView, ViewPlugin } from '@codemirror/view';
 import { EditorState, Selection, TextSelection } from 'prosemirror-state';
 import { createEditor as createMarkoraEditor } from '../src/createEditor';
+import { DocumentRangeSelection } from '../src/documentRangeSelection';
 import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from '../src/managedBlockCursor';
 import { createTableNavigation } from '../src/tableNavigation';
 import {
@@ -478,7 +479,7 @@ describe('ManagedBlockCursor', () => {
     editor.destroy();
   });
 
-  it('extends selection upward into a top-of-document code block with Shift+ArrowUp', () => {
+  it('extends selection upward across a top-of-document code block with Shift+ArrowUp', () => {
     const editor = createEditor({
       element: createHost(),
       markdown: ['```js', 'const a = 1;', '```', '', 'after'].join('\n'),
@@ -490,12 +491,12 @@ describe('ManagedBlockCursor', () => {
     setSelection(editor, TextSelection.create(editor.view.state.doc, paragraphStart));
 
     expect(pressModifiedKey(editor, 'ArrowUp', { shiftKey: true })).toBe(true);
-    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
-    expect((editor.view.state.selection as TextSelection).anchor).toBe(paragraphStart);
-    expect((editor.view.state.selection as TextSelection).head).toBe(codeBlock.pos + 1);
+    expect(editor.view.state.selection).toBeInstanceOf(DocumentRangeSelection);
+    expect(editor.view.state.selection.anchor).toBe(paragraphStart);
+    expect(editor.view.state.selection.head).toBe(codeBlock.pos);
   });
 
-  it('extends selection downward into a bottom-of-document code block with Shift+ArrowDown', () => {
+  it('extends selection downward across a bottom-of-document code block with Shift+ArrowDown', () => {
     const editor = createEditor({
       element: createHost(),
       markdown: ['before', '', '```js', 'const a = 1;', '```'].join('\n'),
@@ -507,9 +508,9 @@ describe('ManagedBlockCursor', () => {
     setSelection(editor, TextSelection.create(editor.view.state.doc, paragraphEnd));
 
     expect(pressModifiedKey(editor, 'ArrowDown', { shiftKey: true })).toBe(true);
-    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
-    expect((editor.view.state.selection as TextSelection).anchor).toBe(paragraphEnd);
-    expect((editor.view.state.selection as TextSelection).head).toBe(codeBlock.pos + codeBlock.node.nodeSize - 1);
+    expect(editor.view.state.selection).toBeInstanceOf(DocumentRangeSelection);
+    expect(editor.view.state.selection.anchor).toBe(paragraphEnd);
+    expect(editor.view.state.selection.head).toBe(codeBlock.pos + codeBlock.node.nodeSize);
   });
 
   it('moves to after-edge cursor on ArrowRight from last table position', () => {

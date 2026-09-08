@@ -149,12 +149,12 @@ if (
 
 for (const requiredSelector of [
   ".ProseMirror.mdw-has-managed-block-cursor",
-  "pre.mdw-managed-block-cursor",
-  "pre.mdw-managed-block-cursor-before::before",
-  "pre.mdw-managed-block-cursor-after::after",
+  ".mdw-host .mdw-managed-block-cursor",
+  ".mdw-host .mdw-managed-block-cursor-before::before",
+  ".mdw-host .mdw-managed-block-cursor-after::after",
 ]) {
   if (!minimalStyles.includes(requiredSelector)) {
-    throw new Error(`Minimal Markora styles omitted the managed code-block selector ${requiredSelector}.`);
+    throw new Error(`Minimal Markora styles omitted the managed block selector ${requiredSelector}.`);
   }
 }
 

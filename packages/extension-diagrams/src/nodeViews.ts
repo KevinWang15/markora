@@ -5,7 +5,6 @@ import type {
   NodeView,
   NodeViewConstructor,
 } from "markora/extension-api";
-import { TextSelection } from "markora/extension-api";
 import type { DiagramMessages } from "./messages";
 import {
   DIAGRAM_MAX_SOURCE_BYTES,
@@ -354,9 +353,10 @@ export function createDiagramNodeView(options: CreateDiagramNodeViewOptions): No
       const position = this.getPosition();
       const selection = this.view.state.selection;
       const sourceSelectionActive = position !== null
-        && selection instanceof TextSelection
-        && selection.from <= position + this.nodeValue.nodeSize - 1
-        && selection.to >= position + 1;
+        // Entering source owns its layout until the selection leaves. A range
+        // starting in prose must not expand the preview while the mouse drags.
+        && selection.anchor >= position + 1
+        && selection.anchor <= position + this.nodeValue.nodeSize - 1;
       const uiKey = [editable, errorCode, kind, previewRequested, sourceSelectionActive, status]
         .join("|");
       if (uiKey === this.renderedUiKey) return;

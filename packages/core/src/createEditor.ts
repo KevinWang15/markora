@@ -1,3 +1,4 @@
+import { createElementSelectionPlugin } from "./elementSelection";
 import { baseKeymap,chainCommands,liftEmptyBlock,toggleMark } from "prosemirror-commands";
 import { closeHistory,history,redo,undo } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
@@ -57,7 +58,7 @@ import { assertEditorHostAvailable,claimEditorHost } from "./hostOwnership";
 import { createHostIdleScheduler } from "./idleScheduler";
 import { createImageViewClass } from "./imageView";
 import { createManagedBlockBoundaryHelpers } from "./managedBlockBoundary";
-import { ManagedBlockCursor } from "./managedBlockCursor";
+import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from "./managedBlockCursor";
 import { createManagedBlockBoundaryPlugin } from "./managedBlockCursorPlugin";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import {
@@ -432,7 +433,7 @@ function getTableCellInfo(state: EditorState): TableCellInfo | null {
 const { maybeExtendSelectionAcrossCodeBlock } = createCodeBlockSelectionHelpers({ schema });
 
 function isManagedBlockNode(node: ProseMirrorNode | null | undefined): node is ProseMirrorNode {
-  return Boolean(node && codec.managedBlocks.has(node.type.name));
+  return isManagedBlockNodeFromSchema(schema, node, codec.managedBlocks);
 }
 
 function findTextSelectionInsideNode(
@@ -1353,6 +1354,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }),
     createImagePlugin({ schema, resources }),
     createEscapedBoundaryPlugin(),
+    createElementSelectionPlugin(codec.managedBlocks),
     createManagedBlockBoundaryPlugin({
       isManagedBlockNode,
       getTableBoundaryEscapeInfo,

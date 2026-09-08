@@ -183,7 +183,7 @@ it.each(entries)("%s copies a whole diagram as a canonical plain fence and a bod
   expect(editor.view.serializeForClipboard(partial.content()).text).toBe("graph");
 });
 
-it.each(entries)("%s reveals rendered source whenever a text selection enters the diagram", async (_entry, createEditor) => {
+it.each(entries)("%s reveals source for editing while keeping outer document selections stable", async (_entry, createEditor) => {
   const extension = createDiagramsExtension({
     renderers: {
       mermaid: ({ ownerDocument }) => ownerDocument.createElement("div"),
@@ -223,6 +223,17 @@ it.each(entries)("%s reveals rendered source whenever a text selection enters th
 
   editor.view.dispatch(editor.view.state.tr.setSelection(
     TextSelection.create(editor.view.state.doc, 1, editor.view.state.doc.content.size - 1),
+  ));
+  expect(sourceShell.classList.contains("mdw-diagram__source-shell--visually-hidden"))
+    .toBe(true);
+
+  editor.view.dispatch(editor.view.state.tr.setSelection(
+    TextSelection.create(editor.view.state.doc, 1, node.position + 2),
+  ));
+  expect(sourceShell.classList.contains("mdw-diagram__source-shell--visually-hidden"))
+    .toBe(true);
+  editor.view.dispatch(editor.view.state.tr.setSelection(
+    TextSelection.create(editor.view.state.doc, node.position + 2, 1),
   ));
   expect(sourceShell.classList.contains("mdw-diagram__source-shell--visually-hidden"))
     .toBe(false);

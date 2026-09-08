@@ -336,7 +336,19 @@ export function createManagedBlockBoundaryPlugin(options: CreateManagedBlockBoun
           return null;
         }
 
+        // Chromium may move a caret beside a terminal contenteditable=false
+        // node back to the first paragraph on its next selectionchange. Give
+        // it an editable DOM anchor without inserting a model paragraph.
+        const caret = block.isAtom ? [Decoration.widget(selection.head, view => {
+          const dom = view.dom.ownerDocument.createElement("span");
+          dom.setAttribute("aria-hidden", "true");
+          dom.className = "mdw-atom-caret-anchor";
+          dom.style.cssText = "display:block;height:0;overflow:hidden";
+          dom.appendChild(view.dom.ownerDocument.createElement("br"));
+          return dom;
+        }, { key: "managed-atom-caret", raw: true })] : [];
         return DecorationSet.create(state.doc, [
+          ...caret,
           Decoration.node(selection.blockPos, selection.blockPos + block.nodeSize, {
             class: `mdw-managed-block-cursor mdw-managed-block-cursor-${selection.side}`,
           }),

@@ -21,6 +21,11 @@
   color: var(--mdw-color-selection-text, HighlightText);
 }
 
+.mdw-host .ProseMirror .mdw-document-selected {
+  outline: var(--mdw-selection-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
+  outline-offset: var(--mdw-selection-ring-width, 2px);
+}
+
 .mdw-host .ProseMirror .mdw-placeholder::before {
   content: attr(data-placeholder);
   float: inline-start;
@@ -832,21 +837,12 @@
   display: none !important;
 }
 
-.mdw-host .ProseMirror table.mdw-managed-block-cursor,
-.mdw-host .ProseMirror pre.mdw-managed-block-cursor,
-.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor,
-.mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor {
+.mdw-host .mdw-managed-block-cursor {
   position: relative;
 }
 
-.mdw-host .ProseMirror table.mdw-managed-block-cursor::before,
-.mdw-host .ProseMirror table.mdw-managed-block-cursor::after,
-.mdw-host .ProseMirror pre.mdw-managed-block-cursor::before,
-.mdw-host .ProseMirror pre.mdw-managed-block-cursor::after,
-.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor::before,
-.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor::after,
-.mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor::before,
-.mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor::after {
+.mdw-host .mdw-managed-block-cursor::before,
+.mdw-host .mdw-managed-block-cursor::after {
   content: none;
   position: absolute;
   inset-block: var(--mdw-managed-cursor-inset-block, 8px);
@@ -859,32 +855,20 @@
   z-index: var(--mdw-layer-cursor, 3);
 }
 
-.mdw-host .ProseMirror table.mdw-managed-block-cursor-before::before,
-.mdw-host .ProseMirror pre.mdw-managed-block-cursor-before::before,
-.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor-before::before,
-.mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor-before::before {
+.mdw-host .mdw-managed-block-cursor-before::before {
   content: "";
   inset-inline-start: calc(-1 * var(--mdw-cursor-width, 1px));
 }
 
-.mdw-host .ProseMirror table.mdw-managed-block-cursor-after::after,
-.mdw-host .ProseMirror pre.mdw-managed-block-cursor-after::after,
-.mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor-after::after,
-.mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor-after::after {
+.mdw-host .mdw-managed-block-cursor-after::after {
   content: "";
   inset-inline-end: calc(-1 * var(--mdw-cursor-width, 1px));
 }
 
 @media (prefers-reduced-motion: reduce) {
   .mdw-host .ProseMirror-gapcursor::after,
-  .mdw-host .ProseMirror table.mdw-managed-block-cursor::before,
-  .mdw-host .ProseMirror table.mdw-managed-block-cursor::after,
-  .mdw-host .ProseMirror pre.mdw-managed-block-cursor::before,
-  .mdw-host .ProseMirror pre.mdw-managed-block-cursor::after,
-  .mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor::before,
-  .mdw-host .ProseMirror .mdw-code-block.mdw-managed-block-cursor::after,
-  .mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor::before,
-  .mdw-host .ProseMirror .mdw-opaque-block.mdw-managed-block-cursor::after,
+  .mdw-host .mdw-managed-block-cursor::before,
+  .mdw-host .mdw-managed-block-cursor::after,
   .mdw-host .mdw-image-spinner,
   .mdw-host .cm-cursorLayer {
     animation: none !important;
@@ -921,6 +905,7 @@
 
   .mdw-host .ProseMirror :is(th, td).selectedCell::after,
   .mdw-host .mdw-opaque-node.ProseMirror-selectednode,
+  .mdw-host .ProseMirror .mdw-document-selected,
   .mdw-host .mdw-code-block.mdw-code-block-outer-selection,
   .mdw-host .ProseMirror .mdw-image.ProseMirror-selectednode img {
     outline: var(--mdw-selection-ring-width, 2px) solid Highlight;
@@ -934,8 +919,8 @@
   }
 
   .mdw-host .ProseMirror-gapcursor::after,
-  .mdw-host .ProseMirror .mdw-managed-block-cursor::before,
-  .mdw-host .ProseMirror .mdw-managed-block-cursor::after {
+  .mdw-host .mdw-managed-block-cursor::before,
+  .mdw-host .mdw-managed-block-cursor::after {
     background: CanvasText;
     box-shadow: none;
   }

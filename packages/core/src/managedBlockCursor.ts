@@ -16,8 +16,11 @@ export type ManagedBlockBoundary = ManagedBlockBoundaryMeta & {
 export function isManagedBlockNodeFromSchema(
   schema: ProseMirrorNode["type"]["schema"],
   node: ProseMirrorNode | null | undefined,
+  registered?: ReadonlySet<string>,
 ): node is ProseMirrorNode {
   return !!node && (
+    node.isBlock && node.isAtom ||
+    registered?.has(node.type.name) ||
     node.type === schema.nodes.table ||
     node.type === schema.nodes.code_block ||
     node.type === schema.nodes.raw_block

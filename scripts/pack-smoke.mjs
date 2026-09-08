@@ -669,12 +669,12 @@ function assertPackedProvenance(
 
   for (const selector of [
     ".ProseMirror.mdw-has-managed-block-cursor",
-    "pre.mdw-managed-block-cursor",
-    "pre.mdw-managed-block-cursor-before:before",
-    "pre.mdw-managed-block-cursor-after:after",
+    ".mdw-host .mdw-managed-block-cursor",
+    ".mdw-host .mdw-managed-block-cursor-before:before",
+    ".mdw-host .mdw-managed-block-cursor-after:after",
   ]) {
     if (!minimalReport.cssSource.includes(selector)) {
-      throw new Error(`Packed minimal stylesheet omitted managed code-block selector ${selector}.`);
+      throw new Error(`Packed minimal stylesheet omitted managed block selector ${selector}.`);
     }
   }
 }

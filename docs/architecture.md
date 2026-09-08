@@ -13,6 +13,9 @@ adapters supply dialogs and renderers. React and NW.js stay in host packages.
 Full and minimal assemblies share these internal modules:
 
 - `editorDom`: validated host attributes and DOM focus helpers.
+- `elementSelection` and `documentRangeSelection`: selection ownership across
+  embedded surfaces and ranges ending at document boundaries. See the
+  [element interaction contract](element-interaction-contract.md).
 - `editorSelection`: portable selection resolution and snapshots. The full
   assembly adds table selection classification without importing tables into minimal.
 - `editorTransactionRuntime`: transaction origin, view update ordering, callback

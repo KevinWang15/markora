@@ -251,6 +251,7 @@ export function createHtmlNodeView(
 
     deselectNode() {
       this.selected = false;
+      this.dom.classList.remove("ProseMirror-selectednode");
       this.renderUi();
     }
 
@@ -310,6 +311,7 @@ export function createHtmlNodeView(
 
     selectNode() {
       this.selected = true;
+      this.dom.classList.add("ProseMirror-selectednode");
       this.renderUi();
     }
 
