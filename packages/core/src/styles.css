@@ -81,31 +81,32 @@
   margin: 0;
 }
 
-.mdw-host .ProseMirror p + p,
-.mdw-host .ProseMirror p + h1,
-.mdw-host .ProseMirror p + h2,
-.mdw-host .ProseMirror p + h3,
-.mdw-host .ProseMirror h1 + p,
-.mdw-host .ProseMirror h2 + p,
-.mdw-host .ProseMirror h3 + p,
-.mdw-host .ProseMirror h1 + h1,
-.mdw-host .ProseMirror h1 + h2,
-.mdw-host .ProseMirror h1 + h3,
-.mdw-host .ProseMirror h2 + h1,
-.mdw-host .ProseMirror h2 + h2,
-.mdw-host .ProseMirror h2 + h3,
-.mdw-host .ProseMirror h3 + h1,
-.mdw-host .ProseMirror h3 + h2,
-.mdw-host .ProseMirror h3 + h3,
-.mdw-host .ProseMirror blockquote + p,
-.mdw-host .ProseMirror p + blockquote,
-.mdw-host .ProseMirror ul + p,
-.mdw-host .ProseMirror ol + p,
-.mdw-host .ProseMirror p + ul,
-.mdw-host .ProseMirror p + ol,
-.mdw-host .ProseMirror pre + p,
-.mdw-host .ProseMirror p + pre {
+/* Prose blocks share one rhythm regardless of their order. Keep this list
+   limited to block surfaces: applying a blanket sibling rule would also space
+   NodeView controls, inline atoms, and ProseMirror's selection widgets. Keep
+   prose-only selectors separate so minimal.css generation can retain them. */
+.mdw-host .ProseMirror :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, pre)
+  + :where(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, pre),
+.mdw-host .ProseMirror :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, pre, table, .mdw-code-block, .mdw-opaque-block)
+  + :where(table, .mdw-code-block, .mdw-opaque-block),
+.mdw-host .ProseMirror :is(table, .mdw-code-block, .mdw-opaque-block)
+  + :where(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, pre) {
   margin-block-start: var(--mdw-block-spacing, 0.75rem);
+}
+
+/* Container padding supplies the outer inset; child margins supply only the
+   space between blocks. This also keeps a leading block surface aligned
+   with a leading paragraph, and prevents margins escaping a blockquote. */
+.mdw-host .ProseMirror > :first-child,
+.mdw-host .ProseMirror :is(blockquote, li) > :first-child,
+.mdw-host .ProseMirror :is(.mdw-task-content, td, th) > :first-child {
+  margin-block-start: 0;
+}
+
+.mdw-host .ProseMirror > :last-child,
+.mdw-host .ProseMirror :is(blockquote, li) > :last-child,
+.mdw-host .ProseMirror :is(.mdw-task-content, td, th) > :last-child {
+  margin-block-end: 0;
 }
 
 .mdw-host .ProseMirror h1 {
@@ -144,12 +145,6 @@
   line-height: var(--mdw-heading-6-line-height, 1.5);
 }
 
-.mdw-host .ProseMirror :is(p, h1, h2, h3, h4, h5, h6) + :is(h4, h5, h6),
-.mdw-host .ProseMirror :is(h4, h5, h6) + :is(p, h1, h2, h3, h4, h5, h6) {
-  margin-block-start: var(--mdw-block-spacing, 0.75rem);
-}
-
-
 .mdw-host .ProseMirror table {
   width: 100%;
   border-collapse: collapse;
@@ -184,15 +179,6 @@
   box-shadow: inset 0 0 0 var(--mdw-selection-ring-width, 2px) var(--mdw-color-accent, #0969da);
 }
 
-.mdw-host .ProseMirror td > :first-child,
-.mdw-host .ProseMirror th > :first-child {
-  margin-block-start: 0;
-}
-
-.mdw-host .ProseMirror td > :last-child,
-.mdw-host .ProseMirror th > :last-child {
-  margin-block-end: 0;
-}
 .mdw-host .ProseMirror hr {
   margin: var(--mdw-rule-margin-block, 1rem) 0;
   border: 0;
@@ -222,11 +208,8 @@
   margin-block-start: var(--mdw-list-item-spacing, 0.25rem);
 }
 
-.mdw-host .ProseMirror li > p + p,
-.mdw-host .ProseMirror li > p + ul,
-.mdw-host .ProseMirror li > p + ol,
-.mdw-host .ProseMirror li > ul + p,
-.mdw-host .ProseMirror li > ol + p {
+.mdw-host .ProseMirror li > :is(p, ul, ol) + :is(p, ul, ol),
+.mdw-host .ProseMirror .mdw-task-content > :is(p, ul, ol) + :is(p, ul, ol) {
   margin-block-start: var(--mdw-list-nested-spacing, 0.2rem);
 }
 
@@ -438,10 +421,6 @@
   box-shadow: var(--mdw-code-block-inset-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.5));
 }
 
-.mdw-host .mdw-code-block + :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol) {
-  margin-block-start: var(--mdw-block-spacing, 0.75rem);
-}
-
 .mdw-host .mdw-opaque-block {
   position: relative;
   margin-block-start: var(--mdw-block-spacing, 0.75rem);
@@ -450,11 +429,6 @@
   border-radius: var(--mdw-opaque-block-radius, 10px);
   background: var(--mdw-color-surface-subtle, #f6f8fa);
   color: var(--mdw-color-text, #24292f);
-}
-
-.mdw-host .mdw-opaque-block + :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol),
-.mdw-host :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol) + .mdw-opaque-block {
-  margin-block-start: var(--mdw-block-spacing, 0.75rem);
 }
 
 .mdw-host .mdw-opaque-header {

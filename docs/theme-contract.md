@@ -147,6 +147,8 @@ Do not encode meaning only in a custom color. The supplied DOM keeps checked sta
 
 Defaults shown here are the component defaults. Zeroes, percentages, viewport-coordinate positioning, and visually-hidden clipping remain structural invariants rather than theme choices.
 
+Adjacent prose blocks use `--mdw-block-spacing` regardless of their order, including lists followed by any heading level and headings followed by quotes. Document and content-container edges omit the outer child margin; the editor padding supplies the inset. Ordinary and task-list content share `--mdw-list-nested-spacing` for compact nested paragraphs and lists. Dedicated extension blocks retain their own margin tokens. These rules apply to both root and minimal stylesheets, including Shadow DOM embeds.
+
 ### Editor and common controls
 
 | Token | Default |
