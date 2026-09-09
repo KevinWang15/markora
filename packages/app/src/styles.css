@@ -409,7 +409,7 @@ button {
   display: flex;
   flex: 0 0 43px;
   gap: 4px;
-  justify-content: center;
+  justify-content: safe center;
   overflow-x: auto;
   padding: 5px 12px;
   position: relative;
@@ -745,12 +745,8 @@ button {
     display: none;
   }
 
-  .app-sidebar {
-    bottom: 0;
-    box-shadow: 12px 0 28px rgba(0, 0, 0, 0.1);
-    left: 0;
-    position: absolute;
-    top: 0;
+  .app-sidebar[data-open="true"] {
+    flex-basis: 190px;
   }
 
   .app-editor {

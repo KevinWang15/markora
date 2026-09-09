@@ -1190,6 +1190,7 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
       this.presentedLanguage = language;
       const languageLabel = language || messages.codeBlockPlainTextLabel;
       this.languageBadge.textContent = languageLabel;
+      this.languageBadge.title = languageLabel;
 
       if (this.onEditLanguage) {
         this.languageBadge.setAttribute(

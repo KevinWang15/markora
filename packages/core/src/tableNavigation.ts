@@ -286,7 +286,7 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
     if (direction < 0) {
       if (info.cellIndex > 0) {
         let targetPos = info.cellPos - info.row.child(info.cellIndex - 1).nodeSize;
-        view.dispatch(state.tr.setSelection(getTableCellSelection(state.doc, targetPos)));
+        view.dispatch(state.tr.setSelection(getTableCellSelection(state.doc, targetPos)).scrollIntoView());
         return true;
       }
 
@@ -296,7 +296,7 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
         for (let index = 0; index < previousRow.childCount - 1; index += 1) {
           targetPos += previousRow.child(index).nodeSize;
         }
-        view.dispatch(state.tr.setSelection(getTableCellSelection(state.doc, targetPos)));
+        view.dispatch(state.tr.setSelection(getTableCellSelection(state.doc, targetPos)).scrollIntoView());
         return true;
       }
 
@@ -305,13 +305,13 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
 
     if (info.cellIndex < columnCount - 1) {
       const targetPos = info.cellPos + info.cell.nodeSize;
-      view.dispatch(state.tr.setSelection(getTableCellSelection(state.doc, targetPos)));
+      view.dispatch(state.tr.setSelection(getTableCellSelection(state.doc, targetPos)).scrollIntoView());
       return true;
     }
 
     if (info.rowIndex < rowCount - 1) {
       const targetPos = info.rowPos + info.row.nodeSize + 1;
-      view.dispatch(state.tr.setSelection(getTableCellSelection(state.doc, targetPos)));
+      view.dispatch(state.tr.setSelection(getTableCellSelection(state.doc, targetPos)).scrollIntoView());
       return true;
     }
 

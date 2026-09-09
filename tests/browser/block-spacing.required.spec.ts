@@ -44,7 +44,7 @@ for (const root of ["document", "shadow"] as const) {
     await expect(editor.locator(":scope > .mdw-code-block")).toHaveCSS("margin-block-start", "0px");
     await expect(editor.locator("blockquote > .mdw-code-block")).toHaveCSS("margin-block-start", "0px");
     await expect(editor.locator(".mdw-task-content > p + ul")).toHaveCSS("margin-block-start", "3px");
-    await expect(editor.locator(":scope > table")).toHaveCSS("margin-block-end", "0px");
+    await expect(editor.locator(":scope > .mdw-table-scroll")).toHaveCSS("margin-block-end", "0px");
     await expect(editor.locator("td > p")).toHaveCSS("margin-block-start", "0px");
   });
 }

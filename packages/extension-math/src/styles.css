@@ -1,4 +1,5 @@
 .mdw-math {
+  box-sizing: border-box;
   color: var(--mdw-math-color, var(--mdw-color-text, currentColor));
   max-inline-size: 100%;
   min-inline-size: 0;
@@ -138,7 +139,7 @@
 
 .mdw-math--inline .mdw-math__preview {
   display: inline-block;
-  overflow: visible;
+  overflow: auto;
   padding: 0;
   vertical-align: baseline;
 }
@@ -319,4 +320,17 @@
 .mdw-math:focus-visible {
   outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
   outline-offset: 2px;
+}
+
+/* Natural-width renderer content makes both ends of a wide formula reachable.
+ * The scroll surface remains interactive; its renderer-owned child is inert. */
+.mdw-math__preview > .mdw-math__render {
+  display: inline-block;
+  inline-size: max-content;
+  max-inline-size: none;
+  vertical-align: baseline;
+}
+.mdw-math--block .mdw-math__render {
+  display: block;
+  min-inline-size: 100%;
 }

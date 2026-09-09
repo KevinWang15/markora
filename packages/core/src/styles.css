@@ -87,9 +87,9 @@
    prose-only selectors separate so minimal.css generation can retain them. */
 .mdw-host .ProseMirror :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, pre)
   + :where(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, pre),
-.mdw-host .ProseMirror :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, pre, table, .mdw-code-block, .mdw-opaque-block)
-  + :where(table, .mdw-code-block, .mdw-opaque-block),
-.mdw-host .ProseMirror :is(table, .mdw-code-block, .mdw-opaque-block)
+.mdw-host .ProseMirror :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, pre, table, .mdw-table-scroll, .mdw-code-block, .mdw-opaque-block)
+  + :where(table, .mdw-table-scroll, .mdw-code-block, .mdw-opaque-block),
+.mdw-host .ProseMirror :is(table, .mdw-table-scroll, .mdw-code-block, .mdw-opaque-block)
   + :where(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, pre) {
   margin-block-start: var(--mdw-block-spacing, 0.75rem);
 }
@@ -150,6 +150,17 @@
   border-collapse: collapse;
   margin: var(--mdw-block-spacing, 0.75rem) 0;
   table-layout: fixed;
+}
+
+.mdw-host .mdw-table-scroll {
+  max-inline-size: 100%;
+  overflow: auto;
+  margin-block: var(--mdw-block-spacing, 0.75rem);
+}
+
+.mdw-host .mdw-table-scroll > table {
+  margin: 0;
+  min-inline-size: calc(var(--_mdw-table-columns, 1) * var(--mdw-table-cell-min-inline-size, 8rem));
 }
 
 .mdw-host .ProseMirror th,
@@ -520,6 +531,12 @@
 }
 
 .mdw-host .mdw-code-block-language {
+  display: block;
+  max-inline-size: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding-block: var(--mdw-code-language-padding-block, 0.625rem);
   padding-inline: var(--mdw-code-language-padding-inline, 0.875rem);
   border-block-end: var(--mdw-border-width, 1px) solid var(--mdw-color-border, #d8dee4);

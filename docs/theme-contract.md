@@ -147,7 +147,7 @@ Do not encode meaning only in a custom color. The supplied DOM keeps checked sta
 
 Defaults shown here are the component defaults. Zeroes, percentages, viewport-coordinate positioning, and visually-hidden clipping remain structural invariants rather than theme choices.
 
-Adjacent prose blocks use `--mdw-block-spacing` regardless of their order, including lists followed by any heading level and headings followed by quotes. Document and content-container edges omit the outer child margin; the editor padding supplies the inset. Ordinary and task-list content share `--mdw-list-nested-spacing` for compact nested paragraphs and lists. Dedicated extension blocks retain their own margin tokens. These rules apply to both root and minimal stylesheets, including Shadow DOM embeds.
+Adjacent prose blocks use `--mdw-block-spacing` regardless of their order, including lists followed by any heading level and headings followed by quotes. Document and content-container edges omit the outer child margin; the editor padding supplies the inset. Ordinary and task-list content share `--mdw-list-nested-spacing` for compact nested paragraphs and lists. Wide tables scroll within the editor instead of compressing columns below `--mdw-table-cell-min-inline-size`; the scroll wrapper is editor UI and is omitted from serialized HTML. Dedicated extension blocks retain their own margin tokens. These rules apply to both root and minimal stylesheets, including Shadow DOM embeds.
 
 ### Editor and common controls
 
@@ -184,6 +184,7 @@ Adjacent prose blocks use `--mdw-block-spacing` regardless of their order, inclu
 | `--mdw-rule-margin-block` | `1rem` |
 | `--mdw-blockquote-padding-inline`, `--mdw-blockquote-border-width` | `1rem`, `3px` |
 | `--mdw-list-indent`, `--mdw-list-item-spacing`, `--mdw-list-nested-spacing` | `1.5rem`, `0.25rem`, `0.2rem` |
+| `--mdw-table-cell-min-inline-size` | `8rem` |
 | `--mdw-table-cell-padding-block`, `--mdw-table-cell-padding-inline`, `--mdw-table-heading-font-weight` | `0.55rem`, `0.75rem`, `600` |
 | `--mdw-inline-code-padding-block`, `--mdw-inline-code-padding-inline`, `--mdw-inline-code-radius`, `--mdw-inline-code-font-size` | `0.15em`, `0.35em`, `0.375rem`, `0.9em` |
 

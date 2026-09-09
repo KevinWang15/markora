@@ -86,6 +86,7 @@ function isRootOnlySelector(selector) {
     || selector.includes(".mdw-code-block")
     || selector.includes(".mdw-opaque-")
     || selector.includes(".mdw-task-")
+    || selector.includes(".mdw-table-")
     || selector.includes("[data-task=")
     || /(^|[^\w-])(table|thead|tbody|tr|th|td)(?=$|[^\w-])/.test(selector)
   );

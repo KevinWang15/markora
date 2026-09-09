@@ -93,6 +93,7 @@ import { getTableFidelityIssues } from "./tableFidelity";
 import { createTableNavigation } from "./tableNavigation";
 import type { TableCellInfo } from "./tableTypes";
 import { createTaskListItemViewClass } from "./taskListItemView";
+import { TableView } from "./tableView";
 import { createTaskListHelpers } from "./taskListUtils";
 import {
 hasMarkdownEditorExternalUpdatePermission,
@@ -2223,6 +2224,9 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       editable: () => runtimeOptions.editable,
       state: initialState,
       nodeViews: {
+        table(node, targetView) {
+          return new TableView(node, targetView);
+        },
         list_item(node: ProseMirrorNode, targetView: EditorView) {
           return new TaskListItemView(node, targetView);
         },

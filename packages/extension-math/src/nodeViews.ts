@@ -204,7 +204,7 @@ export function createMathNodeView(
       this.preview.className = "mdw-math__preview";
       this.preview.dataset.mdwMathPreview = "";
       this.preview.hidden = true;
-      this.preview.inert = true;
+
       this.preview.setAttribute("aria-hidden", "true");
       this.preview.setAttribute("aria-label", messages.previewLabel(kind));
 
@@ -322,7 +322,13 @@ export function createMathNodeView(
         return;
       }
 
-      this.preview.replaceChildren(fragment);
+      // Keep renderer-owned content inert while the surrounding preview remains
+      // a native scroll target for expressions wider than the editor.
+      const rendered = this.dom.ownerDocument.createElement(kind === "inline" ? "span" : "div");
+      rendered.className = "mdw-math__render";
+      rendered.inert = true;
+      rendered.append(fragment);
+      this.preview.replaceChildren(rendered);
       this.preview.hidden = false;
     }
 

@@ -197,7 +197,7 @@ function restoreEditorFocus(view: EditorView, dom: HTMLElement, doc: Document, w
 
 function positionOverlay(
   dom: HTMLElement,
-  markerRect: DOMRect,
+  markerRect: Pick<DOMRect, "left" | "right" | "top" | "bottom">,
   doc: Document,
   win: Window,
   preferredSide: "above" | "below",
@@ -1898,6 +1898,24 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     marker.querySelectorAll<HTMLTableRowElement>("tr"),
   ).filter((row) => row.closest("table") === marker);
 
+  // Portaled controls must follow the visible part of a horizontally scrolled
+  // table, rather than exposing hit targets over clipped columns or host UI.
+  const getVisibleTableRect = (marker: HTMLElement) => {
+    const rect = marker.getBoundingClientRect();
+    let left = rect.left;
+    let right = rect.right;
+    for (let parent = marker.parentElement; parent; parent = parent.parentElement) {
+      if (!/^(auto|scroll|hidden|clip)$/.test(win.getComputedStyle(parent).overflowX)) continue;
+      const bounds = parent.getBoundingClientRect();
+      const scale = parent.offsetWidth ? bounds.width / parent.offsetWidth : 1;
+      const start = bounds.left + parent.clientLeft * scale;
+      left = Math.max(left, start);
+      right = Math.min(right, start + parent.clientWidth * scale);
+    }
+    return { top: rect.top, bottom: rect.bottom, height: rect.height,
+      left, right, width: Math.max(0, right - left) };
+  };
+
   const getRenderedColumns = (marker: HTMLElement) => {
     const firstRow = getRenderedRows(marker)[0];
     return firstRow
@@ -1933,7 +1951,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       return;
     }
 
-    const tableRect = activeMarker.getBoundingClientRect();
+    const tableRect = getVisibleTableRect(activeMarker);
     const edgeStyle = win.getComputedStyle(edgeDom);
     const configuredThickness = Number.parseFloat(
       edgeStyle.getPropertyValue("--mdw-ui-table-reorder-indicator-thickness"),
@@ -2211,7 +2229,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       return;
     }
 
-    const tableRect = activeMarker.getBoundingClientRect();
+    const tableRect = getVisibleTableRect(activeMarker);
     const rtl = win.getComputedStyle(activeMarker).direction === "rtl";
     const edgeStyle = win.getComputedStyle(edgeDom);
     const readEdgeSize = (name: string, fallback: number) => {
@@ -2262,11 +2280,15 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       const cellRect = cell.getBoundingClientRect();
       const button = columnSelectorButtons[index];
       if (button) {
+        const left = Math.max(cellRect.left, tableRect.left);
+        const width = Math.max(0, Math.min(cellRect.right, tableRect.right) - left);
+        button.hidden = width === 0;
+        button.style.display = width === 0 ? "none" : "";
         positionEdgeElement(button, {
           height: selectorSize,
-          left: cellRect.left,
+          left,
           top: columnSelectorTop,
-          width: cellRect.width,
+          width,
         });
       }
     });
@@ -2289,6 +2311,9 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       const boundary = rtl
         ? (previousRect.left + nextRect.right) / 2
         : (previousRect.right + nextRect.left) / 2;
+      const visible = boundary >= tableRect.left && boundary <= tableRect.right;
+      button.hidden = !visible;
+      button.style.display = visible ? "" : "none";
       positionEdgeElement(button, {
         height: insertionSize,
         left: boundary - insertionSize / 2,
@@ -2315,7 +2340,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       refreshSelectionAnchor(activeMarker, activeView);
     }
     try {
-      const rect = activeMarker.getBoundingClientRect();
+      const rect = getVisibleTableRect(activeMarker);
       positionOverlay(dom, rect, doc, win, "above");
       positionEdgeControls();
     } catch {
@@ -2640,7 +2665,10 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       close();
       return;
     }
-    const marker = view.nodeDOM(info.tablePos);
+    const tableDom = view.nodeDOM(info.tablePos);
+    const marker = tableDom instanceof HTMLElementCtor
+      ? tableDom.matches("table") ? tableDom : tableDom.querySelector("table")
+      : null;
     if (!(marker instanceof HTMLElementCtor)) {
       close();
       return;
