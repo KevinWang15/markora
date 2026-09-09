@@ -1,5 +1,7 @@
 import { editorLocator, expect, getMarkdown, mountEditor, ownedOverlay, runEditorCommand, test } from "./fixtures";
 
+test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
+
 const tableMarkdown = "| A | B | C | D | E | F | G | H |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| one | two | three | four | five | six | seven | eight |";
 
 for (const root of ["document", "shadow"] as const) {
@@ -65,11 +67,15 @@ for (const theme of ["github", "night"]) {
     const editor = page.locator("#editor .ProseMirror");
     await expect(editor.locator('.mdw-math[data-mdw-math-state="rendered"]')).toHaveCount(2);
     expect(await editor.evaluate(e => e.scrollWidth - e.clientWidth)).toBeLessThanOrEqual(1);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
     const cdp = browserName === "chromium" ? await context.newCDPSession(page) : null;
     try {
       for (const preview of await editor.locator(".mdw-math__preview").all()) {
         await expect(preview.locator(".mdw-math__render")).toHaveAttribute("inert", "");
+        if (await preview.evaluate(e => e.parentElement!.classList.contains("mdw-math--inline"))) {
+          expect(await preview.evaluate((e: HTMLElement) => e.offsetHeight - e.clientHeight)).toBe(0);
+          expect(await preview.evaluate((e: HTMLElement) => e.offsetWidth - e.clientWidth)).toBe(0);
+        }
         await preview.hover();
         if (cdp) {
           const box = (await preview.boundingBox())!;

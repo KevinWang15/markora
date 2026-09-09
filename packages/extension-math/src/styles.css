@@ -139,9 +139,18 @@
 
 .mdw-math--inline .mdw-math__preview {
   display: inline-block;
-  overflow: auto;
+  /* MathML can report vertical ink overflow beyond its line box. Inline
+   * previews grow with the formula; they must not acquire vertical controls.
+   * Wide formulas still scroll horizontally without adding bars to prose. */
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 0;
+  scrollbar-width: none;
   vertical-align: baseline;
+}
+
+.mdw-math--inline .mdw-math__preview::-webkit-scrollbar {
+  display: none;
 }
 
 .mdw-math__preview > *,
