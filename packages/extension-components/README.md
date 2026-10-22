@@ -142,6 +142,7 @@ state.getSelected();
 state.getProps(metricCard, position);
 ```
 
+- `insert()` replaces a text selection, but never a selected block: with a component (or other block) selected, the new component goes right after it and becomes selected. Consecutive inserts therefore add components in order.
 - Optional positions default to the current component node selection. Positions are synchronous ProseMirror offsets, not persistent identifiers.
 - Commands return `false` for unavailable targets, unregistered definitions, read-only/composition states, and document mutations that do not change source. `edit()` returns whether an editor was opened.
 - Malformed command properties/source throw through Markora's extension error boundary. `updateSource()` requires a JSON object and, when registered, valid component properties; it cannot be used to introduce malformed JSON. Imported malformed source remains preserved and repairable.
