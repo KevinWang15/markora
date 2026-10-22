@@ -110,7 +110,10 @@ export function createComponentsExtension(options: ComponentsExtensionOptions) {
           const source = serializeProps(definition, props);
           if (getState() !== state || !registry.has(definition) || !view?.editable) return false;
           const node = schema.nodes[nodeName].create({ name: definition.name, source });
-          const transaction = state.tr.replaceSelectionWith(node);
+          // A selected block (such as the component just inserted) is kept: the new component goes
+          // right after it, so consecutive inserts add components instead of replacing them.
+          const selected = state.selection instanceof NodeSelection && state.selection.node.isBlock ? state.selection : null;
+          const transaction = selected ? state.tr.insert(selected.to, node) : state.tr.replaceSelectionWith(node);
           if (transaction.doc.eq(state.doc)) return false;
           const position = [...collectChangedComponents(transaction)].find(([, candidate]) => candidate === node)?.[0];
           if (position === undefined) return false;

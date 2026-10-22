@@ -93,6 +93,22 @@ describe.each([["root", createEditor], ["minimal", createMinimalEditor]] as cons
     expect(api.commands.insert(definition, { title: "No", points: [] })).toBe(false);
   });
 
+  it("inserts after a selected component instead of replacing it, so consecutive inserts add components", () => {
+    const { editor, api, definition } = mount({ markdown: "Intro" });
+    editor.focus("end");
+    expect(api.commands.insert(definition, { title: "First", points: [1] })).toBe(true);
+    expect(api.state.getSelected()?.name).toBe("metrics-chart");
+    expect(api.commands.insert(definition, { title: "Second", points: [2] })).toBe(true);
+    const nodes = api.state.getNodes();
+    expect(nodes.map(node => JSON.parse(node.source).title)).toEqual(["First", "Second"]);
+    expect(api.state.getSelected()?.position).toBe(nodes[1]!.position);
+    const output = editor.getMarkdown();
+    expect(output).toContain("Intro");
+    expect(output.indexOf('"First"')).toBeLessThan(output.indexOf('"Second"'));
+    expect(editor.commands.undo()).toBe(true);
+    expect(api.state.getNodes().map(node => JSON.parse(node.source).title)).toEqual(["First"]);
+  });
+
   it("inserts, updates, removes and independently undoes each operation", () => {
     const { editor, api, definition } = mount({ markdown: "" });
     expect(api.commands.insert(definition, { title: "CPU", points: [1] })).toBe(true);
