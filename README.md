@@ -14,6 +14,7 @@ Write Markdown at the speed of thought, inside your product.
 - `packages/ui` — the npm package published as `markora-ui`
 - `packages/app` — the installable NW.js desktop application published as a self-contained distribution
 - `packages/extension-alerts` — GitHub-style alerts
+- [`packages/extension-components`](./packages/extension-components/README.md) — typed, editable custom components such as metrics charts
 - `packages/extension-diagrams` — Mermaid, PlantUML, GeoJSON, TopoJSON, and STL fences
 - `packages/extension-footnotes` — GitHub-style footnotes
 - `packages/extension-frontmatter` — exact-source YAML front matter
@@ -34,7 +35,7 @@ Write Markdown at the speed of thought, inside your product.
 - Deliberate rich, Markdown, plain-text, table-matrix, and file-transfer clipboard behavior
 - Rectangular table selection, matrix clipboard, row/column reordering, dimension controls, and GFM fidelity diagnostics
 - Reconciled host updates, idle output delivery, deterministic reset, and complete teardown semantics
-- A versioned creation-time extension kernel, seven official optional syntax packages, and an independently bundled minimal entry
+- A versioned creation-time extension kernel, eight official optional syntax packages, and an independently bundled minimal entry
 - Per-editor URL, image-loading, link-opening, and asynchronous asset-upload policy with secure defaults
 - Scoped themes, localization, RTL, forced-colors, reduced-motion, keyboard, and managed-focus support
 - Chromium, Firefox, and WebKit release gates plus package-isolation and performance budgets
@@ -60,6 +61,7 @@ npm install markora-extension-footnotes markora-extension-math
 
 | Package | Adds | Entry compatibility | External runtime |
 | --- | --- | --- | --- |
+| [`markora-extension-components`](./packages/extension-components/README.md) | Registered, typed, editable custom block components | Root and minimal | Host-owned DOM rendering; no framework or chart engine |
 | [`markora-extension-frontmatter`](./packages/extension-frontmatter/README.md) | Exact-source YAML-like document-head blocks | Root and minimal | No YAML parser |
 | [`markora-extension-footnotes`](./packages/extension-footnotes/README.md) | Semantic references, definitions, diagnostics, and navigation | Root and minimal | None |
 | [`markora-extension-math`](./packages/extension-math/README.md) | Semantic inline and block math | Root and minimal | No TeX renderer; host callback optional |
@@ -334,21 +336,21 @@ Useful scripts:
 - `pnpm dev:ui` — watch the `markora-ui` package only
 - `pnpm dev:demo` — run the docs/demo site only
 - `pnpm dev:app` — build and launch the desktop application in the NW.js SDK
-- `pnpm build` — build `markora`, all seven extension packages, `markora-ui`, the demo, and the desktop app
+- `pnpm build` — build `markora`, all eight extension packages, `markora-ui`, the demo, and the desktop app
 - `pnpm dist:app` — build a self-contained desktop distribution for the current operating system
 - `pnpm dist:app:windows` — cross-build the portable Windows x64 application directory
 - `pnpm check` — build packages, run typechecks, verify API types, smoke-test Node ESM imports, and execute the test suite
 - `pnpm browser:install` — install the pinned Playwright Chromium, Firefox, and WebKit engines
 - `pnpm test:browser:required` — run the compact release-gate browser cases in all three engines
 - `pnpm test:browser` — run the complete embedded-editor browser matrix against a production demo build
-- `pnpm pack:smoke` — pack all nine public packages and verify isolated, minimal, per-extension, and all-extension consumer graphs
+- `pnpm pack:smoke` — pack the public packages and verify isolated, minimal, per-extension, and combined consumer graphs
 - `pnpm release:check` — dry-run the `markora` tarball and then run the complete packed-consumer smoke test
 - open `/__dev` in the demo app for fixture-driven regression checks while developing the editor itself
 - `/__browser` is the private deferred-mount fixture used by Playwright for lifecycle, portal, Shadow DOM, and multi-editor checks
 
 ## Publishing
 
-This repo ships nine publishable packages: `markora`, `markora-ui`, and the seven `markora-extension-*` packages listed above.
+Publishable packages include `markora`, `markora-ui`, `markora-renderers`, and the eight `markora-extension-*` packages listed above.
 
 ```bash
 # Validate the core tarball and the packed consumer flow.

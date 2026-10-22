@@ -1,10 +1,14 @@
 import { useEffect, useRef } from "react";
 import { mountBrowserLab } from "../browser-lab/runtime";
+import { mountComponentsLab } from "../browser-lab/components";
 
 export function BrowserLabPage() {
   const labRootRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    if (labRootRef.current) return mountBrowserLab(labRootRef.current);
+    if (!labRootRef.current) return;
+    const cleanup = mountBrowserLab(labRootRef.current);
+    const cleanupComponents = mountComponentsLab(labRootRef.current);
+    return () => { cleanupComponents(); cleanup(); };
   }, []);
 
   return (

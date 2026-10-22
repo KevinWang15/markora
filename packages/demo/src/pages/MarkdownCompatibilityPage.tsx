@@ -18,6 +18,7 @@ const opaqueSyntax = [
 ] as const;
 
 const optionalSyntax = [
+  ["markora-extension-components", "Typed custom components in component:name fences with host rendering and property editing"],
   ["markora-extension-frontmatter", "Exact-source document-head YAML-like front matter; no YAML runtime"],
   ["markora-extension-footnotes", "Semantic references, definitions, indexing, and navigation"],
   ["markora-extension-math", "Inline and block math source with an optional host renderer"],

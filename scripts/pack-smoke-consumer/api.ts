@@ -17,6 +17,20 @@ import {
   type MarkdownEditorTableInsertOptions,
   type UpdateEditorOptions,
 } from "markora";
+import { defineComponent, createComponentRegistry, createComponentsExtension } from "markora-extension-components";
+
+const packedCard = defineComponent({
+  name: "typed-card",
+  parseProps: (value: unknown) => ({ title: String(value) }),
+  render: ({ element, props }) => { element.textContent = props.title; },
+});
+const packedComponents = createComponentsExtension({ registry: createComponentRegistry([packedCard]) });
+export function checkComponentTypes(editor: ReturnType<typeof createEditor>) {
+  const api = editor.extensions.get(packedComponents);
+  const changed: boolean = api.commands.insert(packedCard, { title: "Packed" });
+  const title: string | undefined = api.state.getProps(packedCard)?.title;
+  return { changed, title };
+}
 import {
   createEditor as createMinimalEditor,
   type MarkdownEditorActiveNode as MinimalMarkdownEditorActiveNode,

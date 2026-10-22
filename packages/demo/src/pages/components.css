@@ -1,0 +1,51 @@
+.components-intro { padding: 12px 4px 4px; }
+.components-intro h1 { font-size: clamp(28px, 4vw, 44px); line-height: 1.15; letter-spacing: -1.4px; margin: 12px 0 18px; max-width: 650px; }
+.components-intro p { max-width: 700px; font-size: 17px; line-height: 1.7; color: var(--text-muted); }
+.components-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
+.components-badges span { font-size: 12px; font-weight: 600; padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.components-workspace { overflow: hidden; padding: 0; }
+.components-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--border); }
+.components-toolbar > span { margin-inline-end: auto; }
+.components-toolbar small { display: block; color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.components-toolbar .button, .components-controls .button { padding: 7px 12px; font-size: 13px; }
+.components-workspace button:disabled { opacity: .45; cursor: not-allowed; }
+.components-editor .ProseMirror { padding: 24px 36px; min-height: 440px; }
+.components-editor .ProseMirror > h1 { font-size: 28px; }
+.components-editor .ProseMirror > h2 { font-size: 20px; }
+.components-controls { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--border); padding: 14px 24px; font-size: 13px; color: var(--text-muted); }
+.components-controls label { display: flex; align-items: center; gap: 6px; }
+.components-controls button { margin-inline-start: auto; }
+.components-status { font-size: 13px; color: var(--text-muted); margin: -8px 4px 0; }
+.components-source { padding: 18px 24px; }
+.components-source summary { cursor: pointer; font-weight: 650; }
+.components-source summary span { font-size: 12px; font-weight: 400; color: var(--text-muted); margin-inline-start: 12px; }
+.components-source pre { font-size: 12px; line-height: 1.7; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; border-radius: 8px; background: var(--mdw-color-surface-subtle, #f8fafc); }
+.metrics-chart { --chart-color: #0d9488; }
+.metrics-chart-blue { --chart-color: #2563eb; }
+.metrics-chart-violet { --chart-color: #7c3aed; }
+.metrics-chart-top { display: flex; align-items: center; gap: 12px; justify-content: space-between; flex-wrap: wrap; }
+.metrics-chart-title { margin: 0; font: 600 15px/1.5 system-ui, sans-serif; }
+.metrics-chart-window { font-size: 11px; color: var(--text-muted); background: var(--mdw-color-surface-subtle, #f1f5f9); padding: 4px 8px; border-radius: 5px; }
+.metrics-chart-value { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; font-size: 38px; font-weight: 650; letter-spacing: -1px; }
+.metrics-chart-value small { font-size: 16px; font-weight: 400; color: var(--text-muted); }
+.metrics-chart-value span { margin-inline-start: auto; font-size: 11px; letter-spacing: 0; font-weight: 500; color: var(--text-muted); }
+.metrics-chart svg { width: 100%; display: block; max-height: 160px; }
+.metrics-chart-grid { fill: none; stroke: var(--mdw-color-border, #e2e8f0); stroke-dasharray: 3 5; stroke-width: .7; }
+.metrics-chart-line { fill: none; stroke: var(--chart-color); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.metrics-chart-area { fill: var(--chart-color); fill-opacity: .10; }
+.metrics-chart-legend { display: flex; justify-content: space-between; gap: 10px; font-size: 10px; color: var(--text-muted); margin-top: 8px; }
+.metrics-dialog { box-sizing: border-box; width: min(460px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 16px; padding: 28px; background: var(--mdw-color-surface, white); color: var(--mdw-color-text, #0f172a); box-shadow: 0 24px 100px #0003; }
+.metrics-dialog::backdrop { background: #0f172a66; backdrop-filter: blur(3px); }
+.metrics-dialog h2 { font-size: 24px; margin: 10px 0; letter-spacing: -.6px; }
+.metrics-dialog p { font-size: 13px; line-height: 1.6; color: var(--text-muted); }
+.metrics-dialog label { display: block; font-size: 13px; font-weight: 600; margin-top: 16px; }
+.metrics-dialog input, .metrics-dialog select { box-sizing: border-box; width: 100%; margin-top: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--mdw-color-surface-subtle, #f8fafc); color: inherit; }
+.metrics-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+.metrics-dialog [role="alert"] { color: var(--mdw-color-danger, #b91c1c); }
+@media (max-width: 600px) {
+  .components-editor .ProseMirror { padding: 16px; }
+  .components-toolbar, .components-controls { padding: 12px 16px; gap: 10px; }
+  .components-toolbar > span { width: 100%; }
+  .components-source { padding: 16px; }
+  .components-source summary span { display: block; margin: 6px 0 0; }
+}

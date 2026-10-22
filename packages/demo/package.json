@@ -12,6 +12,7 @@
   "dependencies": {
     "@lucide/icons": "^1.37.0",
     "markora": "workspace:*",
+    "markora-extension-components": "workspace:*",
     "markora-extension-alerts": "workspace:*",
     "markora-extension-diagrams": "workspace:*",
     "markora-extension-frontmatter": "workspace:*",

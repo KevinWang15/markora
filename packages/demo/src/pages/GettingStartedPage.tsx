@@ -68,7 +68,7 @@ export function GettingStartedPage() {
         <article className="feature-card">
           <h3>Opt-in syntax</h3>
           <p>
-            Seven official packages add front matter, footnotes, math, alerts, TOCs, HTML, and diagrams
+            Eight official packages add front matter, footnotes, math, alerts, TOCs, HTML, diagrams, and custom components
             {" "}without making any of them part of the base bundle.
           </p>
         </article>

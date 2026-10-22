@@ -1286,6 +1286,9 @@ const tocPackage = packPackage(join(
   "packages/extension-toc",
 ));
 rememberPackage(tocPackage);
+currentPhase = "components-package";
+const componentsPackage = packPackage(join(rootDir, "packages/extension-components"));
+rememberPackage(componentsPackage);
 currentPhase = "renderers-package";
 const renderersPackage = packPackage(join(rootDir, "packages/renderers"));
 rememberPackage(renderersPackage);
@@ -1301,6 +1304,7 @@ unpackPackage(htmlPackage.name, htmlPackage.tarballPath);
 unpackPackage(mathPackage.name, mathPackage.tarballPath);
 unpackPackage(alertsPackage.name, alertsPackage.tarballPath);
 unpackPackage(tocPackage.name, tocPackage.tarballPath);
+unpackPackage(componentsPackage.name, componentsPackage.tarballPath);
 unpackPackage(renderersPackage.name, renderersPackage.tarballPath);
 assertPackedPackage(renderersPackage);
 const rendererRoot = join(smokeNodeModulesDir, renderersPackage.name);
@@ -1347,6 +1351,10 @@ assertPackedPackage(alertsPackage, {
 assertPackedPackage(tocPackage, {
   rootSelector: ".mdw-toc",
   tokenPrefix: "--mdw-toc-",
+});
+assertPackedPackage(componentsPackage, {
+  rootSelector: ".mdw-component",
+  tokenPrefix: "--mdw-color-",
 });
 
 currentPhase = "consumer-generation";

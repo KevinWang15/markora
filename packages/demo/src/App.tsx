@@ -18,6 +18,9 @@ const ApiPage = lazy(async () => ({
 const ExamplesPage = lazy(async () => ({
   default: (await import("./pages/ExamplesPage")).ExamplesPage,
 }));
+const ComponentsPage = lazy(async () => ({
+  default: (await import("./pages/ComponentsPage")).ComponentsPage,
+}));
 
 const loadEditorPlayground = () => import("./components/EditorPlayground");
 const EditorPlayground = lazy(async () => ({
@@ -319,7 +322,7 @@ export function App({ themeController }: Readonly<{ themeController?: MarkdownTh
             <h1 id="site-hero-title">Production-minded Markdown editing, inside your product.</h1>
             <p>
               Markora combines predictable Markdown fidelity, accessible Typora-style interactions,
-              host-owned lifecycle and resources, and seven opt-in syntax packages without taking
+              host-owned lifecycle and resources, and eight opt-in syntax packages without taking
               over your application shell.
             </p>
             <div className="hero-actions">
@@ -378,6 +381,7 @@ export function App({ themeController }: Readonly<{ themeController?: MarkdownTh
                 <Route path="/" element={<EditorPlayground />} />
                 <Route path="/docs/getting-started" element={<GettingStartedPage />} />
                 <Route path="/docs/markdown" element={<MarkdownCompatibilityPage />} />
+                <Route path="/docs/components" element={<ComponentsPage />} />
                 <Route path="/docs/api" element={<ApiPage />} />
                 <Route path="/docs/examples" element={<ExamplesPage />} />
                 <Route path="/demo" element={<EditorPlayground />} />

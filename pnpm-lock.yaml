@@ -222,6 +222,9 @@ importers:
       markora-extension-alerts:
         specifier: workspace:*
         version: link:../extension-alerts
+      markora-extension-components:
+        specifier: workspace:*
+        version: link:../extension-components
       markora-extension-diagrams:
         specifier: workspace:*
         version: link:../extension-diagrams
@@ -276,6 +279,12 @@ importers:
         version: 6.4.1(@types/node@24.13.3)
 
   packages/extension-alerts:
+    devDependencies:
+      markora:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/extension-components:
     devDependencies:
       markora:
         specifier: workspace:*

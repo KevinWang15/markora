@@ -15,7 +15,7 @@ Write Markdown at the speed of thought, inside your product.
 - Toolbar-friendly commands for formatting, links, images, mature table workflows, clipboard modes, and undo/redo
 - Per-editor URL/image/navigation/upload policy plus managed navigation around tables and code blocks
 - Reconciled host updates, idle Markdown delivery, deterministic reset, and complete teardown semantics
-- Creation-time extension composition with seven official optional syntax packages
+- Creation-time extension composition with eight official optional syntax packages
 - Localized, RTL-aware, themeable, keyboard-accessible embedded interactions
 
 ## Markdown compatibility
@@ -283,6 +283,7 @@ Install only the syntax required by the embedding product. None of these package
 
 | Package | Semantic surface | Compatible entry | External runtime |
 | --- | --- | --- | --- |
+| [`markora-extension-components`](https://github.com/KevinWang15/markora/tree/main/packages/extension-components) | Registered, typed custom block components with editable properties | Root and minimal | Host-owned DOM; no framework or chart engine |
 | [`markora-extension-frontmatter`](https://github.com/KevinWang15/markora/tree/main/packages/extension-frontmatter) | Exact-source YAML-like document-head blocks | Root and minimal | No YAML parser |
 | [`markora-extension-footnotes`](https://github.com/KevinWang15/markora/tree/main/packages/extension-footnotes) | References, definitions, diagnostics, and navigation | Root and minimal | None |
 | [`markora-extension-math`](https://github.com/KevinWang15/markora/tree/main/packages/extension-math) | Inline and block math | Root and minimal | Optional host renderer; no TeX engine |

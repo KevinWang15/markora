@@ -55,6 +55,7 @@ const [
   html,
   math,
   toc,
+  components,
 ] = await Promise.all([
   import("markora"),
   import("markora/minimal"),
@@ -65,6 +66,7 @@ const [
   import("markora-extension-html"),
   import("markora-extension-math"),
   import("markora-extension-toc"),
+  import("markora-extension-components"),
 ]);
 const SOURCE = "\uFEFF---\r\ntitle: Packed\r\nanchor: &base value\r\ncopy: *base\r\n...";
 const OPTIONAL_EXTENSION_NAMES = new Set([
@@ -75,6 +77,7 @@ const OPTIONAL_EXTENSION_NAMES = new Set([
   "markora-extension-html",
   "markora-extension-math",
   "markora-extension-toc",
+  "markora-extension-components",
 ]);
 
 for (const [label, create] of [["root", createEditor], ["minimal", createMinimalEditor]]) {
@@ -87,6 +90,26 @@ for (const [label, create] of [["root", createEditor], ["minimal", createMinimal
     throw new Error("Packed " + label + " baseline unexpectedly installed an optional extension.");
   }
   baseline.destroy();
+  element.replaceChildren();
+
+  const card = components.defineComponent({
+    name: "packed-card",
+    parseProps: value => ({ title: String(value.title) }),
+    render: ({ element, props }) => { element.textContent = props.title; },
+  });
+  const registry = components.createComponentRegistry([card]);
+  const componentExtension = components.createComponentsExtension({ registry });
+  const componentEditor = create({ element, extensions: [componentExtension], markdown: "" });
+  const componentApi = componentEditor.extensions.get(componentExtension);
+  if (!componentApi.commands.insert(card, { title: "Packed component" })
+    || !element.querySelector('[data-status="ready"]')?.textContent.includes("Packed component")
+    || !componentEditor.getMarkdown().includes("component:packed-card")
+    || !componentApi.commands.update(card, { title: "Edited component" })
+    || !componentEditor.commands.undo()
+    || componentApi.state.getProps(card)?.title !== "Packed component") {
+    throw new Error("Packed component API failed for " + label);
+  }
+  componentEditor.destroy();
   element.replaceChildren();
 
   const alertsDefinition = alerts.createAlertsExtension({

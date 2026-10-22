@@ -612,8 +612,18 @@ export type BrowserLabApi = {
   ) => BrowserLabUpdateResult;
 };
 
+export type BrowserLabComponentsApi = {
+  mount(root: "iframe" | "shadow", entry: "root" | "minimal"): void;
+  markdown(): string;
+  undo(): boolean;
+  reset(): void;
+  readonly(): void;
+  destroy(): void;
+};
+
 declare global {
   interface Window {
+    __MARKORA_COMPONENTS_LAB__?: BrowserLabComponentsApi;
     __MARKORA_BROWSER_LAB__?: BrowserLabApi;
   }
 }

@@ -4,6 +4,10 @@ export const defaultDocumentMetadata = {
 };
 
 export const publicRouteMetadata: Record<string, typeof defaultDocumentMetadata> = {
+  "/docs/components": {
+    title: "Custom Components — Markora",
+    description: "Mix Markdown with typed, editable custom components. Try the metrics-chart example and explore the registration API.",
+  },
   "/": {
     title: "Core Playground — Markora",
     description: "Try Markora's embedded core editor and optional UI in a realistic host-controlled playground.",

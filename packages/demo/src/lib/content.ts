@@ -83,6 +83,10 @@ export const docsNavigation = [
     path: "/docs/examples",
   },
   {
+    title: "Components",
+    path: "/docs/components",
+  },
+  {
     title: "Core playground",
     path: "/demo",
   },

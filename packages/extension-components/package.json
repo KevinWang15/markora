@@ -1,0 +1,33 @@
+{
+  "name": "markora-extension-components",
+  "version": "0.0.1",
+  "description": "Typed, host-rendered custom components in Markora Markdown documents.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KevinWang15/markora.git",
+    "directory": "packages/extension-components"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./styles.css": "./dist/styles.css"
+  },
+  "sideEffects": ["./dist/styles.css"],
+  "files": ["dist", "LICENSE", "README.md"],
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "dev": "node ../../scripts/dev-package.mjs src/styles.css",
+    "build": "node ./scripts/cleanDist.mjs && tsc -p tsconfig.json && node ./scripts/copyStyles.mjs && node ../../scripts/fix-node-esm-specifiers.mjs dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.api.json --noEmit",
+    "test": "vitest run --root ../.. packages/extension-components/test",
+    "benchmark": "pnpm build && node ./scripts/benchmark.mjs",
+    "prepack": "pnpm run build && pnpm run typecheck && pnpm run test && pnpm run smoke:node-esm",
+    "smoke:node-esm": "node --input-type=module -e \"const mod = await import('./dist/index.js'); for (const name of ['defineComponent', 'createComponentRegistry', 'createComponentsExtension']) if (typeof mod[name] !== 'function') throw new Error(name);\""
+  },
+  "peerDependencies": { "markora": "^0.0.1" },
+  "devDependencies": { "markora": "workspace:*" }
+}

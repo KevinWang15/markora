@@ -18,6 +18,9 @@
       "markora-extension-alerts": [
         "./packages/extension-alerts/src/index.ts"
       ],
+      "markora-extension-components": [
+        "./packages/extension-components/src/index.ts"
+      ],
       "markora-extension-footnotes": [
         "./packages/extension-footnotes/src/index.ts"
       ],
