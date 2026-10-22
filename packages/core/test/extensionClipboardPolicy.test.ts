@@ -47,7 +47,7 @@ describe.each(entries)("%s editor clipboard policy", (_name, createEditor) => {
     const extension = defineMarkdownEditorExtension({
       name: "acme-unsafe-slice",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime: ({ schema }) => {
         const unsafeSlice = () => {
           const link = schema.marks.link.create({ href: "javascript:alert(1)" });

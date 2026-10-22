@@ -11,7 +11,7 @@ import { createMinimalMarkdownCodec } from "../src/minimalMarkdownCodec";
 
 const compatibility = {
   extensionApi: "^1.0.0",
-  markora: "^0.0.1",
+  markora: "^0.1.0",
 } as const;
 
 function markExtension(

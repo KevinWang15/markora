@@ -637,7 +637,7 @@ function createFailingExtension() {
   return defineMarkdownEditorExtension({
     name: "markora-performance-failed-creation",
     version: "0.0.1",
-    compatibility: { extensionApi: "^1.3.0", markora: "^0.0.1" },
+    compatibility: { extensionApi: "^1.3.0", markora: "^0.1.0" },
     createRuntime() {
       return {
         plugins: [{

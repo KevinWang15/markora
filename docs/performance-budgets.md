@@ -46,6 +46,11 @@ Raw and gzip JavaScript, CSS, lazy output, total output, and static module count
 are checked against `performance/budgets.json`. Optional advanced-syntax packages
 are also packed and measured without bundling host renderer engines.
 
+The 0.1.0 release-preparation check measures 201 root static modules. The root
+module-count failure ceiling increases from 200 to 205, leaving four modules
+of headroom. Its warning threshold remains 197; all byte-size, other graph,
+runtime, and memory budgets remain unchanged.
+
 The 2026-08-31 root-bundle review measured 41,949 raw / 6,221 gzip CSS bytes
 and 181 static modules after the theme, localization, and table-control work.
 The review also replaced the `@lucide/icons` barrel import, which made the

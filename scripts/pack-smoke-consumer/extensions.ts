@@ -79,7 +79,7 @@ function createHighlightRule(openType: string, closeType: string): InlineRule {
 export const packedCalloutExtension = defineMarkdownEditorExtension({
   name: "@pack-smoke/callout",
   version: "1.0.0",
-  compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+  compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
   schema: {
     nodes: [{
       name: "pack_callout",
@@ -123,7 +123,7 @@ export const packedCalloutExtension = defineMarkdownEditorExtension({
 export const packedHighlightExtension = defineMarkdownEditorExtension({
   name: "@pack-smoke/highlight",
   version: "1.0.0",
-  compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+  compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
   schema: {
     marks: [{
       name: "pack_highlight",

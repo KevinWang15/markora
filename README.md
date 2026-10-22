@@ -11,7 +11,7 @@ Write Markdown at the speed of thought, inside your product.
 ## Packages
 
 - `packages/core` — the npm package published as `markora`, including the `minimal` and `extension-api` entries
-- `packages/ui` — the npm package published as `markora-ui`
+- `packages/ui` — the optional workspace UI (the npm name `markora-ui` belongs to an unrelated project)
 - `packages/app` — the installable NW.js desktop application published as a self-contained distribution
 - `packages/extension-alerts` — GitHub-style alerts
 - [`packages/extension-components`](./packages/extension-components/README.md) — typed, editable custom components such as metrics charts
@@ -49,13 +49,10 @@ Opaque HTML is shown as text and never executed inside the editor, but serialize
 ## Install
 
 ```bash
-npm install markora markora-ui
-
-# Add only the document syntax your product needs.
-npm install markora-extension-footnotes markora-extension-math
+npm install markora@^0.1.0
 ```
 
-`markora-ui` is optional. Install it when you want the built-in link, image, code-fence metadata, and table overlays.
+This checkout targets the `markora@0.1.0` core release. The extensions, local renderers, and optional UI below are separate workspace packages and need their own releases. The npm package named `markora-ui` is unrelated to this repository; do not install it as Markora's UI integration. Examples importing companion packages currently require a workspace build.
 
 ### Official optional syntax
 
@@ -350,29 +347,25 @@ Useful scripts:
 
 ## Publishing
 
-Publishable packages include `markora`, `markora-ui`, `markora-renderers`, and the eight `markora-extension-*` packages listed above.
+The prepared release targets **`markora@0.1.0` only**, from `packages/core`, on `https://registry.npmjs.org/`. Extension and UI peer/runtime compatibility ranges follow the new core version, but these companion packages are not published by this workflow. In particular, the unrelated npm package named `markora-ui` must not be overwritten; resolve its package name before planning a UI release.
 
 ```bash
-# Validate the core tarball and the packed consumer flow.
+pnpm install --frozen-lockfile
+pnpm check
 pnpm release:check
+pnpm test:browser:required
 
-# Publish a prerelease of markora.
-cd packages/core
-npm publish --tag test.2026031101
+# Build and pack without publishing or requiring npm credentials.
+pnpm pack:core
 
-# Publish a matching prerelease of markora-ui.
-cd ../ui
-npm publish --tag test.2026031101
-
-# Repeat from each extension package directory included in this release.
+# Only after all release gates pass and the artifact is approved:
+npm login --registry=https://registry.npmjs.org/
+npm publish ./artifacts/npm/markora-0.1.0.tgz --access public --tag latest --registry=https://registry.npmjs.org/
 ```
 
-Notes:
+`pack:core` checks the core build, public types, Node ESM imports, and runtime/package version agreement. It builds with a standard `022` umask so packaged files are readable, then writes the tarball and a `.sha256` checksum under the ignored `artifacts/npm/` directory. Publish the reviewed tarball rather than rebuilding from a different working tree. `pack:core` is not a replacement for the unit, browser, packed-consumer, accessibility, or performance gates, and no failing gate should be silently waived. `publish:core` explicitly builds, packs, and publishes only the core artifact; it is not part of preparation.
 
-- `pnpm release:check` dry-runs the `markora` tarball and smoke-tests consumer graphs using all nine packed packages
-- keep `markora`, `markora-ui`, extension versions, and extension peer ranges compatible when releasing them together
-- publish prereleases with a dated tag such as `test.2026031101`
-- publish stable releases without the prerelease tag when you are ready for `latest`
+`release:check` dry-runs the core tarball and validates packed workspace consumers, including companion packages that have not yet been published. A package version already on npm cannot be reused. For prereleases, set a prerelease version and use a non-`latest` tag. Do not commit npm credentials or tarballs.
 
 ## API notes
 

@@ -28,6 +28,6 @@
     "prepack": "pnpm run build && pnpm run typecheck && pnpm run test && pnpm run smoke:node-esm",
     "smoke:node-esm": "node --input-type=module -e \"const mod = await import('./dist/index.js'); for (const name of ['defineComponent', 'createComponentRegistry', 'createComponentsExtension']) if (typeof mod[name] !== 'function') throw new Error(name);\""
   },
-  "peerDependencies": { "markora": "^0.0.1" },
+  "peerDependencies": { "markora": "^0.1.0" },
   "devDependencies": { "markora": "workspace:*" }
 }

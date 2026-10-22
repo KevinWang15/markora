@@ -51,7 +51,7 @@
     "test": "vitest run --root ../.. packages/extension-alerts/test/alerts.test.ts"
   },
   "peerDependencies": {
-    "markora": "^0.0.1"
+    "markora": "^0.1.0"
   },
   "devDependencies": {
     "markora": "workspace:*"

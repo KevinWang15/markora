@@ -29,11 +29,12 @@ Opaque HTML is displayed as text and never executed inside the editor. Serialize
 ## Install
 
 ```bash
-npm install markora
-
-# Optional link, image, code-fence metadata, and table overlays
-npm install markora-ui
+npm install markora@^0.1.0
 ```
+
+This README describes the 0.1 API. The package includes the root editor, `markora/minimal`, `markora/extension-api`, `markora/themes`, and their stylesheets. Companion extensions, renderers, and UI are separate workspace packages, not bundled into `markora` or published by the core release command.
+
+When upgrading from 0.0.1, rebuild host integrations against the current types and regenerate persisted extension manifests with compatible definitions. Custom extensions must declare a compatible core range, such as `markora: "^0.1.0"`; `^0.0.1` does not accept 0.1.0. The extension API has its own independent version.
 
 ## Quick start
 
@@ -92,6 +93,8 @@ const editor = createEditor({
 `update(nextSource)` returns `false` if the atom was removed, replaced, or changed while the source editor was open. A successful update is undoable, preserves the atom's existing kind, and does not validate or reclassify the new source. See the compatibility contract for the exact preservation boundary and recognized shapes.
 
 ## Optional default UI
+
+The following example is for **workspace builds only**. The repository's `markora-ui` package is not published under that name; the npm package with that name is unrelated. Do not install it as Markora's UI integration. A separately named UI release is required for registry consumers.
 
 `markora` is headless by default. Add `markora-ui` when you want the repo's built-in link, image, and code-fence metadata editors plus the table-creation/dimension dialog and table toolbar overlays. `editor.ui.createTable()` opens the creation dialog. The toolbar exposes before/after insertion, row/column movement and deletion, automatic/left/center/right alignment, exact logical resizing, and table deletion; Alt+F10 or `editor.ui.editTable()` moves focus into it from an active table. Hosts can use the same command surface without this package, including `insertTable()` and `resizeTable()`.
 
@@ -325,7 +328,7 @@ import "markora/minimal.css";
 const extension = defineMarkdownEditorExtension({
   name: "@acme/counter",
   version: "1.0.0",
-  compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+  compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
   createStorage: () => ({ count: 0 }),
   createRuntime: ({ storage }) => ({
     commands: {

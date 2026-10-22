@@ -67,7 +67,7 @@ function createFailingCodecExtension() {
   const extension = defineMarkdownEditorExtension({
     name: extensionName,
     version: "1.0.0",
-    compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+    compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
     schema: {
       nodes: [{
         name: nodeName,
@@ -165,7 +165,7 @@ function createReadonlyStateExtension() {
   const extension = defineMarkdownEditorExtension({
     name: "@acme/readonly-state",
     version: "1.0.0",
-    compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+    compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
     createRuntime: (context) => ({
       commands: {
         appendQuestion: () => context.dispatch(
@@ -208,7 +208,7 @@ function createDestroyReentryExtension() {
   const extension = defineMarkdownEditorExtension({
     name: extensionName,
     version: "1.0.0",
-    compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+    compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
     schema: {
       nodes: [{
         name: nodeName,
@@ -316,7 +316,7 @@ describe.each(entries)("%s editor extension codec errors", (_entryName, createEd
     const extension = defineMarkdownEditorExtension({
       name: "@acme/setup-destroy-reentry",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime: () => ({
         setup({ editor }) {
           editor.destroy();
@@ -349,7 +349,7 @@ describe.each(entries)("%s editor extension codec errors", (_entryName, createEd
     const reporting = defineMarkdownEditorExtension({
       name: "@acme/construction-report",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime: () => ({
         setup({ reportError }) {
           reportError(reported, "setup");

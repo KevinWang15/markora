@@ -51,7 +51,7 @@ describe("public editor extensions", () => {
     const probe = defineMarkdownEditorExtension({
       name: "acme-codec-facade",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createStorage: ({ codec }) => {
         capturedCodec = codec;
         return {};
@@ -193,7 +193,7 @@ describe("public editor extensions", () => {
     const createProbe = (name: string) => defineMarkdownEditorExtension({
       name,
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createStorage: ({ lifecycle }) => {
         lifecycle.addCleanup(() => events.push(`${name}:assembly`));
         return { ready: true };
@@ -232,7 +232,7 @@ describe("public editor extensions", () => {
     const failing = defineMarkdownEditorExtension({
       name: "acme-failing-cleanup",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createStorage: ({ lifecycle }) => {
         lifecycle.addCleanup(() => events.push("assembly:last"));
         lifecycle.addCleanup(() => {
@@ -267,7 +267,7 @@ describe("public editor extensions", () => {
     const failing = defineMarkdownEditorExtension({
       name: "acme-failing-runtime",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createStorage: ({ lifecycle }) => {
         lifecycle.addCleanup(() => events.push("cleanup"));
         return {};
@@ -296,7 +296,7 @@ describe("public editor extensions", () => {
     const malformed = defineMarkdownEditorExtension({
       name: "acme-malformed-runtime",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime({ lifecycle }) {
         lifecycle.addCleanup(() => events.push("cleanup"));
         return {
@@ -321,7 +321,7 @@ describe("public editor extensions", () => {
     const eager = defineMarkdownEditorExtension({
       name: "acme-eager-runtime",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime({ getState }) {
         getState();
         return {};
@@ -339,7 +339,7 @@ describe("public editor extensions", () => {
     const conflicting = defineMarkdownEditorExtension({
       name: "acme-conflicting-node",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       schema: {
         nodes: [{ name: "paragraph", spec: { content: "inline*", group: "block" } }],
       },
@@ -355,7 +355,7 @@ describe("public editor extensions", () => {
     const reporting = defineMarkdownEditorExtension({
       name: "acme-reporting-runtime",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime: ({ reportError }) => ({
         commands: {
           report: () => {
@@ -392,7 +392,7 @@ describe("public editor extensions", () => {
     const failing = defineMarkdownEditorExtension({
       name: "acme-failing-host-calls",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime: () => ({
         commands: {
           fail: () => {

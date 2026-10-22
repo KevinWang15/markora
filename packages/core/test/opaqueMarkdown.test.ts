@@ -121,7 +121,7 @@ describe('opaque token exact-source API', () => {
       version: '1.0.0',
       compatibility: {
         extensionApi: '^1.3.0',
-        markora: '^0.0.1',
+        markora: '^0.1.0',
       },
       markdown: {
         tokenizerRules: [{

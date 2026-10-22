@@ -67,7 +67,7 @@ describe.each(entries)("%s idle Markdown changes", (_entry, createEditor: Editor
     const extension = defineMarkdownEditorExtension({
       name: `acme-construction-dispatch-${_entry}`,
       version: "1.0.0",
-      compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
+      compatibility: { extensionApi: "^1.0.0", markora: "^0.1.0" },
       createRuntime: () => ({
         plugins: [{
           id: "construction-dispatch",
@@ -147,7 +147,7 @@ describe.each(entries)("%s idle Markdown changes", (_entry, createEditor: Editor
     const extension = defineMarkdownEditorExtension({
       name: `acme-scheduler-destroy-${_entry}`,
       version: "1.0.0",
-      compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
+      compatibility: { extensionApi: "^1.0.0", markora: "^0.1.0" },
       schema: {
         nodes: [{
           name: nodeName,

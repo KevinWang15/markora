@@ -1,4 +1,5 @@
 import { jsdomUrl } from "./environment.mjs";
+import { readFileSync } from "node:fs";
 const { JSDOM } = await import(jsdomUrl);
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
@@ -69,6 +70,7 @@ const [
   import("markora-extension-components"),
 ]);
 const SOURCE = "\uFEFF---\r\ntitle: Packed\r\nanchor: &base value\r\ncopy: *base\r\n...";
+const corePackage = JSON.parse(readFileSync(new URL("../package.json", import.meta.resolve("markora")), "utf8"));
 const OPTIONAL_EXTENSION_NAMES = new Set([
   "markora-extension-alerts",
   "markora-extension-frontmatter",
@@ -84,6 +86,9 @@ for (const [label, create] of [["root", createEditor], ["minimal", createMinimal
   const element = ownerWindow.document.createElement("div");
   ownerWindow.document.body.append(element);
   const baseline = create({ element, markdown: "Body" });
+  if (baseline.extensions.manifest.preset?.version !== corePackage.version) {
+    throw new Error("Packed " + label + " runtime version does not match its npm package.");
+  }
   if (baseline.extensions.manifest.extensions.some(({ name }) => (
     OPTIONAL_EXTENSION_NAMES.has(name)
   ))) {

@@ -139,7 +139,7 @@ export const calloutActivityKey = new PluginKey<number>("acme-callout-activity")
 export const calloutExtension = defineMarkdownEditorExtension({
   name: "@acme/callout",
   version: "1.0.0",
-  compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+  compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
   schema: {
     nodes: [{
       name: "acme_callout",
@@ -261,7 +261,7 @@ export const calloutExtension = defineMarkdownEditorExtension({
 export const highlightExtension = defineMarkdownEditorExtension({
   name: "@acme/highlight",
   version: "1.0.0",
-  compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+  compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
   schema: {
     marks: [{
       name: "acme_highlight",

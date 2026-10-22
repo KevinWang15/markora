@@ -8,6 +8,7 @@ playwright-report
 test-results
 performance-results
 .cache
+artifacts/npm
 packages/app/release
 packages/app/release.tgz
 ci-results

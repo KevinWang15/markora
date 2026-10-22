@@ -583,7 +583,7 @@ function assertPackedPackage(packageInfo, extensionCssContract) {
       || packageJson.exports?.["."]?.import !== "./dist/index.js"
       || packageJson.exports?.["./styles.css"] !== "./dist/styles.css"
       || JSON.stringify(packageJson.sideEffects) !== JSON.stringify(["./dist/styles.css"])
-      || packageJson.peerDependencies?.markora !== "^0.0.1"
+      || packageJson.peerDependencies?.markora !== "^0.1.0"
       || packageJson.license !== "MIT"
     ) {
       throw new Error(`Packed ${packageInfo.name} metadata contract is incomplete.`);

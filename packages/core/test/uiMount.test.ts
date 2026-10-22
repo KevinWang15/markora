@@ -8,7 +8,7 @@ afterEach(() => { for (const editor of editors.splice(0)) editor.destroy(); docu
 it("mounts UI after extension setup and unmounts it before the view is destroyed", () => {
   const order: string[] = [];
   const extension = defineMarkdownEditorExtension({ name: "ui-lifecycle-probe", version: "1.0.0",
-    compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+    compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
     createRuntime: () => ({ setup() { order.push("extension"); } }),
   });
   const editor = createEditor({ element: host(), extensions: [extension], ui: () => ({

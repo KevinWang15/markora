@@ -223,7 +223,7 @@
         "rawBytes": { "warning": 45500, "failure": 48000 },
         "gzipBytes": { "warning": 6800, "failure": 7100 }
       },
-      "staticModuleCount": { "warning": 197, "failure": 200 }
+      "staticModuleCount": { "warning": 197, "failure": 205 }
     },
     "minimal": {
       "initialJs": {

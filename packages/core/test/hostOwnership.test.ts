@@ -79,7 +79,7 @@ describe("shared editor host ownership", () => {
     const reentrant = defineMarkdownEditorExtension({
       name: "acme-reentrant-host-claim",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createStorage: ({ lifecycle }) => {
         lifecycle.addCleanup(cleanup);
         return {};

@@ -44,7 +44,7 @@ sliceMarkdownEditorOriginalSourceLines({}, "0", 1);
 const calloutExtension = defineMarkdownEditorExtension({
   name: "@example/callout",
   version: "1.0.0",
-  compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
+  compatibility: { extensionApi: "^1.0.0", markora: "^0.1.0" },
   createStorage: ({ ownerDocument }) => {
     const document: Document = ownerDocument;
     void document;
@@ -68,7 +68,7 @@ const calloutExtension = defineMarkdownEditorExtension({
 const configuredCalloutExtension = defineMarkdownEditorExtension({
   name: "@example/configured-callout",
   version: "1.0.0",
-  compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
+  compatibility: { extensionApi: "^1.0.0", markora: "^0.1.0" },
   createRuntime: () => ({
     commands: {
       insertConfigured: () => true,
@@ -94,7 +94,7 @@ const typedCallout: MarkdownEditorExtension<
 const counterExtension = defineMarkdownEditorExtension({
   name: "@example/counter",
   version: "2.0.0",
-  compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
+  compatibility: { extensionApi: "^1.0.0", markora: "^0.1.0" },
   createStorage: () => ({ label: "counter", value: 0 }),
   createRuntime: ({ storage }) => ({
     commands: {
@@ -112,7 +112,7 @@ const counterExtension = defineMarkdownEditorExtension({
 const statelessExtension = defineMarkdownEditorExtension({
   name: "@example/stateless",
   version: "1.0.0",
-  compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
+  compatibility: { extensionApi: "^1.0.0", markora: "^0.1.0" },
   createRuntime: ({ storage }) => {
     const noStorage: undefined = storage;
     return {
@@ -125,7 +125,7 @@ const statelessExtension = defineMarkdownEditorExtension({
 const staticOnlyExtension = defineMarkdownEditorExtension({
   name: "@example/static-only",
   version: "1.0.0",
-  compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
+  compatibility: { extensionApi: "^1.0.0", markora: "^0.1.0" },
   schema: {
     marks: [{ name: "example_highlight", spec: {} }],
   },
@@ -184,7 +184,7 @@ counter.storage.value = 2;
 const structuralImpostor = {
   name: "@example/impostor",
   version: "1.0.0",
-  compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
+  compatibility: { extensionApi: "^1.0.0", markora: "^0.1.0" },
 };
 
 // @ts-expect-error Plain structural metadata lacks the hidden definition brand.
@@ -199,7 +199,7 @@ const rejectedPreset: MarkdownEditorExtensionPreset = {
 defineMarkdownEditorExtension({
   name: "@example/bad-command",
   version: "1.0.0",
-  compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
+  compatibility: { extensionApi: "^1.0.0", markora: "^0.1.0" },
   createRuntime: () => ({ commands: { invalid: () => 1 } }),
 });
 
@@ -207,7 +207,7 @@ defineMarkdownEditorExtension({
 defineMarkdownEditorExtension({
   name: "@example/bad-state",
   version: "1.0.0",
-  compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
+  compatibility: { extensionApi: "^1.0.0", markora: "^0.1.0" },
   createRuntime: () => ({ state: { invalid: true } }),
 });
 
@@ -215,7 +215,7 @@ defineMarkdownEditorExtension({
 defineMarkdownEditorExtension({
   name: "@example/storage-without-runtime",
   version: "1.0.0",
-  compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
+  compatibility: { extensionApi: "^1.0.0", markora: "^0.1.0" },
   createStorage: () => ({ value: 0 }),
 });
 
@@ -223,7 +223,7 @@ defineMarkdownEditorExtension({
 defineMarkdownEditorExtension({
   name: "@example/parameterized-ui-action",
   version: "1.0.0",
-  compatibility: { extensionApi: "^1.0.0", markora: "^0.0.1" },
+  compatibility: { extensionApi: "^1.0.0", markora: "^0.1.0" },
   createRuntime: () => ({
     commands: { insert: (_kind: "note" | "warning") => true },
     ui: [{

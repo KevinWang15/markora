@@ -1,6 +1,6 @@
 {
   "name": "markora",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "A headless, embeddable Markdown editor toolkit built with ProseMirror and CodeMirror.",
   "type": "module",
   "license": "MIT",
@@ -55,14 +55,15 @@
     "README.md"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "dev": "node ../../scripts/dev-package.mjs src/styles.css src/themes.css",
     "build": "node ./scripts/cleanDist.mjs && tsc -p tsconfig.json && node ./scripts/copyStyles.mjs && node ../../scripts/fix-node-esm-specifiers.mjs dist",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pack": "npm pack",
-    "publish:public": "npm publish --access public",
+    "publish:public": "node ../../scripts/release-core.mjs publish",
     "prepack": "pnpm run build && pnpm run typecheck && pnpm run typecheck:api && pnpm run smoke:node-esm",
     "typecheck:api": "tsc -p tsconfig.api.json --noEmit",
     "smoke:node-esm": "node --input-type=module -e \"const [root, minimal, extensionApi, themes] = await Promise.all([import('./dist/index.js'), import('./dist/minimal.js'), import('./dist/extension-api.js'), import('./dist/themes.js')]); if (typeof themes.defineTheme !== 'function' || typeof themes.createThemeController !== 'function' || themes.builtInThemes.length !== 8) throw new Error('theme API export missing'); if (typeof root.createEditor !== 'function') throw new Error('createEditor export missing'); if (typeof minimal.createEditor !== 'function') throw new Error('minimal createEditor export missing'); if (typeof extensionApi.defineMarkdownEditorExtension !== 'function') throw new Error('extension API export missing'); if (typeof extensionApi.closeHistory !== 'function') throw new Error('closeHistory export missing'); if (typeof extensionApi.readMarkdownEditorOpaqueTokenSource !== 'function') throw new Error('opaque token source export missing');\""

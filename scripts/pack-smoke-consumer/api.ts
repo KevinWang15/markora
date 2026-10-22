@@ -826,7 +826,7 @@ exerciseStructuralSurface(minimalCommands, minimalState, {
 const staticDefinition = defineMarkdownEditorExtension({
   name: "@pack-smoke/static",
   version: "1.0.0",
-  compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+  compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
 });
 const callbackOptions: CreateEditorOptions = {
   element,

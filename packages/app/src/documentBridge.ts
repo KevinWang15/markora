@@ -5,7 +5,7 @@ export function createDocumentBridge() {
   return defineMarkdownEditorExtension({
     name: "markora-app-document",
     version: "0.0.1",
-    compatibility: { extensionApi: "^1.1.0", markora: "^0.0.1" },
+    compatibility: { extensionApi: "^1.1.0", markora: "^0.1.0" },
     createRuntime({ codec }) {
       return { state: {
         parse: (source: string) => codec.parse(source),

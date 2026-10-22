@@ -566,7 +566,7 @@ export function createFootnotesExtension(options?: FootnotesExtensionOptions) {
   return defineMarkdownEditorExtension({
     name: "markora-extension-footnotes",
     version: "0.0.1",
-    compatibility: { extensionApi: "^1.1.0", markora: "^0.0.1" },
+    compatibility: { extensionApi: "^1.1.0", markora: "^0.1.0" },
     schema: {
       nodes: [
         {

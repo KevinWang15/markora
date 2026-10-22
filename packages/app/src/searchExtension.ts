@@ -6,7 +6,7 @@ export function createSearchExtension() {
   const key = new PluginKey<SearchState>("markora-app-search");
   return defineMarkdownEditorExtension({
     name: "markora-app-search", version: "0.0.1",
-    compatibility: { extensionApi: "^1.1.0", markora: "^0.0.1" },
+    compatibility: { extensionApi: "^1.1.0", markora: "^0.1.0" },
     createRuntime({ getState, dispatch }) {
       let configured: SearchOptions | null = null;
       const current = () => key.getState(getState())!;

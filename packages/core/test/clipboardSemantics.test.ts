@@ -294,7 +294,7 @@ describe("clipboard extension and security ordering", () => {
     const extension = defineMarkdownEditorExtension({
       name: "acme-markdown-clipboard-order",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime: () => ({
         clipboard: {
           transforms: [{
@@ -342,7 +342,7 @@ describe("clipboard extension and security ordering", () => {
     const extension = defineMarkdownEditorExtension({
       name: "acme-markdown-clipboard-failure",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime: () => ({
         clipboard: {
           transforms: [{
@@ -392,7 +392,7 @@ describe("clipboard extension and security ordering", () => {
     const extension = defineMarkdownEditorExtension({
       name: "acme-markdown-clipboard-empty",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime: () => ({
         clipboard: { transforms: [{
           id: "empty",
@@ -420,7 +420,7 @@ describe("clipboard extension and security ordering", () => {
     const emptySlice = defineMarkdownEditorExtension({
       name: "acme-markdown-clipboard-empty-slice",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime: () => ({
         clipboard: { transforms: [{
           id: "empty",
@@ -448,7 +448,7 @@ describe("clipboard extension and security ordering", () => {
     const extension = defineMarkdownEditorExtension({
       name: "acme-markdown-clipboard-destroy",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime: () => ({
         clipboard: { transforms: [{
           id: "destroy",

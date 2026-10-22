@@ -46,7 +46,7 @@ export function createComponentsExtension(options: ComponentsExtensionOptions) {
   return defineMarkdownEditorExtension({
     name: "markora-extension-components",
     version: "0.0.1",
-    compatibility: { extensionApi: "^1.1.0", markora: "^0.0.1" },
+    compatibility: { extensionApi: "^1.1.0", markora: "^0.1.0" },
     schema: {
       nodes: [{
         name: nodeName,

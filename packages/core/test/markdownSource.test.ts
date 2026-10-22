@@ -68,7 +68,7 @@ describe.each(codecBuilders)("%s codec source environment", (_, createCodec) => 
     const sourceProbe = defineMarkdownEditorExtension({
       name: "acme-source-probe",
       version: "1.0.0",
-      compatibility: { extensionApi: "^1.1.0", markora: "^0.0.1" },
+      compatibility: { extensionApi: "^1.1.0", markora: "^0.1.0" },
       markdown: {
         tokenizerRules: [{
           id: "capture",

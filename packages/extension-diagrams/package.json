@@ -31,6 +31,6 @@
     "smoke:node-esm": "node --input-type=module -e \"const mod = await import('./dist/index.js'); if (typeof mod.createDiagramsExtension !== 'function') throw new Error('createDiagramsExtension export missing'); if (!Object.isFrozen(mod.defaultDiagramMessages)) throw new Error('frozen defaultDiagramMessages export missing');\"",
     "test": "vitest run --root ../.. packages/extension-diagrams/test"
   },
-  "peerDependencies": { "markora": "^0.0.1" },
+  "peerDependencies": { "markora": "^0.1.0" },
   "devDependencies": { "markora": "workspace:*" }
 }

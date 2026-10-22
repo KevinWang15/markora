@@ -117,7 +117,7 @@ function runtimeExtension(
   return defineMarkdownEditorExtension({
     name,
     version: "1.0.0",
-    compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+    compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
     createRuntime,
   });
 }

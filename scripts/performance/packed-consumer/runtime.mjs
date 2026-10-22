@@ -59,7 +59,7 @@ const codecProbeExtension = defineMarkdownEditorExtension({
   version: "1.0.0",
   compatibility: {
     extensionApi: "^1.0.0",
-    markora: "^0.0.1",
+    markora: "^0.1.0",
   },
   createStorage({ codec }) {
     return Object.freeze({ codec });
@@ -74,7 +74,7 @@ const hotPathProbeExtension = defineMarkdownEditorExtension({
   version: "1.0.0",
   compatibility: {
     extensionApi: "^1.0.0",
-    markora: "^0.0.1",
+    markora: "^0.1.0",
   },
   createRuntime() {
     return {

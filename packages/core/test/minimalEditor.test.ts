@@ -766,7 +766,7 @@ describe("minimal embedded editor entry", () => {
     const lanes = defineMarkdownEditorExtension({
       name: "acme-minimal-lanes",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime: ({ schema }) => ({
         inputRules: [{
           id: "bang",
@@ -900,7 +900,7 @@ describe("minimal embedded editor entry", () => {
     const reporting = defineMarkdownEditorExtension({
       name: "acme-minimal-reporting",
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createRuntime: ({ reportError }) => ({
         commands: {
           report: () => {
@@ -947,7 +947,7 @@ describe("minimal embedded editor entry", () => {
     const probe = (name: string) => defineMarkdownEditorExtension({
       name,
       version: "1.0.0",
-      compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+      compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
       createStorage: ({ lifecycle }) => {
         lifecycle.addCleanup(() => events.push(`${name}:assembly`));
         return {};

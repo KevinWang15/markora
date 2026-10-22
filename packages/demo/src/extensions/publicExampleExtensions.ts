@@ -138,7 +138,7 @@ function createHighlightRule(openType: string, closeType: string): InlineRule {
 export const publicCalloutExtension = defineMarkdownEditorExtension({
   name: "@markora-demo/callout",
   version: "1.0.0",
-  compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+  compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
   schema: {
     nodes: [{
       name: "demo_callout",
@@ -312,7 +312,7 @@ export const publicCalloutExtension = defineMarkdownEditorExtension({
 export const publicHighlightExtension = defineMarkdownEditorExtension({
   name: "@markora-demo/highlight",
   version: "1.0.0",
-  compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+  compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
   schema: {
     marks: [{
       name: "demo_highlight",
@@ -383,7 +383,7 @@ export const publicHighlightExtension = defineMarkdownEditorExtension({
 export const publicClipboardExtension = defineMarkdownEditorExtension({
   name: "@markora-demo/clipboard",
   version: "1.0.0",
-  compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+  compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
   createRuntime: () => ({
     clipboard: {
       transforms: [{

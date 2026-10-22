@@ -30,7 +30,7 @@ const minimalMessages: MarkdownEditorMessageOverrides = {
 const extension = defineMarkdownEditorExtension({
   name: "acme-minimal-types",
   version: "1.0.0",
-  compatibility: { markora: "^0.0.1", extensionApi: "^1.0.0" },
+  compatibility: { markora: "^0.1.0", extensionApi: "^1.0.0" },
   createStorage: () => ({ count: 0 }),
   createRuntime: ({ storage }) => ({
     commands: {

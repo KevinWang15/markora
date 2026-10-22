@@ -582,7 +582,7 @@ export function createMathExtension(options?: MathExtensionOptions) {
   return defineMarkdownEditorExtension({
     name: "markora-extension-math",
     version: "0.0.1",
-    compatibility: { extensionApi: "^1.4.0", markora: "^0.0.1" },
+    compatibility: { extensionApi: "^1.4.0", markora: "^0.1.0" },
     schema: {
       nodes: [
         {
