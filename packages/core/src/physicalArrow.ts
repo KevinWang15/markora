@@ -217,14 +217,20 @@ export function probeVisualRangeMotion(
   }
 
   const modelNodeDom = view.nodeDOM(from);
+  const modelNode = view.state.doc.nodeAt(from);
+  const contentDom = modelNode?.isBlock && !modelNode.isLeaf
+    ? view.domAtPos(from + 1).node
+    : null;
 
   if (
     modelNodeDom?.nodeType === 1
-    && next.focusNode === modelNodeDom
+    && (next.focusNode === modelNodeDom
+      || contentDom && next.focusNode !== contentDom
+        && modelNodeDom.contains(next.focusNode) && next.focusNode.contains(contentDom))
   ) {
     // Firefox can represent motion beyond a table's trailing visual edge as
     // a caret on the table element itself instead of on its parent boundary.
-    return horizontalArrowLogicalSide(view, direction, modelNodeDom);
+    return horizontalArrowLogicalSide(view, direction, next.focusNode);
   }
 
   return comparePointToModelRange(view, next.focusNode, next.focusOffset, from, to);

@@ -2504,11 +2504,11 @@ test("@required composition at a managed table boundary materializes an editable
     id,
   )).toBe(true);
   await labPage.keyboard.press("ArrowLeft");
-  await expect(editor.locator("table.mdw-managed-block-cursor-before")).toHaveCount(1);
+  await expect(editor.locator(".mdw-table-scroll.mdw-managed-block-cursor-before")).toHaveCount(1);
 
   const text = "表の前";
   expect(await startSyntheticComposition(editor, text)).toBe(true);
-  await expect(editor.locator("table.mdw-managed-block-cursor-before")).toHaveCount(0);
+  await expect(editor.locator(".mdw-table-scroll.mdw-managed-block-cursor-before")).toHaveCount(0);
   await endSyntheticComposition(editor, text);
   await settleEditor(labPage, id);
   expect(await getMarkdown(labPage, id)).toBe(`${text}\n\n${tableMarkdown}`);

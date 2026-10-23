@@ -361,7 +361,7 @@ The shared-atom release prepares the following separate packages on `https://reg
 
 Core stays within the backward-compatible pre-1.0 `0.1` line; the additive extension API independently advances to `1.5.0`. Migrated extensions require the new core because earlier packages do not export `createAtomView`. Their schema, Markdown, and public command contracts are unchanged. The five initial extension releases were unpublished when checked on 2026-10-23; verify registry availability and account permissions again before publishing. Alerts, diagrams, renderers, and UI are outside this release. In particular, the unrelated npm package named `markora-ui` must not be overwritten.
 
-**Preparation is not release approval:** the full required browser suite remains non-green. Its baseline comparison and passing focused regressions are recorded in the [atom migration verification](./docs/atom-node-view-plan.md#phases-24-verification-2026-10-23). Resolve the failing release gate before publishing; do not silently waive it.
+**Preparation is not release approval:** verify the unit, browser, package, and performance gates on the release commit. The [atom migration verification](./docs/atom-node-view-plan.md#phases-24-verification-2026-10-23) records historical results, including the original failing browser runs; it does not replace fresh release checks. Do not silently waive failing gates.
 
 ```bash
 pnpm install --frozen-lockfile

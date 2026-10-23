@@ -42,7 +42,7 @@ test("@required local engines load independently on demand and release PlantUML 
   await shell.getByRole("button", { name: "Show diagram preview", exact: true }).click();
   await expect(shell.locator("[data-mdw-diagram-preview]")).toContainText("Updated", { timeout: 20_000 });
   await labPage.screenshot({ path: testInfo.outputPath("local-plantuml.png") });
-  expect(requests.every(url => new URL(url).origin === "http://127.0.0.1:4173")).toBe(true);
+  expect(requests.every(url => new URL(url).origin === new URL(labPage.url()).origin)).toBe(true);
   await destroyEditorOnly(labPage, "local");
   await expect(labPage.locator('iframe[title="Local PlantUML rendering engine"]')).toHaveCount(0);
 });

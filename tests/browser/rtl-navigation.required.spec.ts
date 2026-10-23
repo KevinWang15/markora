@@ -393,7 +393,7 @@ test("@required RTL tables exit and re-enter on their physical visual edges", as
     ].join("\n"),
   });
   const editor = editorLocator(labPage, id);
-  const table = editor.locator("table");
+  const table = editor.locator(".mdw-table-scroll");
 
   await selectTextBoundary(labPage, id, "ראשון", "start");
   await labPage.keyboard.press("ArrowRight");

@@ -323,7 +323,7 @@ chromiumTest("@required Android CDP forward fallback preserves managed-block del
   )).toBe(true);
   await labPage.keyboard.press("ArrowLeft");
   await settleEditor(labPage, id);
-  await expect(editorLocator(labPage, id).locator("table.mdw-managed-block-cursor-before")).toHaveCount(1);
+  await expect(editorLocator(labPage, id).locator(".mdw-table-scroll.mdw-managed-block-cursor-before")).toHaveCount(1);
 
   await dispatchNoMutationDeletion(
     context,
@@ -356,7 +356,7 @@ chromiumTest("@required Android CDP fallback preserves structural Backspace comm
     id,
   )).toBe(true);
   await labPage.keyboard.press("ArrowRight");
-  await expect(editorLocator(labPage, id).locator("table.mdw-managed-block-cursor-after")).toHaveCount(1);
+  await expect(editorLocator(labPage, id).locator(".mdw-table-scroll.mdw-managed-block-cursor-after")).toHaveCount(1);
 
   await dispatchNoMutationDeletion(context, id, labPage);
   await expect.poll(() => getMarkdown(labPage, id)).toBe("");

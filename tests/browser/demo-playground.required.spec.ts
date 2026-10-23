@@ -174,7 +174,10 @@ test("@required public mobile navigation is compact, touch-sized, and overflow-f
 
   const topbar = page.locator(".topbar");
   const links = page.locator(".topnav-link");
-  await expect(links).toHaveCount(6);
+  await expect(links).toHaveText([
+    "Getting started", "Markdown contract", "API overview", "Examples",
+    "Components", "Core playground", "GitHub",
+  ]);
   expect((await topbar.boundingBox())?.height).toBeLessThanOrEqual(180);
 
   for (const link of await links.all()) {
@@ -182,6 +185,7 @@ test("@required public mobile navigation is compact, touch-sized, and overflow-f
     expect(box).not.toBeNull();
     expect(box!.width).toBeGreaterThanOrEqual(44);
     expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(await link.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   }
 
   expect(await page.evaluate(() => (
@@ -269,7 +273,11 @@ test("@required the desktop sidebar exposes documentation navigation", async ({ 
   await page.goto("/docs/api");
   const navigation = page.getByRole("navigation", { name: "Documentation" });
   await expect(navigation).toBeVisible();
-  await expect(navigation.getByRole("link")).toHaveCount(5);
+  await expect(navigation.getByRole("link")).toHaveText([
+    "Getting started", "Markdown contract", "API overview", "Examples",
+    "Components", "Core playground",
+  ]);
+  await expect(navigation.getByRole("link", { name: "Components" })).toHaveAttribute("href", "/docs/components");
   await expect(navigation.getByRole("link", { name: "API overview" })).toHaveAttribute(
     "aria-current",
     "page",
