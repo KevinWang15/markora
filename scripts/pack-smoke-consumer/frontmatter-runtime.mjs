@@ -106,7 +106,7 @@ for (const [label, create] of [["root", createEditor], ["minimal", createMinimal
   const atomExtension = defineMarkdownEditorExtension({
     name: "pack-smoke-atom",
     version: "1.0.0",
-    compatibility: { markora: "^0.1.0", extensionApi: "^1.5.0" },
+    compatibility: { markora: "^0.1.2", extensionApi: "^1.5.0" },
     schema: {
       nodes: [{
         name: "packed_atom",

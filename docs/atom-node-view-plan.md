@@ -21,7 +21,10 @@ based on `main` after PR #2 (selection rings follow editor focus).
   They stay in the editable-content family; their mutation and event ownership
   cannot safely use the atom primitive. No schema or typing behavior is changed.
 - Migrated extensions declare extension API `^1.5.0`; their exported consumer
-  APIs, package versions, Markdown formats, and renderer contracts are unchanged.
+  APIs, Markdown formats, and renderer contracts are unchanged. Release
+  preparation targets `markora@0.1.2` and components `0.0.3`; the five unpublished
+  migrated extensions retain `0.0.1`. All six require core `^0.1.2` in both npm
+  peer dependencies and runtime compatibility metadata.
 
 ### Phases 2–4 verification (2026-10-23)
 
@@ -48,6 +51,18 @@ based on `main` after PR #2 (selection rings follow editor focus).
 - Three Chromium CDP screenshots (edited chart, settings, and forced-colors
   atom frames) were inspected and uploaded to the requested transfer session
   `111111` with proxy variables unset.
+
+### Release preparation verification (2026-10-23)
+
+- Frozen-lockfile installation and `pnpm check` pass with the release metadata:
+  **127 test files / 1,887 tests**, including six new package/runtime version and
+  minimum-core compatibility checks.
+- `pnpm release:check` passes with the new versions and peer requirements.
+- All seven release tarballs come from that successful packed-consumer run.
+  Their SHA-256 checksums and `npm publish --dry-run` checks pass. Publication
+  order and artifact preparation commands are in the [publishing guide](../README.md#publishing).
+- Nothing was published. The full browser gate described above remains
+  non-green; release preparation does not waive those failures.
 
 ## Phase 1 implementation
 

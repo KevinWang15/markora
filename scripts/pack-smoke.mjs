@@ -242,6 +242,7 @@ function packPackage(packagePath) {
     name: packageJson.name,
     tarballPath: join(packageOutputDir, tarballs[0]),
     version: packageJson.version,
+    peerDependencies: packageJson.peerDependencies,
   };
 }
 
@@ -583,7 +584,8 @@ function assertPackedPackage(packageInfo, extensionCssContract) {
       || packageJson.exports?.["."]?.import !== "./dist/index.js"
       || packageJson.exports?.["./styles.css"] !== "./dist/styles.css"
       || JSON.stringify(packageJson.sideEffects) !== JSON.stringify(["./dist/styles.css"])
-      || packageJson.peerDependencies?.markora !== "^0.1.0"
+      || !packageJson.peerDependencies?.markora
+      || packageJson.peerDependencies.markora !== packageInfo.peerDependencies?.markora
       || packageJson.license !== "MIT"
     ) {
       throw new Error(`Packed ${packageInfo.name} metadata contract is incomplete.`);

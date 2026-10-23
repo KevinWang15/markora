@@ -51,7 +51,7 @@
     "test": "vitest run --root ../.. packages/extension-frontmatter/test/frontmatter.test.ts"
   },
   "peerDependencies": {
-    "markora": "^0.1.0"
+    "markora": "^0.1.2"
   },
   "devDependencies": {
     "markora": "workspace:*"

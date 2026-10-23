@@ -10,6 +10,8 @@ import { createFrontmatterExtension } from "../../extension-frontmatter/src/inde
 import { createHtmlExtension } from "../../extension-html/src/index";
 import { createMathExtension } from "../../extension-math/src/index";
 import { createTocExtension } from "../../extension-toc/src/index";
+import { markdownEditorSemVerSatisfies } from "../src/extensionSemver";
+import { MARKORA_VERSION } from "../src/extensionVersion";
 
 const editors: MarkdownEditor[] = [];
 const markdown = [
@@ -27,6 +29,27 @@ const markdown = [
 afterEach(() => {
   for (const editor of editors.splice(0)) editor.destroy();
   document.body.replaceChildren();
+});
+
+it.each([
+  ["components", () => createComponentsExtension({ registry: createComponentRegistry([]) })],
+  ["frontmatter", createFrontmatterExtension],
+  ["toc", createTocExtension],
+  ["html", createHtmlExtension],
+  ["math", createMathExtension],
+  ["footnotes", createFootnotesExtension],
+] as const)("keeps %s release metadata aligned with the shared atom API", (directory, create) => {
+  const packagePath = `../../extension-${directory}/package.json`;
+  const packageJson = JSON.parse(readFileSync(new URL(packagePath, import.meta.url), "utf8"));
+  const definition = create();
+  expect(definition.name).toBe(packageJson.name);
+  expect(definition.version).toBe(packageJson.version);
+  expect(definition.compatibility).toEqual({ extensionApi: "^1.5.0", markora: "^0.1.2" });
+  expect(packageJson.peerDependencies.markora).toBe(definition.compatibility.markora);
+  expect(markdownEditorSemVerSatisfies(MARKORA_VERSION, definition.compatibility.markora)).toBe(true);
+  for (const previousVersion of ["0.1.0", "0.1.1"]) {
+    expect(markdownEditorSemVerSatisfies(previousVersion, definition.compatibility.markora)).toBe(false);
+  }
 });
 
 describe.each([["root", createEditor], ["minimal", createMinimalEditor]] as const)("%s atom migrations", (entry, create) => {

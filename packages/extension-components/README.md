@@ -7,8 +7,10 @@ Works with both `markora` and `markora/minimal`. The core bundle is unchanged. N
 ## Install
 
 ```sh
-npm install markora markora-extension-components
+npm install markora@^0.1.2 markora-extension-components@^0.0.3
 ```
+
+Version 0.0.3 requires Markora 0.1.2 or later within the 0.1 line (extension API 1.5.0). It uses the shared atom frame for selection, accessibility, and cleanup; the component registration, rendering, editing, and Markdown APIs are unchanged. Upgrade core and this extension together, including both stylesheets.
 
 ## Define and register
 

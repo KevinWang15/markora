@@ -49,10 +49,10 @@ Opaque HTML is shown as text and never executed inside the editor, but serialize
 ## Install
 
 ```bash
-npm install markora@^0.1.0
+npm install markora@^0.1.2
 ```
 
-This checkout targets the `markora@0.1.0` core release. The extensions, local renderers, and optional UI below are separate workspace packages and need their own releases. The npm package named `markora-ui` is unrelated to this repository; do not install it as Markora's UI integration. Examples importing companion packages currently require a workspace build.
+This checkout prepares `markora@0.1.2` and `markora-extension-components@0.0.3`, plus initial releases of the migrated frontmatter, TOC, HTML, math, and footnotes extensions. Extensions, local renderers, and optional UI are separate packages, not bundled into core. The npm package named `markora-ui` is unrelated to this repository; do not install it as Markora's UI integration. Examples importing unpublished companion packages require a workspace build.
 
 ### Official optional syntax
 
@@ -347,7 +347,21 @@ Useful scripts:
 
 ## Publishing
 
-The prepared release targets **`markora@0.1.0` only**, from `packages/core`, on `https://registry.npmjs.org/`. Extension and UI peer/runtime compatibility ranges follow the new core version, but these companion packages are not published by this workflow. In particular, the unrelated npm package named `markora-ui` must not be overwritten; resolve its package name before planning a UI release.
+The shared-atom release prepares the following separate packages on `https://registry.npmjs.org/`:
+
+| Package | Version | Core peer dependency |
+| --- | --- | --- |
+| `markora` | `0.1.2` | — |
+| `markora-extension-components` | `0.0.3` | `^0.1.2` |
+| `markora-extension-frontmatter` | `0.0.1` | `^0.1.2` |
+| `markora-extension-toc` | `0.0.1` | `^0.1.2` |
+| `markora-extension-html` | `0.0.1` | `^0.1.2` |
+| `markora-extension-math` | `0.0.1` | `^0.1.2` |
+| `markora-extension-footnotes` | `0.0.1` | `^0.1.2` |
+
+Core stays within the backward-compatible pre-1.0 `0.1` line; the additive extension API independently advances to `1.5.0`. Migrated extensions require the new core because earlier packages do not export `createAtomView`. Their schema, Markdown, and public command contracts are unchanged. The five initial extension releases were unpublished when checked on 2026-10-23; verify registry availability and account permissions again before publishing. Alerts, diagrams, renderers, and UI are outside this release. In particular, the unrelated npm package named `markora-ui` must not be overwritten.
+
+**Preparation is not release approval:** the full required browser suite remains non-green. Its baseline comparison and passing focused regressions are recorded in the [atom migration verification](./docs/atom-node-view-plan.md#phases-24-verification-2026-10-23). Resolve the failing release gate before publishing; do not silently waive it.
 
 ```bash
 pnpm install --frozen-lockfile
@@ -357,15 +371,25 @@ pnpm test:browser:required
 
 # Build and pack without publishing or requiring npm credentials.
 pnpm pack:core
+for extension in components frontmatter toc html math footnotes; do
+  (umask 022; pnpm --filter "markora-extension-$extension" exec npm pack --pack-destination ../../artifacts/npm) || exit 1
+done
+(cd artifacts/npm && sha256sum markora-extension-components-0.0.3.tgz markora-extension-{frontmatter,toc,html,math,footnotes}-0.0.1.tgz > extensions.sha256)
 
 # Only after all release gates pass and the artifact is approved:
 npm login --registry=https://registry.npmjs.org/
-npm publish ./artifacts/npm/markora-0.1.0.tgz --access public --tag latest --registry=https://registry.npmjs.org/
+npm publish ./artifacts/npm/markora-0.1.2.tgz --access public --tag latest --registry=https://registry.npmjs.org/
+npm publish ./artifacts/npm/markora-extension-components-0.0.3.tgz --access public --tag latest --registry=https://registry.npmjs.org/
+
+# Optional first releases, only when those packages are intended for publication:
+for extension in frontmatter toc html math footnotes; do
+  npm publish "./artifacts/npm/markora-extension-$extension-0.0.1.tgz" --access public --tag latest --registry=https://registry.npmjs.org/ || exit 1
+done
 ```
 
 `pack:core` checks the core build, public types, Node ESM imports, and runtime/package version agreement. It builds with a standard `022` umask so packaged files are readable, then writes the tarball and a `.sha256` checksum under the ignored `artifacts/npm/` directory. Publish the reviewed tarball rather than rebuilding from a different working tree. `pack:core` is not a replacement for the unit, browser, packed-consumer, accessibility, or performance gates, and no failing gate should be silently waived. `publish:core` explicitly builds, packs, and publishes only the core artifact; it is not part of preparation.
 
-`release:check` dry-runs the core tarball and validates packed workspace consumers, including companion packages that have not yet been published. A package version already on npm cannot be reused. For prereleases, set a prerelease version and use a non-`latest` tag. Do not commit npm credentials or tarballs.
+Each extension's `prepack` hook builds it, checks public types, runs its tests, and verifies Node ESM imports. Publish core first, then the selected extensions; publishing core does not publish or bundle them. Publish the reviewed tarballs, not the private workspace root or a package directory containing workspace dependencies. `release:check` dry-runs the core tarball and validates packed workspace consumers, including companion packages that have not yet been published. A package version already on npm cannot be reused. For prereleases, set a prerelease version and use a non-`latest` tag. Do not commit npm credentials or tarballs.
 
 ## API notes
 

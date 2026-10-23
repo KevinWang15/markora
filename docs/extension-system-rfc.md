@@ -561,7 +561,9 @@ Extension API **1.5.0** adds `createAtomView(node, view, getPos, spec)` and the
 `AtomViewSpec`, `AtomViewContext`, `AtomControl`, `AtomRendering`, and `AtomView`
 types to `markora/extension-api`. It returns a ProseMirror NodeView plus
 `refresh(): boolean`. It is independent of both presets and renderer engines.
-Declare `compatibility.extensionApi: "^1.5.0"` when using it.
+It ships in `markora@0.1.2`. Declare `compatibility.extensionApi: "^1.5.0"`,
+`compatibility.markora: "^0.1.2"`, and a `markora` peer dependency of `^0.1.2`
+when using it; earlier core packages do not export the helper.
 
 Use this helper for non-text atoms, not editable containers or CodeMirror views.
 `display` must match the schema node's inline/block identity. Attributes are

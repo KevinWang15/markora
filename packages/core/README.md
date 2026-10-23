@@ -29,12 +29,14 @@ Opaque HTML is displayed as text and never executed inside the editor. Serialize
 ## Install
 
 ```bash
-npm install markora@^0.1.0
+npm install markora@^0.1.2
 ```
 
 This README describes the 0.1 API. The package includes the root editor, `markora/minimal`, `markora/extension-api`, `markora/themes`, and their stylesheets. Companion extensions, renderers, and UI are separate workspace packages, not bundled into `markora` or published by the core release command.
 
 When upgrading from 0.0.1, rebuild host integrations against the current types and regenerate persisted extension manifests with compatible definitions. Custom extensions must declare a compatible core range, such as `markora: "^0.1.0"`; `^0.0.1` does not accept 0.1.0. The extension API has its own independent version.
+
+Version 0.1.2 adds `createAtomView` through extension API 1.5.0 and shares atom selection, accessibility, event ownership, and cleanup across built-in and optional atom views. Extensions using this helper require both a `markora` peer dependency of `^0.1.2` and runtime compatibility `{ markora: "^0.1.2", extensionApi: "^1.5.0" }`. Markdown formats and host-facing editor APIs are unchanged. Opaque-node selection now uses the shared 2px outline with a 2px offset instead of its previous border/box-shadow; customize it with `--mdw-atom-selection-color`.
 
 ## Quick start
 
