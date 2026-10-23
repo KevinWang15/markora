@@ -58,7 +58,7 @@
   user-select: none;
 }
 
-.mdw-alert.ProseMirror-selectednode {
+.ProseMirror-focused .mdw-alert.ProseMirror-selectednode {
   outline: var(--mdw-focus-ring-width, 2px) solid
     var(--mdw-alert-selection-color, var(--mdw-color-focus, Highlight));
   outline-offset: var(--mdw-focus-ring-offset, 2px);

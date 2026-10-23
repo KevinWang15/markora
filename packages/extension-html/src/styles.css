@@ -27,7 +27,7 @@
   vertical-align: baseline;
 }
 
-.mdw-html.ProseMirror-selectednode {
+.ProseMirror-focused .mdw-html.ProseMirror-selectednode {
   outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
   outline-offset: var(--mdw-focus-ring-offset, 2px);
 }
@@ -180,7 +180,7 @@
     border-color: CanvasText;
   }
 
-  .mdw-html.ProseMirror-selectednode {
+  .ProseMirror-focused .mdw-html.ProseMirror-selectednode {
     outline-color: Highlight;
   }
 

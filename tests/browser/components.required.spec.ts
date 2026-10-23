@@ -149,3 +149,18 @@ test("@required components: mobile layout, dark theme and remount", async ({ pag
   await expect(page.locator('.mdw-component[data-status="ready"]')).toHaveCount(1);
   await expect(page.locator(".mdw-component")).toContainText("Production CPU");
 });
+
+test("@required components: the selection ring follows editor focus", async ({ page }) => {
+  const component = page.locator(".mdw-component");
+  const ring = () => component.evaluate(element => getComputedStyle(element).outlineStyle);
+  // Clicking the header selects the component as a node.
+  await component.locator(".mdw-component-header").click({ position: { x: 12, y: 8 } });
+  await expect.poll(ring).toBe("solid");
+  // Focus leaves the editor: the selection is kept, but no longer drawn, as with text selection.
+  await page.locator("body").click({ position: { x: 2, y: 2 } });
+  await expect.poll(ring).toBe("none");
+  await expect(component).toHaveClass(/ProseMirror-selectednode/);
+  // Selecting it again while focused draws the ring again.
+  await component.locator(".mdw-component-header").click({ position: { x: 12, y: 8 } });
+  await expect.poll(ring).toBe("solid");
+});

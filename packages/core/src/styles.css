@@ -21,8 +21,8 @@
   color: var(--mdw-color-selection-text, HighlightText);
 }
 
-.mdw-host .ProseMirror .mdw-document-selected,
-.mdw-host .ProseMirror .mdw-element-selected {
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-document-selected,
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-element-selected {
   position: relative;
   z-index: 1;
   outline: var(--mdw-selection-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
@@ -408,7 +408,7 @@
   box-shadow: var(--mdw-shadow-subtle, 0 1px 2px rgba(31, 35, 40, 0.08));
 }
 
-.mdw-host .ProseMirror .mdw-image.ProseMirror-selectednode img {
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-image.ProseMirror-selectednode img {
   outline: var(--mdw-selection-ring-width, 2px) solid var(--mdw-color-accent, #0969da);
   outline-offset: var(--mdw-selection-ring-offset, 2px);
 }
@@ -525,7 +525,7 @@
   white-space: pre-wrap;
 }
 
-.mdw-host .mdw-opaque-node.ProseMirror-selectednode {
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-opaque-node.ProseMirror-selectednode {
   border-color: var(--mdw-color-accent, #0969da);
   box-shadow: 0 0 0 var(--mdw-selection-ring-width, 2px) var(--mdw-color-focus-soft, rgba(9, 105, 218, 0.18));
 }
@@ -892,10 +892,10 @@
   }
 
   .mdw-host .ProseMirror :is(th, td).selectedCell::after,
-  .mdw-host .mdw-opaque-node.ProseMirror-selectednode,
-  .mdw-host .ProseMirror .mdw-document-selected,
+  .mdw-host .ProseMirror.ProseMirror-focused .mdw-opaque-node.ProseMirror-selectednode,
+  .mdw-host .ProseMirror.ProseMirror-focused .mdw-document-selected,
   .mdw-host .mdw-code-block.mdw-code-block-outer-selection,
-  .mdw-host .ProseMirror .mdw-image.ProseMirror-selectednode img {
+  .mdw-host .ProseMirror.ProseMirror-focused .mdw-image.ProseMirror-selectednode img {
     outline: var(--mdw-selection-ring-width, 2px) solid Highlight;
     outline-offset: calc(-1 * var(--mdw-selection-ring-width, 2px));
     box-shadow: none;

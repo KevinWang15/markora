@@ -7,7 +7,7 @@
   overflow: clip;
 }
 
-.mdw-frontmatter.ProseMirror-selectednode {
+.ProseMirror-focused .mdw-frontmatter.ProseMirror-selectednode {
   outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
   outline-offset: var(--mdw-focus-ring-offset, 2px);
 }
