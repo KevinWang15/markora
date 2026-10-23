@@ -1,14 +1,9 @@
 .mdw-footnote-reference {
+  border-radius: var(--mdw-control-radius, 0.375rem);
   color: var(--mdw-footnotes-reference-color, var(--mdw-color-accent, #0969da));
   font-size: var(--mdw-footnotes-reference-font-size, 0.75em);
   line-height: 1;
   vertical-align: super;
-}
-
-.ProseMirror-focused .mdw-footnote-reference.ProseMirror-selectednode {
-  border-radius: var(--mdw-control-radius, 0.375rem);
-  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
-  outline-offset: var(--mdw-focus-ring-offset, 2px);
 }
 
 .mdw-footnote-reference__action {

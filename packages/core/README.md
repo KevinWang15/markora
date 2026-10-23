@@ -306,6 +306,13 @@ and ProseMirror constructors so packages do not accidentally install duplicate
 runtime identities. Published extensions should peer-depend on a compatible
 `markora` version.
 
+For non-editable block or inline nodes, `createAtomView()` from
+`markora/extension-api` provides a shared accessible frame, controls, selection
+ring, event ownership, and lifecycle cleanup. Supply only the rendering and
+actions specific to your node. This additive helper requires extension API
+`^1.5.0`; editable containers should continue to implement their own NodeViews.
+See the [atom view contract](https://github.com/KevinWang15/markora/blob/main/docs/extension-system-rfc.md#shared-atom-node-views).
+
 Extension contexts receive a frozen public codec facade containing only the
 final schema plus `parse()` and `serialize()`. State queries are observational:
 attempting to dispatch directly or through `runCommand()` while a query is

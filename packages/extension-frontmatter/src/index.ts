@@ -291,7 +291,7 @@ export function createFrontmatterExtension(
   return defineMarkdownEditorExtension({
     name: "markora-extension-frontmatter",
     version: "0.0.1",
-    compatibility: { extensionApi: "^1.1.0", markora: "^0.1.0" },
+    compatibility: { extensionApi: "^1.5.0", markora: "^0.1.0" },
     schema: {
       nodes: [{
         name: "frontmatter",
@@ -447,20 +447,18 @@ export function createFrontmatterExtension(
           command: "insert",
           enabled: "canInsert",
         }],
-        ...(onEditSource ? {
-          nodeViews: [{
-            id: "source",
-            node: "frontmatter",
-            create: () => createFrontmatterNodeView({
-              dispatch,
-              messages,
-              nodeType,
-              onEditSource,
-              refreshers,
-              reportError,
-            }),
-          }],
-        } : {}),
+        nodeViews: [{
+          id: "source",
+          node: "frontmatter",
+          create: () => createFrontmatterNodeView({
+            dispatch,
+            messages,
+            nodeType,
+            onEditSource,
+            refreshers,
+            reportError,
+          }),
+        }],
       } satisfies MarkdownEditorExtensionRuntime<
         undefined,
         FrontmatterCommands,

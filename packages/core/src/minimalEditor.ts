@@ -63,7 +63,7 @@ import { resolveMarkdownEditorExtensions } from "./extensionResolver";
 import { MARKORA_VERSION } from "./extensionVersion";
 import { assertEditorHostAvailable,claimEditorHost } from "./hostOwnership";
 import { createHostIdleScheduler } from "./idleScheduler";
-import { createImageViewClass } from "./imageView";
+import { createImageViewFactory } from "./imageView";
 import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from "./managedBlockCursor";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import { createMinimalMarkdownEditorPreset } from "./minimalExtensionPreset";
@@ -542,7 +542,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     },
     takeExtensionFailure: extensionAssembly.contributions.takeClipboardFailure,
   });
-  const ImageView = createImageViewClass({
+  const ImageView = createImageViewFactory({
     imageNodeType: codec.schema.nodes.image,
     messages,
     onError: handleResourceError,
@@ -686,8 +686,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       attributes: () => buildEditorDomAttributes(runtimeOptions),
       editable: () => runtimeOptions.editable,
       nodeViews: {
-        image(node, editorView) {
-          return new ImageView(node, editorView.dom.ownerDocument);
+        image(node, editorView, getPos) {
+          return ImageView.create(node, editorView, getPos);
         },
         ...extensionAssembly.contributions.nodeViews,
       },

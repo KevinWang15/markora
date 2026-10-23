@@ -56,7 +56,7 @@ MARKORA_VERSION,
 import { resolveMarkdownEditorExtensions } from "./extensionResolver";
 import { assertEditorHostAvailable,claimEditorHost } from "./hostOwnership";
 import { createHostIdleScheduler } from "./idleScheduler";
-import { createImageViewClass } from "./imageView";
+import { createImageViewFactory } from "./imageView";
 import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from "./managedBlockCursor";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import {
@@ -272,7 +272,7 @@ const revealMarkConfigs: RevealMarkConfig[] = [
   },
 ];
 
-const ImageView = createImageViewClass({
+const ImageView = createImageViewFactory({
   imageNodeType: schema.nodes.image,
   messages,
   onError: onResourceError,
@@ -2233,8 +2233,8 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         code_block(node: ProseMirrorNode, targetView: EditorView, getPos: () => number | undefined) {
           return new CodeBlockView(node, targetView, getPos as () => number);
         },
-        image(node, editorView) {
-          return new ImageView(node, editorView.dom.ownerDocument);
+        image(node, editorView, getPos) {
+          return ImageView.create(node, editorView, getPos);
         },
         raw_block(node: ProseMirrorNode, editorView: EditorView, getPos: (() => number | undefined) | boolean) {
           return new RawBlockView(node, editorView, getPos as () => number | undefined);

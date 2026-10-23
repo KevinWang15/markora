@@ -7,7 +7,7 @@
   color: var(--mdw-color-text, #0f172a);
   font: 14px/1.5 system-ui, sans-serif;
 }
-.ProseMirror-focused .mdw-component.ProseMirror-selectednode { outline: 2px solid var(--mdw-color-focus, #2563eb); outline-offset: 2px; }
+.mdw-component .mdw-atom-controls { gap: 8px; }
 .mdw-component-header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--mdw-color-border, #cbd5e1); }
 .mdw-component-header strong { flex: 1; overflow-wrap: anywhere; }
 .mdw-component button { cursor: pointer; font: inherit; padding: 5px 10px; border: 1px solid var(--mdw-color-border, #cbd5e1); border-radius: 6px; color: inherit; background: var(--mdw-color-surface-subtle, #f8fafc); }

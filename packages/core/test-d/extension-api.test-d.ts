@@ -27,7 +27,7 @@ interface CalloutStorage {
   insertions: number;
 }
 
-const extensionApiVersion: "1.4.0" = MARKORA_EXTENSION_API_VERSION;
+const extensionApiVersion: "1.5.0" = MARKORA_EXTENSION_API_VERSION;
 const opaqueSource: string | null = readMarkdownEditorOpaqueTokenSource({
   meta: { markoraOpaqueSource: "<aside>\r\n" },
 });

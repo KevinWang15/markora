@@ -3,10 +3,11 @@ import {
   Selection,
   TextSelection,
   closeHistory,
+  createAtomView,
+  type AtomViewContext,
   type EditorView,
   type Node as ProseMirrorNode,
   type NodeType,
-  type NodeView,
   type NodeViewConstructor,
   type Transaction,
 } from "markora/extension-api";
@@ -18,18 +19,13 @@ type CreateFrontmatterNodeViewOptions = Readonly<{
   dispatch(transaction: Transaction): boolean;
   messages: FrontmatterMessages;
   nodeType: NodeType;
-  onEditSource(request: FrontmatterEditRequest): void;
+  onEditSource?: (request: FrontmatterEditRequest) => void;
   refreshers: Set<() => void>;
   reportError(error: unknown, contribution?: string): void;
 }>;
 
 function readSource(node: ProseMirrorNode) {
   return typeof node.attrs.source === "string" ? node.attrs.source : "";
-}
-
-function isInside(target: EventTarget | null, element: HTMLElement) {
-  const NodeConstructor = element.ownerDocument.defaultView?.Node;
-  return !!NodeConstructor && target instanceof NodeConstructor && element.contains(target);
 }
 
 export function createFrontmatterNodeView(
@@ -44,12 +40,12 @@ export function createFrontmatterNodeView(
     reportError,
   } = options;
 
-  class FrontmatterNodeView implements NodeView {
+  class FrontmatterNodeView {
     readonly dom: HTMLElement;
 
     private destroyed = false;
     private node: ProseMirrorNode;
-    private readonly editButton: HTMLButtonElement;
+    private readonly editButton: HTMLButtonElement | null;
     private renderedDisabled: boolean | null = null;
     private renderedSource: string | null = null;
     private readonly sourceElement: HTMLElement;
@@ -58,6 +54,7 @@ export function createFrontmatterNodeView(
       node: ProseMirrorNode,
       private readonly view: EditorView,
       private readonly getPos: () => number | undefined,
+      frame: AtomViewContext,
     ) {
       if (node.type !== nodeType) {
         throw new RangeError(
@@ -67,26 +64,24 @@ export function createFrontmatterNodeView(
 
       this.node = node;
       const ownerDocument = view.dom.ownerDocument;
-      this.dom = ownerDocument.createElement("div");
-      this.dom.className = "mdw-frontmatter";
-      this.dom.contentEditable = "false";
+      this.dom = frame.dom;
       this.dom.dataset.mdwFrontmatter = "yaml";
       this.dom.dataset.mdwFrontmatterLabel = messages.kindLabel;
-      this.dom.setAttribute("aria-label", messages.sourceLabel);
-      this.dom.setAttribute("role", "region");
-
-      const header = ownerDocument.createElement("div");
-      header.className = "mdw-frontmatter__header";
+      const header = frame.header!;
+      header.classList.add("mdw-frontmatter__header");
       const kind = ownerDocument.createElement("span");
       kind.className = "mdw-frontmatter__kind";
       kind.textContent = messages.kindLabel;
-      this.editButton = ownerDocument.createElement("button");
-      this.editButton.className = "mdw-frontmatter__edit";
-      this.editButton.type = "button";
-      this.editButton.textContent = messages.editSource;
-      this.editButton.addEventListener("click", this.handleEdit);
-      this.editButton.addEventListener("keydown", this.handleBoundaryKeyDown);
-      header.append(kind, this.editButton);
+      header.prepend(kind);
+      this.editButton = onEditSource ? ownerDocument.createElement("button") : null;
+      if (this.editButton) {
+        this.editButton.className = "mdw-frontmatter__edit";
+        this.editButton.type = "button";
+        this.editButton.textContent = messages.editSource;
+        this.editButton.addEventListener("click", this.handleEdit, { signal: frame.signal });
+        this.editButton.addEventListener("keydown", this.handleBoundaryKeyDown, { signal: frame.signal });
+        frame.controls.append(this.editButton);
+      }
 
       const pre = ownerDocument.createElement("pre");
       pre.className = "mdw-frontmatter__pre";
@@ -94,9 +89,8 @@ export function createFrontmatterNodeView(
       this.sourceElement.className = "mdw-frontmatter__source";
       this.sourceElement.dataset.mdwFrontmatterSource = "";
       pre.append(this.sourceElement);
-      this.dom.append(header, pre);
+      frame.content.append(pre);
       this.render(node);
-      refreshers.add(this.refresh);
     }
 
     update(node: ProseMirrorNode) {
@@ -109,41 +103,16 @@ export function createFrontmatterNodeView(
       return true;
     }
 
-    selectNode() {
-      this.dom.classList.add("ProseMirror-selectednode");
-    }
-
-    deselectNode() {
-      this.dom.classList.remove("ProseMirror-selectednode");
-    }
-
-    stopEvent(event: Event) {
-      return isInside(event.target, this.editButton);
-    }
-
-    ignoreMutation() {
-      return true;
-    }
-
     destroy() {
       if (this.destroyed) {
         return;
       }
 
       this.destroyed = true;
-      refreshers.delete(this.refresh);
-      this.editButton.removeEventListener("click", this.handleEdit);
-      this.editButton.removeEventListener("keydown", this.handleBoundaryKeyDown);
     }
 
-    private readonly refresh = () => {
-      if (!this.destroyed) {
-        this.render(this.node);
-      }
-    };
-
     private readonly handleEdit = () => {
-      if (this.destroyed || !this.view.editable || this.view.composing) {
+      if (!onEditSource || this.destroyed || !this.view.editable || this.view.composing) {
         return;
       }
 
@@ -320,7 +289,7 @@ export function createFrontmatterNodeView(
 
       const disabled = !this.view.editable || this.view.composing;
 
-      if (disabled !== this.renderedDisabled) {
+      if (this.editButton && disabled !== this.renderedDisabled) {
         this.editButton.disabled = disabled;
         this.editButton.setAttribute("aria-disabled", disabled ? "true" : "false");
         this.renderedDisabled = disabled;
@@ -332,5 +301,22 @@ export function createFrontmatterNodeView(
     node: ProseMirrorNode,
     view: EditorView,
     getPos: () => number | undefined,
-  ) => new FrontmatterNodeView(node, view, getPos);
+  ) => {
+    const refresh = () => { atom.refresh(); };
+    const atom = createAtomView(node, view, getPos, {
+      display: "block",
+      role: "region",
+      className: "mdw-frontmatter",
+      label: () => messages.sourceLabel,
+      render(frame) {
+        const renderer = new FrontmatterNodeView(node, view, getPos, frame);
+        return {
+          update: current => renderer.update(current.node),
+          destroy() { refreshers.delete(refresh); renderer.destroy(); },
+        };
+      },
+    });
+    refreshers.add(refresh);
+    return atom;
+  };
 }

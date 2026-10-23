@@ -51,6 +51,28 @@ module-count failure ceiling increases from 200 to 205, leaving four modules
 of headroom. Its warning threshold remains 197; all byte-size, other graph,
 runtime, and memory budgets remain unchanged.
 
+The phase-1 shared atom view adds one dependency-free core module, exported
+through `markora/extension-api`, and common frame/selection styles to both core
+stylesheets. The packed root graph measures 202 static modules and 43,817 raw /
+6,743 gzip CSS bytes, within its existing failure ceilings. The packed minimal
+graph measures 152 modules and 11,871 raw / 2,534 gzip CSS bytes. Its module
+ceiling increases by exactly one to 152; its CSS ceilings become 12,000 raw /
+2,600 gzip bytes. Warning thresholds and all JavaScript byte, optional-extension,
+runtime, and memory budgets remain unchanged. The shared module has no runtime
+imports and does not pull root-only features into minimal.
+
+After the remaining atom migrations, the root and minimal module counts remain
+202 and 152. Their CSS measures 43,616 raw / 6,752 gzip and 11,670 raw / 2,540
+gzip bytes respectively. The combined seven-extension graph shrinks by 672 raw
+JavaScript bytes and 1,190 raw CSS bytes relative to phase 1.
+
+The standalone math graph now uses the shared helper rather than tree-shaking
+it away: JavaScript grows from 148,026 raw / 38,291 gzip to 152,142 raw / 39,726
+gzip bytes. Its initial and total JavaScript failure ceilings become 155,000
+raw / 40,500 gzip, leaving about 2% headroom. Math's warning thresholds, CSS,
+module-count and lazy-output limits, and every other graph's limits stay
+unchanged. No runtime or memory budget is relaxed.
+
 The 2026-08-31 root-bundle review measured 41,949 raw / 6,221 gzip CSS bytes
 and 181 static modules after the theme, localization, and table-control work.
 The review also replaced the `@lucide/icons` barrel import, which made the

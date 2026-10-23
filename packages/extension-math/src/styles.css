@@ -28,9 +28,8 @@
   overflow: clip;
 }
 
-.ProseMirror-focused .mdw-math.ProseMirror-selectednode {
-  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
-  outline-offset: var(--mdw-focus-ring-offset, 2px);
+.mdw-math--inline > .mdw-atom-content {
+  display: contents;
 }
 
 .mdw-math__header {
@@ -206,10 +205,6 @@
   .mdw-math--inline,
   .mdw-math__header {
     border-color: CanvasText;
-  }
-
-  .ProseMirror-focused .mdw-math.ProseMirror-selectednode {
-    outline-color: Highlight;
   }
 
   .mdw-math__action {

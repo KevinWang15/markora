@@ -1,4 +1,4 @@
-import { closeHistory, type EditorView, type Node, type NodeView, type Transaction } from "markora/extension-api";
+import { closeHistory, createAtomView, type AtomViewContext, type EditorView, type Node, type Transaction } from "markora/extension-api";
 import type { ComponentMessages } from "./messages";
 import { componentIdentityKey } from "./identity";
 import { parseSource } from "./props";
@@ -7,7 +7,7 @@ import type { ComponentProps, ComponentRegistry } from "./types";
 
 type Session = { controller: AbortController; cleanup?: () => void; identity?: object };
 
-export class ComponentNodeView implements NodeView {
+export class ComponentNodeView {
   readonly dom: HTMLElement;
   private readonly preview: HTMLElement;
   private readonly title: HTMLElement;
@@ -31,17 +31,17 @@ export class ComponentNodeView implements NodeView {
     private readonly dispatch: (transaction: Transaction) => boolean,
     private readonly reportError: (error: unknown, contribution?: string) => void,
     private readonly onDestroy: () => void,
+    private readonly frame: AtomViewContext,
   ) {
     const document = view.dom.ownerDocument;
-    this.dom = document.createElement("section");
-    this.dom.className = "mdw-component";
-    this.dom.contentEditable = "false";
-    const header = document.createElement("header");
-    header.className = "mdw-component-header";
+    this.dom = frame.dom;
+    const header = frame.header!;
+    header.classList.add("mdw-component-header");
     this.title = document.createElement("strong");
     this.editButton = this.button(messages.edit, () => this.edit());
     this.sourceButton = this.button(messages.editSource, () => this.edit(true));
-    header.append(this.title, this.editButton, this.sourceButton);
+    header.prepend(this.title);
+    frame.controls.append(this.editButton, this.sourceButton);
     this.preview = document.createElement("div");
     this.preview.className = "mdw-component-preview";
     this.form = document.createElement("form");
@@ -59,7 +59,7 @@ export class ComponentNodeView implements NodeView {
     const apply = this.button(messages.apply, () => this.applySource());
     const cancel = this.button(messages.cancel, () => this.closeEditor(true));
     this.form.append(label, this.error, apply, cancel);
-    this.form.addEventListener("submit", event => { event.preventDefault(); this.applySource(); });
+    this.form.addEventListener("submit", event => { event.preventDefault(); this.applySource(); }, { signal: frame.signal });
     this.form.addEventListener("keydown", event => {
       if (event.isComposing) return;
       if (event.key === "Escape") {
@@ -69,15 +69,15 @@ export class ComponentNodeView implements NodeView {
         event.preventDefault();
         this.applySource();
       }
-    });
-    this.dom.append(header, this.preview, this.form);
+    }, { signal: frame.signal });
+    frame.content.append(this.preview, this.form);
   }
 
   private button(label: string, action: () => unknown) {
     const button = this.view.dom.ownerDocument.createElement("button");
     button.type = "button";
     button.textContent = label;
-    button.addEventListener("click", action);
+    button.addEventListener("click", action, { signal: this.frame.signal });
     return button;
   }
 
@@ -123,6 +123,7 @@ export class ComponentNodeView implements NodeView {
     this.dom.dataset.component = this.node.attrs.name;
     const definition = this.registry.get(this.node.attrs.name);
     this.title.textContent = definition?.label ?? this.node.attrs.name;
+    this.dom.setAttribute("aria-label", this.title.textContent);
     this.editButton.hidden = !this.editable;
     this.sourceButton.hidden = !this.editable || !definition || !readDefinition(definition).edit;
     if (!definition) {
@@ -269,13 +270,8 @@ export class ComponentNodeView implements NodeView {
     return true;
   }
 
-  selectNode() { this.dom.classList.add("ProseMirror-selectednode"); }
-  deselectNode() { this.dom.classList.remove("ProseMirror-selectednode"); }
-  ignoreMutation() { return true; }
-  stopEvent(event: Event) {
-    const target = event.target as globalThis.Node | null;
-    return Boolean(target && (this.preview.contains(target) || this.form.contains(target)
-      || this.editButton.contains(target) || this.sourceButton.contains(target)));
+  ownsEvents(target: globalThis.Node) {
+    return this.preview.contains(target) || this.form.contains(target);
   }
 
   destroy() {
@@ -287,4 +283,30 @@ export class ComponentNodeView implements NodeView {
     this.dispose(session);
     this.onDestroy();
   }
+}
+
+export function createComponentNodeView(
+  node: Node,
+  view: EditorView,
+  getPos: () => number | undefined,
+  registry: ComponentRegistry,
+  messages: ComponentMessages,
+  dispatch: (transaction: Transaction) => boolean,
+  reportError: (error: unknown, contribution?: string) => void,
+  onDestroy: (controller: ComponentNodeView) => void,
+) {
+  let controller: ComponentNodeView;
+  const nodeView = createAtomView(node, view, getPos, {
+    display: "block",
+    tagName: "section",
+    className: "mdw-component",
+    label: current => registry.get(current.attrs.name)?.label ?? current.attrs.name,
+    ownsEvents: target => controller.ownsEvents(target),
+    render(frame) {
+      controller = new ComponentNodeView(node, view, getPos, registry, messages, dispatch, reportError,
+        () => onDestroy(controller), frame);
+      return { update: current => controller.update(current.node), destroy: () => controller.destroy() };
+    },
+  });
+  return { nodeView, controller: controller! };
 }

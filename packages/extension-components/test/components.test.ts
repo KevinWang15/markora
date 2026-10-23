@@ -81,13 +81,18 @@ describe.each([["root", createEditor], ["minimal", createMinimalEditor]] as cons
   it("supports late registration and removal without changing Markdown or history", () => {
     const { editor, api, registry, definition } = mount({ registered: false });
     expect(document.querySelector('[data-status="unregistered"]')).not.toBeNull();
+    const frame = document.querySelector('.mdw-component')!;
+    expect(frame.classList.contains("mdw-atom")).toBe(true);
+    expect(frame.getAttribute("aria-label")).toBe("metrics-chart");
     const changes = vi.fn();
     editor.subscribe("update", changes);
     const unregister = registry.register(definition);
     expect(document.querySelector('[data-status="ready"]')).not.toBeNull();
+    expect(frame.getAttribute("aria-label")).toBe("Metrics chart");
     unregister();
     unregister();
     expect(document.querySelector('[data-status="unregistered"]')).not.toBeNull();
+    expect(frame.getAttribute("aria-label")).toBe("metrics-chart");
     expect(editor.getMarkdown()).toBe(markdown);
     expect(changes).not.toHaveBeenCalled();
     expect(api.commands.insert(definition, { title: "No", points: [] })).toBe(false);

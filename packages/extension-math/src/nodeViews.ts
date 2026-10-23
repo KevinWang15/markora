@@ -1,11 +1,11 @@
-import { NodeSelection, Selection, closeHistory } from "markora/extension-api";
+import { NodeSelection, Selection, closeHistory, createAtomView } from "markora/extension-api";
 import { isValidInlineMathSource, isValidBlockMathSource, normalizeMathSource } from "./source";
 import { createMathSourceEditor, type MathSourceEditor } from "./sourceEditor";
 import type {
+  AtomViewContext,
   EditorView,
   Node as ProseMirrorNode,
   NodeType,
-  NodeView,
   NodeViewConstructor,
 } from "markora/extension-api";
 import type { MathMessages } from "./messages";
@@ -55,15 +55,6 @@ function canonicalShell(kind: MathKind, source: string) {
     : `$$\n${source}\n$$`;
 }
 
-function isInside(target: EventTarget | null, element: HTMLElement) {
-  const NodeConstructor = element.ownerDocument.defaultView?.Node;
-  return Boolean(
-    NodeConstructor
-    && target instanceof NodeConstructor
-    && element.contains(target),
-  );
-}
-
 function safePosition(
   view: EditorView,
   getPos: () => number | undefined,
@@ -110,7 +101,7 @@ export function createMathNodeView(
     reportError,
   } = options;
 
-  class MathNodeView implements NodeView, MathRenderTarget {
+  class MathNodeView implements MathRenderTarget {
     readonly dom: HTMLElement;
     readonly preview: HTMLElement;
     readonly viewDom: HTMLElement;
@@ -141,6 +132,7 @@ export function createMathNodeView(
       node: ProseMirrorNode,
       private readonly view: EditorView,
       private readonly getPos: () => number | undefined,
+      private readonly frame: AtomViewContext,
     ) {
       if (node.type !== nodeType) {
         throw new RangeError(
@@ -153,19 +145,15 @@ export function createMathNodeView(
       this.renderSnapshot = initialSnapshot(kind, source);
       const ownerDocument = view.dom.ownerDocument;
       this.viewDom = view.dom;
-      this.dom = ownerDocument.createElement(kind === "inline" ? "span" : "div");
-      this.dom.className = `mdw-math mdw-math--${kind}`;
-      this.dom.contentEditable = "false";
+      this.dom = frame.dom;
       this.dom.dataset.mdwMath = "";
       this.dom.dataset.mdwMathKind = kind;
       this.dom.dataset.mdwMathState = "source";
-      this.dom.addEventListener("click", this.handleClick);
-      this.dom.addEventListener("keydown", this.handleNodeKeyDown);
-      this.dom.setAttribute("role", "group");
+      this.dom.addEventListener("click", this.handleClick, { signal: frame.signal });
+      this.dom.addEventListener("keydown", this.handleNodeKeyDown, { signal: frame.signal });
 
-      this.header = ownerDocument.createElement("span");
-      this.header.className = "mdw-math__header";
-      this.header.contentEditable = "false";
+      this.header = frame.header!;
+      this.header.classList.add("mdw-math__header");
       this.kindElement = ownerDocument.createElement("span");
       this.kindElement.className = "mdw-math__kind";
       this.kindElement.textContent = kind === "inline"
@@ -173,8 +161,8 @@ export function createMathNodeView(
         : messages.blockKindLabel;
       this.dom.setAttribute("aria-label", this.kindElement.textContent);
 
-      this.actions = ownerDocument.createElement("span");
-      this.actions.className = "mdw-math__actions";
+      this.actions = frame.controls;
+      this.actions.classList.add("mdw-math__actions");
 
       this.editButton = this.createActionButton("edit", messages.editSource);
       this.actions.append(this.editButton);
@@ -190,7 +178,7 @@ export function createMathNodeView(
       );
       this.retryButton.hidden = true;
       this.actions.append(this.toggleButton, this.retryButton);
-      this.header.append(this.kindElement, this.actions);
+      this.header.prepend(this.kindElement);
 
       this.sourceShell = ownerDocument.createElement(kind === "inline" ? "span" : "pre");
       this.sourceShell.className = "mdw-math__source-shell";
@@ -208,8 +196,8 @@ export function createMathNodeView(
       this.preview.setAttribute("aria-hidden", "true");
       this.preview.setAttribute("aria-label", messages.previewLabel(kind));
 
-      this.status = ownerDocument.createElement("span");
-      this.status.className = "mdw-math__status";
+      this.status = frame.status;
+      this.status.classList.add("mdw-math__status");
       this.status.dataset.mdwMathStatus = "";
       this.status.hidden = true;
       this.status.setAttribute("aria-atomic", "true");
@@ -221,11 +209,9 @@ export function createMathNodeView(
       this.srSource.setAttribute("role", "math");
       accessibleSourceId += 1;
       this.srSource.id = `mdw-math-source-${accessibleSourceId}`;
-      this.dom.append(
-        this.header,
+      frame.content.append(
         this.sourceShell,
         this.preview,
-        this.status,
         this.srSource,
       );
 
@@ -288,24 +274,13 @@ export function createMathNodeView(
       return true;
     }
 
-    selectNode() {
-      this.renderedSelected = true;
-      this.dom.classList.add("ProseMirror-selectednode");
+    setSelected(selected: boolean) {
+      this.renderedSelected = selected;
       this.render(this.registration.snapshot());
     }
 
-    deselectNode() {
-      this.renderedSelected = false;
-      this.dom.classList.remove("ProseMirror-selectednode");
-      this.render(this.registration.snapshot());
-    }
-
-    stopEvent(event: Event) {
-      return isInside(event.target, this.actions) || !!this.sourceEditor && isInside(event.target, this.sourceEditor.dom);
-    }
-
-    ignoreMutation() {
-      return true;
+    ownsEvents(target: globalThis.Node) {
+      return this.sourceEditor?.dom.contains(target) ?? false;
     }
 
     destroy() {
@@ -423,7 +398,7 @@ export function createMathNodeView(
           onChange: (source) => this.writeSource(source),
           onExit: (direction) => this.finishEditing(direction),
         });
-        this.dom.append(this.sourceEditor.dom);
+        this.frame.content.append(this.sourceEditor.dom);
         if (this.registration.snapshot().previewRequested) this.registration.togglePreview();
         this.render(this.registration.snapshot());
         this.sourceEditor.focus();
@@ -492,7 +467,7 @@ export function createMathNodeView(
     }
 
     private readonly handleNodeKeyDown = (event: KeyboardEvent) => {
-      if (isInside(event.target, this.actions)) {
+      if (event.composedPath().includes(this.actions)) {
         if (event.isComposing || event.keyCode === 229 || this.view.composing) {
           event.preventDefault();
           event.stopPropagation();
@@ -510,12 +485,13 @@ export function createMathNodeView(
       // One shell listener owns both formula activation and its action buttons.
       // Per-button listeners would multiply with every formula in large documents.
       let handled = false;
-      if (isInside(event.target, this.actions)) {
-        if (!this.editButton.disabled && isInside(event.target, this.editButton)) {
+      const path = event.composedPath();
+      if (path.includes(this.actions)) {
+        if (!this.editButton.disabled && path.includes(this.editButton)) {
           handled = this.requestEdit();
-        } else if (!this.toggleButton.disabled && isInside(event.target, this.toggleButton)) {
+        } else if (!this.toggleButton.disabled && path.includes(this.toggleButton)) {
           handled = this.togglePreview();
-        } else if (!this.retryButton.disabled && isInside(event.target, this.retryButton)) {
+        } else if (!this.retryButton.disabled && path.includes(this.retryButton)) {
           handled = this.retryPreview();
         }
       } else {
@@ -655,8 +631,6 @@ export function createMathNodeView(
       this.destroyed = true;
       this.sourceEditor?.destroy();
       this.sourceEditor = null;
-      this.dom.removeEventListener("click", this.handleClick);
-      this.dom.removeEventListener("keydown", this.handleNodeKeyDown);
       this.registration?.destroy();
       this.preview.replaceChildren();
 
@@ -666,5 +640,23 @@ export function createMathNodeView(
     }
   }
 
-  return (node, view, getPos) => new MathNodeView(node, view, getPos);
+  return (node, view, getPos) => {
+    let renderer: MathNodeView;
+    return createAtomView(node, view, getPos, {
+      display: kind,
+      header: true,
+      statusDisplay: "visible",
+      className: `mdw-math mdw-math--${kind}`,
+      label: () => kind === "inline" ? messages.inlineKindLabel : messages.blockKindLabel,
+      ownsEvents: target => renderer.ownsEvents(target),
+      render(frame) {
+        renderer = new MathNodeView(node, view, getPos, frame);
+        return {
+          update: current => renderer.update(current.node),
+          selectionChanged: current => renderer.setSelected(current.selected),
+          destroy: () => renderer.destroy(),
+        };
+      },
+    });
+  };
 }

@@ -1,8 +1,9 @@
+import { createAtomView } from "markora/extension-api";
 import type {
+  AtomViewContext,
   EditorView,
   Node as ProseMirrorNode,
   NodeType,
-  NodeView,
   NodeViewConstructor,
 } from "markora/extension-api";
 import type { HtmlMessages } from "./messages";
@@ -78,11 +79,6 @@ function kindLabel(kind: HtmlSourceKind, messages: HtmlMessages) {
     : kind === "inline-html" ? messages.inlineKindLabel : messages.commentKindLabel;
 }
 
-function isInside(target: EventTarget | null, element: HTMLElement) {
-  const NodeConstructor = element.ownerDocument.defaultView?.Node;
-  return Boolean(NodeConstructor && target instanceof NodeConstructor && element.contains(target));
-}
-
 export function createHtmlNodeView(
   options: CreateHtmlNodeViewOptions,
 ): NodeViewConstructor {
@@ -99,7 +95,7 @@ export function createHtmlNodeView(
     reportError,
   } = options;
 
-  class HtmlNodeView implements NodeView, HtmlRenderTarget {
+  class HtmlNodeView implements HtmlRenderTarget {
     readonly dom: HTMLElement;
     readonly preview: HTMLElement;
     readonly viewDom: HTMLElement;
@@ -125,6 +121,7 @@ export function createHtmlNodeView(
       node: ProseMirrorNode,
       private readonly view: EditorView,
       private readonly getPos: () => number | undefined,
+      frame: AtomViewContext,
     ) {
       if (node.type !== nodeType) {
         throw new RangeError(`HTML NodeView expected ${nodeType.name}, received ${node.type.name}.`);
@@ -138,30 +135,26 @@ export function createHtmlNodeView(
       accessibleId += 1;
       const id = accessibleId;
       this.viewDom = view.dom;
-      this.dom = ownerDocument.createElement(display === "block" ? "div" : "span");
-      this.dom.className = `mdw-html mdw-html--${display}`;
-      this.dom.contentEditable = "false";
+      this.dom = frame.dom;
       this.dom.dataset.mdwHtml = "";
       this.dom.dataset.mdwHtmlDisplay = display;
       this.dom.dataset.mdwHtmlKind = kind;
-      this.dom.setAttribute("role", "group");
-
-      const header = ownerDocument.createElement(display === "block" ? "div" : "span");
-      header.className = "mdw-html__header";
+      const header = frame.header!;
+      header.classList.add("mdw-html__header");
       this.kindElement = ownerDocument.createElement("span");
       this.kindElement.className = "mdw-html__kind";
       this.kindElement.id = `mdw-html-kind-${id}`;
       this.kindElement.textContent = kindLabel(kind, messages);
-      header.append(this.kindElement);
+      header.prepend(this.kindElement);
 
-      this.actions = ownerDocument.createElement("span");
-      this.actions.className = "mdw-html__actions";
+      this.actions = frame.controls;
+      this.actions.classList.add("mdw-html__actions");
       const makeButton = (label: string, action: () => void) => {
         const button = ownerDocument.createElement("button");
         button.type = "button";
         button.className = "mdw-html__action";
         button.textContent = label;
-        button.addEventListener("click", action);
+        button.addEventListener("click", action, { signal: frame.signal });
         this.actions.append(button);
         return button;
       };
@@ -171,8 +164,6 @@ export function createHtmlNodeView(
         : null;
       this.toggleButton = makeButton(messages.showPreview, () => { this.togglePreview(); });
       this.retryButton = makeButton(messages.retryPreview, () => { this.retryPreview(); });
-      header.append(this.actions);
-      this.dom.append(header);
 
       this.sourceShell = ownerDocument.createElement(display === "block" ? "pre" : "span");
       this.sourceShell.className = "mdw-html__source-shell";
@@ -186,7 +177,7 @@ export function createHtmlNodeView(
       this.sourceElement.id = `mdw-html-source-${id}`;
       this.sourceElement.textContent = source;
       this.sourceShell.append(this.sourceLabelElement, this.sourceElement);
-      this.dom.append(this.sourceShell);
+      frame.content.append(this.sourceShell);
       this.dom.setAttribute("aria-labelledby", [
         this.kindElement.id,
         this.sourceLabelElement.id,
@@ -200,13 +191,10 @@ export function createHtmlNodeView(
       this.preview.setAttribute("aria-label", messages.previewLabel);
       this.preview.setAttribute("inert", "");
       this.preview.hidden = true;
-      this.dom.append(this.preview);
+      frame.content.append(this.preview);
 
-      this.status = ownerDocument.createElement(display === "block" ? "p" : "span");
-      this.status.className = "mdw-html__status";
-      this.status.setAttribute("aria-live", "polite");
-      this.status.setAttribute("aria-atomic", "true");
-      this.dom.append(this.status);
+      this.status = frame.status;
+      this.status.classList.add("mdw-html__status");
 
       const thisView = this;
       this.controller = Object.freeze({
@@ -249,18 +237,13 @@ export function createHtmlNodeView(
       onDestroy?.(this.controller);
     }
 
-    deselectNode() {
-      this.selected = false;
-      this.dom.classList.remove("ProseMirror-selectednode");
+    setSelected(selected: boolean) {
+      this.selected = selected;
       this.renderUi();
     }
 
     getPosition() {
       return safePosition(this.view, this.getPos, this.nodeValue);
-    }
-
-    ignoreMutation() {
-      return true;
     }
 
     isComposing() {
@@ -309,20 +292,10 @@ export function createHtmlNodeView(
       return this.registration?.retry() ?? false;
     }
 
-    selectNode() {
-      this.selected = true;
-      this.dom.classList.add("ProseMirror-selectednode");
-      this.renderUi();
-    }
-
     setRenderSnapshot(next: HtmlRenderSnapshot) {
       if (this.destroyed) return;
       this.renderSnapshot = next;
       this.renderUi();
-    }
-
-    stopEvent(event: Event) {
-      return isInside(event.target, this.actions);
     }
 
     togglePreview() {
@@ -465,5 +438,19 @@ export function createHtmlNodeView(
     }
   }
 
-  return (node, view, getPos) => new HtmlNodeView(node, view, getPos);
+  return (node, view, getPos) => createAtomView(node, view, getPos, {
+    display,
+    header: true,
+    statusDisplay: "visible",
+    className: `mdw-html mdw-html--${display}`,
+    label: current => messages.sourceLabel(readKind(current)),
+    render(frame) {
+      const renderer = new HtmlNodeView(node, view, getPos, frame);
+      return {
+        update: current => renderer.update(current.node),
+        selectionChanged: current => renderer.setSelected(current.selected),
+        destroy: () => renderer.destroy(),
+      };
+    },
+  });
 }

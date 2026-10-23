@@ -1,7 +1,7 @@
 # Markora Extension System RFC
 
 - Status: Accepted design for `EE-009`
-- Extension API version: `1.4.0`
+- Extension API version: `1.5.0`
 - Accepted: 2026-07-15
 - Implemented: `EE-010`; host resource boundary integrated by `EE-012`; additive source, tokenizer-anchor, serializer literal-escape, and exact opaque-token source contracts integrated for `EE-021`
 
@@ -72,7 +72,7 @@ Parsing during creation, reconciliation, and reset must use the same immutable a
 The following is the approved public boundary. Supporting contribution interfaces may be split across files, but the branded carrier, definition identity, typed lookup, and behavioral rules are normative. `EE-010` must add declaration tests before refining any mechanical generic shape.
 
 ```ts
-export const MARKORA_EXTENSION_API_VERSION = "1.4.0" as const;
+export const MARKORA_EXTENSION_API_VERSION = "1.5.0" as const;
 
 export type MarkdownEditorExtensionName = string;
 
@@ -554,6 +554,103 @@ The compiler uses fixed lanes so extensions cannot precede kernel policy:
 The stable tokenizer anchors and optional tokenizer rule IDs are published above. Built-in table, task, CodeMirror, and opaque behavior occupies fixed kernel lanes, while public extension contributions order against one another inside the documented lanes. Structured key bindings form a first-`true` chain. A contribution that needs internal fallback, such as table `Tab` before list indentation, should declare one command that performs that chain rather than relying on accidental plugin order.
 
 One NodeView owner is allowed per node type. The kernel validates each returned NodeView and its callback surface, wraps constructor and callback failures with extension/contribution attribution, and isolates `destroy()` failures so one broken view cannot prevent sibling cleanup. NodeView constructors receive the lifecycle/error context, must clean DOM and async work in `destroy()`, and must not create global listeners without returning owned cleanup. Lazy resources must use versioned cancellation like the existing CodeMirror language loader.
+
+### Shared atom node views
+
+Extension API **1.5.0** adds `createAtomView(node, view, getPos, spec)` and the
+`AtomViewSpec`, `AtomViewContext`, `AtomControl`, `AtomRendering`, and `AtomView`
+types to `markora/extension-api`. It returns a ProseMirror NodeView plus
+`refresh(): boolean`. It is independent of both presets and renderer engines.
+Declare `compatibility.extensionApi: "^1.5.0"` when using it.
+
+Use this helper for non-text atoms, not editable containers or CodeMirror views.
+`display` must match the schema node's inline/block identity. Attributes are
+available through the ProseMirror `node`; the helper does not validate or cast
+extension-specific attributes. Keep that validation at the extension boundary.
+
+```ts
+import { createAtomView, type NodeViewConstructor } from "markora/extension-api";
+
+const createMetricView: NodeViewConstructor = (node, view, getPos) =>
+  createAtomView(node, view, getPos, {
+    display: "block",
+    className: "metric-preview",
+    label: current => `Metric: ${String(current.attrs.title)}`,
+    render(context) {
+      const draw = (current: typeof context) => {
+        current.content.textContent = String(current.node.attrs.title);
+      };
+      draw(context);
+      return { update: draw };
+    },
+  });
+```
+
+Pass this constructor from a runtime `nodeViews` contribution's `create`
+factory. The helper owns the frame and its `mdw-atom` and display classes,
+`contenteditable="false"`, group label, selection class, and these stable slots:
+
+- `header`: a block header, or `null` for inline atoms by default. `header: true`
+  enables an inline header; `header: false` omits a block header.
+- `controls`: managed or renderer-owned action buttons; without a header,
+  controls follow the content.
+- `content`: the renderer's div/span for its own DOM.
+- `status`: a polite, atomic status live region, visually hidden by default.
+  `statusDisplay: "visible"` lets the renderer style visible progress or errors.
+
+`tagName` preserves semantic frames (`div`, `section`, `nav`, `span`, or `sup`);
+the default is `div` for blocks and `span` for inline atoms. Choose a tag valid
+in the surrounding document. `role` defaults to `group` and can name a more
+specific landmark, such as `navigation` for a TOC.
+
+Contexts are frozen snapshots with a live `getPos` function, the editor `view`,
+the current `node`, `editable` and `selected` values, and a lifetime `signal`.
+Create DOM with the slots' `ownerDocument`. Do not replace the frame or remove
+its slots. A slot may be moved within the frame (for example, image status
+inside its preview overlay).
+Core `styles.css` and `minimal.css` both supply the shared selection ring;
+see the [theme contract](./theme-contract.md#editor-and-common-controls).
+
+Controls declare a text `label`, optional `ariaLabel` (each a string or context
+callback), optional `className`, `hidden`/`disabled` predicates, and `onClick`.
+They are disabled in read-only mode unless `requiresEditable: false` explicitly
+marks a non-mutating action. Clicks recheck current editability and predicates.
+The helper does not dispatch transactions or validate application commands;
+async actions must recheck the signal, live position, node identity, and
+editability before applying a result.
+
+`render` runs synchronously once and optionally returns `update(context)`,
+`selectionChanged(context)`, and `destroy()`. The selection hook runs once per
+transition, after the shared selection class changes, without dispatching a
+transaction. Use it for selected-only source UI, not another selection ring.
+An update returning `false` asks ProseMirror to recreate the view;
+`true` or `undefined` accepts it. Without an update hook, only equal nodes are
+accepted. Hosts call `refresh()` after external state or editability changes
+that do not cause a node update; it invokes the same hook and refreshes labels
+and buttons. Return `true`/`undefined` for such refreshes. A rejected refresh
+returns `false` but does not itself request a ProseMirror redraw. Read-only
+policy for renderer-owned controls (including those appended to `controls`)
+remains the renderer's responsibility. Bind their listeners with `signal` and
+recheck editability, composition, and node identity before mutating the document.
+
+Rendering, update, label, and predicate callbacks must not synchronously
+dispatch or re-enter view updates. Asynchronous render work belongs to the
+renderer: use `signal` for lifetime cancellation and your own generation guard
+when an update supersedes a request. Destroy removes managed listeners, aborts,
+then calls the renderer cleanup exactly once. A rendering or
+update or selection callback exception disposes the view and propagates the original error.
+
+The helper owns events inside `controls`. Use `ownsEvents(target, context, event)`
+to claim additional interactive regions inside the frame; other events remain
+available to ProseMirror. Ownership does not call `preventDefault`. Internal
+DOM and selection mutations are ignored; selections outside the frame are not.
+No editable `contentDOM`, keyboard navigation, sanitization, or async scheduling
+is added by the helper.
+
+Core images and opaque nodes, components, frontmatter, TOC, block/inline HTML,
+block/inline math, and footnote references use this helper. Diagrams and footnote
+definitions deliberately do not: both expose ProseMirror-owned editable
+`contentDOM`, just like alerts, tables, and task items.
 
 ## Paste and drop
 

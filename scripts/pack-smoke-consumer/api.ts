@@ -45,11 +45,24 @@ import {
 import {
   MARKORA_EXTENSION_API_VERSION,
   closeHistory,
+  createAtomView,
   defineMarkdownEditorExtension,
   sliceMarkdownEditorOriginalSourceLines,
   type AnyMarkdownEditorExtension,
+  type AtomView,
+  type AtomViewSpec,
+  type NodeViewConstructor,
   type Transaction,
 } from "markora/extension-api";
+
+export function checkAtomViewTypes(spec: AtomViewSpec): NodeViewConstructor {
+  return (node, view, getPos) => {
+    const atom: AtomView = createAtomView(node, view, getPos, spec);
+    const refresh: () => boolean = atom.refresh;
+    void refresh;
+    return atom;
+  };
+}
 import {
   alertKinds,
   createAlertsExtension,
@@ -896,7 +909,7 @@ editor.focus("start");
 editor.blur();
 editor.destroy();
 minimalEditor.destroy();
-MARKORA_EXTENSION_API_VERSION satisfies "1.4.0";
+MARKORA_EXTENSION_API_VERSION satisfies "1.5.0";
 const unavailableSourceSlice: string | null =
   sliceMarkdownEditorOriginalSourceLines({}, 0, 1);
 void new MarkdownEditorDestroyedError("focus the editor");

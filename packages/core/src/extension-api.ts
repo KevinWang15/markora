@@ -1,4 +1,6 @@
 export { moveToElementBoundary, type ElementNavigationSpec } from "./elementNavigation";
+export { createAtomView } from "./atomView";
+export type { AtomControl, AtomRendering, AtomView, AtomViewContext, AtomViewSpec } from "./atomView";
 export {
   MARKORA_EXTENSION_API_VERSION,
   MarkdownEditorExtensionError,

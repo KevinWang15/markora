@@ -43,6 +43,42 @@
   position: absolute;
 }
 
+:where(.mdw-host .mdw-atom-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+:where(.mdw-host .mdw-atom-controls) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mdw-atom-control-gap, 0.25rem);
+}
+
+.mdw-host .mdw-atom-controls:empty {
+  display: none;
+}
+
+.mdw-host .mdw-atom-content {
+  min-inline-size: 0;
+}
+
+.mdw-host .mdw-atom-status:not(.mdw-atom-status-visible) {
+  position: absolute;
+  inline-size: var(--mdw-visually-hidden-size, 1px);
+  block-size: var(--mdw-visually-hidden-size, 1px);
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-atom.ProseMirror-selectednode {
+  outline: var(--mdw-selection-ring-width, 2px) solid var(--mdw-atom-selection-color, var(--mdw-color-focus, #0969da));
+  outline-offset: var(--mdw-selection-ring-offset, 2px);
+}
+
 .mdw-host .ProseMirror.ProseMirror-focused .ProseMirror-gapcursor {
   display: block;
 }
@@ -408,9 +444,8 @@
   box-shadow: var(--mdw-shadow-subtle, 0 1px 2px rgba(31, 35, 40, 0.08));
 }
 
-.mdw-host .ProseMirror.ProseMirror-focused .mdw-image.ProseMirror-selectednode img {
-  outline: var(--mdw-selection-ring-width, 2px) solid var(--mdw-color-accent, #0969da);
-  outline-offset: var(--mdw-selection-ring-offset, 2px);
+.mdw-host .mdw-image > .mdw-atom-content {
+  display: contents;
 }
 .mdw-host .ProseMirror :not(pre) > code {
   padding-block: var(--mdw-inline-code-padding-block, 0.15em);
@@ -489,7 +524,7 @@
   }
 }
 
-.mdw-host .mdw-opaque-block > .mdw-opaque-source {
+.mdw-host .mdw-opaque-block .mdw-opaque-source {
   max-height: var(--mdw-opaque-source-max-block-size, 18rem);
   margin: 0;
   overflow: auto;
@@ -519,15 +554,10 @@
   margin-inline-end: var(--mdw-opaque-inline-control-margin, 0.2rem);
 }
 
-.mdw-host .mdw-opaque-inline > .mdw-opaque-source {
+.mdw-host .mdw-opaque-inline .mdw-opaque-source {
   min-width: 0;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-}
-
-.mdw-host .ProseMirror.ProseMirror-focused .mdw-opaque-node.ProseMirror-selectednode {
-  border-color: var(--mdw-color-accent, #0969da);
-  box-shadow: 0 0 0 var(--mdw-selection-ring-width, 2px) var(--mdw-color-focus-soft, rgba(9, 105, 218, 0.18));
 }
 
 .mdw-host .mdw-code-block-language {
@@ -882,6 +912,11 @@
 }
 
 @media (forced-colors: active) {
+  .mdw-host .ProseMirror.ProseMirror-focused .mdw-atom.ProseMirror-selectednode {
+    outline-color: Highlight;
+    box-shadow: none;
+  }
+
   .mdw-host .ProseMirror:focus-visible,
   .mdw-host .ProseMirror .mdw-task-checkbox:focus-visible,
   .mdw-host .mdw-opaque-edit:focus-visible,
@@ -892,10 +927,8 @@
   }
 
   .mdw-host .ProseMirror :is(th, td).selectedCell::after,
-  .mdw-host .ProseMirror.ProseMirror-focused .mdw-opaque-node.ProseMirror-selectednode,
   .mdw-host .ProseMirror.ProseMirror-focused .mdw-document-selected,
-  .mdw-host .mdw-code-block.mdw-code-block-outer-selection,
-  .mdw-host .ProseMirror.ProseMirror-focused .mdw-image.ProseMirror-selectednode img {
+  .mdw-host .mdw-code-block.mdw-code-block-outer-selection {
     outline: var(--mdw-selection-ring-width, 2px) solid Highlight;
     outline-offset: calc(-1 * var(--mdw-selection-ring-width, 2px));
     box-shadow: none;

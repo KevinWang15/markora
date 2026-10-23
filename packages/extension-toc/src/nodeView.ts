@@ -1,9 +1,10 @@
 import {
   TextSelection,
+  createAtomView,
+  type AtomViewContext,
   type EditorView,
   type Node as ProseMirrorNode,
   type NodeType,
-  type NodeView,
   type NodeViewConstructor,
   type PluginKey,
 } from "markora/extension-api";
@@ -120,7 +121,7 @@ export function createTocNodeView(
 ): NodeViewConstructor {
   const { indexKey, messages, nodeTypes, storage } = options;
 
-  class TocNodeView implements NodeView {
+  class TocNodeView {
     readonly dom: HTMLElement;
 
     private destroyed = false;
@@ -131,6 +132,7 @@ export function createTocNodeView(
       node: ProseMirrorNode,
       private readonly view: EditorView,
       private readonly getPos: () => number | undefined,
+      frame: AtomViewContext,
     ) {
       if (node.type !== nodeTypes.toc) {
         throw new RangeError(
@@ -139,13 +141,11 @@ export function createTocNodeView(
       }
 
       const ownerDocument = view.dom.ownerDocument;
-      this.dom = ownerDocument.createElement("nav");
-      this.dom.className = "mdw-toc";
-      this.dom.setAttribute("contenteditable", "false");
+      this.dom = frame.dom;
       this.dom.dataset.mdwToc = "";
 
-      const header = ownerDocument.createElement("div");
-      header.className = "mdw-toc__header";
+      const header = frame.header!;
+      header.classList.add("mdw-toc__header");
       header.dataset.mdwTocHeader = "";
 
       const source = ownerDocument.createElement("span");
@@ -157,9 +157,9 @@ export function createTocNodeView(
       this.outline = ownerDocument.createElement("div");
       this.outline.className = "mdw-toc__outline";
       this.outline.dataset.mdwTocOutline = "";
-      this.dom.append(header, this.outline);
-      this.dom.addEventListener("click", this.handleClick);
-      this.dom.addEventListener("keydown", this.handleKeyDown);
+      frame.content.append(this.outline);
+      this.dom.addEventListener("click", this.handleClick, { signal: frame.signal });
+      this.dom.addEventListener("keydown", this.handleKeyDown, { signal: frame.signal });
       storage.refreshers.add(this.refresh);
       this.render();
     }
@@ -176,22 +176,6 @@ export function createTocNodeView(
       return true;
     }
 
-    selectNode() {
-      this.dom.classList.add("ProseMirror-selectednode");
-    }
-
-    deselectNode() {
-      this.dom.classList.remove("ProseMirror-selectednode");
-    }
-
-    stopEvent(event: Event) {
-      return entryButton(event, this.dom) !== null;
-    }
-
-    ignoreMutation() {
-      return true;
-    }
-
     destroy() {
       if (this.destroyed) {
         return;
@@ -199,8 +183,6 @@ export function createTocNodeView(
 
       this.destroyed = true;
       storage.refreshers.delete(this.refresh);
-      this.dom.removeEventListener("click", this.handleClick);
-      this.dom.removeEventListener("keydown", this.handleKeyDown);
       this.outline.replaceChildren();
     }
 
@@ -365,5 +347,21 @@ export function createTocNodeView(
     }
   }
 
-  return (node, view, getPos) => new TocNodeView(node, view, getPos);
+  return (node, view, getPos) => createAtomView(node, view, getPos, {
+    display: "block",
+    tagName: "nav",
+    role: "navigation",
+    className: "mdw-toc",
+    label: () => {
+      const index = indexKey.getState(view.state);
+      const position = safePosition(view, getPos, nodeTypes.toc);
+      const offset = index?.snapshot.tocs.findIndex(toc => toc.position === position) ?? -1;
+      return messages.navigationLabel(offset < 0 ? 1 : offset + 1, Math.max(1, index?.snapshot.tocs.length ?? 0));
+    },
+    ownsEvents: (_target, frame, event) => entryButton(event, frame.dom) !== null,
+    render(frame) {
+      const renderer = new TocNodeView(node, view, getPos, frame);
+      return { update: current => renderer.update(current.node), destroy: () => renderer.destroy() };
+    },
+  });
 }

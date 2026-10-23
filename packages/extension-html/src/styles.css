@@ -27,9 +27,8 @@
   vertical-align: baseline;
 }
 
-.ProseMirror-focused .mdw-html.ProseMirror-selectednode {
-  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
-  outline-offset: var(--mdw-focus-ring-offset, 2px);
+.mdw-html--inline > .mdw-atom-content {
+  display: contents;
 }
 
 .mdw-html__header {
@@ -178,10 +177,6 @@
   .mdw-html,
   .mdw-html__header {
     border-color: CanvasText;
-  }
-
-  .ProseMirror-focused .mdw-html.ProseMirror-selectednode {
-    outline-color: Highlight;
   }
 
   .mdw-html__action {

@@ -163,12 +163,23 @@ Adjacent prose blocks use `--mdw-block-spacing` regardless of their order, inclu
 | `--mdw-focus-ring-width`, `--mdw-selection-ring-width` | `2px` |
 | `--mdw-focus-halo-width` | `3px` |
 | `--mdw-focus-ring-offset`, `--mdw-selection-ring-offset` | `2px` |
+| `--mdw-atom-selection-color` | `var(--mdw-color-focus, #0969da)` |
+| `--mdw-atom-control-gap` | `0.25rem` |
 | `--mdw-radius-pill` | `999px` |
 | `--mdw-font-mono` | `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` |
 | `--mdw-label-font-size`, `--mdw-label-font-weight`, `--mdw-label-letter-spacing` | `0.75rem`, `600`, `0.06em` |
 | `--mdw-disabled-opacity` | component default (`0.7` or `0.72`) |
 | `--mdw-layer-selection`, `--mdw-layer-content`, `--mdw-layer-cursor` | `1`, `2`, `3` (internal relative stack) |
 | `--mdw-visually-hidden-size` | `1px` (accessibility invariant; do not override) |
+
+Nodes built with `createAtomView()` share a focus-following outline in both core
+stylesheets. Set `--mdw-atom-selection-color` on an atom to customize its ring
+without adding a selection selector. Forced-colors mode uses system `Highlight`
+instead. This applies to opaque nodes, images, components, frontmatter, TOC,
+HTML, math, and footnote references. Opaque nodes replace their previous
+border/box-shadow highlight; images outline the entire atom rather than its
+inner image. TOC retains `--mdw-toc-selection-color` as an alias. Diagrams and
+footnote definitions retain their editable-content selection rules.
 
 ### Document typography and block layout
 

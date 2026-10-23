@@ -1707,7 +1707,7 @@ describe.each(entries)("%s math schema and clipboard", (_entry, createEditor) =>
 });
 
 it("validates factory options, localized messages, and frozen public constants", () => {
-  expect(createMathExtension().compatibility.extensionApi).toBe("^1.4.0");
+  expect(createMathExtension().compatibility.extensionApi).toBe("^1.5.0");
   expect(Object.isFrozen(defaultMathMessages)).toBe(true);
   expect(Object.isFrozen(mathKinds)).toBe(true);
   expect(Object.isFrozen(mathDiagnosticCodes)).toBe(true);

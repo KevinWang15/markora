@@ -678,6 +678,14 @@ function assertPackedProvenance(
       throw new Error(`Packed minimal stylesheet omitted managed block selector ${selector}.`);
     }
   }
+
+  for (const [label, report] of [["root", rootReport], ["minimal", minimalReport]]) {
+    for (const selector of [".mdw-atom-header", ".mdw-atom-controls", ".mdw-atom-content", ".mdw-atom-status", ".mdw-atom.ProseMirror-selectednode"]) {
+      if (!report.cssSource.includes(selector)) {
+        throw new Error(`Packed ${label} stylesheet omitted shared atom selector ${selector}.`);
+      }
+    }
+  }
 }
 
 function assertBundleIsolation(rootReport, minimalReport) {

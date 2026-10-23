@@ -27,6 +27,8 @@ test("@required components: CDP editing, persistence, history and screenshots", 
   const snapshot = await cdp.send("DOMSnapshot.captureSnapshot", { computedStyles: ["display"] });
   expect(snapshot.documents.length).toBeGreaterThan(0);
   const component = page.locator(".mdw-component");
+  await expect(component).toHaveClass(/mdw-atom-block/);
+  await expect(component.locator(".mdw-atom-status")).toHaveAttribute("role", "status");
   const markdown = page.locator("[data-component-markdown]");
   await component.getByRole("button", { name: "Edit component", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Configure metrics chart" });

@@ -1,6 +1,8 @@
 import {
   NodeSelection,
   Selection,
+  createAtomView,
+  type AtomViewContext,
   type EditorView,
   type Node as ProseMirrorNode,
   type NodeType,
@@ -114,7 +116,7 @@ export function createFootnoteReferenceNodeView(
 ): NodeViewConstructor {
   const { indexKey, messages, nodeTypes, storage } = options;
 
-  class FootnoteReferenceNodeView implements NodeView {
+  class FootnoteReferenceNodeView {
     readonly dom: HTMLElement;
 
     private readonly action: HTMLElement;
@@ -125,6 +127,7 @@ export function createFootnoteReferenceNodeView(
       node: ProseMirrorNode,
       private readonly view: EditorView,
       private readonly getPos: () => number | undefined,
+      frame: AtomViewContext,
     ) {
       if (node.type !== nodeTypes.reference) {
         throw new RangeError(
@@ -134,17 +137,15 @@ export function createFootnoteReferenceNodeView(
 
       this.node = node;
       const ownerDocument = view.dom.ownerDocument;
-      this.dom = ownerDocument.createElement("sup");
-      this.dom.className = "mdw-footnote-reference";
-      this.dom.contentEditable = "false";
+      this.dom = frame.dom;
       this.dom.dataset.mdwFootnoteReference = "";
       this.action = ownerDocument.createElement("span");
       this.action.className = "mdw-footnote-reference__action";
       this.action.setAttribute("role", "link");
       this.action.tabIndex = 0;
-      this.action.addEventListener("click", this.handleActivate);
-      this.action.addEventListener("keydown", this.handleKeyDown);
-      this.dom.append(this.action);
+      this.action.addEventListener("click", this.handleActivate, { signal: frame.signal });
+      this.action.addEventListener("keydown", this.handleKeyDown, { signal: frame.signal });
+      frame.content.append(this.action);
       storage.refreshers.add(this.refresh);
       this.render();
     }
@@ -159,22 +160,6 @@ export function createFootnoteReferenceNodeView(
       return true;
     }
 
-    selectNode() {
-      this.dom.classList.add("ProseMirror-selectednode");
-    }
-
-    deselectNode() {
-      this.dom.classList.remove("ProseMirror-selectednode");
-    }
-
-    stopEvent(event: Event) {
-      return isInside(event.target, this.action);
-    }
-
-    ignoreMutation() {
-      return true;
-    }
-
     destroy() {
       if (this.destroyed) {
         return;
@@ -182,8 +167,6 @@ export function createFootnoteReferenceNodeView(
 
       this.destroyed = true;
       storage.refreshers.delete(this.refresh);
-      this.action.removeEventListener("click", this.handleActivate);
-      this.action.removeEventListener("keydown", this.handleKeyDown);
     }
 
     private readonly refresh = () => {
@@ -301,7 +284,20 @@ export function createFootnoteReferenceNodeView(
     }
   }
 
-  return (node, view, getPos) => new FootnoteReferenceNodeView(node, view, getPos);
+  return (node, view, getPos) => createAtomView(node, view, getPos, {
+    display: "inline",
+    tagName: "sup",
+    className: "mdw-footnote-reference",
+    label: current => messages.referenceSourceLabel(readLabel(current)),
+    ownsEvents: (target, frame) => frame.content.contains(target),
+    render(frame) {
+      const renderer = new FootnoteReferenceNodeView(node, view, getPos, frame);
+      return {
+        update: current => renderer.update(current.node),
+        destroy: () => renderer.destroy(),
+      };
+    },
+  });
 }
 
 export function createFootnoteDefinitionNodeView(

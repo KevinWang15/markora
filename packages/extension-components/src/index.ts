@@ -4,7 +4,7 @@ import {
 } from "markora/extension-api";
 import { normalizeMessages, type ComponentMessages } from "./messages";
 import { buildComponentIdentities, collectChangedComponents, componentIdentityKey, mapComponentIdentities } from "./identity";
-import { ComponentNodeView } from "./nodeView";
+import { createComponentNodeView, type ComponentNodeView } from "./nodeView";
 import { componentMarkdown, componentNamePattern, parseSource } from "./props";
 import { readRegistry, serializeProps, validateProps } from "./registry";
 import type {
@@ -46,7 +46,7 @@ export function createComponentsExtension(options: ComponentsExtensionOptions) {
   return defineMarkdownEditorExtension({
     name: "markora-extension-components",
     version: "0.0.1",
-    compatibility: { extensionApi: "^1.1.0", markora: "^0.1.0" },
+    compatibility: { extensionApi: "^1.5.0", markora: "^0.1.0" },
     schema: {
       nodes: [{
         name: nodeName,
@@ -179,10 +179,10 @@ export function createComponentsExtension(options: ComponentsExtensionOptions) {
         nodeViews: [{
           id: "component", node: nodeName,
           create: () => (node, view, getPos) => {
-            const component = new ComponentNodeView(node, view, getPos, registry, messages, dispatch, reportError, () => views.delete(component));
+            const { controller: component, nodeView } = createComponentNodeView(node, view, getPos, registry, messages, dispatch, reportError, controller => { views.delete(controller); });
             views.add(component);
             component.refresh();
-            return component;
+            return nodeView;
           },
         }],
         plugins: [{

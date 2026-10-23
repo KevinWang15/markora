@@ -1,4 +1,5 @@
 .mdw-toc {
+  --mdw-atom-selection-color: var(--mdw-toc-selection-color, var(--mdw-color-focus, Highlight));
   background: var(
     --mdw-toc-background,
     color-mix(in srgb, var(--mdw-color-accent, #0969da) 6%, transparent)
@@ -15,12 +16,6 @@
   padding-block: var(--mdw-toc-padding-block, 0.75rem);
   padding-inline: var(--mdw-toc-padding-inline, 1rem);
   unicode-bidi: isolate;
-}
-
-.ProseMirror-focused .mdw-toc.ProseMirror-selectednode {
-  outline: var(--mdw-focus-ring-width, 2px) solid
-    var(--mdw-toc-selection-color, var(--mdw-color-focus, Highlight));
-  outline-offset: var(--mdw-focus-ring-offset, 2px);
 }
 
 .mdw-toc__header {
@@ -131,8 +126,7 @@
     color: LinkText;
   }
 
-  .mdw-toc__entry:focus-visible,
-  .ProseMirror-focused .mdw-toc.ProseMirror-selectednode {
+  .mdw-toc__entry:focus-visible {
     outline-color: Highlight;
   }
 }

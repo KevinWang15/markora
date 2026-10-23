@@ -7,11 +7,6 @@
   overflow: clip;
 }
 
-.ProseMirror-focused .mdw-frontmatter.ProseMirror-selectednode {
-  outline: var(--mdw-focus-ring-width, 2px) solid var(--mdw-color-focus, #0969da);
-  outline-offset: var(--mdw-focus-ring-offset, 2px);
-}
-
 .mdw-frontmatter__header {
   align-items: center;
   border-block-end: var(--mdw-border-width, 1px) solid var(--mdw-frontmatter-border-color, var(--mdw-color-border, #d0d7de));

@@ -1,5 +1,6 @@
 import type { Node as ProseMirrorNode, NodeType } from "prosemirror-model";
 import type { NodeView, EditorView } from "prosemirror-view";
+import { createAtomView, type AtomControl, type AtomView, type AtomViewContext } from "./atomView";
 import { normalizeOpaqueMarkdownKind } from "./opaqueMarkdown";
 import type { OpaqueMarkdownEditRequest, OpaqueMarkdownKind } from "./opaqueMarkdown";
 import {
@@ -35,9 +36,29 @@ function readOpaqueSource(node: ProseMirrorNode) {
   return typeof node.attrs.source === "string" ? node.attrs.source : "";
 }
 
-function isEventTargetInside(target: EventTarget | null, container: HTMLElement) {
-  const NodeCtor = container.ownerDocument.defaultView?.Node;
-  return !!NodeCtor && target instanceof NodeCtor && container.contains(target);
+function updateSource(
+  context: AtomViewContext,
+  requestedKind: OpaqueMarkdownKind,
+  requestedSource: string,
+  nextSource: string,
+) {
+  const { node, view, getPos, signal } = context;
+  if (signal.aborted || !view.editable) return false;
+  let position: number | undefined;
+  try {
+    position = getPos();
+  } catch {
+    return false;
+  }
+  if (typeof position !== "number") return false;
+  const currentNode = view.state.doc.nodeAt(position);
+  if (currentNode !== node || readOpaqueKind(currentNode) !== requestedKind
+    || readOpaqueSource(currentNode) !== requestedSource) return false;
+  if (nextSource === requestedSource) return true;
+  view.dispatch(view.state.tr.setNodeMarkup(
+    position, node.type, { ...node.attrs, source: nextSource }, node.marks,
+  ));
+  return true;
 }
 
 export function createOpaqueNodeViewClass(
@@ -50,218 +71,82 @@ export function createOpaqueNodeViewClass(
     nodeType,
     onEdit,
   } = options;
-  const refreshers = new Set<() => void>();
+  const views = new Set<AtomView>();
   const resolveOnEdit = () => getOnEdit ? getOnEdit() : onEdit;
+  const labelContext = (node: ProseMirrorNode) => {
+    const kind = readOpaqueKind(node);
+    return Object.freeze({ kind, kindLabel: messages.opaqueKindLabels[kind] });
+  };
+  const controls: readonly AtomControl[] = onEdit || getOnEdit ? [{
+    className: "mdw-opaque-edit",
+    label: messages.opaqueEditSource,
+    ariaLabel: ({ node }) => messages.opaqueEditSourceLabel(labelContext(node)),
+    hidden: () => !resolveOnEdit(),
+    onClick(context) {
+      const kind = readOpaqueKind(context.node);
+      const source = readOpaqueSource(context.node);
+      resolveOnEdit()?.({
+        kind,
+        source,
+        update: nextSource => updateSource(context, kind, source, nextSource),
+      });
+    },
+  }] : [];
 
   return class OpaqueNodeView implements NodeView {
     static refresh() {
-      for (const refresh of [...refreshers]) {
-        refresh();
-      }
+      for (const atom of [...views]) atom.refresh();
     }
 
     readonly dom: HTMLElement;
 
-    private node: ProseMirrorNode;
-    private readonly sourceElement: HTMLElement;
-    private readonly kindElement: HTMLElement | null;
-    private readonly editButton: HTMLButtonElement | null;
-    private destroyed = false;
-
-    constructor(
-      node: ProseMirrorNode,
-      private readonly view: EditorView,
-      private readonly getPos: () => number | undefined,
-    ) {
+    constructor(node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) {
       if (node.type !== nodeType) {
         throw new RangeError(`Opaque node view expected ${nodeType.name}, received ${node.type.name}.`);
       }
 
-      this.node = node;
-      const ownerDocument = view.dom.ownerDocument;
-      this.dom = ownerDocument.createElement(display === "block" ? "div" : "span");
-      this.dom.className = `mdw-opaque-node mdw-opaque-${display}`;
-      this.dom.setAttribute("contenteditable", "false");
-      this.dom.setAttribute("role", "group");
-
-      if (display === "block") {
-        const header = ownerDocument.createElement("div");
-        header.className = "mdw-opaque-header";
-
-        this.kindElement = ownerDocument.createElement("span");
-        this.kindElement.className = "mdw-opaque-kind";
-        header.append(this.kindElement);
-
-        this.editButton = this.createEditButton(ownerDocument);
-
-        if (this.editButton) {
-          header.append(this.editButton);
-        }
-
-        const pre = ownerDocument.createElement("pre");
-        pre.className = "mdw-opaque-source";
-        this.sourceElement = ownerDocument.createElement("code");
-        pre.append(this.sourceElement);
-        this.dom.append(header, pre);
-      } else {
-        this.kindElement = null;
-        this.sourceElement = ownerDocument.createElement("code");
-        this.sourceElement.className = "mdw-opaque-source";
-        this.dom.append(this.sourceElement);
-
-        this.editButton = this.createEditButton(ownerDocument);
-
-        if (this.editButton) {
-          this.dom.append(this.editButton);
-        }
-      }
-
-      this.renderNode(node);
-      refreshers.add(this.refresh);
-    }
-
-    update(node: ProseMirrorNode) {
-      if (node.type !== nodeType) {
-        return false;
-      }
-
-      this.node = node;
-      this.renderNode(node);
-      return true;
-    }
-
-    selectNode() {
-      this.dom.classList.add("ProseMirror-selectednode");
-    }
-
-    deselectNode() {
-      this.dom.classList.remove("ProseMirror-selectednode");
-    }
-
-    stopEvent(event: Event) {
-      return !!this.editButton && isEventTargetInside(event.target, this.editButton);
-    }
-
-    ignoreMutation() {
-      return true;
-    }
-
-    destroy() {
-      if (this.destroyed) {
-        return;
-      }
-
-      this.destroyed = true;
-      refreshers.delete(this.refresh);
-      this.editButton?.removeEventListener("click", this.handleEditClick);
-    }
-
-    private readonly refresh = () => {
-      if (!this.destroyed) {
-        this.renderNode(this.node);
-      }
-    };
-
-    private createEditButton(ownerDocument: Document) {
-      if (!onEdit && !getOnEdit) {
-        return null;
-      }
-
-      const button = ownerDocument.createElement("button");
-      button.className = "mdw-opaque-edit";
-      button.type = "button";
-      button.textContent = messages.opaqueEditSource;
-      button.addEventListener("click", this.handleEditClick);
-      return button;
-    }
-
-    private readonly handleEditClick = () => {
-      const currentOnEdit = resolveOnEdit();
-
-      if (!currentOnEdit || this.destroyed || !this.view.editable) {
-        return;
-      }
-
-      const requestedNode = this.node;
-      const kind = readOpaqueKind(requestedNode);
-      const source = readOpaqueSource(requestedNode);
-
-      currentOnEdit({
-        kind,
-        source,
-        update: (nextSource) => this.updateSource(requestedNode, kind, source, nextSource),
+      let atom: AtomView | undefined;
+      atom = createAtomView(node, view, getPos, {
+        display,
+        className: `mdw-opaque-node mdw-opaque-${display}`,
+        label: current => messages.opaqueSourceLabel(labelContext(current)),
+        controls,
+        render(context) {
+          const ownerDocument = context.dom.ownerDocument;
+          const kindElement = context.header ? ownerDocument.createElement("span") : null;
+          if (context.header && kindElement) {
+            context.header.classList.add("mdw-opaque-header");
+            kindElement.className = "mdw-opaque-kind";
+            context.header.prepend(kindElement);
+          }
+          const sourceElement = ownerDocument.createElement("code");
+          if (display === "block") {
+            const pre = ownerDocument.createElement("pre");
+            pre.className = "mdw-opaque-source";
+            pre.append(sourceElement);
+            context.content.append(pre);
+          } else {
+            sourceElement.className = "mdw-opaque-source";
+            context.content.append(sourceElement);
+          }
+          const renderNode = ({ node, dom }: AtomViewContext) => {
+            const { kind, kindLabel } = labelContext(node);
+            dom.setAttribute("data-mdw-opaque-kind", kind);
+            if (kindElement) kindElement.textContent = kindLabel;
+            sourceElement.textContent = readOpaqueSource(node);
+          };
+          renderNode(context);
+          return {
+            update: renderNode,
+            destroy() {
+              if (atom) views.delete(atom);
+            },
+          };
+        },
       });
-    };
-
-    private updateSource(
-      requestedNode: ProseMirrorNode,
-      requestedKind: OpaqueMarkdownKind,
-      requestedSource: string,
-      nextSource: string,
-    ) {
-      if (this.destroyed || !this.view.editable) {
-        return false;
-      }
-
-      let pos: number | undefined;
-
-      try {
-        pos = this.getPos();
-      } catch {
-        return false;
-      }
-
-      if (typeof pos !== "number") {
-        return false;
-      }
-
-      const currentNode = this.view.state.doc.nodeAt(pos);
-
-      if (
-        currentNode !== requestedNode ||
-        currentNode.type !== nodeType ||
-        readOpaqueKind(currentNode) !== requestedKind ||
-        readOpaqueSource(currentNode) !== requestedSource
-      ) {
-        return false;
-      }
-
-      if (nextSource === requestedSource) {
-        return true;
-      }
-
-      const transaction = this.view.state.tr.setNodeMarkup(
-        pos,
-        nodeType,
-        { ...currentNode.attrs, source: nextSource },
-        currentNode.marks,
-      );
-      this.view.dispatch(transaction);
-      return true;
-    }
-
-    private renderNode(node: ProseMirrorNode) {
-      const kind = readOpaqueKind(node);
-      const kindLabel = messages.opaqueKindLabels[kind];
-      const context = Object.freeze({ kind, kindLabel });
-
-      this.dom.setAttribute("data-mdw-opaque-kind", kind);
-      this.dom.setAttribute("aria-label", messages.opaqueSourceLabel(context));
-
-      if (this.kindElement) {
-        this.kindElement.textContent = kindLabel;
-      }
-
-      if (this.editButton) {
-        const hasEditHandler = !!resolveOnEdit();
-        const editDisabled = !hasEditHandler || !this.view.editable;
-        this.editButton.hidden = !hasEditHandler;
-        this.editButton.disabled = editDisabled;
-        this.editButton.setAttribute("aria-disabled", editDisabled ? "true" : "false");
-        this.editButton.setAttribute("aria-label", messages.opaqueEditSourceLabel(context));
-      }
-
-      this.sourceElement.textContent = readOpaqueSource(node);
+      this.dom = atom.dom;
+      views.add(atom);
+      return atom;
     }
   };
 }

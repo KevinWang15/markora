@@ -65,6 +65,10 @@ editor is read-only, or composition is active. Updating a current request with
 its unchanged source succeeds as a no-op; an actual change is one undoable
 extension transaction. No form, YAML parser, or standalone UI is bundled.
 
+The source always uses Markora's shared atom frame and selection ring. The edit
+button appears only when `onEditSource` is supplied. This extension requires
+extension API 1.5.0 or later within the 1.x series.
+
 Import `markora-extension-frontmatter/styles.css` explicitly. Package tokens
 use the `--mdw-frontmatter-*` prefix and fall back to Markora's public design
 tokens; hosts may override them within their embed scope.

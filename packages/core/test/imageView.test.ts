@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import { EditorState } from 'prosemirror-state';
+import { DecorationSet, EditorView } from 'prosemirror-view';
 import { createEditor } from '../src/createEditor';
 import { defaultMarkdownEditorMessages } from '../src/editorMessages';
-import { createImageViewClass } from '../src/imageView';
+import { createImageViewFactory } from '../src/imageView';
 import { schema } from './support/currentMarkdownCodec';
 import type { MarkdownEditorImageLoadRequest } from '../src/resourceApi';
 import { normalizeMarkdownEditorResources } from '../src/resourcePolicy';
@@ -12,13 +15,28 @@ function createHost() {
   return element;
 }
 
+const imageCleanups: Array<() => void> = [];
+
+function createImageView(factory: ReturnType<typeof createImageViewFactory>, node: ProseMirrorNode) {
+  const view = new EditorView(createHost(), { state: EditorState.create({ schema }) });
+  const atom = factory.create(node, view, () => undefined);
+  const destroy = () => { atom.destroy!(); view.destroy(); };
+  imageCleanups.push(destroy);
+  return {
+    dom: atom.dom,
+    update: (current: ProseMirrorNode) => atom.update!(current, [], DecorationSet.empty),
+    destroy,
+  };
+}
+
 afterEach(() => {
+  for (const cleanup of imageCleanups.splice(0)) cleanup();
   document.body.innerHTML = '';
 });
 
 describe('image node view', () => {
   it('labels empty-alt authoring objects and defers to populated native alt text', () => {
-    const ImageView = createImageViewClass({
+    const ImageView = createImageViewFactory({
       imageNodeType: schema.nodes.image,
       messages: {
         ...defaultMarkdownEditorMessages,
@@ -26,11 +44,11 @@ describe('image node view', () => {
       },
       resources: normalizeMarkdownEditorResources(undefined),
     });
-    const imageView = new ImageView(schema.nodes.image.create({
+    const imageView = createImageView(ImageView, schema.nodes.image.create({
       alt: null,
       src: '/decorative.png',
       title: null,
-    }), document);
+    }));
     const image = imageView.dom.querySelector('img');
 
     expect(image?.getAttribute('alt')).toBe('');
@@ -48,17 +66,17 @@ describe('image node view', () => {
   });
 
   it('exposes loading as semantic DOM state for tokenized CSS animation', () => {
-    const ImageView = createImageViewClass({
+    const ImageView = createImageViewFactory({
       imageNodeType: schema.nodes.image,
       resources: normalizeMarkdownEditorResources({
         loadImage: () => new Promise(() => undefined),
       }),
     });
-    const imageView = new ImageView(schema.nodes.image.create({
+    const imageView = createImageView(ImageView, schema.nodes.image.create({
       alt: 'Pending',
       src: '/pending.png',
       title: null,
-    }), document);
+    }));
 
     expect(imageView.dom.dataset.mdwImageState).toBe('loading');
     expect(imageView.dom.querySelector('.mdw-image-spinner')?.getAttribute('aria-hidden')).toBe('true');
@@ -71,7 +89,7 @@ describe('image node view', () => {
   });
 
   it('settles the CSS state and supports localized resource-policy text', () => {
-    const ImageView = createImageViewClass({
+    const ImageView = createImageViewFactory({
       imageNodeType: schema.nodes.image,
       messages: {
         ...defaultMarkdownEditorMessages,
@@ -81,11 +99,11 @@ describe('image node view', () => {
         loadImage: () => null,
       }),
     });
-    const imageView = new ImageView(schema.nodes.image.create({
+    const imageView = createImageView(ImageView, schema.nodes.image.create({
       alt: 'Fallback',
       src: '/fallback.png',
       title: null,
-    }), document);
+    }));
 
     expect(imageView.dom.dataset.mdwImageState).toBe('error');
     expect(imageView.dom.textContent).toContain('Imagen bloqueada');
@@ -182,8 +200,8 @@ describe('image node view', () => {
 
   it('keeps a reentrant replacement request cancellable after aborting the stale request', () => {
     const requests: MarkdownEditorImageLoadRequest[] = [];
-    let imageView!: InstanceType<ReturnType<typeof createImageViewClass>>;
-    const ImageView = createImageViewClass({
+    let imageView!: ReturnType<typeof createImageView>;
+    const ImageView = createImageViewFactory({
       imageNodeType: schema.nodes.image,
       resources: normalizeMarkdownEditorResources({
         loadImage(request) {
@@ -201,11 +219,11 @@ describe('image node view', () => {
         },
       }),
     });
-    imageView = new ImageView(schema.nodes.image.create({
+    imageView = createImageView(ImageView, schema.nodes.image.create({
       alt: 'First',
       src: '/first.png',
       title: null,
-    }), document);
+    }));
 
     imageView.update(schema.nodes.image.create({
       alt: 'Trigger',

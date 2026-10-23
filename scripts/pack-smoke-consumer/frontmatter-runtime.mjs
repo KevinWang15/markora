@@ -57,6 +57,7 @@ const [
   math,
   toc,
   components,
+  { createAtomView, defineMarkdownEditorExtension },
 ] = await Promise.all([
   import("markora"),
   import("markora/minimal"),
@@ -68,6 +69,7 @@ const [
   import("markora-extension-math"),
   import("markora-extension-toc"),
   import("markora-extension-components"),
+  import("markora/extension-api"),
 ]);
 const SOURCE = "\uFEFF---\r\ntitle: Packed\r\nanchor: &base value\r\ncopy: *base\r\n...";
 const corePackage = JSON.parse(readFileSync(new URL("../package.json", import.meta.resolve("markora")), "utf8"));
@@ -97,6 +99,68 @@ for (const [label, create] of [["root", createEditor], ["minimal", createMinimal
   baseline.destroy();
   element.replaceChildren();
 
+  let packedAtom;
+  let atomSignal;
+  let atomCleanups = 0;
+  let atomClicks = 0;
+  const atomExtension = defineMarkdownEditorExtension({
+    name: "pack-smoke-atom",
+    version: "1.0.0",
+    compatibility: { markora: "^0.1.0", extensionApi: "^1.5.0" },
+    schema: {
+      nodes: [{
+        name: "packed_atom",
+        spec: {
+          inline: true,
+          atom: true,
+          group: "inline",
+          attrs: { label: { default: "Packed atom" } },
+          toDOM: () => ["span"],
+        },
+      }],
+    },
+    markdown: { serializer: { nodes: { packed_atom(state, node) { state.text(node.attrs.label); } } } },
+    createRuntime: () => ({
+      nodeViews: [{
+        id: "atom",
+        node: "packed_atom",
+        create: () => (node, view, getPos) => {
+          packedAtom = createAtomView(node, view, getPos, {
+            display: "inline",
+            label: current => current.attrs.label,
+            controls: [{ label: "Edit", onClick: () => { atomClicks += 1; } }],
+            render(context) {
+              atomSignal = context.signal;
+              context.content.textContent = context.node.attrs.label;
+              return {
+                update(next) { next.content.textContent = next.node.attrs.label; },
+                destroy() { atomCleanups += 1; },
+              };
+            },
+          });
+          return packedAtom;
+        },
+      }],
+    }),
+  });
+  const atomMarkdown = "Packed atom";
+  const atomEditor = create({ element, extensions: [atomExtension], markdown: "" });
+  atomEditor.view.dispatch(atomEditor.view.state.tr.insert(1, atomEditor.view.state.schema.nodes.packed_atom.create()));
+  const atomButton = packedAtom.dom.querySelector("button");
+  atomButton.click();
+  atomEditor.updateOptions({ editable: false });
+  const atomRefreshed = packedAtom.refresh();
+  if (!atomRefreshed || !atomButton.disabled || atomButton.getAttribute("aria-disabled") !== "true"
+    || atomClicks !== 1 || atomSignal.aborted || atomEditor.getMarkdown() !== atomMarkdown
+    || !element.querySelector(".mdw-atom-inline .mdw-atom-content")) {
+    throw new Error("Packed atom frame failed for " + label);
+  }
+  atomEditor.destroy();
+  if (!atomSignal.aborted || atomCleanups !== 1 || packedAtom.refresh()) {
+    throw new Error("Packed atom cleanup failed for " + label);
+  }
+  element.replaceChildren();
+
   const card = components.defineComponent({
     name: "packed-card",
     parseProps: value => ({ title: String(value.title) }),
@@ -108,6 +172,7 @@ for (const [label, create] of [["root", createEditor], ["minimal", createMinimal
   const componentApi = componentEditor.extensions.get(componentExtension);
   if (!componentApi.commands.insert(card, { title: "Packed component" })
     || !element.querySelector('[data-status="ready"]')?.textContent.includes("Packed component")
+    || !element.querySelector("section.mdw-component.mdw-atom-block .mdw-atom-content")
     || !componentEditor.getMarkdown().includes("component:packed-card")
     || !componentApi.commands.update(card, { title: "Edited component" })
     || !componentEditor.commands.undo()
@@ -167,6 +232,8 @@ for (const [label, create] of [["root", createEditor], ["minimal", createMinimal
   const handle = editor.extensions.get(definition);
   if (
     handle.state.getSource() !== SOURCE
+    || !element.querySelector(".mdw-frontmatter.mdw-atom-block .mdw-atom-status[role=status]")
+    || element.querySelector(".mdw-frontmatter button") !== null
     || editor.getMarkdown() !== SOURCE + "\n\nBody"
     || !editor.extensions.manifest.extensions.some(({ name }) => (
       name === "markora-extension-frontmatter"

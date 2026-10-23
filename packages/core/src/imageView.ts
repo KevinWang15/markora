@@ -1,4 +1,6 @@
 import type { Node as ProseMirrorNode, NodeType } from "prosemirror-model";
+import type { EditorView } from "prosemirror-view";
+import { createAtomView, type AtomViewContext } from "./atomView";
 import type { MarkdownEditorResourceErrorPhase } from "./resourceApi";
 import {
   defaultMarkdownEditorMessages,
@@ -11,27 +13,12 @@ import {
   type NormalizedMarkdownEditorResources,
 } from "./resourcePolicy";
 
-type ImageViewInstance = {
-  dom: HTMLSpanElement;
-  update(node: ProseMirrorNode): boolean;
-  selectNode(): void;
-  deselectNode(): void;
-  stopEvent(): boolean;
-  ignoreMutation(): boolean;
-  destroy(): void;
-};
-
-type ImageViewClass = {
-  new (node: ProseMirrorNode, ownerDocument: Document): ImageViewInstance;
-  refresh(): void;
-};
-
-export function createImageViewClass(options: {
+export function createImageViewFactory(options: {
   imageNodeType: NodeType;
   messages?: MarkdownEditorMessages;
   onError?: (error: unknown, phase: MarkdownEditorResourceErrorPhase) => void;
   resources: NormalizedMarkdownEditorResources;
-}): ImageViewClass {
+}) {
   const {
     imageNodeType,
     messages = defaultMarkdownEditorMessages,
@@ -42,17 +29,12 @@ export function createImageViewClass(options: {
   const instances = new Set<ImageView>();
 
   class ImageView {
-    static refresh() {
-      for (const instance of [...instances]) {
-        if (!instance.destroyed) instance.load();
-      }
-    }
-    dom: HTMLSpanElement;
+    dom: HTMLElement;
     private sourceRow: HTMLSpanElement;
     private sourceText: HTMLSpanElement;
     private frame: HTMLSpanElement;
     private img: HTMLImageElement;
-    private status: HTMLSpanElement;
+    private status: HTMLElement;
     private spinner: HTMLSpanElement;
     private errorIcon: HTMLSpanElement;
     private statusText: HTMLSpanElement;
@@ -63,11 +45,9 @@ export function createImageViewClass(options: {
     private loadState: "loading" | "loaded" | "error" = "loading";
     private errorUsesAltText = false;
 
-    constructor(private node: ProseMirrorNode, private ownerDocument: Document) {
+    constructor(private node: ProseMirrorNode, private ownerDocument: Document, context: AtomViewContext) {
       const doc = this.ownerDocument;
-      this.dom = doc.createElement("span");
-      this.dom.className = "mdw-image";
-      this.dom.contentEditable = "false";
+      this.dom = context.dom;
 
       this.sourceRow = doc.createElement("span");
       this.sourceRow.className = "mdw-image-source";
@@ -86,11 +66,8 @@ export function createImageViewClass(options: {
       this.img = doc.createElement("img");
       this.img.draggable = false;
 
-      this.status = doc.createElement("span");
-      this.status.className = "mdw-image-status";
-      this.status.setAttribute("aria-atomic", "true");
-      this.status.setAttribute("aria-live", "polite");
-      this.status.setAttribute("role", "status");
+      this.status = context.status;
+      this.status.classList.add("mdw-image-status");
 
       const statusInner = doc.createElement("span");
       statusInner.className = "mdw-image-status-inner";
@@ -111,7 +88,7 @@ export function createImageViewClass(options: {
       statusInner.append(this.spinner, this.errorIcon, this.statusText);
       this.status.append(statusInner);
       this.frame.append(this.img, this.status);
-      this.dom.append(this.sourceRow, this.frame);
+      context.content.append(this.sourceRow, this.frame);
 
       instances.add(this);
       this.syncMeta();
@@ -138,22 +115,8 @@ export function createImageViewClass(options: {
       return true;
     }
 
-    selectNode() {
-      this.dom.classList.add("ProseMirror-selectednode");
-      this.sourceRow.hidden = false;
-    }
-
-    deselectNode() {
-      this.dom.classList.remove("ProseMirror-selectednode");
-      this.sourceRow.hidden = true;
-    }
-
-    stopEvent() {
-      return false;
-    }
-
-    ignoreMutation() {
-      return true;
+    setSelected(selected: boolean) {
+      this.sourceRow.hidden = !selected;
     }
 
     destroy() {
@@ -245,7 +208,8 @@ export function createImageViewClass(options: {
       this.statusText.textContent = message;
     }
 
-    private load() {
+    load() {
+      if (this.destroyed) return;
       const rawSrc = typeof this.node.attrs.src === "string" ? this.node.attrs.src : "";
       const getFallbackMessage = () =>
         typeof this.node.attrs.alt === "string" && this.node.attrs.alt
@@ -450,5 +414,25 @@ export function createImageViewClass(options: {
     }
   }
 
-  return ImageView;
+  return {
+    create(node: ProseMirrorNode, view: EditorView, getPos: () => number | undefined) {
+      return createAtomView(node, view, getPos, {
+        display: "inline",
+        className: "mdw-image",
+        statusDisplay: "visible",
+        label: current => current.attrs.alt || messages.imageEmptyAltTextLabel,
+        render(context) {
+          const renderer = new ImageView(node, view.dom.ownerDocument, context);
+          return {
+            update: current => renderer.update(current.node),
+            selectionChanged: current => renderer.setSelected(current.selected),
+            destroy: () => renderer.destroy(),
+          };
+        },
+      });
+    },
+    refresh() {
+      for (const instance of [...instances]) instance.load();
+    },
+  };
 }
