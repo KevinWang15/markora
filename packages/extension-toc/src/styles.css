@@ -17,7 +17,7 @@
   unicode-bidi: isolate;
 }
 
-.mdw-toc.ProseMirror-selectednode {
+.ProseMirror-focused .mdw-toc.ProseMirror-selectednode {
   outline: var(--mdw-focus-ring-width, 2px) solid
     var(--mdw-toc-selection-color, var(--mdw-color-focus, Highlight));
   outline-offset: var(--mdw-focus-ring-offset, 2px);
@@ -132,7 +132,7 @@
   }
 
   .mdw-toc__entry:focus-visible,
-  .mdw-toc.ProseMirror-selectednode {
+  .ProseMirror-focused .mdw-toc.ProseMirror-selectednode {
     outline-color: Highlight;
   }
 }
