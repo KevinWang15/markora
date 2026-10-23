@@ -1320,6 +1320,12 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
 
           if (this.focusOnActivation) {
             this.focusActiveSelection();
+          } else if (
+            this.outerView.hasFocus()
+            && this.outerView.state.selection instanceof NodeSelection
+            && this.outerView.state.selection.from === this.getPos()
+          ) {
+            this.outerView.focus();
           }
 
           if (!this.nearViewport && !this.isOuterSelectionInsideCodeBlock()) {

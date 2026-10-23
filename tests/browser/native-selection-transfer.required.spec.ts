@@ -1433,6 +1433,9 @@ test("@required native multi-block drag preserves an enclosed managed code block
     markdown,
     root: "shadow",
   });
+  await expect(editorLocator(labPage, id).locator(".mdw-code-block"))
+    .toHaveAttribute("data-mdw-code-block-state", "active");
+  await settleEditor(labPage, id);
   expect((await snapshotEditor(labPage, id)).selection).toMatchObject({
     anchor: 6,
     from: 6,

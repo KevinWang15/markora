@@ -4,6 +4,7 @@ import { chromiumTest,
   blurEditor,
   editorLocator,
   expect,
+  focusEditor,
   getMarkdown,
   mountEditor,
   settleEditor,
@@ -307,6 +308,42 @@ test("@required inactive code-block click hands the caret to a warm lazy editor"
 });
 
 for (const root of ["document", "shadow"] as const) {
+  test(`@required lazy code activation preserves a selected node in a ${root} root`, async ({ labPage }) => {
+    let releaseRuntime!: () => void;
+    const runtimeGate = new Promise<void>((resolve) => {
+      releaseRuntime = resolve;
+    });
+    await labPage.route(/activeCodeBlockView-[^/]+\.js$/, async (route) => {
+      await runtimeGate;
+      await route.continue();
+    });
+
+    try {
+      const id = `cold-node-selection-${root}`;
+      const markdown = "Before\n\n```js\nx\n```\n\n---\n\nAfter";
+      await mountEditor(labPage, { id, markdown, root });
+      const host = editorLocator(labPage, id);
+      const shell = host.locator(".mdw-code-block");
+      await expect(shell).toHaveAttribute("data-mdw-code-block-state", "loading");
+      await focusEditor(labPage, id, { anchor: 7 });
+      await labPage.keyboard.press("ArrowRight");
+      await expect(shell).toHaveClass(/mdw-element-selected/);
+      const selection = (await snapshotEditor(labPage, id)).selection;
+
+      releaseRuntime();
+      await expect(shell).toHaveAttribute("data-mdw-code-block-state", "active");
+      await settleEditor(labPage, id);
+      expect((await snapshotEditor(labPage, id)).selection).toEqual(selection);
+      await expect(shell).toHaveClass(/mdw-element-selected/);
+      await expect(host).toBeFocused();
+      await expect(shell.locator(".cm-content")).not.toBeFocused();
+      expect(await getMarkdown(labPage, id)).toBe(markdown);
+    } finally {
+      releaseRuntime();
+      await labPage.unroute(/activeCodeBlockView-[^/]+\.js$/);
+    }
+  });
+
   for (const handoff of ["host control", "public blur"] as const) {
     chromiumTest(`@required cold lazy activation respects ${handoff} in a ${root} root`, async ({ labPage }) => {
       await reloadWithoutIntersectionObserver(labPage);
