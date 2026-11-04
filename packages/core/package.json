@@ -1,6 +1,6 @@
 {
   "name": "markora",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "A headless, embeddable Markdown editor toolkit built with ProseMirror and CodeMirror.",
   "type": "module",
   "license": "MIT",

@@ -57,6 +57,7 @@ import { resolveMarkdownEditorExtensions } from "./extensionResolver";
 import { assertEditorHostAvailable,claimEditorHost } from "./hostOwnership";
 import { createHostIdleScheduler } from "./idleScheduler";
 import { createImageViewFactory } from "./imageView";
+import { createLinkViewFactory } from "./linkView";
 import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from "./managedBlockCursor";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import {
@@ -278,6 +279,7 @@ const ImageView = createImageViewFactory({
   onError: onResourceError,
   resources,
 });
+const LinkView = createLinkViewFactory({ onError: onResourceError, resources });
 
 function getAncestorInfo(state: EditorState, nodeType: NodeType): AncestorInfo | null {
   const { selection } = state;
@@ -492,6 +494,7 @@ const { convertPipeTable } = createPipeTableHelpers({
     createEscapedBoundaryPlugin,
     revealMarkConfigs,
     ImageView,
+    LinkView,
     getActiveListItemInfo,
     getActiveLineMarker,
     getTableUiContext,
@@ -579,6 +582,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     createEscapedBoundaryPlugin,
     revealMarkConfigs,
     ImageView,
+    LinkView,
     getActiveListItemInfo,
     getActiveLineMarker,
     getTableUiContext,
@@ -2244,6 +2248,11 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         },
         ...extensionAssembly.contributions.nodeViews,
       },
+      markViews: {
+        link(mark, editorView) {
+          return LinkView.create(mark, editorView);
+        },
+      },
       dispatchTransaction: createTransactionDispatcher({
         isActive: () => lifecycle === "active",
         isPasting: () => clipboard.isPasting(),
@@ -2509,6 +2518,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     refreshResources() {
       assertActive("refresh resources");
       ImageView.refresh();
+      LinkView.refresh();
     },
     flushChange() {
       if (lifecycle !== "active" || view.isDestroyed) {

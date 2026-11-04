@@ -191,6 +191,20 @@ describe("resource runtime isolation", () => {
   });
 });
 
+describe("root link rendering", () => {
+  it("keeps a bare autolink's marker on the rendered anchor and in Markdown", () => {
+    const editor = track(createRootEditor({
+      element: createHost(),
+      markdown: "see https://example.test/auto",
+      resources: { resolveUrl: ({ url }) => `${url}?via=host` },
+    }));
+    const anchor = editor.view.dom.querySelector("a")!;
+    expect(anchor.getAttribute("href")).toBe("https://example.test/auto?via=host");
+    expect(anchor.getAttribute("data-markora-autolink")).toBe("true");
+    expect(editor.getMarkdown()).toBe("see https://example.test/auto");
+  });
+});
+
 describe.each(runtimes)("$name resource opening", ({ createEditor }) => {
   it("uses the safe default popup contract when no host opener is present", () => {
     const openWindow = vi.spyOn(window, "open").mockImplementation(() => null);
@@ -255,11 +269,65 @@ describe.each(runtimes)("$name resource opening", ({ createEditor }) => {
     expect(hostileEvent.defaultPrevented).toBe(true);
     expect(openUrl).toHaveBeenCalledTimes(1);
     expect(openWindow).not.toHaveBeenCalled();
+    // Rendering the link resolves it once; each modifier click resolves the stored URL, not the
+    // rendered href.
     expect(requests).toEqual([
       { kind: "link", purpose: "open", url: "/docs" },
       { kind: "link", purpose: "open", url: "/docs" },
       { kind: "link", purpose: "open", url: "/docs" },
+      { kind: "link", purpose: "open", url: "/docs" },
     ]);
+  });
+
+  it("renders each link with the URL it opens, without changing the stored Markdown", async () => {
+    let base = "https://a.example.test";
+    const editor = track(createEditor({
+      element: createHost(),
+      markdown: "[Docs](/docs \"Guide\") and [Gone](/gone)",
+      resources: {
+        resolveUrl: ({ url }) => url === "/gone" ? null : url.startsWith("/") ? base + url : url,
+      },
+    }));
+    const anchors = () => [...editor.view.dom.querySelectorAll("a")];
+    expect(anchors().map((anchor) => [anchor.textContent, anchor.getAttribute("href")])).toEqual([
+      ["Docs", "https://a.example.test/docs"],
+      ["Gone", null],
+    ]);
+    expect(anchors()[0]!.getAttribute("title")).toBe("Guide");
+    expect(editor.getMarkdown()).toBe("[Docs](/docs \"Guide\") and [Gone](/gone)");
+
+    // A changed resource context reaches rendered links too, without an edit.
+    const doc = editor.view.state.doc;
+    base = "https://b.example.test";
+    editor.refreshResources();
+    // The rewritten href is not read back as an edit once the mutation observer has run.
+    await flushPromises();
+    expect(anchors()[0]!.getAttribute("href")).toBe("https://b.example.test/docs");
+    expect(editor.view.state.doc).toBe(doc);
+    expect(editor.getMarkdown()).toBe("[Docs](/docs \"Guide\") and [Gone](/gone)");
+  });
+
+  it("renders a link without href when resolving it fails, and reports the failure", () => {
+    const failure = new Error("resolver failed");
+    let fail = false;
+    const errors: unknown[] = [];
+    const editor = track(createEditor({
+      element: createHost(),
+      markdown: "[Docs](/docs)",
+      resources: {
+        resolveUrl: ({ url }) => {
+          if (fail) throw failure;
+          return url;
+        },
+      },
+    }));
+    editor.subscribe("error", (event) => {
+      if (event.code === "resource-callback-failed") errors.push(event.error);
+    });
+    fail = true;
+    editor.refreshResources();
+    expect(editor.view.dom.querySelector("a")?.hasAttribute("href")).toBe(false);
+    expect(errors).toEqual([failure]);
   });
 
   it("does not open a URL after the resolver destroys the editor", () => {

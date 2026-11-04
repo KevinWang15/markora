@@ -64,6 +64,7 @@ import { MARKORA_VERSION } from "./extensionVersion";
 import { assertEditorHostAvailable,claimEditorHost } from "./hostOwnership";
 import { createHostIdleScheduler } from "./idleScheduler";
 import { createImageViewFactory } from "./imageView";
+import { createLinkViewFactory } from "./linkView";
 import { ManagedBlockCursor, isManagedBlockNodeFromSchema } from "./managedBlockCursor";
 import { createMarkBoundaryHelpers } from "./markBoundaryUtils";
 import { createMinimalMarkdownEditorPreset } from "./minimalExtensionPreset";
@@ -548,6 +549,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     onError: handleResourceError,
     resources,
   });
+  const LinkView = createLinkViewFactory({ onError: handleResourceError, resources });
 
   try {
     plugins = [
@@ -690,6 +692,11 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
           return ImageView.create(node, editorView, getPos);
         },
         ...extensionAssembly.contributions.nodeViews,
+      },
+      markViews: {
+        link(mark, editorView) {
+          return LinkView.create(mark, editorView);
+        },
       },
       state: initialState,
       dispatchTransaction: createTransactionDispatcher({
@@ -1446,6 +1453,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     refreshResources() {
       assertActive("refresh resources");
       ImageView.refresh();
+      LinkView.refresh();
     },
     flushChange() {
       if (lifecycle === "active" && !view.isDestroyed) {

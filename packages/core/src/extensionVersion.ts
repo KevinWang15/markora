@@ -1,1 +1,1 @@
-export const MARKORA_VERSION = "0.1.2" as const;
+export const MARKORA_VERSION = "0.1.4" as const;

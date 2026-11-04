@@ -2,6 +2,7 @@ import type { Schema } from "prosemirror-model";
 import { NodeSelection, TextSelection, type EditorState, type Transaction } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import type { ActiveImageInfo, ImageEditorOverlay, LinkEditorOverlay } from "./uiTypes";
+import { storedLinkUrl } from "./linkView";
 import type { MarkdownEditorResourceErrorPhase } from "./resourceApi";
 import {
   resolveResourceUrl,
@@ -318,7 +319,7 @@ export function createMediaActionHelpers(options: {
       return false;
     }
 
-    const href = anchor.getAttribute("href");
+    const href = storedLinkUrl(anchor);
 
     if (!href) {
       return false;

@@ -1,5 +1,6 @@
 import { Plugin } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
+import { storedLinkUrl } from "./linkView";
 import type { MarkdownEditorResourceErrorPhase } from "./resourceApi";
 import {
   resolveResourceUrl,
@@ -40,7 +41,7 @@ export function createResourceOpenPlugin(options: {
           const kind = imageWrapper || image ? "image" : anchor ? "link" : null;
           const rawUrl = imageWrapper?.dataset.src
             ?? image?.getAttribute("src")
-            ?? anchor?.getAttribute("href")
+            ?? (anchor ? storedLinkUrl(anchor) : null)
             ?? null;
 
           if (!kind || !rawUrl) {
