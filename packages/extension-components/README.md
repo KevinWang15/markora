@@ -7,10 +7,10 @@ Works with both `markora` and `markora/minimal`. The core bundle is unchanged. N
 ## Install
 
 ```sh
-npm install markora@^0.1.2 markora-extension-components@^0.0.3
+npm install markora@^0.1.2 markora-extension-components@^0.0.4
 ```
 
-Version 0.0.3 requires Markora 0.1.2 or later within the 0.1 line (extension API 1.5.0). It uses the shared atom frame for selection, accessibility, and cleanup; the component registration, rendering, editing, and Markdown APIs are unchanged. Upgrade core and this extension together, including both stylesheets.
+Version 0.0.4 requires Markora 0.1.2 or later within the 0.1 line (extension API 1.5.0). It uses the shared atom frame for selection, accessibility, and cleanup, and its stylesheet leaves the content you render alone; the component registration, rendering, editing, and Markdown APIs are unchanged. Upgrade core and this extension together, including both stylesheets.
 
 ## Define and register
 
@@ -103,6 +103,8 @@ render({ element, props, signal }) {
   return () => chart.destroy();
 }
 ```
+
+The stylesheet styles the component's frame, header controls, source form and fallback, never what you render: buttons, tables and code in your mount keep your application's styles. The fallback is a `.mdw-component-fallback` note followed by the source in `.mdw-component-fallback-source`; a read-only surface whose readers can't repair source can hide the latter.
 
 Render and edit callbacks are **trusted application code**, not sandboxed HTML renderers. They own output accessibility, URL/network policy, escaping, and any event listeners outside the provided mount. Do not assign untrusted properties to `innerHTML`. The package's fallback UI uses `textContent`. Renderer/edit/cleanup exceptions use Markora's existing `error` event channel. Validation failures on imported documents stay local to the source fallback.
 

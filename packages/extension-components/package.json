@@ -1,6 +1,6 @@
 {
   "name": "markora-extension-components",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Typed, host-rendered custom components in Markora Markdown documents.",
   "type": "module",
   "license": "MIT",

@@ -45,7 +45,7 @@ export function createComponentsExtension(options: ComponentsExtensionOptions) {
   const messages = normalizeMessages(options.messages);
   return defineMarkdownEditorExtension({
     name: "markora-extension-components",
-    version: "0.0.3",
+    version: "0.0.4",
     compatibility: { extensionApi: "^1.5.0", markora: "^0.1.2" },
     schema: {
       nodes: [{

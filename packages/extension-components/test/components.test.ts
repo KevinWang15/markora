@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEditor, type MarkdownEditor } from "markora";
 import { createEditor as createMinimalEditor } from "markora/minimal";
@@ -152,9 +153,18 @@ describe.each([["root", createEditor], ["minimal", createMinimalEditor]] as cons
   it("preserves invalid and potentially hostile source without running it", () => {
     const hostile = '<img src=x onerror=alert(1)><script>throw Error()</script>';
     const { editor } = mount({ markdown: `\`\`\`component:metrics-chart\n${hostile}\n\`\`\`` });
-    expect(document.querySelector('[data-status="invalid"] pre')?.textContent).toBe(hostile);
+    expect(document.querySelector('[data-status="invalid"] pre.mdw-component-fallback-source')?.textContent).toBe(hostile);
+    // The note and the source carry their own classes, so a host can style or hide either.
+    expect(document.querySelector('[data-status="invalid"] .mdw-component-fallback')?.textContent).toBeTruthy();
     expect(document.querySelector("img, script")).toBeNull();
     expect(editor.getMarkdown()).toContain(hostile);
+  });
+
+  it("styles only its own controls and fallback, never content the host renders", () => {
+    const css = readFileSync("packages/extension-components/src/styles.css", "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    // Descendant rules from the frame itself would reach the host's buttons, code and fields.
+    expect(css).not.toMatch(/\.mdw-component\s+(?:button|pre|textarea|:is\(button)/);
+    expect(css).toMatch(/\.mdw-component-fallback-source\s*\{/);
   });
 
   it("tracks async edits when text before the component moves its position", () => {

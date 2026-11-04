@@ -102,8 +102,10 @@ export class ComponentNodeView {
   private fallback(message: string) {
     const document = this.dom.ownerDocument;
     const status = document.createElement("p");
+    status.className = "mdw-component-fallback";
     status.textContent = message;
     const source = document.createElement("pre");
+    source.className = "mdw-component-fallback-source";
     source.textContent = this.node.attrs.source;
     this.preview.replaceChildren(status, source);
   }

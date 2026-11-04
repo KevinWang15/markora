@@ -10,13 +10,14 @@
 .mdw-component .mdw-atom-controls { gap: 8px; }
 .mdw-component-header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--mdw-color-border, #cbd5e1); }
 .mdw-component-header strong { flex: 1; overflow-wrap: anywhere; }
-.mdw-component button { cursor: pointer; font: inherit; padding: 5px 10px; border: 1px solid var(--mdw-color-border, #cbd5e1); border-radius: 6px; color: inherit; background: var(--mdw-color-surface-subtle, #f8fafc); }
-.mdw-component :is(button, textarea):focus-visible { outline: 2px solid var(--mdw-color-focus, #2563eb); outline-offset: 2px; }
+/* The component's own controls and fallback only: what a host renders in the preview keeps its own styles. */
+:is(.mdw-component .mdw-atom-controls, .mdw-component-form) button { cursor: pointer; font: inherit; padding: 5px 10px; border: 1px solid var(--mdw-color-border, #cbd5e1); border-radius: 6px; color: inherit; background: var(--mdw-color-surface-subtle, #f8fafc); }
+:is(.mdw-component .mdw-atom-controls, .mdw-component-form) :is(button, textarea):focus-visible { outline: 2px solid var(--mdw-color-focus, #2563eb); outline-offset: 2px; }
 .mdw-component-preview { padding: 18px; min-width: 0; }
-.mdw-component pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
+.mdw-component-fallback-source { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
 .mdw-component-form { padding: 16px; border-top: 1px solid var(--mdw-color-border, #cbd5e1); }
 .mdw-component-form textarea { display: block; box-sizing: border-box; width: 100%; margin-block: 8px; resize: vertical; font: 13px/1.6 monospace; color: inherit; background: var(--mdw-color-surface, #fff); border: 1px solid var(--mdw-color-border, #cbd5e1); border-radius: 6px; padding: 10px; }
 .mdw-component-form button { margin-inline-end: 8px; }
 .mdw-component-error { color: var(--mdw-color-danger, #b91c1c); margin-block: 8px; }
 .mdw-component [hidden] { display: none !important; }
-@media (forced-colors: active) { .mdw-component, .mdw-component button, .mdw-component textarea { border-color: CanvasText; } }
+@media (forced-colors: active) { .mdw-component, :is(.mdw-component .mdw-atom-controls, .mdw-component-form) button, .mdw-component-form textarea { border-color: CanvasText; } }
