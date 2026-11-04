@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEditor, type MarkdownEditor } from "markora";
 import { createEditor as createMinimalEditor } from "markora/minimal";
@@ -161,7 +163,7 @@ describe.each([["root", createEditor], ["minimal", createMinimalEditor]] as cons
   });
 
   it("styles only its own controls and fallback, never content the host renders", () => {
-    const css = readFileSync("packages/extension-components/src/styles.css", "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/styles.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
     // Descendant rules from the frame itself would reach the host's buttons, code and fields.
     expect(css).not.toMatch(/\.mdw-component\s+(?:button|pre|textarea|:is\(button)/);
     expect(css).toMatch(/\.mdw-component-fallback-source\s*\{/);
