@@ -824,7 +824,9 @@ const markdownTokenizer = new MarkdownIt("commonmark", { html: true, linkify: tr
   .enable("strikethrough")
   .enable("table")
   .enable("linkify");
-markdownTokenizer.block.ruler.at("table", widestRowTableRule);
+// Replacing a rule resets what it may interrupt: a table, as in markdown-it and GFM, starts right
+// after a paragraph's line or a reference definition, without a blank line between them.
+markdownTokenizer.block.ruler.at("table", widestRowTableRule, { alt: ["paragraph", "reference"] });
 markdownTokenizer.inline.ruler.at("strikethrough", exactDoubleTildeStrikethroughRule);
 const taskCheckedTokenAttribute = "data-markora-task-checked";
 // Markdown-it's built-in allowlist would discard host-approved custom schemes

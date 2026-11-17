@@ -49,10 +49,10 @@ Opaque HTML is shown as text and never executed inside the editor, but serialize
 ## Install
 
 ```bash
-npm install markora@^0.1.5
+npm install markora@^0.1.6
 ```
 
-This checkout prepares `markora@0.1.5` and `markora-extension-components@0.0.4`, plus initial releases of the migrated frontmatter, TOC, HTML, math, and footnotes extensions. Extensions, local renderers, and optional UI are separate packages, not bundled into core. The npm package named `markora-ui` is unrelated to this repository; do not install it as Markora's UI integration. Examples importing unpublished companion packages require a workspace build.
+This checkout prepares `markora@0.1.6` and `markora-extension-components@0.0.4`, plus initial releases of the migrated frontmatter, TOC, HTML, math, and footnotes extensions. Extensions, local renderers, and optional UI are separate packages, not bundled into core. The npm package named `markora-ui` is unrelated to this repository; do not install it as Markora's UI integration. Examples importing unpublished companion packages require a workspace build.
 
 ### Official optional syntax
 
@@ -351,7 +351,7 @@ The shared-atom release prepares the following separate packages on `https://reg
 
 | Package | Version | Core peer dependency |
 | --- | --- | --- |
-| `markora` | `0.1.5` | — |
+| `markora` | `0.1.6` | — |
 | `markora-extension-components` | `0.0.4` | `^0.1.2` |
 | `markora-extension-frontmatter` | `0.0.1` | `^0.1.2` |
 | `markora-extension-toc` | `0.0.1` | `^0.1.2` |
@@ -378,7 +378,7 @@ done
 
 # Only after all release gates pass and the artifact is approved:
 npm login --registry=https://registry.npmjs.org/
-npm publish ./artifacts/npm/markora-0.1.5.tgz --access public --tag latest --registry=https://registry.npmjs.org/
+npm publish ./artifacts/npm/markora-0.1.6.tgz --access public --tag latest --registry=https://registry.npmjs.org/
 npm publish ./artifacts/npm/markora-extension-components-0.0.4.tgz --access public --tag latest --registry=https://registry.npmjs.org/
 
 # Optional first releases, only when those packages are intended for publication:

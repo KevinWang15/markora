@@ -107,3 +107,37 @@ describe("ragged pipe-table fidelity", () => {
     expect(codec.serialize(document)).toContain("tail-sentinel");
   });
 });
+
+describe("tables that interrupt a block", () => {
+  // As in GFM and markdown-it: a table may start on the line after a paragraph's text.
+  it("starts right after a paragraph line, without a blank line", () => {
+    const codec = createMarkdownCodec();
+    const document = codec.parse([
+      "**What moved it**",
+      "| Platform | Change |",
+      "|---|---|",
+      "| Bedrock | +$56,530.50 |",
+    ].join("\n"))!;
+
+    expect(document.childCount).toBe(2);
+    expect(document.child(0).type.name).toBe("paragraph");
+    expect(document.child(0).textContent).toBe("What moved it");
+    expect(document.child(1).type.name).toBe("table");
+    expect(document.child(1).childCount).toBe(2);
+    const canonical = codec.serialize(document);
+    expect(canonical).toBe([
+      "**What moved it**",
+      "",
+      "| Platform | Change |",
+      "| --- | --- |",
+      "| Bedrock | +$56,530.50 |",
+    ].join("\n"));
+    expect(codec.parse(canonical)!.eq(document)).toBe(true);
+  });
+
+  it("does not start without a delimiter row", () => {
+    const document = createMarkdownCodec().parse("Text\n| not | a table |")!;
+    expect(document.childCount).toBe(1);
+    expect(document.child(0).type.name).toBe("paragraph");
+  });
+});
