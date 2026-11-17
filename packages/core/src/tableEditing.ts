@@ -70,7 +70,8 @@ function createLifecycleSafeTableEditingPlugin() {
       handleDOMEvents: {
         ...upstream.spec.props?.handleDOMEvents,
         mousedown(view, event) {
-          if (!upstreamMouseDown) return false;
+          // A read-only table is read like text: a drag selects text natively, not cells.
+          if (!upstreamMouseDown || !view.editable) return false;
           removeTrackedListeners(view);
           const root = view.root;
           const ownDescriptor = Object.getOwnPropertyDescriptor(root, "addEventListener");

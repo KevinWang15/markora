@@ -11,7 +11,9 @@
   word-break: break-word;
 }
 
-.mdw-host .ProseMirror:focus-visible {
+/* The ring shows where keyboard focus is. A read-only editor the host took out of the tab
+   order (tabindex="-1", a document to read) is focused by pointer only: no ring there. */
+.mdw-host .ProseMirror:not([aria-readonly="true"][tabindex="-1"]):focus-visible {
   border-color: var(--mdw-color-focus, #0969da);
   box-shadow: 0 0 0 var(--mdw-focus-ring-width, 2px) var(--mdw-color-focus-soft, rgba(9, 105, 218, 0.18));
 }
@@ -917,7 +919,7 @@
     box-shadow: none;
   }
 
-  .mdw-host .ProseMirror:focus-visible,
+  .mdw-host .ProseMirror:not([aria-readonly="true"][tabindex="-1"]):focus-visible,
   .mdw-host .ProseMirror .mdw-task-checkbox:focus-visible,
   .mdw-host .mdw-opaque-edit:focus-visible,
   .mdw-host button.mdw-code-block-language:focus-visible {

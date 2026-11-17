@@ -297,8 +297,9 @@ test("@required footnote keyboard relationships are scoped, localized, RTL-safe,
   await backReference.focus();
   await labPage.keyboard.press("Space");
   selection = (await snapshotEditor(labPage, firstId)).selection;
+  // A read-only editor keeps text selections only: the reference's position, not the node.
   expect(selection.from).toBe(firstSnapshot.references[0]!.position);
-  expect(selection.to).toBe(firstSnapshot.references[0]!.position + 1);
+  expect(selection.to).toBe(firstSnapshot.references[0]!.position);
 
   const reflow = await secondDefinition.evaluate((element) => {
     const definition = element as HTMLElement;

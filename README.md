@@ -49,10 +49,10 @@ Opaque HTML is shown as text and never executed inside the editor, but serialize
 ## Install
 
 ```bash
-npm install markora@^0.1.4
+npm install markora@^0.1.5
 ```
 
-This checkout prepares `markora@0.1.4` and `markora-extension-components@0.0.4`, plus initial releases of the migrated frontmatter, TOC, HTML, math, and footnotes extensions. Extensions, local renderers, and optional UI are separate packages, not bundled into core. The npm package named `markora-ui` is unrelated to this repository; do not install it as Markora's UI integration. Examples importing unpublished companion packages require a workspace build.
+This checkout prepares `markora@0.1.5` and `markora-extension-components@0.0.4`, plus initial releases of the migrated frontmatter, TOC, HTML, math, and footnotes extensions. Extensions, local renderers, and optional UI are separate packages, not bundled into core. The npm package named `markora-ui` is unrelated to this repository; do not install it as Markora's UI integration. Examples importing unpublished companion packages require a workspace build.
 
 ### Official optional syntax
 
@@ -251,7 +251,7 @@ The root entry supports task items and tables. Task items can contain supported 
 
 `createEditor()` accepts host-facing configuration without requiring ProseMirror access:
 
-- `editable` defaults to `true`; read-only mode still permits selection and copy, while blocking user, UI, formatting, and history mutations. Host-controlled `editor.commands.reconcileMarkdown()` and `resetMarkdown()` remain available.
+- `editable` defaults to `true`; read-only mode still permits selection and copy, while blocking user, UI, formatting, and history mutations. Host-controlled `editor.commands.reconcileMarkdown()` and `resetMarkdown()` remain available. A read-only editor reads as a document: it reveals no Markdown syntax at the selection, and its selection is always a text one (a clicked image, rule, or component, a table cell range, or a gap cursor becomes the text position or range it covers; a drag across cells selects their text natively). It keeps its keyboard focus ring while in the tab order; give it `attributes: { tabindex: "-1" }` (with `role: "document"`, say) to render it as a page part without one.
 - `placeholder` supplies empty-editor guidance.
 - `autofocus` defaults to `false`, and `initialSelection` accepts `"start"`, `"end"`, `"all"`, or `{ anchor, head? }`.
 - Object selection targets use in-range integer ProseMirror positions that resolve inside text blocks.
@@ -351,7 +351,7 @@ The shared-atom release prepares the following separate packages on `https://reg
 
 | Package | Version | Core peer dependency |
 | --- | --- | --- |
-| `markora` | `0.1.4` | — |
+| `markora` | `0.1.5` | — |
 | `markora-extension-components` | `0.0.4` | `^0.1.2` |
 | `markora-extension-frontmatter` | `0.0.1` | `^0.1.2` |
 | `markora-extension-toc` | `0.0.1` | `^0.1.2` |
@@ -378,7 +378,7 @@ done
 
 # Only after all release gates pass and the artifact is approved:
 npm login --registry=https://registry.npmjs.org/
-npm publish ./artifacts/npm/markora-0.1.4.tgz --access public --tag latest --registry=https://registry.npmjs.org/
+npm publish ./artifacts/npm/markora-0.1.5.tgz --access public --tag latest --registry=https://registry.npmjs.org/
 npm publish ./artifacts/npm/markora-extension-components-0.0.4.tgz --access public --tag latest --registry=https://registry.npmjs.org/
 
 # Optional first releases, only when those packages are intended for publication:

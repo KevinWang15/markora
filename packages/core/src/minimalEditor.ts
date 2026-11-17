@@ -53,7 +53,7 @@ createHorizontalRulePlugin,
 createImagePlugin,
 createInputRuleRecoveryPlugin,
 } from "./editorPlugins";
-import { resolveSelectionTarget,snapshotSelection as snapshotBaseSelection } from "./editorSelection";
+import { createReadOnlySelectionPlugin,readOnlySelection,readOnlyStartSelection,resolveSelectionTarget,snapshotSelection as snapshotBaseSelection } from "./editorSelection";
 import { createStateEventEmitter } from "./editorStateEvents";
 import { createChangeContext,createTransactionDispatcher } from "./editorTransactionRuntime";
 import { MarkdownEditorExtensionError } from "./extensionApi";
@@ -562,6 +562,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
           );
         },
       }),
+      createReadOnlySelectionPlugin(() => runtimeOptions.editable),
       assetController.plugin,
       codec.createImportedContentSanitizerPlugin(),
       createPlaceholderPlugin(() => runtimeOptions.placeholder),
@@ -681,7 +682,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     const initialState = EditorState.create({
       doc,
       plugins,
-      selection: resolvedInitialSelection,
+      selection: runtimeOptions.editable ? resolvedInitialSelection : readOnlyStartSelection(doc, resolvedInitialSelection),
     });
 
     view = new EditorView(element, {
@@ -782,7 +783,11 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }
 
     const previousState = view.state;
-    const nextState = EditorState.create({ doc: nextDoc, plugins });
+    const nextState = EditorState.create({
+      doc: nextDoc,
+      plugins,
+      selection: runtimeOptions.editable ? undefined : readOnlyStartSelection(nextDoc),
+    });
     changeEmitter.cancel();
     assetController.cancelAll();
     assertActive("reset Markdown");
@@ -1398,6 +1403,16 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         attributes: () => domAttributes!,
         editable: () => runtimeOptions.editable,
       });
+    }
+
+    // The editing selection it had becomes the text one a read-only editor keeps.
+    const selection = !runtimeOptions.editable && lifecycle === "active" && !view.isDestroyed
+      ? readOnlySelection(view.state.doc, view.state.selection)
+      : null;
+    if (selection) {
+      const transaction = view.state.tr.setSelection(selection);
+      setBuiltinMarkdownEditorTransactionOrigin(transaction, "command");
+      view.dispatch(transaction);
     }
   };
 

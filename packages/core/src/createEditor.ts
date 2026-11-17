@@ -43,7 +43,7 @@ normalizeMarkdownEditorMessages,
 type MarkdownEditorMessages,
 } from "./editorMessages";
 import { createCodeBlockOuterSelectionPlugin,createCodeFenceEditingPlugin,createHeadingEditingPlugin,createHorizontalRulePlugin,createImagePlugin,createInputRuleRecoveryPlugin,createMarkBoundaryPlugin,createMarkdownRevealPlugin,type RevealMarkConfig } from "./editorPlugins";
-import { getSelectionKind,resolveSelectionTarget,snapshotSelection as snapshotBaseSelection } from "./editorSelection";
+import { createReadOnlySelectionPlugin,getSelectionKind,readOnlySelection,readOnlyStartSelection,resolveSelectionTarget,snapshotSelection as snapshotBaseSelection } from "./editorSelection";
 import { createStateEventEmitter } from "./editorStateEvents";
 import { createChangeContext,createTransactionDispatcher } from "./editorTransactionRuntime";
 import { MarkdownEditorExtensionError } from "./extensionApi";
@@ -1274,6 +1274,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         );
       },
     }),
+    createReadOnlySelectionPlugin(() => runtimeOptions.editable),
     createPlaceholderPlugin(() => runtimeOptions.placeholder),
     assetController.plugin,
     codec.createImportedContentSanitizerPlugin(),
@@ -1328,6 +1329,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     }),
     createCodeBlockOuterSelectionPlugin({ schema }),
     createMarkdownRevealPlugin({
+      isEditable: () => runtimeOptions.editable,
       revealMarkConfigs,
       getMarkInfo,
       isEscapedOutsideBoundary,
@@ -1454,6 +1456,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     const nextState = EditorState.create({
       doc: nextDoc,
       plugins,
+      selection: runtimeOptions.editable ? undefined : readOnlyStartSelection(nextDoc),
     });
     const callbackErrors: unknown[] = [];
 
@@ -2220,7 +2223,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     const initialState = EditorState.create({
       doc,
       plugins,
-      selection: resolvedInitialSelection,
+      selection: runtimeOptions.editable ? resolvedInitialSelection : readOnlyStartSelection(doc, resolvedInitialSelection),
     });
 
     view = runWithViewErrorCollector(pluginInitializationErrors, () => new EditorView(element, {
@@ -2444,6 +2447,22 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
         codeBlockLanguageEditor?.close(false);
       } catch (error) {
         optionErrors.push(error);
+      }
+
+      // The editing selection it had becomes the text one a read-only editor keeps.
+      const selection = lifecycle === "active" && !view.isDestroyed
+        ? readOnlySelection(view.state.doc, view.state.selection)
+        : null;
+      if (selection) {
+        try {
+          runWithViewErrorCollector(optionErrors, () => {
+            const transaction = view.state.tr.setSelection(selection);
+            setBuiltinMarkdownEditorTransactionOrigin(transaction, "command");
+            view.dispatch(transaction);
+          });
+        } catch (error) {
+          optionErrors.push(error);
+        }
       }
     }
 

@@ -752,17 +752,20 @@ export function createCodeBlockOuterSelectionPlugin(options: { schema: Schema })
 }
 
 export function createMarkdownRevealPlugin(options: {
+  /** Syntax shows where the user edits: a read-only editor shows the rendered document only. */
+  isEditable: () => boolean;
   revealMarkConfigs: RevealMarkConfig[];
   getMarkInfo: (state: EditorState, markName: MarkName) => MarkInfo | null;
   isEscapedOutsideBoundary: (state: EditorState, markName: MarkName, markInfo: MarkInfo) => boolean;
   getActiveListItemInfo: (state: EditorState) => { from: number; to: number } | null;
   getActiveLineMarker: (state: EditorState) => { pos: number; marker: string; className: string } | null;
 }) {
-  const { getActiveLineMarker, getActiveListItemInfo, getMarkInfo, isEscapedOutsideBoundary, revealMarkConfigs } = options;
+  const { getActiveLineMarker, getActiveListItemInfo, getMarkInfo, isEditable, isEscapedOutsideBoundary, revealMarkConfigs } = options;
 
   return new Plugin({
     props: {
       decorations(state) {
+        if (!isEditable()) return null;
         const decorations: Decoration[] = [];
 
         for (const config of revealMarkConfigs) {

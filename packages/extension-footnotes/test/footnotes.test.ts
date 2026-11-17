@@ -1078,7 +1078,9 @@ it("renders editor-scoped accessible relationships and navigates them in read-on
   expect(backReferences).toHaveLength(2);
   expect(backReferences[1]?.getAttribute("aria-label")).toBe("Retour 2: note");
   backReferences[1]!.click();
-  expect(first.view.state.selection).toBeInstanceOf(NodeSelection);
+  // A read-only editor keeps text selections only: the reference's position, not the node.
+  expect(first.view.state.selection).toBeInstanceOf(TextSelection);
+  expect(first.view.state.selection.empty).toBe(true);
   expect(first.view.state.selection.from).toBe(firstSnapshot.references[1]?.position);
 
   first.updateOptions({ editable: true });
