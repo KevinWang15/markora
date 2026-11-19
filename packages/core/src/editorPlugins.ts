@@ -441,8 +441,19 @@ export function createHeadingEditingPlugin(options: {
         return updateHeadingLevel(view, currentLevel + 1);
       },
       handleKeyDown(view, event) {
-        if (event.key === "Enter" && isPlainStructuralKey(view, event) && convertPipeTable(view)) {
-          return true;
+        if (event.key === "Enter" && isPlainStructuralKey(view, event)) {
+          if (convertPipeTable(view)) {
+            return true;
+          }
+
+          const { selection } = view.state;
+          const { $from } = selection;
+          const parent = $from.parent;
+
+          if (selection.empty && parent.type === schema.nodes.heading && parent.content.size === 0) {
+            event.preventDefault();
+            return updateHeadingLevel(view, null);
+          }
         }
 
         if (!isBackwardDeleteKey(view, event)) {

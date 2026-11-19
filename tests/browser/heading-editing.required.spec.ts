@@ -228,3 +228,81 @@ test("@required link and image dialogs stay anchored on resize after their trigg
   const imageDialogBox = (await imageDialog.boundingBox())!;
   expect(Math.abs(imageDialogBox.y - (imageBox.y + imageBox.height))).toBeLessThan(80);
 });
+
+test("@required unfocused heading drag-select and double-click stay accurate as # reveals", async ({ labPage }) => {
+  const id = "unfocused-heading-selection";
+  await mountEditor(labPage, { id, markdown: "# Markora\n\nSecond paragraph" });
+  const editor = editorLocator(labPage, id);
+  await expect(editor.locator(".mdw-marker-heading")).toBeHidden();
+
+  const pts = await editor.locator("h1").evaluate((heading) => {
+    const walker = heading.ownerDocument.createTreeWalker(heading, NodeFilter.SHOW_TEXT);
+    let text: Text | null = null;
+    while (walker.nextNode()) {
+      const candidate = walker.currentNode as Text;
+      if (candidate.data === "Markora") {
+        text = candidate;
+        break;
+      }
+    }
+    if (!text) throw new Error("Missing Markora text node.");
+    const rectAt = (index: number) => {
+      const range = heading.ownerDocument.createRange();
+      range.setStart(text!, index);
+      range.setEnd(text!, index + 1);
+      return range.getBoundingClientRect();
+    };
+    const r1 = rectAt(1); // 'a'
+    const r3 = rectAt(3); // 'k'
+    return {
+      x1: r1.left + 1,
+      x2: r3.right - 1,
+      y: r1.top + r1.height / 2,
+    };
+  });
+
+  await labPage.mouse.move(pts.x1, pts.y);
+  await labPage.mouse.down();
+  await labPage.mouse.move(pts.x2, pts.y, { steps: 8 });
+  await labPage.mouse.up();
+  await settleEditor(labPage, id);
+  expect((await snapshotEditor(labPage, id)).selection).toEqual({
+    anchor: 2,
+    from: 2,
+    head: 5,
+    to: 5,
+  });
+
+  // Blur with that non-empty selection active, then double-click "Markora" while unfocused.
+  await blurEditor(labPage, id);
+  await settleEditor(labPage, id);
+  await labPage.mouse.dblclick(pts.x1 + 10, pts.y);
+  await settleEditor(labPage, id);
+  expect((await snapshotEditor(labPage, id)).selection).toEqual({
+    anchor: 1,
+    from: 1,
+    head: 8,
+    to: 8,
+  });
+});
+
+test("@required empty heading exits to paragraph on Enter and triple delimiters format bold+italic", async ({ labPage }) => {
+  const id = "typora-heading-and-triple-delims";
+  await mountEditor(labPage, { id, markdown: "" });
+  const editor = editorLocator(labPage, id);
+  await focusEditor(labPage, id, "start");
+
+  await labPage.keyboard.type("# ");
+  await settleEditor(labPage, id);
+  await expect(editor.locator("h1")).toHaveCount(1);
+
+  await labPage.keyboard.press("Enter");
+  await settleEditor(labPage, id);
+  await expect(editor.locator("h1")).toHaveCount(0);
+  await expect(editor.locator("p")).toHaveCount(1);
+
+  await labPage.keyboard.type("***both*** plain ___also___");
+  await settleEditor(labPage, id);
+  await expect(editor.locator("strong em, em strong")).toHaveCount(2);
+  expect(await getMarkdown(labPage, id)).toMatch(/^\*\*\*both\*\*\* plain \*\*\*also\*\*\*|\*\*_both_\*\* plain \*\*_also_\*\*$/);
+});

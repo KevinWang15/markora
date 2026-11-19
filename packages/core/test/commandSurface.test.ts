@@ -1223,4 +1223,65 @@ describe("public command and state surface", () => {
     expect(() => editor.state.can.setHeading(2)).toThrow(MarkdownEditorDestroyedError);
     expect(() => editor.commands.insertTable()).toThrow(MarkdownEditorDestroyedError);
   });
+
+  it("exits an empty heading to a normal paragraph on Enter in one undo step", () => {
+    for (const factory of [createEditor, createMinimalEditor]) {
+      const editor = factory({ element: createHost(), markdown: "# " });
+      editor.focus();
+      expect(editor.state.isActive.heading(1)).toBe(true);
+
+      const enter = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" });
+      editor.view.dom.dispatchEvent(enter);
+
+      expect(enter.defaultPrevented).toBe(true);
+      expect(editor.state.isActive.paragraph()).toBe(true);
+      expect(editor.view.state.doc.childCount).toBe(1);
+
+      expect(editor.commands.undo()).toBe(true);
+      expect(editor.state.isActive.heading(1)).toBe(true);
+      editor.destroy();
+    }
+  });
+
+  it("formats triple-delimiter bold+italic input rules and recovers literal syntax on immediate Backspace", () => {
+    const typeText = (editor: ReturnType<typeof createEditor>, text: string) => {
+      for (const ch of text) {
+        const { from, to } = editor.view.state.selection;
+        const handled = editor.view.someProp("handleTextInput", (handler) => (
+          handler(editor.view, from, to, ch)
+        ));
+        if (!handled) {
+          editor.view.dispatch(editor.view.state.tr.insertText(ch, from, to));
+        }
+      }
+    };
+
+    for (const factory of [createEditor, createMinimalEditor]) {
+      const editor = factory({ element: createHost(), markdown: "" });
+      typeText(editor, "***both*** and ___also___");
+
+      const doc = editor.view.state.doc;
+      const markedRuns: Array<{ text: string; marks: string[] }> = [];
+      doc.descendants((node) => {
+        if (node.isText) {
+          markedRuns.push({
+            marks: node.marks.map((mark) => mark.type.name).sort(),
+            text: node.text ?? "",
+          });
+        }
+      });
+
+      expect(markedRuns).toEqual([
+        { marks: ["em", "strong"], text: "both" },
+        { marks: [], text: " and " },
+        { marks: ["em", "strong"], text: "also" },
+      ]);
+
+      // Immediate Backspace recovers the last triple-delimiter input rule.
+      const backspace = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Backspace" });
+      editor.view.dom.dispatchEvent(backspace);
+      expect(editor.view.state.doc.textContent).toBe("both and ___also___");
+      editor.destroy();
+    }
+  });
 });

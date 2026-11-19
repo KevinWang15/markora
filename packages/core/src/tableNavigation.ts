@@ -315,7 +315,28 @@ export function createTableNavigation(options: CreateTableNavigationOptions) {
       return true;
     }
 
-    return addTableRow(view, "after") || moveAfterManagedBlock(view, info.tablePos);
+    if (
+      tableCommands.addTableRow("after")(
+        state,
+        (transaction) => {
+          const updatedTable = transaction.doc.nodeAt(info.tablePos);
+          const appendedRow = updatedTable?.maybeChild(rowCount);
+          if (updatedTable && appendedRow && appendedRow.childCount > 0) {
+            let rowPos = info.tablePos + 1;
+            for (let index = 0; index < rowCount; index += 1) {
+              rowPos += updatedTable.child(index).nodeSize;
+            }
+            transaction.setSelection(getTableCellSelection(transaction.doc, rowPos + 1)).scrollIntoView();
+          }
+          view.dispatch(transaction);
+        },
+        view,
+      )
+    ) {
+      return true;
+    }
+
+    return moveAfterManagedBlock(view, info.tablePos);
   }
 
   return {

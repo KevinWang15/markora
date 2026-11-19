@@ -29,7 +29,9 @@ export type MarkInfo = {
   attrs?: Record<string, unknown>;
 };
 
-function createMarkInputRule(regexp: RegExp, markType: MarkType) {
+function createMarkInputRule(regexp: RegExp, markType: MarkType | readonly MarkType[]) {
+  const markTypes = Array.isArray(markType) ? markType : [markType];
+
   return new InputRule(regexp, (state, match, start, end) => {
     const text = match[1];
 
@@ -49,8 +51,13 @@ function createMarkInputRule(regexp: RegExp, markType: MarkType) {
       tr.delete(start, textStart);
     }
 
-    tr.addMark(start, start + text.length, markType.create());
-    tr.removeStoredMark(markType);
+    for (const type of markTypes) {
+      tr.addMark(start, start + text.length, type.create());
+    }
+
+    for (const type of markTypes) {
+      tr.removeStoredMark(type);
+    }
 
     return tr;
   });
@@ -263,6 +270,13 @@ export function createTypingShortcuts(options: {
   }
   if (marks.strike) {
     rules.push(createMarkInputRule(/(?<!~)~~([^~]+)~~$/, marks.strike));
+  }
+  if (marks.strong && marks.em) {
+    const boldItalic = [marks.strong, marks.em] as const;
+    rules.push(
+      createMarkInputRule(/(?<!\*)\*\*\*([^*]+)\*\*\*$/, boldItalic),
+      createMarkInputRule(/(?<!_)___([^_]+)___$/, boldItalic),
+    );
   }
   if (marks.strong) {
     rules.push(

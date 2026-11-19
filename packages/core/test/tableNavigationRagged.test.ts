@@ -201,4 +201,26 @@ describe('direct table axis reordering', () => {
     expect(editor.getMarkdown()).toBe(markdown);
     editor.destroy();
   });
+
+  it('appends a new row on Tab from the last cell and places the caret in the first column in one undo step', () => {
+    const editor = createEditor({ element: createHost(), markdown });
+    const navigation = createTestTableNavigation(editor);
+    setSelectionInsideTableCell(editor, 2, 2);
+
+    expect(navigation.moveTableCell(editor.view, 1)).toBe(true);
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe(markdown);
+
+    expect(editor.commands.redo()).toBe(true);
+    editor.view.dispatch(editor.view.state.tr.insertText('g'));
+
+    expect(editor.getMarkdown()).toBe([
+      '| H1 | H2 | H3 |',
+      '| --- | --- | --- |',
+      '| a | b | c |',
+      '| d | e | f |',
+      '| g |  |  |',
+    ].join('\n'));
+    editor.destroy();
+  });
 });

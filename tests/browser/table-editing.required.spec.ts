@@ -1,10 +1,12 @@
 import type { CDPSession, Locator, Page } from "@playwright/test";
 import { chromiumTest,
+  blurEditor,
   canRunEditorCommand,
   copyEditorSelection,
   dispatchTransfer,
   editorLocator,
   expect,
+  focusEditor,
   getEditorActiveState,
   getMarkdown,
   mountEditor,
@@ -718,4 +720,86 @@ test("@required modified cell-collapse keys preserve rectangular table selection
   }
 
   await cdp?.detach();
+});
+
+test("@required table toolbar, edge controls, and selected-cell chrome hide on blur and return on focus", async ({
+  labPage,
+}) => {
+  for (const root of ["document", "shadow"] as const) {
+    const id = `table-blur-chrome-${root}`;
+    await mountEditor(labPage, { id, markdown: TABLE_MARKDOWN, root });
+    const editor = editorLocator(labPage, id);
+    const toolbar = ownedOverlay(labPage, id, ".mdw-table-toolbar");
+    const edgeControls = ownedOverlay(labPage, id, ".mdw-table-edge-controls");
+    const rowSelector = edgeControls.getByRole("button", { name: "Select row 2" });
+
+    // Initial unfocused document starting with a table keeps table chrome hidden.
+    await expect(toolbar).toBeHidden();
+    await expect(edgeControls).toHaveJSProperty("hidden", true);
+
+    // Drag-select two cells while focused -> toolbar, edge controls, and cell highlight appear.
+    const cells = editor.locator("table tr").nth(1).locator("td");
+    await dragAcrossCells(labPage, cells.nth(0), cells.nth(1));
+    await settleEditor(labPage, id);
+    await expect(toolbar).toBeVisible();
+    await expect(rowSelector).toBeVisible();
+
+    const paintedSelectedCells = () => editor.locator("td.selectedCell").evaluateAll((elements) => (
+      elements.filter((element) => getComputedStyle(element, "::after").content !== "none").length
+    ));
+    expect(await paintedSelectedCells()).toBe(2);
+
+    // Moving focus to the table toolbar keeps toolbar & selected-cell highlight visible.
+    const resize = toolbar.getByRole("button", { name: "Resize table" });
+    await resize.focus();
+    await expect(toolbar).toBeVisible();
+    expect(await paintedSelectedCells()).toBe(2);
+
+    // Blurring from the table toolbar hides toolbar, edge controls, and cell highlight.
+    await resize.evaluate((button) => button.blur());
+    await expect(toolbar).toBeHidden();
+    await expect(edgeControls).toHaveJSProperty("hidden", true);
+    await expect(rowSelector).toBeHidden();
+    expect(await paintedSelectedCells()).toBe(0);
+
+    // Returning focus to the editor brings toolbar, edge controls, and cell highlight back.
+    await focusEditor(labPage, id);
+    await expect(toolbar).toBeVisible();
+    await expect(rowSelector).toBeVisible();
+    expect(await paintedSelectedCells()).toBe(2);
+
+    // Blurring directly from the editor hides toolbar, edge controls, and cell highlight again.
+    await blurEditor(labPage, id);
+    await expect(toolbar).toBeHidden();
+    await expect(edgeControls).toHaveJSProperty("hidden", true);
+    await expect(rowSelector).toBeHidden();
+    expect(await paintedSelectedCells()).toBe(0);
+
+    // Focusing the editor restores them cleanly.
+    await focusEditor(labPage, id);
+    await expect(toolbar).toBeVisible();
+    await expect(rowSelector).toBeVisible();
+    expect(await paintedSelectedCells()).toBe(2);
+  }
+});
+
+test("@required Tab from the last table cell appends a row and focuses its first column", async ({
+  labPage,
+}) => {
+  const id = "table-tab-append-first-col";
+  await mountEditor(labPage, { id, markdown: "| Name | Role |\n| --- | --- |\n| Ada | Lead |" });
+  const editor = editorLocator(labPage, id);
+  await editor.locator("table tr").nth(1).locator("td").nth(1).click();
+  await settleEditor(labPage, id);
+
+  await labPage.keyboard.press("Tab");
+  await labPage.keyboard.type("Bob");
+  await settleEditor(labPage, id);
+
+  expect(await getMarkdown(labPage, id)).toBe([
+    "| Name | Role |",
+    "| --- | --- |",
+    "| Ada | Lead |",
+    "| Bob |  |",
+  ].join("\n"));
 });

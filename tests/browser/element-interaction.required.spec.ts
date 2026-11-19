@@ -196,3 +196,44 @@ for (const root of ["document", "shadow"] as const) {
     await cdp?.detach();
   });
 }
+
+test("@required clicking empty padding below a terminal code block lets the user type and blurred outer selection hides chrome", async ({ labPage }) => {
+  const id = "terminal-code-padding-click";
+  const markdown = "before\n\n```js\nconst x = 1;\n```";
+  await mountEditor(labPage, { id, markdown });
+  const editor = editorLocator(labPage, id);
+  await editor.evaluate((element) => {
+    element.style.paddingBottom = "120px";
+  });
+
+  // Activate CodeMirror once, then select all so the code block has both outer and CM selections, then blur.
+  await editor.locator(".mdw-code-block").click();
+  await settleEditor(labPage, id);
+  await editor.locator("p").click();
+  await labPage.keyboard.press("ControlOrMeta+a");
+  await settleEditor(labPage, id);
+  const codeBlock = editor.locator(".mdw-code-block.mdw-code-block-outer-selection");
+  await expect(codeBlock).toHaveCount(1);
+  expect(await codeBlock.evaluate((el) => getComputedStyle(el, "::after").content)).not.toBe("none");
+
+  await labPage.evaluate((editorId) => window.__MARKORA_BROWSER_LAB__!.blur(editorId), id);
+  await settleEditor(labPage, id);
+  expect(await codeBlock.evaluate((el) => getComputedStyle(el, "::after").content)).toBe("none");
+  expect(await editor.locator(".cm-selectionBackground").evaluateAll((elements) => (
+    elements.filter((element) => {
+      const bg = getComputedStyle(element).backgroundColor;
+      return bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent";
+    }).length
+  ))).toBe(0);
+
+  // Click empty editor padding below the terminal code block and type directly.
+  const editorBox = (await editor.boundingBox())!;
+  const codeBox = (await editor.locator(".mdw-code-block").boundingBox())!;
+  await labPage.mouse.click(editorBox.x + 40, codeBox.y + codeBox.height + 40);
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(markdown);
+
+  await labPage.keyboard.type("after code");
+  await settleEditor(labPage, id);
+  expect(await getMarkdown(labPage, id)).toBe(`${markdown}\n\nafter code`);
+});

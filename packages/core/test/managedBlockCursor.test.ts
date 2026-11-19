@@ -1264,4 +1264,85 @@ describe('ManagedBlockCursor', () => {
     editor.destroy();
   });
 
+  it('places an after-edge managed cursor when clicking empty padding below a terminal code block', () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: ['```js', 'const a = 1;', '```'].join('\n'),
+    });
+
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const codeDom = editor.view.nodeDOM(codeBlock.pos) as HTMLElement;
+    vi.spyOn(codeDom, 'getBoundingClientRect').mockReturnValue({
+      bottom: 120,
+      height: 80,
+      left: 20,
+      right: 420,
+      top: 40,
+      width: 400,
+      x: 20,
+      y: 40,
+      toJSON: () => ({}),
+    });
+
+    const mouseDown = new MouseEvent('mousedown', {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+      clientX: 60,
+      clientY: 160,
+    });
+    editor.view.dom.dispatchEvent(mouseDown);
+
+    expect(mouseDown.defaultPrevented).toBe(true);
+    expectManagedCursor(editor, 'after', codeBlock.pos);
+    expect(editor.getMarkdown()).toBe(['```js', 'const a = 1;', '```'].join('\n'));
+
+    const inserted = editor.view.someProp('handleTextInput', (handler) => (
+      handler(editor.view, editor.view.state.selection.from, editor.view.state.selection.to, 'after code')
+    ));
+    expect(inserted).toBe(true);
+    expect(editor.getMarkdown()).toBe(['```js', 'const a = 1;', '```', '', 'after code'].join('\n'));
+    editor.destroy();
+  });
+
+  it('places a before-edge managed cursor when clicking empty padding above a leading managed block', () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: ['```js', 'const a = 1;', '```'].join('\n'),
+    });
+
+    const codeBlock = findNodeByName(editor.view.state.doc, 'code_block');
+    const codeDom = editor.view.nodeDOM(codeBlock.pos) as HTMLElement;
+    vi.spyOn(codeDom, 'getBoundingClientRect').mockReturnValue({
+      bottom: 120,
+      height: 80,
+      left: 20,
+      right: 420,
+      top: 40,
+      width: 400,
+      x: 20,
+      y: 40,
+      toJSON: () => ({}),
+    });
+
+    const mouseDown = new MouseEvent('mousedown', {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+      clientX: 60,
+      clientY: 12,
+    });
+    editor.view.dom.dispatchEvent(mouseDown);
+
+    expect(mouseDown.defaultPrevented).toBe(true);
+    expectManagedCursor(editor, 'before', codeBlock.pos);
+
+    const inserted = editor.view.someProp('handleTextInput', (handler) => (
+      handler(editor.view, editor.view.state.selection.from, editor.view.state.selection.to, 'before code')
+    ));
+    expect(inserted).toBe(true);
+    expect(editor.getMarkdown()).toBe(['before code', '', '```js', 'const a = 1;', '```'].join('\n'));
+    editor.destroy();
+  });
+
 });

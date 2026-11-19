@@ -401,6 +401,72 @@ export function createManagedBlockBoundaryPlugin(options: CreateManagedBlockBoun
         return options.insertParagraphAtManagedBlockBoundary(view, boundary, text);
       },
       handleDOMEvents: {
+        mousedown(view, event) {
+          const mouseEvent = event as MouseEvent;
+          if (
+            !view.editable
+            || view.composing
+            || mouseEvent.defaultPrevented
+            || mouseEvent.button !== 0
+            || mouseEvent.altKey
+            || mouseEvent.ctrlKey
+            || mouseEvent.metaKey
+            || mouseEvent.shiftKey
+            || mouseEvent.target !== view.dom
+          ) {
+            return false;
+          }
+
+          const isManagedBlock = (node: ProseMirrorNode | null | undefined): node is ProseMirrorNode => (
+            options.isManagedBlockNode(node)
+          );
+          const { doc } = view.state;
+          const placeBoundaryCursor = (blockPos: number, side: "before" | "after") => {
+            const cursor = ManagedBlockCursor.create(doc, blockPos, side, isManagedBlock);
+            if (!cursor) {
+              return false;
+            }
+
+            mouseEvent.preventDefault();
+            if (!view.state.selection.eq(cursor)) {
+              view.dispatch(view.state.tr.setSelection(cursor).scrollIntoView());
+            }
+
+            const activeElement = getActiveElement(view);
+            if (activeElement && view.dom.contains(activeElement) && activeElement.closest(".cm-editor")) {
+              blurElement(activeElement);
+            }
+            view.focus();
+            return true;
+          };
+
+          const readBlockRect = (blockPos: number) => {
+            const dom = view.nodeDOM(blockPos);
+            const rect = dom && "getBoundingClientRect" in dom
+              ? (dom as Element).getBoundingClientRect()
+              : null;
+            return rect && (rect.width > 0 || rect.height > 0) ? rect : null;
+          };
+
+          const lastChild = doc.lastChild;
+          if (lastChild && options.isManagedBlockNode(lastChild)) {
+            const lastPos = doc.content.size - lastChild.nodeSize;
+            const lastRect = readBlockRect(lastPos);
+            if (lastRect && mouseEvent.clientY > lastRect.bottom) {
+              return placeBoundaryCursor(lastPos, "after");
+            }
+          }
+
+          const firstChild = doc.firstChild;
+          if (firstChild && options.isManagedBlockNode(firstChild)) {
+            const firstRect = readBlockRect(0);
+            if (firstRect && mouseEvent.clientY < firstRect.top) {
+              return placeBoundaryCursor(0, "before");
+            }
+          }
+
+          return false;
+        },
         compositionstart(view) {
           const boundary = options.getManagedBlockBoundary(view.state);
 
