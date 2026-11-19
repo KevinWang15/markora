@@ -887,6 +887,33 @@ function readTextBlockAtPosition(
     : null;
 }
 
+function hasRevealableMarkdownMarker(state: EditorState, position: number) {
+  if (!Number.isInteger(position) || position < 0 || position > state.doc.content.size) {
+    return false;
+  }
+
+  const $position = state.doc.resolve(position);
+  const parent = $position.parent;
+
+  if (parent.type.name === "heading") {
+    return true;
+  }
+
+  for (let depth = $position.depth - 1; depth > 0; depth -= 1) {
+    if ($position.node(depth).type.name === "blockquote") {
+      return true;
+    }
+  }
+
+  for (let index = 0; index < parent.childCount; index += 1) {
+    if (parent.child(index).marks.length > 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function isPointerGraphemeBoundary(
   text: string,
   offset: number,
@@ -1884,6 +1911,7 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
 
       function stopPointerCaretDrag() {
         pointerCaretDrag = null;
+        view.dom.classList.remove("mdw-pointer-drag-pending");
         pointerDocument.removeEventListener("mousemove", handlePointerCaretDrag, true);
         pointerDocument.removeEventListener("mouseup", finishPointerCaretDrag, true);
         pointerWindow?.removeEventListener("blur", stopPointerCaretDrag);
@@ -1954,6 +1982,8 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
         if (!state.selection.eq(selection)) {
           view.dispatch(state.tr.setSelection(selection));
         }
+
+        view.dom.classList.remove("mdw-pointer-drag-pending");
       }
 
       function startPointerCaretDrag(event: MouseEvent) {
@@ -1963,7 +1993,13 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
         if (
           !intent
           || !event.isTrusted
-          || !readTextBlockAtPosition(view.state, intent.position, true)
+          || !(
+            readTextBlockAtPosition(view.state, intent.position, true)
+            || (
+              hasRevealableMarkdownMarker(view.state, intent.position)
+              && readTextBlockAtPosition(view.state, intent.position, false)
+            )
+          )
           || (
             !intent.selection.empty
             && intent.position >= intent.selection.from
@@ -1978,7 +2014,11 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
         // commits an ordinary caret; genuine movement switches to the model
         // drag above. Pressing inside an existing selection remains native so
         // selected-text drag-and-drop keeps its own transfer semantics.
+        const wasFocused = view.hasFocus();
         event.preventDefault();
+        if (!wasFocused) {
+          view.dom.classList.add("mdw-pointer-drag-pending");
+        }
         view.focus();
         pointerCaretDrag = {
           ...intent,
@@ -2094,8 +2134,18 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
       function stopPointerWordDrag() {
         pointerWordDrag = null;
         pointerDocument.removeEventListener("mousemove", handlePointerWordDrag, true);
-        pointerDocument.removeEventListener("mouseup", stopPointerWordDrag, true);
+        pointerDocument.removeEventListener("mouseup", finishPointerWordDrag, true);
         pointerWindow?.removeEventListener("blur", cancelPointerWordDrag);
+      }
+
+      function finishPointerWordDrag(event: MouseEvent) {
+        if (pointerWordDrag) {
+          // The double-click word selection is model-owned from its initiating
+          // press. Prevent Chromium from collapsing it during mouseup defaulting.
+          event.preventDefault();
+        }
+
+        stopPointerWordDrag();
       }
 
       function cancelPointerWordDrag() {
@@ -2183,7 +2233,7 @@ export function createInputRobustnessPlugin(ownerWindow: BrowserWindow) {
           lastPosition: null,
         };
         pointerDocument.addEventListener("mousemove", handlePointerWordDrag, true);
-        pointerDocument.addEventListener("mouseup", stopPointerWordDrag, true);
+        pointerDocument.addEventListener("mouseup", finishPointerWordDrag, true);
         pointerWindow?.addEventListener("blur", cancelPointerWordDrag);
       }
 

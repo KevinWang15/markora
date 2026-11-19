@@ -127,7 +127,7 @@
   margin-inline: auto;
 }
 
-.mdw-host .mdw-diagram--selected {
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-diagram--selected {
   outline: 2px solid var(--mdw-focus-ring, Highlight);
   outline-offset: 2px;
 }

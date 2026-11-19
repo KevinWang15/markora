@@ -219,7 +219,7 @@
   position: relative;
 }
 
-.mdw-host .ProseMirror :is(th, td).selectedCell::after {
+.mdw-host .ProseMirror:is(.ProseMirror-focused, .mdw-table-ui-focused) :is(th, td).selectedCell::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -665,13 +665,13 @@
   min-width: 0;
 }
 
-.mdw-host .mdw-code-block.mdw-code-block-outer-selection {
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection {
   border-color: var(--mdw-color-focus, #96c0ff);
   box-shadow: 0 0 0 var(--mdw-border-width, 1px) var(--mdw-color-focus-soft, rgba(9, 105, 218, 0.18)),
     var(--mdw-code-block-inset-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.5));
 }
 
-.mdw-host .mdw-code-block.mdw-code-block-outer-selection::after {
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -680,15 +680,15 @@
   z-index: var(--mdw-layer-selection, 1);
 }
 
-.mdw-host .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-language,
-.mdw-host .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-editor,
-.mdw-host .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-static,
-.mdw-host .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-static-gutter,
-.mdw-host .mdw-code-block.mdw-code-block-outer-selection .cm-gutters,
-.mdw-host .mdw-code-block.mdw-code-block-outer-selection .cm-activeLine,
-.mdw-host .mdw-code-block.mdw-code-block-outer-selection .cm-activeLineGutter,
-.mdw-host .mdw-code-block.mdw-code-block-outer-selection .cm-line,
-.mdw-host .mdw-code-block.mdw-code-block-outer-selection .cm-selectionBackground {
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-language,
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-editor,
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-static,
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection .mdw-code-block-static-gutter,
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection .cm-gutters,
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection .cm-activeLine,
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection .cm-activeLineGutter,
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection .cm-line,
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection .cm-selectionBackground {
   background: transparent !important;
 }
 
@@ -755,11 +755,11 @@
   color: var(--mdw-color-muted, #626c76);
 }
 
-.mdw-host .cm-activeLine {
+.mdw-host .cm-editor.cm-focused .cm-activeLine {
   background: var(--mdw-code-active-line-background, rgba(9, 105, 218, 0.06));
 }
 
-.mdw-host .cm-activeLineGutter {
+.mdw-host .cm-editor.cm-focused .cm-activeLineGutter {
   background: var(--mdw-color-accent-softer, rgba(9, 105, 218, 0.08));
 }
 
@@ -768,16 +768,22 @@
   border-inline-start-color: var(--mdw-color-caret, #1f2328);
 }
 
-.mdw-host .cm-selectionBackground,
+.mdw-host .cm-editor.cm-focused .cm-selectionBackground,
 .mdw-host .cm-content ::selection {
   background: var(--mdw-color-selection, rgba(9, 105, 218, 0.18));
+}
+
+.mdw-host .cm-editor:not(.cm-focused) .cm-activeLine,
+.mdw-host .cm-editor:not(.cm-focused) .cm-activeLineGutter,
+.mdw-host .cm-editor:not(.cm-focused) .cm-selectionBackground {
+  background: transparent !important;
 }
 
 .mdw-host .cm-content ::selection {
   color: var(--mdw-color-selection-text, inherit);
 }
 
-.mdw-host .mdw-code-block.mdw-code-block-outer-selection .cm-gutterElement {
+.mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection .cm-gutterElement {
   color: var(--mdw-color-accent-strong, #0550ae);
 }
 
@@ -834,7 +840,8 @@
   cursor: text;
 }
 
-.mdw-host .ProseMirror:not(.ProseMirror-focused) .mdw-marker {
+.mdw-host .ProseMirror:not(.ProseMirror-focused) .mdw-marker,
+.mdw-host .ProseMirror.mdw-pointer-drag-pending .mdw-marker {
   display: none;
 }
 
@@ -938,16 +945,16 @@
     box-shadow: none;
   }
 
-  .mdw-host .ProseMirror :is(th, td).selectedCell::after,
+  .mdw-host .ProseMirror:is(.ProseMirror-focused, .mdw-table-ui-focused) :is(th, td).selectedCell::after,
   .mdw-host .ProseMirror.ProseMirror-focused .mdw-document-selected,
-  .mdw-host .mdw-code-block.mdw-code-block-outer-selection {
+  .mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection {
     outline: var(--mdw-selection-ring-width, 2px) solid Highlight;
     outline-offset: calc(-1 * var(--mdw-selection-ring-width, 2px));
     box-shadow: none;
   }
 
-  .mdw-host .ProseMirror :is(th, td).selectedCell::after,
-  .mdw-host .mdw-code-block.mdw-code-block-outer-selection::after {
+  .mdw-host .ProseMirror:is(.ProseMirror-focused, .mdw-table-ui-focused) :is(th, td).selectedCell::after,
+  .mdw-host .ProseMirror.ProseMirror-focused .mdw-code-block.mdw-code-block-outer-selection::after {
     background: transparent;
   }
 
@@ -966,7 +973,7 @@
     forced-color-adjust: none;
   }
 
-  .mdw-host .cm-selectionBackground,
+  .mdw-host .cm-editor.cm-focused .cm-selectionBackground,
   .mdw-host .cm-content ::selection,
   .mdw-host .ProseMirror ::selection {
     background: Highlight;

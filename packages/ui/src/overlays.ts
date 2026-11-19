@@ -1087,6 +1087,7 @@ type TableDimensions = { rows: number; columns: number };
 type TableSizeMode = "create" | "resize";
 
 type TableSizeEditorOverlay = {
+  dom: HTMLElement;
   open: (
     view: EditorView,
     marker: HTMLElement,
@@ -1340,6 +1341,7 @@ function createTableSizeEditorOverlay(options: OverlayEnvironment & {
   const removeVisualViewportListeners = addViewportListeners(win, handleWindowChange);
 
   return {
+    dom,
     open(view, marker, mode, dimensions, onClose) {
       if (destroyed || view.isDestroyed || !view.editable) {
         close(false);
@@ -1523,6 +1525,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   );
 
   let activeView: EditorView | null = null;
+  let observedView: EditorView | null = null;
   let activeMarker: HTMLElement | null = null;
   let activeContextVersion = 0;
   let destroyed = false;
@@ -2400,10 +2403,67 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       : win.setTimeout(callback, 0);
   };
 
-  const close = (refocusIfToolbarFocused = true) => {
-    const view = activeView;
-    const activeElement = getDeepActiveElement(dom, doc, win);
-    const hadToolbarFocus = activeElement instanceof win.Node && dom.contains(activeElement);
+  const TABLE_UI_FOCUSED_CLASS = "mdw-table-ui-focused";
+
+  const hasManagedFocusState = (view: EditorView) => (
+    typeof view.hasFocus === "function"
+    && view.dom instanceof HTMLElementCtor
+    && view.dom.isConnected
+  );
+
+  const isNodeInsideTableUi = (node: EventTarget | null) => (
+    node instanceof win.Node
+    && (
+      dom.contains(node)
+      || edgeDom.contains(node)
+      || tableSizeEditor.dom.contains(node)
+    )
+  );
+
+  const isShadowHostOf = (candidate: EventTarget | null, descendant: Node) => {
+    if (!(candidate instanceof HTMLElementCtor) || !candidate.shadowRoot) {
+      return false;
+    }
+
+    let root = descendant.getRootNode();
+    while (root instanceof win.ShadowRoot) {
+      if (root.host === candidate) {
+        return true;
+      }
+      root = root.host.getRootNode();
+    }
+
+    return false;
+  };
+
+  const isNodeInsideTableInteraction = (view: EditorView, node: EventTarget | null) => (
+    isNodeInsideTableUi(node)
+    || (node instanceof win.Node && view.dom.contains(node))
+    || isShadowHostOf(node, view.dom)
+    || isShadowHostOf(node, dom)
+    || isShadowHostOf(node, edgeDom)
+    || isShadowHostOf(node, tableSizeEditor.dom)
+  );
+
+  const isTableUiFocused = (view: EditorView) => {
+    const active = getDeepActiveElement(dom, doc, win)
+      ?? (view.dom instanceof HTMLElementCtor ? getDeepActiveElement(view.dom, doc, win) : null);
+    return isNodeInsideTableUi(active);
+  };
+
+  const isTableInteractionFocused = (view: EditorView) => (
+    !hasManagedFocusState(view)
+    || view.hasFocus()
+    || isTableUiFocused(view)
+  );
+
+  const setTableUiFocusedClass = (view: EditorView | null, focused: boolean) => {
+    if (view && view.dom instanceof HTMLElementCtor) {
+      view.dom.classList.toggle(TABLE_UI_FOCUSED_CLASS, focused);
+    }
+  };
+
+  const hideChrome = () => {
     finishReorderDrag(false);
     clearSuppressedSelectorClick();
     cancelScheduledReposition();
@@ -2416,6 +2476,103 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     dom.style.display = "none";
     edgeDom.hidden = true;
     edgeDom.style.display = "none";
+  };
+
+  const syncFocusState = (view: EditorView) => {
+    if (destroyed || observedView !== view) {
+      return;
+    }
+
+    if (view.isDestroyed || !view.editable) {
+      close(false);
+      return;
+    }
+
+    if (!hasManagedFocusState(view)) {
+      return;
+    }
+
+    if (isTableInteractionFocused(view)) {
+      setTableUiFocusedClass(view, isTableUiFocused(view));
+      if (dom.hidden || activeView !== view) {
+        update(view);
+      }
+      return;
+    }
+
+    setTableUiFocusedClass(view, false);
+    hideChrome();
+  };
+
+  const handleObservedFocusIn = (event: FocusEvent) => {
+    if (event.currentTarget === dom) {
+      handleFocusIn(event);
+    }
+
+    const view = observedView;
+    if (destroyed || !view || view.isDestroyed || !view.editable || !hasManagedFocusState(view)) {
+      return;
+    }
+
+    const uiFocused = isNodeInsideTableUi(event.target) || isTableUiFocused(view);
+    setTableUiFocusedClass(view, uiFocused);
+
+    if (dom.hidden || activeView !== view) {
+      update(view);
+    }
+  };
+
+  const handleObservedFocusOut = (event: FocusEvent) => {
+    const view = observedView;
+    if (destroyed || !view || view.isDestroyed || !hasManagedFocusState(view)) {
+      return;
+    }
+
+    const nextTarget = event.relatedTarget;
+    if (
+      nextTarget instanceof HTMLElementCtor
+      && nextTarget.shadowRoot
+      && isNodeInsideTableInteraction(view, nextTarget)
+    ) {
+      queueMicrotask(() => syncFocusState(view));
+      return;
+    }
+
+    if (isNodeInsideTableInteraction(view, nextTarget)) {
+      setTableUiFocusedClass(view, isNodeInsideTableUi(nextTarget));
+      return;
+    }
+
+    setTableUiFocusedClass(view, false);
+    hideChrome();
+  };
+
+  const observeView = (view: EditorView | null) => {
+    const nextView = view && hasManagedFocusState(view) ? view : null;
+    if (observedView === nextView) {
+      return;
+    }
+
+    if (observedView) {
+      observedView.dom.removeEventListener("focusin", handleObservedFocusIn);
+      observedView.dom.removeEventListener("focusout", handleObservedFocusOut);
+      setTableUiFocusedClass(observedView, false);
+    }
+
+    observedView = nextView;
+
+    if (observedView) {
+      observedView.dom.addEventListener("focusin", handleObservedFocusIn);
+      observedView.dom.addEventListener("focusout", handleObservedFocusOut);
+    }
+  };
+
+  const close = (refocusIfToolbarFocused = true) => {
+    const view = activeView;
+    const activeElement = getDeepActiveElement(dom, doc, win);
+    const hadToolbarFocus = activeElement instanceof win.Node && dom.contains(activeElement);
+    observeView(null);
+    hideChrome();
 
     if (refocusIfToolbarFocused && hadToolbarFocus && view) {
       restoreTableEditorFocus(view);
@@ -2542,10 +2699,15 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   portalRoot.append(edgeDom);
 
   dom.addEventListener("mousedown", handleMouseDown);
-  dom.addEventListener("focusin", handleFocusIn);
+  dom.addEventListener("focusin", handleObservedFocusIn);
+  dom.addEventListener("focusout", handleObservedFocusOut);
   dom.addEventListener("keydown", handleKeyDown);
   edgeDom.addEventListener("mousedown", handleMouseDown);
+  edgeDom.addEventListener("focusin", handleObservedFocusIn);
+  edgeDom.addEventListener("focusout", handleObservedFocusOut);
   edgeDom.addEventListener("keydown", handleKeyDown);
+  tableSizeEditor.dom.addEventListener("focusin", handleObservedFocusIn);
+  tableSizeEditor.dom.addEventListener("focusout", handleObservedFocusOut);
   edgeDom.addEventListener("pointerdown", handleReorderPointerDown);
   edgeDom.addEventListener("pointermove", handleReorderPointerMove);
   edgeDom.addEventListener("pointerup", handleReorderPointerUp);
@@ -2677,7 +2839,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   win.addEventListener("scroll", handleWindowChange, true);
   const removeVisualViewportListeners = addViewportListeners(win, handleWindowChange);
 
-  const update = (view: EditorView) => {
+  const update = (view: EditorView, forceShow = false) => {
     if (destroyed || view.isDestroyed || !view.editable) {
       tableSizeEditor.close(false);
       close();
@@ -2698,6 +2860,15 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       close();
       return;
     }
+
+    observeView(view);
+    if (!forceShow && !isTableInteractionFocused(view)) {
+      setTableUiFocusedClass(view, false);
+      hideChrome();
+      return;
+    }
+
+    setTableUiFocusedClass(view, hasManagedFocusState(view) && isTableUiFocused(view));
 
     const contextChanged = activeView !== view || activeMarker !== marker;
     if (contextChanged) {
@@ -2738,18 +2909,22 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     create(view, marker, onClose) {
       return tableSizeEditor.open(view, marker, "create", { columns: 3, rows: 2 }, onClose);
     },
-    update,
-    focus(view) {
+    update(view) {
       update(view);
+    },
+    focus(view) {
+      update(view, true);
 
       if (activeView !== view || dom.hidden || dom.style.display === "none") {
         return false;
       }
 
       if (!setRovingIndex(rovingIndex, true)) {
+        syncFocusState(view);
         return false;
       }
 
+      syncFocusState(view);
       return getDeepActiveElement(dom, doc, win) === toolbarButtons[rovingIndex];
     },
     destroy() {
@@ -2760,10 +2935,15 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       destroyed = true;
       close(false);
       dom.removeEventListener("mousedown", handleMouseDown);
-      dom.removeEventListener("focusin", handleFocusIn);
+      dom.removeEventListener("focusin", handleObservedFocusIn);
+      dom.removeEventListener("focusout", handleObservedFocusOut);
       dom.removeEventListener("keydown", handleKeyDown);
       edgeDom.removeEventListener("mousedown", handleMouseDown);
+      edgeDom.removeEventListener("focusin", handleObservedFocusIn);
+      edgeDom.removeEventListener("focusout", handleObservedFocusOut);
       edgeDom.removeEventListener("keydown", handleKeyDown);
+      tableSizeEditor.dom.removeEventListener("focusin", handleObservedFocusIn);
+      tableSizeEditor.dom.removeEventListener("focusout", handleObservedFocusOut);
       edgeDom.removeEventListener("pointerdown", handleReorderPointerDown);
       edgeDom.removeEventListener("pointermove", handleReorderPointerMove);
       edgeDom.removeEventListener("pointerup", handleReorderPointerUp);

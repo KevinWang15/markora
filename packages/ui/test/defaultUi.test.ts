@@ -2418,4 +2418,96 @@ describe('createDefaultUi', () => {
 
     destroyControllers(controllers);
   });
+
+  it('hides table toolbar and edge controls while the editor is unfocused and tracks table UI focus', () => {
+    setWindowMetrics(window, { height: 600, width: 800 });
+    const hostElement = document.createElement('div');
+    const editorDom = document.createElement('div');
+    editorDom.tabIndex = 0;
+    const table = document.createElement('table');
+    table.innerHTML = '<tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr>';
+    editorDom.append(table);
+    hostElement.append(editorDom);
+    const outsideButton = document.createElement('button');
+    outsideButton.type = 'button';
+    document.body.append(hostElement, outsideButton);
+    setElementRect(table, { bottom: 260, left: 100, right: 420, top: 180 });
+
+    const controllers = createControllers(hostElement, undefined, {
+      getTableContext: () => ({
+        cell: { attrs: { align: null } },
+        columnCount: 2,
+        columnIndex: 0,
+        isCellSelection: true,
+        rowCount: 2,
+        rowIndex: 1,
+        selectedColumnFrom: 0,
+        selectedColumnTo: 1,
+        selectedRowFrom: 1,
+        selectedRowTo: 1,
+        tablePos: 0,
+      }),
+    });
+
+    const view = {
+      ...createView(),
+      dom: editorDom,
+      focus: () => editorDom.focus(),
+      hasFocus: () => document.activeElement === editorDom,
+      nodeDOM: () => table,
+    } as never;
+
+    const toolbar = document.querySelector<HTMLElement>('.mdw-table-toolbar')!;
+    const edgeControls = document.querySelector<HTMLElement>('.mdw-table-edge-controls')!;
+    const sizeDialog = document.querySelector<HTMLElement>('.mdw-table-size-editor')!;
+
+    // Initially unfocused -> table toolbar & edge controls stay hidden.
+    controllers.tableToolbar.update(view);
+    expect(toolbar.hidden).toBe(true);
+    expect(edgeControls.hidden).toBe(true);
+    expect(editorDom.classList.contains('mdw-table-ui-focused')).toBe(false);
+
+    // Focusing editor shows toolbar & edge controls.
+    editorDom.focus();
+    editorDom.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(toolbar.hidden).toBe(false);
+    expect(edgeControls.hidden).toBe(false);
+    expect(editorDom.classList.contains('mdw-table-ui-focused')).toBe(false);
+
+    // Moving focus to the toolbar keeps it open and marks table UI focus for selected-cell styling.
+    const resizeButton = toolbar.querySelector<HTMLButtonElement>('[aria-label="Resize table"]')!;
+    resizeButton.tabIndex = 0;
+    editorDom.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: resizeButton }));
+    resizeButton.focus();
+    resizeButton.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(toolbar.hidden).toBe(false);
+    expect(editorDom.classList.contains('mdw-table-ui-focused')).toBe(true);
+
+    // Opening the resize dialog keeps table UI focused.
+    resizeButton.click();
+    expect(sizeDialog.hidden).toBe(false);
+    expect(toolbar.hidden).toBe(false);
+    expect(editorDom.classList.contains('mdw-table-ui-focused')).toBe(true);
+
+    // Blurring to an outside control hides toolbar & edge controls and clears the focus class.
+    const rowsInput = sizeDialog.querySelector<HTMLInputElement>('input')!;
+    rowsInput.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: outsideButton }));
+    outsideButton.focus();
+    expect(toolbar.hidden).toBe(true);
+    expect(edgeControls.hidden).toBe(true);
+    expect(editorDom.classList.contains('mdw-table-ui-focused')).toBe(false);
+
+    // Re-focusing the editor re-shows toolbar & edge controls.
+    editorDom.focus();
+    editorDom.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(toolbar.hidden).toBe(false);
+    expect(edgeControls.hidden).toBe(false);
+
+    // Destroy cleans up the class and listeners cleanly.
+    controllers.tableToolbar.focus(view);
+    expect(editorDom.classList.contains('mdw-table-ui-focused')).toBe(true);
+    destroyControllers(controllers);
+    expect(editorDom.classList.contains('mdw-table-ui-focused')).toBe(false);
+    outsideButton.remove();
+  });
 });
