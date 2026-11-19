@@ -29,8 +29,9 @@ for (const width of [320, 390, 721, 768, 1024, 1200, 1280, 1440]) {
     });
     expect(layout.clipped).toBe(false);
     expect(layout.overlapping).toBe(false);
-    expect(layout.logoWidth).toBe(42);
+    expect(layout.logoWidth).toBe(32);
     expect(layout.stacked).toBe(width <= 1100);
+    await expect(page.locator(".docs-theme-chevron")).toBeVisible();
     if (width > 1100) {
       expect(layout.editorWidth).toBeGreaterThan(500);
       expect(layout.sourceWidth).toBeGreaterThan(450);

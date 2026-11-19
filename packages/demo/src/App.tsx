@@ -278,7 +278,7 @@ export function App({ themeController }: Readonly<{ themeController?: MarkdownTh
       {isInternalLabRoute ? null : (
         <header className="topbar">
           <NavLink className="brand" to="/docs/getting-started">
-            <span className="brand-badge">M</span>
+            <span className="brand-badge" aria-hidden="true">M</span>
             <span>
               <strong>Markora</strong>
               <small>Markdown editor toolkit</small>
@@ -302,14 +302,49 @@ export function App({ themeController }: Readonly<{ themeController?: MarkdownTh
                 </Link>
               );
             })}
-            <a className="topnav-link" href="https://github.com/KevinWang15/markora">GitHub</a>
+            <a className="topnav-link topnav-link-external" href="https://github.com/KevinWang15/markora">
+              GitHub
+              <svg
+                className="topnav-external-icon"
+                viewBox="0 0 24 24"
+                width="12"
+                height="12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M7 7h10v10" />
+                <path d="M7 17 17 7" />
+              </svg>
+            </a>
           </nav>
           {themeController && (
             <label className="docs-theme-picker" title={theme.description}>
-              <span>Theme</span>
-              <select aria-label="Theme" value={theme.id} onChange={event => themeController.setTheme(event.target.value)}>
-                {themeController.themes.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-              </select>
+              <span className="docs-theme-picker-label">Theme</span>
+              <span className="docs-theme-select-wrap">
+                <select aria-label="Theme" value={theme.id} onChange={event => themeController.setTheme(event.target.value)}>
+                  {themeController.themes.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                </select>
+                <svg
+                  className="docs-theme-chevron"
+                  viewBox="0 0 24 24"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </span>
             </label>
           )}
         </header>

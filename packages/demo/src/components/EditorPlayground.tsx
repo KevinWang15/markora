@@ -928,13 +928,19 @@ export function EditorPlayground() {
   return (
     <div className="playground-shell">
       <div className="playground-intro">
-        <div>
-          <span className="eyebrow">Core playground</span>
-          <h1>Try the Markora editor.</h1>
+        <div className="playground-intro-copy">
+          <div className="playground-intro-title-row">
+            <span className="eyebrow">Core playground</span>
+            <h1>Try the Markora editor.</h1>
+          </div>
           <p>
-            Write naturally, format with the toolbar, or edit the Markdown source. Try a different
-            {" "}theme using the menu above.
+            Write naturally, format with the toolbar, or edit Markdown source — switch themes from the top bar.
           </p>
+        </div>
+        <div className="playground-meta" aria-hidden="true">
+          <span>CommonMark + GFM</span>
+          <span>Math · Diagrams</span>
+          <span>8 Themes</span>
         </div>
       </div>
 
@@ -942,7 +948,7 @@ export function EditorPlayground() {
         <section className="panel panel-editor">
           <div className="panel-header">
             <h2>Visual editor</h2>
-            <p>Try headings, tasks, tables, math, and diagrams. Use the Σ button to insert a formula or edit one below.</p>
+            <p>Headings, tasks, tables, math (Σ), and diagrams.</p>
           </div>
           <div ref={toolbarElementRef} className="mdw-toolbar" />
           <div ref={editorElementRef} id="editor" />
@@ -951,9 +957,7 @@ export function EditorPlayground() {
         <section className="panel panel-source">
           <div className="panel-header">
             <h2 id="playground-source-heading">Markdown source</h2>
-            <p>
-              Edit the source, then choose Apply Markdown to update the editor.
-            </p>
+            <p>Edit raw Markdown and apply it to the visual editor.</p>
           </div>
           <textarea
             ref={sourceTextareaRef}
@@ -993,7 +997,7 @@ export function EditorPlayground() {
       <section className="panel panel-output">
         <div className="panel-header">
           <h2>Serialized output</h2>
-          <p>The editor’s Markdown appears here after you pause typing. Math uses $…$ or $$…$$. Mermaid and PlantUML fences render locally; their engines load only when a preview is needed.</p>
+          <p>Canonical Markdown emitted after typing pauses ($…$, $$…$$, Mermaid &amp; PlantUML render lazily).</p>
         </div>
         <pre id="output" role="region" tabIndex={0} aria-label="Serialized Markdown output">{output}</pre>
       </section>
