@@ -1313,8 +1313,12 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       maybeToggleTaskListItem,
       maybeOpenImage,
       maybeOpenLink,
-      maybeEditActiveImage,
-      maybeEditActiveLink,
+      maybeEditActiveImage: (targetView, event, overlay) => (
+        maybeEditActiveImage(targetView, event, overlay, () => uiControllers.clearSelectionAnchor())
+      ),
+      maybeEditActiveLink: (targetView, event, overlay) => (
+        maybeEditActiveLink(targetView, event, overlay, (anchorView) => uiControllers.createSelectionAnchor(anchorView))
+      ),
       getMarkInfo,
       getActiveImageInfo,
       onDestroyError(error) {

@@ -222,7 +222,12 @@ export function createMediaActionHelpers(options: {
     return true;
   }
 
-  function maybeEditActiveImage(view: EditorView, event: MouseEvent, imageEditor: ImageEditorOverlay) {
+  function maybeEditActiveImage(
+    view: EditorView,
+    event: MouseEvent,
+    imageEditor: ImageEditorOverlay,
+    clearSelectionAnchor?: () => void,
+  ) {
     const context = getTargetContext(event.target);
 
     if (!context || event.metaKey || event.ctrlKey) {
@@ -243,13 +248,19 @@ export function createMediaActionHelpers(options: {
       return false;
     }
 
-    const marker = sourceRow instanceof HTMLElementCtor ? sourceRow : imageWrapper;
+    const marker = imageWrapper instanceof HTMLElementCtor ? imageWrapper : sourceRow;
 
     if (!(marker instanceof HTMLElementCtor)) {
       return false;
     }
 
     event.preventDefault();
+    clearSelectionAnchor?.();
+
+    if (view.isDestroyed) {
+      return false;
+    }
+
     imageEditor.open(view, marker, imageInfo);
     return true;
   }
@@ -357,7 +368,12 @@ export function createMediaActionHelpers(options: {
     return true;
   }
 
-  function maybeEditActiveLink(view: EditorView, event: MouseEvent, linkEditor: LinkEditorOverlay) {
+  function maybeEditActiveLink(
+    view: EditorView,
+    event: MouseEvent,
+    linkEditor: LinkEditorOverlay,
+    createSelectionAnchor?: (view: EditorView) => HTMLElement | null,
+  ) {
     const context = getTargetContext(event.target);
 
     if (!context) {
@@ -374,7 +390,13 @@ export function createMediaActionHelpers(options: {
     const markInfo = getMarkInfo(view.state, "link");
     const currentHref = typeof markInfo?.attrs?.href === "string" ? markInfo.attrs.href : "";
     event.preventDefault();
-    linkEditor.open(view, marker, currentHref);
+    const anchor = createSelectionAnchor?.(view) ?? marker;
+
+    if (view.isDestroyed) {
+      return false;
+    }
+
+    linkEditor.open(view, anchor, currentHref);
     return true;
   }
 

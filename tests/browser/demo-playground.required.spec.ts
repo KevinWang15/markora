@@ -1046,3 +1046,31 @@ chromiumTest("@required coarse-pointer controls and short-viewport popovers stay
   await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
   await expectFocusedControlWithinViewport();
 });
+
+test("@required playground hides heading syntax markers whenever the editor is unfocused", async ({ page }) => {
+  await page.goto("/demo");
+  const editor = page.locator("#editor > .ProseMirror");
+  const heading = editor.locator("h1").first();
+  const headingMarker = heading.locator(".mdw-marker-heading");
+  const paragraph = editor.locator("p").first();
+
+  // Initial load: editor is unfocused, so the heading '#' must stay hidden.
+  await expect(heading).toBeVisible();
+  await expect(headingMarker).toBeHidden();
+
+  // Clicking the second line and blurring keeps the heading marker hidden.
+  await paragraph.click();
+  await expect(headingMarker).toHaveCount(0);
+  await page.locator("#source").click();
+  await expect(headingMarker).toHaveCount(0);
+
+  // Clicking the heading reveals '#', and blurring hides it again.
+  await heading.click();
+  await expect(headingMarker).toBeVisible();
+  await page.locator("#source").click();
+  await expect(headingMarker).toBeHidden();
+
+  // Focusing the editor restores the heading marker at the kept selection.
+  await editor.focus();
+  await expect(headingMarker).toBeVisible();
+});

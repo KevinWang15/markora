@@ -265,6 +265,27 @@ function refreshSelectionAnchor(marker: HTMLElement, view: EditorView) {
   }
 }
 
+function getOverlayMarkerRect(
+  marker: HTMLElement,
+  view: EditorView | null,
+  win: BrowserWindow,
+): Pick<DOMRect, "left" | "right" | "top" | "bottom"> | null {
+  if (marker.isConnected && win.getComputedStyle(marker).display !== "none") {
+    return marker.getBoundingClientRect();
+  }
+
+  // If a caller anchored to a marker that hides or detaches once the overlay
+  // takes focus, fall back to the view's selection coordinates rather than (0, 0).
+  if (view && !view.isDestroyed && typeof view.coordsAtPos === "function") {
+    const pos = view.state?.selection?.from;
+    if (typeof pos === "number") {
+      return view.coordsAtPos(pos);
+    }
+  }
+
+  return marker.isConnected ? marker.getBoundingClientRect() : null;
+}
+
 export type LinkEditorOverlay = {
   open: (view: EditorView, marker: HTMLElement, href: string) => void;
   close: (refocusEditor: boolean) => void;
@@ -660,8 +681,10 @@ export function createLinkEditorOverlay(options: OverlayEnvironment & {
     }
 
     try {
-      const markerRect = activeMarker.getBoundingClientRect();
-      positionOverlay(dom, markerRect, doc, win, "below");
+      const markerRect = getOverlayMarkerRect(activeMarker, activeView, win);
+      if (markerRect) {
+        positionOverlay(dom, markerRect, doc, win, "below");
+      }
     } catch {
       // Marker may have been detached from the DOM.
     }
@@ -895,8 +918,10 @@ export function createImageEditorOverlay(options: OverlayEnvironment & {
       refreshSelectionAnchor(activeMarker, activeView);
     }
     try {
-      const markerRect = activeMarker.getBoundingClientRect();
-      positionOverlay(dom, markerRect, doc, win, "below");
+      const markerRect = getOverlayMarkerRect(activeMarker, activeView, win);
+      if (markerRect) {
+        positionOverlay(dom, markerRect, doc, win, "below");
+      }
     } catch {
       // Marker may have been detached from the DOM.
     }

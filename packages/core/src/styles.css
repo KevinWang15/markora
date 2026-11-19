@@ -364,6 +364,7 @@
   font-size: var(--mdw-image-source-font-size, 0.95em);
 }
 
+.mdw-host .ProseMirror:not(.ProseMirror-focused) .mdw-image-source,
 .mdw-host .ProseMirror .mdw-image-source[hidden],
 .mdw-host .ProseMirror .mdw-image-status[hidden] {
   display: none;
@@ -833,6 +834,10 @@
   cursor: text;
 }
 
+.mdw-host .ProseMirror:not(.ProseMirror-focused) .mdw-marker {
+  display: none;
+}
+
 .mdw-host .ProseMirror.mdw-native-visual-motion :is(
   .mdw-marker-strong,
   .mdw-marker-em,
@@ -883,6 +888,11 @@
 .mdw-host .mdw-managed-block-cursor-after::after {
   content: "";
   inset-inline-end: calc(-1 * var(--mdw-cursor-width, 1px));
+}
+
+.mdw-host .ProseMirror:not(.ProseMirror-focused) .mdw-managed-block-cursor::before,
+.mdw-host .ProseMirror:not(.ProseMirror-focused) .mdw-managed-block-cursor::after {
+  content: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

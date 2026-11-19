@@ -2374,4 +2374,48 @@ describe('createDefaultUi', () => {
     controllers.linkEditor.destroy();
     controllers.imageEditor.destroy();
   });
+
+  it('keeps link and image overlays anchored via selection coordinates if their marker hides on blur', () => {
+    setWindowMetrics(window, { height: 600, width: 800 });
+    const hostElement = document.createElement('div');
+    const editorDom = document.createElement('div');
+    const linkMarker = document.createElement('span');
+    const imageMarker = document.createElement('span');
+    editorDom.append(linkMarker, imageMarker);
+    hostElement.append(editorDom);
+    document.body.append(hostElement);
+
+    setElementRect(linkMarker, { bottom: 220, left: 260, right: 320, top: 200 });
+    setElementRect(imageMarker, { bottom: 320, left: 240, right: 360, top: 300 });
+
+    const controllers = createControllers(hostElement);
+    let selectionCoords = { bottom: 220, left: 260, right: 260, top: 200 };
+    const view = {
+      ...createView(),
+      coordsAtPos: () => selectionCoords,
+      dom: editorDom,
+      state: { selection: { from: 4 } },
+    } as never;
+
+    const linkEditor = document.querySelector<HTMLElement>('.mdw-link-editor')!;
+    setOverlaySize(linkEditor, 200, 60);
+    controllers.linkEditor.open(view, linkMarker, 'https://example.com');
+    linkMarker.style.display = 'none';
+    setElementRect(linkMarker, { bottom: 0, left: 0, right: 0, top: 0 });
+    window.dispatchEvent(new Event('resize'));
+    expect(linkEditor.style.left).toBe('260px');
+    expect(linkEditor.style.top).toBe('228px');
+
+    selectionCoords = { bottom: 380, left: 240, right: 240, top: 300 };
+    const imageEditor = document.querySelector<HTMLElement>('.mdw-image-editor')!;
+    setOverlaySize(imageEditor, 200, 100);
+    controllers.imageEditor.open(view, imageMarker, { node: { attrs: { src: '/img.png' } } });
+    imageMarker.style.display = 'none';
+    setElementRect(imageMarker, { bottom: 0, left: 0, right: 0, top: 0 });
+    window.dispatchEvent(new Event('resize'));
+    expect(imageEditor.style.left).toBe('240px');
+    expect(imageEditor.style.top).toBe('388px');
+
+    destroyControllers(controllers);
+  });
 });
