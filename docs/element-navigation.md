@@ -1,51 +1,72 @@
 # Element navigation
 
-Horizontal traversal follows one state machine for inline objects and structured
-blocks. A node is either approached from a boundary, selected as a whole, or left
-at the next boundary:
+Horizontal and vertical arrow traversal follow one unified document-order state
+machine for inline atoms and structured blocks. Adjacent components always share
+one boundary stop between them (two arrows from Component A to Component B):
 
 ```text
-before A → selected A → between A and B → selected B → after B
+before A → inside/selected A → between A and B (gap space) → inside/selected B → after B
 ```
 
-The shared boundary is a position, not two states attached to different nodes.
-Reversing direction at any stop reverses the transition. Inline objects use
-ordinary text selections for boundaries. Where a block adjoins a paragraph, that
-paragraph's edge caret is already the boundary; it does not add another stop.
-At structural gaps, `ManagedBlockCursor` retains its compatibility name and JSON
-format but canonicalizes neighboring-node metadata to the same position.
+- **Editable blocks** (code blocks, tables, diagrams, blockquotes, alerts,
+  footnote definitions) are entered directly at their nearest editable edge on
+  arrow traversal (`ArrowLeft`/`ArrowRight`/`ArrowUp`/`ArrowDown`). `Escape`
+  from inside an editable block selects it as a whole (`NodeSelection`); `Enter`
+  on a whole-selected editable block re-enters it.
+- **Atoms** (horizontal rules, frontmatter, block/inline math, TOC, HTML blocks,
+  images, footnote references, custom components) select as whole elements
+  (`NodeSelection`) when approached from either side, and exit to the shared
+  boundary on the next arrow. Selected atoms retain their extension's activation
+  behavior (for example, `Enter` edits a formula in place).
 
-`elementNavigation.ts` owns classification and document-order transitions.
-`elementInteraction.ts` assembles caret traversal, document ranges, and gap input
-in a fixed order for both editor entries. It owns whole-element highlighting,
-explicit entry into editable content, and boundary mutations. Renderer DOM and preview
-state do not determine traversal. CodeMirror resolves visual exits from its text
-and hands their direction to the same outer boundary resolver. Native editable
-content retains browser visual/bidirectional movement until it exits an element.
+The shared boundary is a canonical position, not two states attached to
+different nodes. Reversing direction at any stop reverses the transition. Inline
+objects use ordinary text selections for boundaries. Where a block adjoins a
+paragraph, that paragraph's edge caret is already the boundary; it does not add
+another stop. At structural gaps between consecutive blocks or at leading and
+trailing document edges, `ManagedBlockCursor` represents the gap space (retaining
+its compatibility name and JSON format while canonicalizing neighboring-node
+metadata to the same position).
 
-Click or Enter enters editable content. Escape selects the containing element.
-Selected atoms retain their extension's activation behavior (for example, Enter edits a formula). Selection changes never
-modify the document or open renderer controls merely because an arrow was pressed.
-Delete/Backspace removes a selected element as one undoable operation. At a shared
-block boundary, deletion targets the neighbor in the deletion direction.
+`elementNavigation.ts` owns classification, entry, and both horizontal (`step`)
+and vertical (`stepVertical`) document-order transitions. `elementInteraction.ts`
+assembles caret traversal, document ranges, and gap input in a fixed order for
+both editor entries. It owns whole-element highlighting, vertical edge detection,
+`Escape`/`Enter` whole-element switching, and boundary mutations. Renderer DOM
+and preview state never dictate outer traversal:
+- CodeMirror resolves horizontal/vertical exits from its text and hands them to
+  `moveToElementBoundary`.
+- Tables retain 2D column-preserving row motion via `moveTableCellVertical` and
+  hand top/bottom row exits to `moveToElementBoundary`.
+- Math in-place editors exit cleanly on all four arrow edges (`ArrowLeft`,
+  `ArrowRight`, `ArrowUp`, `ArrowDown`) and hand block exits to
+  `moveToElementBoundary`.
+- Plaintext diagram blocks declare `elementNavigation: { textArrows: "custom" }`
+  so per-line bidi/grapheme horizontal edge handling stays in the extension while
+  outer and vertical traversal stay in core.
+- Plain paragraphs retain native browser vertical column preservation and native
+  horizontal/bidirectional motion.
+
+Selection changes never modify the document merely because an arrow was pressed.
+`Delete`/`Backspace` removes a whole-selected element as one undoable operation.
+At a shared block boundary (`ManagedBlockCursor`), deletion targets the neighbor
+in the deletion direction. Plain `Backspace` at offset 0 of any editable
+component (headings, lists, blockquotes, alerts, code blocks, tables, diagrams,
+footnote definitions, and in-place math editors) removes the component wrapper
+and rescues its content as ordinary text/paragraphs in one undoable step.
 
 Block types register through the existing `schema.managedBlocks` extension
 contract; built-in code blocks, quotes, tables and block atoms participate by
-default. Selectable inline atoms participate automatically. Ordinary text,
-formatting marks, and hard breaks retain native text navigation. A custom editable
-element must be selectable and expose normal text selection or an activation
-command. Custom editing surfaces can import `moveToElementBoundary` from
-`markora/extension-api` to hand a visual before/after exit to the shared resolver.
-A node with its own text-arrow handler declares
-`elementNavigation: { textArrows: "custom" }` on its NodeSpec (typed by
-`ElementNavigationSpec`). Core then delegates arrows only while editing inside
-that node. This preserves plaintext line direction and grapheme behavior without
-letting source editors intercept outer traversal.
-Node views must preserve whole-element selection across asynchronous
-preview/layout updates; those updates do not own the user's caret.
+default. Selectable inline atoms participate automatically. Custom editing
+surfaces can import `moveToElementBoundary` from `markora/extension-api` to hand
+a visual before/after exit to the shared resolver. Node views must preserve
+whole-element selection across asynchronous preview/layout updates; those updates
+do not own the user's caret.
 
 Shift-arrow document ranges, mouse selection, table cell selection, composition,
 and modified word/document navigation retain their respective owners. The
-horizontal element handler does not intercept those gestures. Tests cover the
-Cartesian product of block pairs, mixed inline/block runs, reversal, history and
-mapping, plus real browser focus, activation, and selection rendering.
+element navigation handler does not intercept those gestures. Tests cover the
+Cartesian product of block pairs horizontally and vertically, mixed inline/block
+runs, reversal, history and mapping, start-of-component `Backspace` unwrapping,
+plus real browser focus, activation, and selection rendering across Chromium and
+Firefox.

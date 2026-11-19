@@ -782,6 +782,8 @@ export function createCodeBlockViewClass(options: CreateCodeBlockViewClassOption
     }
 
     selectNode() {
+      this.focusOnActivation = false;
+      this.focusAfterComposition = false;
       this.dom.classList.add("ProseMirror-selectednode");
     }
 

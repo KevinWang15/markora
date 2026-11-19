@@ -266,6 +266,11 @@ test("@required code-block focus handoffs and replacement preserve document scro
   await labPage.keyboard.press("ArrowLeft");
   await settleFocus();
   expect(Math.abs((await scrollY()) - afterExit)).toBeLessThanOrEqual(1);
+  expect((await snapshotEditor(labPage, id)).activeElement).toBe("code-mirror");
+
+  await labPage.keyboard.press("Escape");
+  await settleFocus();
+  expect(Math.abs((await scrollY()) - afterExit)).toBeLessThanOrEqual(1);
   await expect(codeBlock).toHaveClass(/mdw-element-selected/);
   expect((await snapshotEditor(labPage, id)).activeElement).toBe("prosemirror");
 

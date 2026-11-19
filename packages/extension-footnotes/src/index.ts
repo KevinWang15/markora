@@ -6,6 +6,7 @@ import {
   PluginKey,
   Selection,
   Slice,
+  TextSelection,
   closeHistory,
   defineMarkdownEditorExtension,
   type Command,
@@ -759,6 +760,61 @@ export function createFootnotesExtension(options?: FootnotesExtensionOptions) {
           create: () => new Plugin<FootnoteIndex>({
             key: indexKey,
             props: {
+              handleKeyDown(view, event) {
+                if (
+                  !view.editable
+                  || view.composing
+                  || event.isComposing
+                  || event.keyCode === 229
+                  || event.key !== "Backspace"
+                  || event.altKey
+                  || event.ctrlKey
+                  || event.metaKey
+                  || event.shiftKey
+                ) {
+                  return false;
+                }
+
+                const { selection } = view.state;
+                const paragraphType = schema.nodes.paragraph;
+                if (
+                  !paragraphType
+                  || !(selection instanceof TextSelection)
+                  || !selection.empty
+                  || selection.$from.parentOffset !== 0
+                ) {
+                  return false;
+                }
+
+                const { $from } = selection;
+                const defDepth = $from.depth - 1;
+                if (
+                  defDepth < 1
+                  || $from.node(defDepth).type !== nodeTypes.definition
+                  || $from.index(defDepth) !== 0
+                  || $from.parent.type !== paragraphType
+                ) {
+                  return false;
+                }
+
+                const defPos = $from.before(defDepth);
+                const defNode = $from.node(defDepth);
+                const parentDepth = defDepth - 1;
+                if (
+                  !$from.node(parentDepth).canReplace(
+                    $from.index(parentDepth),
+                    $from.index(parentDepth) + 1,
+                    defNode.content,
+                  )
+                ) {
+                  return false;
+                }
+
+                const tr = view.state.tr.replaceWith(defPos, defPos + defNode.nodeSize, defNode.content);
+                tr.setSelection(Selection.near(tr.doc.resolve(defPos + 1), 1));
+                view.dispatch(closeHistory(tr).scrollIntoView());
+                return true;
+              },
               transformCopied(slice) {
                 return closePartialDefinitionSlice(slice, nodeTypes.definition);
               },

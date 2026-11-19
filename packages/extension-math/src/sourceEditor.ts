@@ -27,6 +27,8 @@ export function highlightTex(
   return fragment;
 }
 
+export type MathSourceExitMode = "arrow" | "blur" | "continue" | "escape";
+
 export type MathSourceEditor = ReturnType<typeof createMathSourceEditor>;
 
 export function createMathSourceEditor(options: {
@@ -36,7 +38,8 @@ export function createMathSourceEditor(options: {
   label: string;
   hint: string;
   onChange(source: string): void;
-  onExit(direction: -1 | 1 | null): void;
+  onExit(direction: -1 | 1 | null, mode?: MathSourceExitMode): void;
+  onUnwrap?(): void;
 }) {
   const { document } = options;
   const dom = document.createElement("span");
@@ -87,36 +90,59 @@ export function createMathSourceEditor(options: {
   const keydown = (event: KeyboardEvent) => {
     if (composing || event.isComposing || event.keyCode === 229) return;
     const caret = input.selectionStart === input.selectionEnd;
+    const plain = !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+    if (
+      plain
+      && event.key === "Backspace"
+      && caret
+      && input.selectionStart === 0
+      && !input.readOnly
+      && options.onUnwrap
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      options.onUnwrap();
+      return;
+    }
     let direction: -1 | 1 | null | undefined;
-    if (event.key === "Escape") direction = null;
-    else if (event.key === "Tab") direction = event.shiftKey ? -1 : 1;
-    else if (
+    let mode: MathSourceExitMode = "continue";
+    if (event.key === "Escape") {
+      direction = null;
+      mode = "escape";
+    } else if (event.key === "Tab") {
+      direction = event.shiftKey ? -1 : 1;
+      mode = "continue";
+    } else if (
       event.key === "Enter" &&
       (options.inline || event.ctrlKey || event.metaKey)
-    )
-      direction = 1;
-    else if (
-      !event.shiftKey &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey &&
-      caret
     ) {
-      if (event.key === "ArrowUp" && input.selectionStart === 0) direction = -1;
-      if (
-        event.key === "ArrowDown" &&
-        input.selectionEnd === input.value.length
-      )
+      direction = 1;
+      mode = "continue";
+    } else if (plain && caret) {
+      const start = input.selectionStart ?? 0;
+      const end = input.selectionEnd ?? 0;
+      if (event.key === "ArrowLeft" && start === 0) {
+        direction = -1;
+        mode = "arrow";
+      } else if (event.key === "ArrowRight" && end === input.value.length) {
         direction = 1;
+        mode = "arrow";
+      } else if (event.key === "ArrowUp" && !input.value.slice(0, start).includes("\n")) {
+        direction = -1;
+        mode = "arrow";
+      } else if (event.key === "ArrowDown" && !input.value.slice(end).includes("\n")) {
+        direction = 1;
+        mode = "arrow";
+      }
     }
     if (direction !== undefined) {
       event.preventDefault();
       event.stopPropagation();
-      options.onExit(direction);
+      options.onExit(direction, mode);
     }
   };
   const blur = () => {
-    if (!composing && !destroyed) options.onExit(null);
+    if (!composing && !destroyed) options.onExit(null, "blur");
   };
   const scroll = () => {
     mirror.scrollTop = input.scrollTop;

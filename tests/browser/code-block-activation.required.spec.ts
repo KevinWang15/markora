@@ -327,6 +327,7 @@ for (const root of ["document", "shadow"] as const) {
       await expect(shell).toHaveAttribute("data-mdw-code-block-state", "loading");
       await focusEditor(labPage, id, { anchor: 7 });
       await labPage.keyboard.press("ArrowRight");
+      await labPage.keyboard.press("Escape");
       await expect(shell).toHaveClass(/mdw-element-selected/);
       const selection = (await snapshotEditor(labPage, id)).selection;
 

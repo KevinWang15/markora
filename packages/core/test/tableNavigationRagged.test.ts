@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DOMParser as ProseMirrorDOMParser } from 'prosemirror-model';
-import { EditorState, Selection } from 'prosemirror-state';
+import { EditorState, Selection, TextSelection } from 'prosemirror-state';
 import { createEditor } from '../src/createEditor';
 import { createTableNavigation } from '../src/tableNavigation';
 
@@ -221,6 +221,75 @@ describe('direct table axis reordering', () => {
       '| d | e | f |',
       '| g |  |  |',
     ].join('\n'));
+    editor.destroy();
+  });
+});
+
+describe('table start-of-component Backspace unwrap', () => {
+  function pressBackspace(editor: ReturnType<typeof createEditor>) {
+    const event = new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true });
+    editor.view.dom.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+
+  it('unwraps a populated table at offset 0 of cell (0, 0) preserving inline marks in one undo step', () => {
+    const markdown = [
+      '| Name | Role |',
+      '| --- | --- |',
+      '| **Alice** | `Engineer` |',
+      '| Bob | [Docs](https://example.com/) |',
+    ].join('\n');
+    const editor = createEditor({ element: createHost(), markdown });
+    setSelectionInsideTableCell(editor, 0, 0);
+
+    expect(pressBackspace(editor)).toBe(true);
+    expect(editor.getMarkdown()).toBe([
+      'Name Role',
+      '',
+      '**Alice** `Engineer`',
+      '',
+      'Bob [Docs](https://example.com/)',
+    ].join('\n'));
+    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+    expect(editor.view.state.selection.from).toBe(1);
+
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.getMarkdown()).toBe(markdown);
+    editor.destroy();
+  });
+
+  it('unwraps an empty table into a single empty paragraph and restores it with one Undo', () => {
+    const markdown = ['|  |  |', '| --- | --- |', '|  |  |'].join('\n');
+    const editor = createEditor({ element: createHost(), markdown });
+    setSelectionInsideTableCell(editor, 0, 0);
+
+    expect(pressBackspace(editor)).toBe(true);
+    expect(editor.view.state.doc.childCount).toBe(1);
+    expect(editor.view.state.doc.firstChild?.type.name).toBe('paragraph');
+    expect(editor.getMarkdown()).toBe('');
+
+    expect(editor.commands.undo()).toBe(true);
+    expect(editor.view.state.doc.firstChild?.type.name).toBe('table');
+    editor.destroy();
+  });
+
+  it('does not unwrap the table from non-start cells, non-zero offsets, or CellSelection', () => {
+    const markdown = ['| H1 | H2 |', '| --- | --- |', '| a | b |'].join('\n');
+    const editor = createEditor({ element: createHost(), markdown });
+
+    setSelectionInsideTableCell(editor, 0, 1);
+    pressBackspace(editor);
+    expect(editor.view.state.doc.firstChild?.type.name).toBe('table');
+
+    setSelectionInsideTableCell(editor, 1, 0);
+    pressBackspace(editor);
+    expect(editor.view.state.doc.firstChild?.type.name).toBe('table');
+
+    const navigation = createTestTableNavigation(editor);
+    setSelectionInsideTableCell(editor, 0, 0);
+    expect(navigation.selectTableRow(editor.view, 0)).toBe(true);
+    pressBackspace(editor);
+    expect(editor.view.state.doc.firstChild?.type.name).toBe('table');
     editor.destroy();
   });
 });

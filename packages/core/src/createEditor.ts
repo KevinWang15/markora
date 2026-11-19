@@ -88,7 +88,10 @@ createListItemDeleteCommand,
 createListItemSplitCommand,
 createStructuralCommandSet,
 } from "./structuralCommands";
-import { getTableSelectionContext as getSharedTableSelectionContext } from "./tableCommands";
+import {
+  createTableUnwrapBackspaceCommand,
+  getTableSelectionContext as getSharedTableSelectionContext,
+} from "./tableCommands";
 import { createTableEditing,isTableCellSelection } from "./tableEditing";
 import { getTableFidelityIssues } from "./tableFidelity";
 import { createTableNavigation } from "./tableNavigation";
@@ -1353,7 +1356,7 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
       : []),
     ...(shortcutKeymap ? [shortcutKeymap] : []),
     keymap({
-      Backspace: listBackspaceForInput,
+      Backspace: chainCommands(listBackspaceForInput, createTableUnwrapBackspaceCommand(schema)),
       Delete: listDeleteForInput,
       Enter: chainCommands(splitListItemForInput, liftEmptyBlock),
       Tab: (state, dispatch, view) => moveTableCell(view!, 1) || sinkListItem(listItemType)(state, dispatch, view),

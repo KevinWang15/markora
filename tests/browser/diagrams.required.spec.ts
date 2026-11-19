@@ -869,7 +869,7 @@ test("@required localized RTL diagram actions expose authored source to AT and p
   expect(results.violations.map(({ id: rule }) => rule)).toEqual([]);
 });
 
-test("@required keyboard navigation selects a rendered diagram before explicitly editing its source", async ({ labPage }) => {
+test("@required keyboard navigation enters a rendered diagram directly and supports Escape whole-block selection", async ({ labPage }) => {
   const id = "diagram-keyboard-source";
   await mountEditor(labPage, {
     diagramRendererModes: { mermaid: "sync" },
@@ -886,7 +886,14 @@ test("@required keyboard navigation selects a rendered diagram before explicitly
 
   await focusEditor(labPage, id, { anchor: target.position - 1 });
   await labPage.keyboard.press("ArrowRight");
+  await settleEditor(labPage, id);
+  expect((await snapshotEditor(labPage, id)).selection.from)
+    .toBe(target.position + 1);
+  await expect(sourceShell).not.toHaveClass(/mdw-diagram__source-shell--visually-hidden/);
+
+  await labPage.keyboard.press("Escape");
   await expect(shell).toHaveClass(/mdw-element-selected/);
+  await expect(sourceShell).toHaveClass(/mdw-diagram__source-shell--visually-hidden/);
   await labPage.keyboard.press("Enter");
   await settleEditor(labPage, id);
   expect((await snapshotEditor(labPage, id)).selection.from)
@@ -957,8 +964,6 @@ test("@required diagram plaintext direction owns physical arrows inside its edit
 
     await focusEditor(labPage, scenario.id, { anchor: target.position - 1 });
     await labPage.keyboard.press(scenario.enter);
-    await expect(shell).toHaveClass(/mdw-element-selected/);
-    await labPage.keyboard.press("Enter");
     await settleEditor(labPage, scenario.id);
     expect((await snapshotEditor(labPage, scenario.id)).selection.from)
       .toBe(target.position + 1);
@@ -1051,9 +1056,6 @@ test("@required each diagram source line owns physical arrows at its node bounda
 
     await focusEditor(labPage, scenario.id, { anchor: afterStart });
     await labPage.keyboard.press(scenario.enter);
-    await expect(shell).toHaveClass(/mdw-element-selected/);
-    await labPage.keyboard.press("Enter");
-    await focusEditor(labPage, scenario.id, { anchor: contentEnd });
     await settleEditor(labPage, scenario.id);
     expect((await snapshotEditor(labPage, scenario.id)).selection.from)
       .toBe(contentEnd);

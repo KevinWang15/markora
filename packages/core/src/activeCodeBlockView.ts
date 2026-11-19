@@ -1267,7 +1267,7 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
         return false;
       }
 
-      return this.exitCodeBlockVertically(unit);
+      return this.exitCodeBlock(unit);
     }
 
     private maybeExtendSelectionVertical(unit: -1 | 1) {
@@ -1427,23 +1427,6 @@ export function createActiveCodeBlockViewClass(options: CreateCodeBlockViewClass
       logCodeBlockCursor(this.outerView, this.dom, this.cm, "exitCodeBlock", () => ({ unit, handled, suppressForwarding: this.suppressForwarding }));
 
       return handled;
-    }
-
-    private exitCodeBlockVertically(unit: -1 | 1) {
-      const boundaryPos = unit < 0 ? this.getPos() : this.getPos() + this.node.nodeSize;
-      const targetSelection = Selection.findFrom(this.outerView.state.doc.resolve(boundaryPos), unit < 0 ? -1 : 1, true);
-
-      if (!targetSelection) {
-        return this.exitCodeBlock(unit);
-      }
-
-      const transferVersion = this.beginOuterFocusTransfer();
-      this.parkOuterFocusForTransfer();
-      this.runWhileUpdating(() => {
-        this.outerView.dispatch(this.outerView.state.tr.setSelection(targetSelection).scrollIntoView());
-      });
-      this.scheduleOuterFocusAfterExit(transferVersion);
-      return true;
     }
 
     private forwardSelection() {

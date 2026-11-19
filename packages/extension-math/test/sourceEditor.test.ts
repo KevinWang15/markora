@@ -190,5 +190,52 @@ for (const [name, create] of [
       element.querySelector<HTMLElement>(".mdw-math")!.click();
       expect(element.querySelector("textarea")).toBeNull();
     });
+    it("exits inline and block math cleanly on ArrowLeft@0, ArrowRight@end, and vertical edges without mutating consecutive blocks", () => {
+      const inline = mount("Before $x^2$ after");
+      const inlineInput = inline.open();
+      inlineInput.setSelectionRange(0, 0);
+      inlineInput.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true }));
+      expect(inline.element.querySelector("textarea")).toBeNull();
+      expect(inline.editor.view.state.selection.head).toBe(8);
+
+      const inlineInput2 = inline.open();
+      inlineInput2.setSelectionRange(inlineInput2.value.length, inlineInput2.value.length);
+      inlineInput2.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+      expect(inline.element.querySelector("textarea")).toBeNull();
+      expect(inline.editor.view.state.selection.head).toBe(9);
+
+      // Trailing block math: ArrowRight/ArrowDown exits to Gap Space (ManagedBlockCursor) without inserting a paragraph.
+      const trailing = mount("$$\na\nb\n$$");
+      const blockInput = trailing.open();
+      blockInput.setSelectionRange(1, 1); // line 1
+      blockInput.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+      expect(trailing.element.querySelector("textarea")).toBe(blockInput); // stays open on line 1
+      blockInput.setSelectionRange(blockInput.value.length, blockInput.value.length); // line 2 end
+      blockInput.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+      expect(trailing.element.querySelector("textarea")).toBeNull();
+      expect(trailing.editor.getMarkdown()).toBe("$$\na\nb\n$$");
+      expect(trailing.editor.view.state.selection.head).toBe(trailing.editor.view.state.doc.content.size);
+      expect(trailing.editor.view.state.selection.toJSON()).toMatchObject({ type: "managed-block-cursor", side: "after" });
+    });
+    it("unwraps inline and block math on Backspace at collapsed offset 0 in one undo step", () => {
+      const inline = mount("Before $x^2$ after");
+      const inlineInput = inline.open();
+      inlineInput.setSelectionRange(0, 0);
+      inlineInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true }));
+      expect(inline.element.querySelector("textarea")).toBeNull();
+      expect(inline.editor.getMarkdown()).toBe("Before x^2 after");
+      expect(inline.editor.view.state.selection.head).toBe(8);
+      expect(inline.editor.commands.undo()).toBe(true);
+      expect(inline.editor.getMarkdown()).toBe("Before $x^2$ after");
+
+      const block = mount("Before\n\n$$\na + b\nc + d\n$$\n\nAfter");
+      const blockInput = block.open();
+      blockInput.setSelectionRange(0, 0);
+      blockInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true }));
+      expect(block.element.querySelector("textarea")).toBeNull();
+      expect(block.editor.getMarkdown()).toBe("Before\n\na + b\n\nc + d\n\nAfter");
+      expect(block.editor.commands.undo()).toBe(true);
+      expect(block.editor.getMarkdown()).toBe("Before\n\n$$\na + b\nc + d\n$$\n\nAfter");
+    });
   });
 }

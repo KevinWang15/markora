@@ -1,4 +1,5 @@
 import {
+  Fragment,
   MarkdownEditorExtensionError,
   NodeSelection,
   Plugin,
@@ -12,7 +13,6 @@ import {
   type DOMOutputSpec,
   type EditorState,
   type EditorView,
-  type Fragment,
   type MarkdownEditorExtensionRuntime,
   type Node as ProseMirrorNode,
   type NodeType,
@@ -400,66 +400,6 @@ function selectedDiagramPositions(state: EditorState, type: NodeType) {
   return positions;
 }
 
-function adjacentDiagram(
-  state: EditorState,
-  type: NodeType,
-  direction: -1 | 1,
-) {
-  const selection = state.selection;
-  if (!(selection instanceof TextSelection) || !selection.empty) return null;
-  const resolved = selection.$head;
-  if (
-    direction === 1
-      ? resolved.parentOffset !== resolved.parent.content.size
-      : resolved.parentOffset !== 0
-  ) return null;
-
-  for (let depth = resolved.depth - 1; depth >= 0; depth -= 1) {
-    const parent = resolved.node(depth);
-    if (direction === 1) {
-      const index = resolved.indexAfter(depth);
-      if (index < parent.childCount) {
-        const node = parent.child(index);
-        return node.type === type
-          ? { node, position: resolved.after(depth + 1) }
-          : null;
-      }
-    } else {
-      const index = resolved.index(depth);
-      if (index > 0) {
-        const node = parent.child(index - 1);
-        return node.type === type
-          ? { node, position: resolved.before(depth + 1) - node.nodeSize }
-          : null;
-      }
-    }
-  }
-  return null;
-}
-
-function diagramBoundaryExit(
-  state: EditorState,
-  type: NodeType,
-  direction: -1 | 1,
-) {
-  const selection = state.selection;
-  if (!(selection instanceof TextSelection) || !selection.empty) return null;
-  for (let depth = selection.$head.depth; depth > 0; depth -= 1) {
-    const node = selection.$head.node(depth);
-    if (node.type !== type) continue;
-    const position = selection.$head.before(depth);
-    const contentBoundary = direction === 1
-      ? position + node.nodeSize - 1
-      : position + 1;
-    if (selection.head !== contentBoundary) return null;
-    return TextSelection.near(
-      state.doc.resolve(direction === 1 ? position + node.nodeSize : position),
-      direction,
-    );
-  }
-  return null;
-}
-
 function selectedDiagramSelection(state: EditorState, type: NodeType) {
   const selection = state.selection;
   if (!(selection instanceof TextSelection) || !selection.empty) return null;
@@ -626,60 +566,68 @@ function moveSelectionAtHorizontalDiagramBoundary(
   return false;
 }
 
-function moveSelectionIntoAdjacentDiagram(
+function unwrapDiagramAtStart(
   view: EditorView,
   event: KeyboardEvent,
   type: NodeType,
 ) {
-  if (event.altKey || event.ctrlKey || event.metaKey || view.composing || event.isComposing || event.keyCode === 229) return false;
-  // Plain horizontal traversal belongs to the shared element state machine.
-  if (!event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-    return moveSelectionAtHorizontalDiagramBoundary(view, event, type);
+  if (
+    !view.editable
+    || view.composing
+    || event.isComposing
+    || event.keyCode === 229
+    || event.key !== "Backspace"
+    || event.altKey
+    || event.ctrlKey
+    || event.metaKey
+    || event.shiftKey
+  ) {
+    return false;
   }
-  if (moveSelectionAtHorizontalDiagramBoundary(view, event, type)) return true;
-  let directionElement: Element = view.dom;
-  try {
-    const atSelection = view.domAtPos(view.state.selection.head, 0).node;
-    const candidate = atSelection.nodeType === 1
-      ? atSelection as Element
-      : atSelection.parentElement;
-    if (candidate && view.dom.contains(candidate)) directionElement = candidate;
-  } catch {
-    // The editor root remains a safe direction fallback during DOM reconciliation.
-  }
-  const directionStyle = view.dom.ownerDocument.defaultView
-    ?.getComputedStyle(directionElement).direction;
-  const rtl = directionStyle === "rtl";
-  const direction = event.key === "ArrowDown"
-    || event.key === (rtl ? "ArrowLeft" : "ArrowRight")
-    ? 1
-    : event.key === "ArrowUp"
-      || event.key === (rtl ? "ArrowRight" : "ArrowLeft")
-      ? -1
-      : 0;
-  if (direction === 0) return false;
-  const exit = diagramBoundaryExit(view.state, type, direction);
-  if (exit) {
-    const selection = event.shiftKey
-      ? TextSelection.create(view.state.doc, view.state.selection.anchor, exit.head)
-      : exit;
-    view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
-    return true;
-  }
-  const adjacent = adjacentDiagram(view.state, type, direction);
-  if (!adjacent) return false;
 
-  const contentStart = adjacent.position + 1;
-  const contentEnd = adjacent.position + adjacent.node.nodeSize - 1;
-  const { firstEnd, lastStart } = diagramSourceGraphemeEdges(adjacent.node.textContent);
-  const target = event.shiftKey && adjacent.node.content.size > 0
-    ? direction === 1 ? contentStart + firstEnd : contentStart + lastStart
-    : direction === 1 ? contentStart : contentEnd;
-  const selection = event.shiftKey
-    ? TextSelection.create(view.state.doc, view.state.selection.anchor, target)
-    : TextSelection.create(view.state.doc, target);
-  view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
+  const { selection, schema } = view.state;
+  const paragraphType = schema.nodes.paragraph;
+  if (
+    !paragraphType
+    || !(selection instanceof TextSelection)
+    || !selection.empty
+    || selection.$from.parent.type !== type
+    || selection.$from.parentOffset !== 0
+  ) {
+    return false;
+  }
+
+  const diagramPos = selection.$from.before(selection.$from.depth);
+  const diagramNode = selection.$from.parent;
+  const $diagramPos = view.state.doc.resolve(diagramPos);
+  if (!$diagramPos.parent.canReplaceWith($diagramPos.index(), $diagramPos.index() + 1, paragraphType)) {
+    return false;
+  }
+
+  const paragraphs = diagramNode.textContent.split("\n").map((line) => (
+    paragraphType.create(null, line ? schema.text(line) : null)
+  ));
+  const tr = view.state.tr.replaceWith(
+    diagramPos,
+    diagramPos + diagramNode.nodeSize,
+    Fragment.fromArray(paragraphs),
+  );
+  tr.setSelection(TextSelection.create(tr.doc, diagramPos + 1));
+  view.dispatch(closeHistory(tr).scrollIntoView());
   return true;
+}
+
+function handleDiagramKeyDown(
+  view: EditorView,
+  event: KeyboardEvent,
+  type: NodeType,
+) {
+  if (unwrapDiagramAtStart(view, event, type)) return true;
+  if (event.altKey || event.ctrlKey || event.metaKey || view.composing || event.isComposing || event.keyCode === 229) return false;
+  // Horizontal arrows inside a diagram follow per-line plaintext direction and
+  // grapheme boundaries, then hand exits back to core's shared boundary resolver.
+  // Outer and vertical traversal belong to core's element navigation state machine.
+  return moveSelectionAtHorizontalDiagramBoundary(view, event, type);
 }
 
 function createInsertCommand(value: Readonly<{ info: string; kind: DiagramKind; source: string }>, type: NodeType): Command {
@@ -1139,7 +1087,7 @@ export function createDiagramsExtension(options?: DiagramExtensionOptions) {
             },
             props: {
               handleKeyDown(editorView, event) {
-                return moveSelectionIntoAdjacentDiagram(editorView, event, types.diagram);
+                return handleDiagramKeyDown(editorView, event, types.diagram);
               },
             },
             view(editorView) {

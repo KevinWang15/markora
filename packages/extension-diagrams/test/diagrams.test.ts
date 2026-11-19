@@ -491,3 +491,42 @@ it("claims through hostile token metadata without invoking accessors or proxies"
   });
   expect(diagramTokenAttrs(proxyToken as never)).toEqual({ info: "geojson", kind: "geojson" });
 });
+
+it("unwraps a diagram into paragraphs on Backspace at offset 0 in one undo step and navigates vertically", () => {
+  const extension = createDiagramsExtension();
+  const markdown = "Before\n\n```mermaid\ngraph TD\nA-->B\n```\n\nAfter";
+  const editor = track(createRootEditor({
+    element: host(),
+    extensions: [extension],
+    markdown,
+  }));
+  const dispatchKey = (key: string) => {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    editor.view.dom.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  const diagramPos = editor.extensions.get(extension).state.getNodes()[0]!.position;
+
+  // ArrowDown from middle of "Before" enters diagram directly at offset 0.
+  editor.view.dispatch(editor.view.state.tr.setSelection(TextSelection.create(editor.view.state.doc, 3)));
+  expect(dispatchKey("ArrowDown")).toBe(true);
+  expect(editor.view.state.selection.from).toBe(diagramPos + 1);
+
+  // ArrowDown on line 1 does not exit multi-line diagram prematurely.
+  expect(dispatchKey("ArrowDown")).toBe(false);
+
+  // Backspace at offset 0 unwraps lines into paragraphs in one undo step.
+  expect(dispatchKey("Backspace")).toBe(true);
+  expect(editor.extensions.get(extension).state.getNodes()).toHaveLength(0);
+  expect(editor.getMarkdown()).toBe("Before\n\ngraph TD\n\nA-->B\n\nAfter");
+  expect(editor.view.state.selection.from).toBe(diagramPos + 1);
+
+  expect(editor.commands.undo()).toBe(true);
+  expect(editor.getMarkdown()).toBe(markdown);
+
+  // Read-only mode refuses unwrap.
+  editor.updateOptions({ editable: false });
+  editor.view.dispatch(editor.view.state.tr.setSelection(TextSelection.create(editor.view.state.doc, diagramPos + 1)));
+  expect(dispatchKey("Backspace")).toBe(false);
+  expect(editor.getMarkdown()).toBe(markdown);
+});

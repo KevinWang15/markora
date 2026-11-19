@@ -7,8 +7,8 @@ export type ElementTarget = { node: ProseMirrorNode; pos: number };
 
 /** Optional NodeSpec.elementNavigation contract for embedded text editors. */
 export type ElementNavigationSpec = {
-  /** Custom owners handle arrows within their text and use
-   * moveToElementBoundary when exiting. Outer traversal stays in core. */
+  /** Custom owners handle horizontal arrows within their text and use
+   * moveToElementBoundary when exiting. Outer and vertical traversal stay in core. */
   textArrows?: "native" | "custom";
 };
 
@@ -18,6 +18,10 @@ function isBlock(node: ProseMirrorNode | null | undefined, managedBlocks?: Reado
 
 function isElement(node: ProseMirrorNode | null | undefined, managedBlocks?: ReadonlySet<string>): boolean {
   return !!node && NodeSelection.isSelectable(node) && (isBlock(node, managedBlocks) || node.isInline && node.isAtom);
+}
+
+function isEditableBlock(node: ProseMirrorNode | null | undefined, managedBlocks?: ReadonlySet<string>): boolean {
+  return isBlock(node, managedBlocks) && !node!.isAtom;
 }
 
 function textEdge(node: ProseMirrorNode | null, pos: number, direction: -1 | 1, managedBlocks?: ReadonlySet<string>): number | null {
@@ -39,11 +43,43 @@ function resolveElementBoundary(doc: ProseMirrorNode, pos: number, managedBlocks
   return ManagedBlockCursor.at(doc, pos, (node): node is ProseMirrorNode => isBlock(node, managedBlocks)) ?? Selection.near($pos);
 }
 
-/** One document-order model for both inline objects and structured blocks.
- * Text positions remain native; block gaps are canonical position selections.
- * Editable contents are entered explicitly, never as a side effect of traversal. */
+/** Enter a node from the given direction: atoms select as whole elements;
+ * editable blocks and prose containers enter their nearest editable edge. */
+function enterNode(
+  doc: ProseMirrorNode,
+  pos: number,
+  node: ProseMirrorNode,
+  direction: -1 | 1,
+  managedBlocks?: ReadonlySet<string>,
+): Selection | null {
+  if (node.isAtom) {
+    return NodeSelection.isSelectable(node) ? NodeSelection.create(doc, pos) : null;
+  }
+  if (node.isTextblock) {
+    return TextSelection.create(doc, direction > 0 ? pos + 1 : pos + node.nodeSize - 1);
+  }
+  const child = direction > 0 ? node.firstChild : node.lastChild;
+  if (!child) {
+    return NodeSelection.isSelectable(node) ? NodeSelection.create(doc, pos) : null;
+  }
+  if (isBlock(node, managedBlocks) && isBlock(child, managedBlocks)) {
+    const innerEdge = direction > 0 ? pos + 1 : pos + node.nodeSize - 1;
+    const cursor = ManagedBlockCursor.at(doc, innerEdge, (candidate): candidate is ProseMirrorNode => isBlock(candidate, managedBlocks));
+    if (cursor) return cursor;
+  }
+  const childPos = direction > 0 ? pos + 1 : pos + node.nodeSize - 1 - child.nodeSize;
+  return enterNode(doc, childPos, child, direction, managedBlocks);
+}
+
+/** One document-order model for inline objects and structured blocks across
+ * both horizontal and vertical arrow traversal. Adjacent components always
+ * share a single boundary stop (Component A ↔ Gap Space ↔ Component B);
+ * editable blocks are entered directly while atoms select as whole elements. */
 export function createElementNavigation(managedBlocks?: ReadonlySet<string>) {
   const boundary = (doc: ProseMirrorNode, pos: number) => resolveElementBoundary(doc, pos, managedBlocks);
+  const enter = (doc: ProseMirrorNode, pos: number, node: ProseMirrorNode, direction: -1 | 1) => (
+    enterNode(doc, pos, node, direction, managedBlocks)
+  );
 
   function containing($pos: ResolvedPos): ElementTarget | null {
     for (let depth = $pos.depth; depth > 0; depth--) {
@@ -53,41 +89,108 @@ export function createElementNavigation(managedBlocks?: ReadonlySet<string>) {
     return null;
   }
 
+  function stepFromManagedCursor(selection: ManagedBlockCursor, direction: -1 | 1): Selection {
+    const doc = selection.$from.doc;
+    const $head = selection.$head;
+    const immediate = direction < 0 ? $head.nodeBefore : $head.nodeAfter;
+    if (immediate) {
+      const targetPos = direction < 0 ? $head.pos - immediate.nodeSize : $head.pos;
+      return enter(doc, targetPos, immediate, direction) ?? selection;
+    }
+    for (let depth = $head.depth; depth > 0; depth--) {
+      const node = $head.node(depth);
+      const pos = direction < 0 ? $head.before(depth) : $head.after(depth);
+      if (isElement(node, managedBlocks)) return boundary(doc, pos);
+      const $edge = doc.resolve(pos);
+      const sibling = direction < 0 ? $edge.nodeBefore : $edge.nodeAfter;
+      if (sibling) {
+        const siblingPos = direction < 0 ? pos - sibling.nodeSize : pos;
+        return enter(doc, siblingPos, sibling, direction) ?? selection;
+      }
+      if (depth > 1 && (direction < 0 ? $head.index(depth - 1) !== 0 : $head.indexAfter(depth - 1) !== $head.node(depth - 1).childCount)) {
+        return selection;
+      }
+    }
+    return selection;
+  }
+
   function step(selection: Selection, direction: -1 | 1): Selection | null {
     const doc = selection.$from.doc;
     if (selection instanceof NodeSelection && isElement(selection.node, managedBlocks)) {
       return boundary(doc, direction < 0 ? selection.from : selection.to);
     }
     if (!selection.empty) return null;
+    if (selection instanceof ManagedBlockCursor) {
+      return stepFromManagedCursor(selection, direction);
+    }
     const $head = selection.$head;
     const immediate = direction < 0 ? $head.nodeBefore : $head.nodeAfter;
     if (immediate && isElement(immediate, managedBlocks)) {
-      return NodeSelection.create(doc, direction < 0 ? $head.pos - immediate.nodeSize : $head.pos);
-    }
-    if (selection instanceof ManagedBlockCursor && immediate) {
-      const edge = textEdge(immediate, direction < 0 ? $head.pos - immediate.nodeSize : $head.pos, direction, managedBlocks);
-      return edge === null ? null : TextSelection.create(doc, edge);
+      const targetPos = direction < 0 ? $head.pos - immediate.nodeSize : $head.pos;
+      return enter(doc, targetPos, immediate, direction);
     }
     if (direction < 0 ? $head.parentOffset !== 0 : $head.parentOffset !== $head.parent.content.size) return null;
 
     for (let depth = $head.depth; depth > 0; depth--) {
       const node = $head.node(depth);
       const pos = direction < 0 ? $head.before(depth) : $head.after(depth);
-      // Leaving an editing surface is an explicit boundary stop.
+      // Leaving an editing surface stops at the shared boundary (prose edge or gap cursor).
       if (isElement(node, managedBlocks)) return boundary(doc, pos);
       const $edge = doc.resolve(pos);
       const sibling = direction < 0 ? $edge.nodeBefore : $edge.nodeAfter;
-      if (sibling && isElement(sibling, managedBlocks)) return NodeSelection.create(doc, direction < 0 ? pos - sibling.nodeSize : pos);
+      if (sibling && isElement(sibling, managedBlocks)) {
+        const siblingPos = direction < 0 ? pos - sibling.nodeSize : pos;
+        return enter(doc, siblingPos, sibling, direction);
+      }
       if (sibling) return null;
       if (depth > 1 && (direction < 0 ? $head.index(depth - 1) !== 0 : $head.indexAfter(depth - 1) !== $head.node(depth - 1).childCount)) return null;
     }
-    return selection instanceof ManagedBlockCursor ? selection : null;
+    return null;
+  }
+
+  function stepVertical(
+    selection: Selection,
+    direction: -1 | 1,
+    atVerticalEdge: () => boolean,
+  ): Selection | null {
+    const doc = selection.$from.doc;
+    if (selection instanceof NodeSelection && isBlock(selection.node, managedBlocks)) {
+      return boundary(doc, direction < 0 ? selection.from : selection.to);
+    }
+    if (!selection.empty) return null;
+    if (selection instanceof ManagedBlockCursor) {
+      return stepFromManagedCursor(selection, direction);
+    }
+    if (!(selection instanceof TextSelection)) return null;
+    const $head = selection.$head;
+    // Tables own 2D column-preserving vertical motion between rows and exit
+    // through moveToElementBoundary at their top and bottom edges.
+    if (containing($head)?.node.type.spec.tableRole === "table") return null;
+
+    for (let depth = $head.depth; depth > 0; depth--) {
+      const node = $head.node(depth);
+      const pos = direction < 0 ? $head.before(depth) : $head.after(depth);
+      if (isBlock(node, managedBlocks)) {
+        return atVerticalEdge() ? boundary(doc, pos) : null;
+      }
+      const $edge = doc.resolve(pos);
+      const sibling = direction < 0 ? $edge.nodeBefore : $edge.nodeAfter;
+      if (sibling && isBlock(sibling, managedBlocks)) {
+        if (!atVerticalEdge()) return null;
+        const siblingPos = direction < 0 ? pos - sibling.nodeSize : pos;
+        return enter(doc, siblingPos, sibling, direction);
+      }
+      if (sibling) return null;
+      if (depth > 1 && (direction < 0 ? $head.index(depth - 1) !== 0 : $head.indexAfter(depth - 1) !== $head.node(depth - 1).childCount)) return null;
+    }
+    return null;
   }
 
   return {
     isBlock: (node: ProseMirrorNode | null | undefined) => isBlock(node, managedBlocks),
     isElement: (node: ProseMirrorNode | null | undefined) => isElement(node, managedBlocks),
-    boundary, containing, step,
+    isEditableBlock: (node: ProseMirrorNode | null | undefined) => isEditableBlock(node, managedBlocks),
+    boundary, enter, containing, step, stepVertical,
   };
 }
 

@@ -313,16 +313,16 @@ describe('ManagedBlockCursor', () => {
     expectManagedCursor(editor, 'before', table.pos);
 
     expect(pressKey(editor, 'ArrowLeft')).toBe(true);
-    expect(editor.view.state.selection).toBeInstanceOf(NodeSelection);
-    expect(editor.view.state.selection.from).toBe(table.pos);
+    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+    expect(editor.view.state.selection.from).toBe(findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, 1).from);
 
     setSelection(editor, findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, -1));
     expect(pressKey(editor, 'ArrowLeft')).toBe(true);
     expectManagedCursor(editor, 'after', table.pos);
 
     expect(pressKey(editor, 'ArrowRight')).toBe(true);
-    expect(editor.view.state.selection).toBeInstanceOf(NodeSelection);
-    expect(editor.view.state.selection.from).toBe(table.pos);
+    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+    expect(editor.view.state.selection.from).toBe(findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, -1).from);
   });
 
   it('deletes an empty first paragraph before a table on Backspace', () => {
@@ -402,9 +402,8 @@ describe('ManagedBlockCursor', () => {
     (editor.view.nodeDOM(codeBlock.pos) as HTMLElement).style.direction = 'rtl';
     editor.view.dom.style.direction = 'rtl';
     expect(pressKey(editor, 'ArrowLeft')).toBe(true);
-    expect(editor.view.state.selection).toBeInstanceOf(NodeSelection);
-    expect(pressKey(editor, 'Enter')).toBe(true);
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+    expect(editor.view.state.selection.from).toBe(codeBlock.pos + 1);
 
     const capturedView = codeMirrorView as CodeMirrorView;
     capturedView.dispatch({
@@ -527,7 +526,7 @@ describe('ManagedBlockCursor', () => {
     expectManagedCursor(editor, 'after', table.pos);
   });
 
-  it('selects the table on ArrowRight and enters its contents explicitly', () => {
+  it('enters the table directly on ArrowRight and supports Escape/Enter whole-block selection', () => {
     const editor = createEditor({
       element: createHost(),
       markdown: ['| A | B |', '| --- | --- |', '| a | b |'].join('\n'),
@@ -537,7 +536,11 @@ describe('ManagedBlockCursor', () => {
     setSelection(editor, ManagedBlockCursor.create(editor.view.state.doc, table.pos, 'before', (node) => isManagedBlockNodeFromSchema(editor.view.state.schema, node))!);
 
     expect(pressKey(editor, 'ArrowRight')).toBe(true);
+    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+    expect(editor.view.state.selection.from).toBe(findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, 1).from);
+    expect(pressKey(editor, 'Escape')).toBe(true);
     expect(editor.view.state.selection).toBeInstanceOf(NodeSelection);
+    expect(editor.view.state.selection.from).toBe(table.pos);
     expect(pressKey(editor, 'Enter')).toBe(true);
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
     expect(editor.view.state.selection.from).toBe(findSelectionInsideNode(editor.view.state.doc, table.pos, table.node, 1).from);
@@ -1238,6 +1241,33 @@ describe('ManagedBlockCursor', () => {
     expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
     expect(editor.view.state.selection).not.toBeInstanceOf(ManagedBlockCursor);
     expect(editor.view.state.selection.from).toBe(paragraph.pos + paragraph.node.nodeSize - 1);
+    editor.destroy();
+  });
+
+  it('stops at the shared Gap Space when exiting a code block vertically toward another managed block', async () => {
+    const editor = createEditor({
+      element: createHost(),
+      markdown: ['```js', 'first', '```', '', '---', '', '> quoted'].join('\n'),
+    });
+
+    const firstCode = findNodeByName(editor.view.state.doc, 'code_block');
+    const rule = findNodeByName(editor.view.state.doc, 'horizontal_rule');
+    const quote = findNodeByName(editor.view.state.doc, 'blockquote');
+    const cmContent = await activateCodeMirrorAt(editor, firstCode.pos + 1);
+
+    dispatchDomKey(cmContent, 'ArrowDown');
+    expectManagedCursor(editor, 'before', rule.pos);
+
+    expect(pressKey(editor, 'ArrowDown')).toBe(true);
+    expect(editor.view.state.selection).toBeInstanceOf(NodeSelection);
+    expect(editor.view.state.selection.from).toBe(rule.pos);
+
+    expect(pressKey(editor, 'ArrowDown')).toBe(true);
+    expectManagedCursor(editor, 'before', quote.pos);
+
+    expect(pressKey(editor, 'ArrowDown')).toBe(true);
+    expect(editor.view.state.selection).toBeInstanceOf(TextSelection);
+    expect(editor.view.state.selection.from).toBe(quote.pos + 2);
     editor.destroy();
   });
 

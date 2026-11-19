@@ -1480,3 +1480,56 @@ it("validates labels, targets, policies, options, and formatter output", () => {
     { references: "rename" } as never,
   )).toThrow(/Extension command/);
 });
+
+it("unwraps a footnote definition on Backspace at start of its first paragraph while preserving nested unwraps", () => {
+  const extension = createFootnotesExtension();
+  const markdown = [
+    "Body[^note].",
+    "",
+    "[^note]: First line.",
+    "",
+    "    Second line.",
+  ].join("\n");
+  const editor = track(createRootEditor({
+    element: host(),
+    extensions: [extension],
+    markdown,
+  }));
+  const handle = editor.extensions.get(extension);
+  const definition = handle.state.getDefinition({ label: "note" })!;
+  const dispatchBackspace = () => {
+    const event = new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true });
+    editor.view.dom.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+
+  // Backspace at start of first paragraph unwraps the definition and rescues both paragraphs.
+  editor.view.dispatch(editor.view.state.tr.setSelection(TextSelection.create(editor.view.state.doc, definition.position + 2)));
+  expect(dispatchBackspace()).toBe(true);
+  expect(handle.state.getDefinition({ label: "note" })).toBeNull();
+  expect(editor.getMarkdown()).toBe("Body[^note].\n\nFirst line.\n\nSecond line.");
+  expect(handle.state.getDiagnostics().map(({ code }) => code)).toContain("unresolved-reference");
+
+  // Single undo restores the definition cleanly.
+  expect(editor.commands.undo()).toBe(true);
+  expect(editor.getMarkdown()).toBe(markdown);
+  expect(handle.state.getDiagnostics()).toEqual([]);
+
+  // Nested list inside a footnote definition lifts its list item first before unwrapping the footnote.
+  const nestedMarkdown = "Body[^list].\n\n[^list]: - item";
+  const nestedEditor = track(createRootEditor({
+    element: host(),
+    extensions: [createFootnotesExtension()],
+    markdown: nestedMarkdown,
+  }));
+  const listDefPos = nestedEditor.view.state.doc.firstChild!.nodeSize;
+  const itemTextPos = listDefPos + 4; // footnote_definition > bullet_list > list_item > paragraph
+  nestedEditor.view.dispatch(nestedEditor.view.state.tr.setSelection(TextSelection.create(nestedEditor.view.state.doc, itemTextPos)));
+  const firstEvent = new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true });
+  nestedEditor.view.dom.dispatchEvent(firstEvent);
+  expect(nestedEditor.getMarkdown()).toBe("Body[^list].\n\n[^list]: item");
+
+  const secondEvent = new KeyboardEvent("keydown", { key: "Backspace", bubbles: true, cancelable: true });
+  nestedEditor.view.dom.dispatchEvent(secondEvent);
+  expect(nestedEditor.getMarkdown()).toBe("Body[^list].\n\nitem");
+});

@@ -17,6 +17,35 @@ export function createElementInteractionPlugins(managedBlocks: ReadonlySet<strin
   ];
 }
 
+function isAtVerticalEdge(view: EditorView, direction: -1 | 1): boolean {
+  const { selection } = view.state;
+  if (!(selection instanceof TextSelection) || !selection.empty) return false;
+  const { $head } = selection;
+  const parent = $head.parent;
+  if (parent.content.size === 0) return true;
+  if (parent.type.spec.code) {
+    const text = direction < 0
+      ? parent.textBetween(0, $head.parentOffset)
+      : parent.textBetween($head.parentOffset, parent.content.size);
+    if (text.includes("\n")) return false;
+  } else if (parent.inlineContent) {
+    let hasBreak = false;
+    const rangeFrom = direction < 0 ? 0 : $head.parentOffset;
+    const rangeTo = direction < 0 ? $head.parentOffset : parent.content.size;
+    parent.nodesBetween(rangeFrom, rangeTo, (child) => {
+      if (child.type.name === "hard_break") {
+        hasBreak = true;
+        return false;
+      }
+      return !hasBreak;
+    });
+    if (hasBreak) return false;
+  }
+  return typeof view.endOfTextblock === "function"
+    ? view.endOfTextblock(direction < 0 ? "up" : "down")
+    : true;
+}
+
 export function createElementNavigationPlugin(managedBlocks: ReadonlySet<string>) {
   const navigation = createElementNavigation(managedBlocks);
   const dispatch = (view: EditorView, selection: Selection) => {
@@ -46,7 +75,17 @@ export function createElementNavigationPlugin(managedBlocks: ReadonlySet<string>
         }
         const direction = horizontalArrowLogicalSide(view, physical, inside ? view.nodeDOM(inside.pos) : undefined) === "before" ? -1 : 1;
         const next = navigation.step(selection, direction);
-        if (inside && motion === "inside" && next && !(next instanceof NodeSelection)) return false;
+        const leavesInside = !!inside && !!next && (
+          next instanceof ManagedBlockCursor
+            ? next.head <= inside.pos || next.head >= inside.pos + inside.node.nodeSize
+            : next.from < inside.pos || next.to > inside.pos + inside.node.nodeSize
+        );
+        if (inside && motion === "inside" && leavesInside) return false;
+        return next ? dispatch(view, next) : false;
+      }
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        const direction = event.key === "ArrowUp" ? -1 : 1;
+        const next = navigation.stepVertical(selection, direction, () => isAtVerticalEdge(view, direction));
         return next ? dispatch(view, next) : false;
       }
       if (event.key === "Escape" && selection instanceof TextSelection) {
@@ -55,8 +94,8 @@ export function createElementNavigationPlugin(managedBlocks: ReadonlySet<string>
       }
       if (!(selection instanceof NodeSelection) || !navigation.isElement(selection.node)) return false;
       if (event.key === "Enter" && !selection.node.isAtom) {
-        const inside = Selection.findFrom(doc.resolve(selection.from + 1), 1, true);
-        if (inside && inside.to < selection.to) return dispatch(view, inside);
+        const inside = navigation.enter(doc, selection.from, selection.node, 1);
+        if (inside && !inside.eq(selection)) return dispatch(view, inside);
       }
       if (view.editable && (event.key === "Backspace" || event.key === "Delete")) {
         const tr = view.state.tr.deleteSelection();

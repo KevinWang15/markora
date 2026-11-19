@@ -1,9 +1,11 @@
-import type {
-  Node as ProseMirrorNode,
-  NodeType,
-  ResolvedPos,
-  Schema,
+import {
+  Fragment,
+  type Node as ProseMirrorNode,
+  type NodeType,
+  type ResolvedPos,
+  type Schema,
 } from "prosemirror-model";
+import { closeHistory } from "prosemirror-history";
 import {
   NodeSelection,
   Selection,
@@ -1267,6 +1269,103 @@ export function tableColumnAlignmentIsActive(
     }
   });
   return active;
+}
+
+/** Unwrap a table into paragraphs when plain Backspace is pressed at offset 0
+ * of its first cell `(0, 0)`, rescuing all cell text and inline marks in one
+ * undoable step. */
+export function createTableUnwrapBackspaceCommand(schema: Schema): Command {
+  return (state, dispatch, view) => {
+    const paragraphType = schema.nodes.paragraph;
+    const { selection } = state;
+
+    if (
+      !paragraphType
+      || view?.editable === false
+      || view?.composing
+      || !(selection instanceof TextSelection)
+      || !selection.empty
+      || selection.$from.parentOffset !== 0
+    ) {
+      return false;
+    }
+
+    const { $from } = selection;
+    const info = getTableCellContextAtPos($from, schema);
+
+    if (!info || info.rowIndex !== 0 || info.cellIndex !== 0) {
+      return false;
+    }
+
+    let cellDepth = -1;
+    for (let depth = $from.depth; depth > 0; depth -= 1) {
+      const nodeType = $from.node(depth).type;
+      if (nodeType === schema.nodes.table_cell || nodeType === schema.nodes.table_header) {
+        cellDepth = depth;
+        break;
+      }
+    }
+
+    // Only unwrap when directly in the first block of cell (0, 0) so nested
+    // structures inside the cell unwrap themselves first.
+    if (cellDepth < 0 || $from.depth !== cellDepth + 1 || $from.index(cellDepth) !== 0) {
+      return false;
+    }
+
+    const $tablePos = state.doc.resolve(info.tablePos);
+    if (!$tablePos.parent.canReplaceWith($tablePos.index(), $tablePos.index() + 1, paragraphType)) {
+      return false;
+    }
+
+    if (!dispatch) {
+      return true;
+    }
+
+    const paragraphs: ProseMirrorNode[] = [];
+    info.table.forEach((row) => {
+      const rowInlines: ProseMirrorNode[] = [];
+      row.forEach((cell) => {
+        const cellInlines: ProseMirrorNode[] = [];
+        cell.forEach((child) => {
+          if (child.isTextblock && child.content.size > 0) {
+            if (cellInlines.length > 0) {
+              cellInlines.push(schema.text(" "));
+            }
+            child.forEach((inline) => {
+              cellInlines.push(inline);
+            });
+          } else if (!child.isTextblock && child.textContent) {
+            if (cellInlines.length > 0) {
+              cellInlines.push(schema.text(" "));
+            }
+            cellInlines.push(schema.text(child.textContent));
+          }
+        });
+        if (cellInlines.length > 0) {
+          if (rowInlines.length > 0) {
+            rowInlines.push(schema.text(" "));
+          }
+          rowInlines.push(...cellInlines);
+        }
+      });
+      if (rowInlines.length > 0) {
+        paragraphs.push(paragraphType.create(null, Fragment.fromArray(rowInlines)));
+      }
+    });
+
+    if (paragraphs.length === 0) {
+      paragraphs.push(paragraphType.create());
+    }
+
+    const tr = state.tr.replaceWith(
+      info.tablePos,
+      info.tablePos + info.table.nodeSize,
+      Fragment.fromArray(paragraphs),
+    );
+    tr.setSelection(TextSelection.create(tr.doc, info.tablePos + 1));
+    dispatch(closeHistory(tr).scrollIntoView());
+    return true;
+  };
 }
 
 export function createTableCommandSet(schema: Schema) {

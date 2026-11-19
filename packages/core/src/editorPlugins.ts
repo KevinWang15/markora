@@ -242,24 +242,8 @@ export function createHorizontalRulePlugin(options: {
           }
         }
 
-        if (event.key === "ArrowUp" && isPlainStructuralKey(view, event) && selection.empty) {
-          const { $from } = selection;
-
-          if ($from.parent.type === schema.nodes.paragraph && $from.parentOffset === 0) {
-            const beforePos = $from.before();
-            const beforeResolved = state.doc.resolve(beforePos);
-            const previousNode = beforeResolved.nodeBefore;
-
-            if (previousNode?.type === schema.nodes.horizontal_rule) {
-              event.preventDefault();
-              view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, beforePos - previousNode.nodeSize)));
-              return true;
-            }
-          }
-        }
-
         if (
-          (event.key === "ArrowDown" || event.key === "Enter")
+          event.key === "Enter"
           && isPlainStructuralKey(view, event)
           && selection instanceof NodeSelection
         ) {

@@ -1,6 +1,14 @@
-import { NodeSelection, Selection, closeHistory, createAtomView } from "markora/extension-api";
+import {
+  Fragment,
+  NodeSelection,
+  Selection,
+  TextSelection,
+  closeHistory,
+  createAtomView,
+  moveToElementBoundary,
+} from "markora/extension-api";
 import { isValidInlineMathSource, isValidBlockMathSource, normalizeMathSource } from "./source";
-import { createMathSourceEditor, type MathSourceEditor } from "./sourceEditor";
+import { createMathSourceEditor, type MathSourceEditor, type MathSourceExitMode } from "./sourceEditor";
 import type {
   AtomViewContext,
   EditorView,
@@ -396,7 +404,8 @@ export function createMathNodeView(
           label: messages.sourceInputLabel,
           hint: messages.editingHint,
           onChange: (source) => this.writeSource(source),
-          onExit: (direction) => this.finishEditing(direction),
+          onExit: (direction, mode) => this.finishEditing(direction, mode),
+          onUnwrap: () => this.unwrapEditing(),
         });
         this.frame.content.append(this.sourceEditor.dom);
         if (this.registration.snapshot().previewRequested) this.registration.togglePreview();
@@ -424,7 +433,7 @@ export function createMathNodeView(
       } finally { this.writingSource = false; }
     }
 
-    private finishEditing(direction: -1 | 1 | null) {
+    private finishEditing(direction: -1 | 1 | null, mode: MathSourceExitMode = "blur") {
       const editor = this.sourceEditor;
       if (!editor || this.finishing || editor.composing) return;
       this.finishing = true;
@@ -436,9 +445,11 @@ export function createMathNodeView(
         if (position === null || this.view.isDestroyed) return;
         const valid = kind === "inline" ? isValidInlineMathSource(source) : isValidBlockMathSource(source);
         let endPosition = position + this.nodeValue.nodeSize;
+        let replaced = false;
         // Empty formulas are removed. Source that cannot round-trip through a math
         // delimiter is kept as ordinary text, never silently discarded on blur.
         if (this.view.editable && (!source.trim() || !valid)) {
+          replaced = true;
           const replacement = source ? (kind === "inline"
             ? this.view.state.schema.text(source, this.nodeValue.marks)
             : this.view.state.schema.nodes.paragraph.create(null, this.view.state.schema.text(source))) : null;
@@ -447,22 +458,59 @@ export function createMathNodeView(
           this.view.dispatch(replacementTransaction);
         }
         if (this.view.isDestroyed) return;
-        let tr = this.view.state.tr;
         if (focused && direction !== null) {
-          let next = Math.min((direction > 0 ? endPosition : position), tr.doc.content.size);
-          if (direction > 0 && kind === "block" && next === tr.doc.content.size) {
-            tr = tr.insert(next, this.view.state.schema.nodes.paragraph.create());
+          if (!replaced && kind === "block" && mode === "arrow") {
+            moveToElementBoundary(this.view, position, direction < 0 ? "before" : "after");
+          } else {
+            let tr = this.view.state.tr;
+            let next = Math.min((direction > 0 ? endPosition : position), tr.doc.content.size);
+            if (direction > 0 && kind === "block" && next === tr.doc.content.size) {
+              tr = tr.insert(next, this.view.state.schema.nodes.paragraph.create());
+            }
+            next = Math.min(next, tr.doc.content.size);
+            tr = tr.setSelection(Selection.near(tr.doc.resolve(next), direction));
+            this.view.dispatch(tr);
           }
-          next = Math.min(next, tr.doc.content.size);
-          tr = tr.setSelection(Selection.near(tr.doc.resolve(next), direction));
         }
-        this.view.dispatch(tr);
         if (!this.view.isDestroyed) this.view.dispatch(closeHistory(this.view.state.tr));
         if (!this.destroyed) {
           if (rendererAvailable && !this.registration.snapshot().previewRequested) this.registration.togglePreview();
           this.render(this.registration.snapshot());
         }
         if (focused && !this.view.isDestroyed) this.view.focus();
+      } finally { editor.destroy(); this.finishing = false; }
+    }
+
+    private unwrapEditing() {
+      const editor = this.sourceEditor;
+      if (!editor || this.finishing || editor.composing || !this.view.editable) return;
+      this.finishing = true;
+      const source = normalizeMathSource(editor.input.value);
+      const position = this.getCurrentPosition();
+      this.sourceEditor = null;
+      try {
+        if (position === null || this.view.isDestroyed) return;
+        const endPosition = position + this.nodeValue.nodeSize;
+        const { schema } = this.view.state;
+        let tr = this.view.state.tr;
+        if (kind === "inline") {
+          if (source) {
+            tr = tr.replaceWith(position, endPosition, schema.text(source, this.nodeValue.marks));
+          } else {
+            tr = tr.delete(position, endPosition);
+          }
+          tr.setSelection(TextSelection.create(tr.doc, Math.min(position, tr.doc.content.size)));
+        } else {
+          const paragraphType = schema.nodes.paragraph;
+          if (!paragraphType) return;
+          const paragraphs = source.split("\n").map((line) => (
+            paragraphType.create(null, line ? schema.text(line) : null)
+          ));
+          tr = tr.replaceWith(position, endPosition, Fragment.fromArray(paragraphs));
+          tr.setSelection(TextSelection.create(tr.doc, position + 1));
+        }
+        this.view.dispatch(closeHistory(tr).scrollIntoView());
+        if (!this.view.isDestroyed) this.view.focus();
       } finally { editor.destroy(); this.finishing = false; }
     }
 
