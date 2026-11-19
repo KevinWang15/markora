@@ -116,7 +116,18 @@ export function createOverlayEnvironmentController(
     version: number;
   }>>();
   const observedElements = new Set<HTMLElement>();
-  const observer = new win.MutationObserver(() => invalidateAndSyncAll());
+  let lastEnvironmentFingerprint: string | null = null;
+  const observer = new win.MutationObserver((records) => {
+    const hasEffectiveChange = records.some((record) => (
+      record.attributeName !== null
+      && record.target instanceof win.Element
+      && record.target.getAttribute(record.attributeName) !== record.oldValue
+    ));
+    if (!hasEffectiveChange) {
+      return;
+    }
+    invalidateAndSyncAll();
+  });
   const mediaQueries = typeof win.matchMedia === "function"
     ? ENVIRONMENT_MEDIA_QUERIES.map((query) => win.matchMedia(query))
     : [];
@@ -130,33 +141,15 @@ export function createOverlayEnvironmentController(
       observedElements.add(ancestor);
       observer.observe(ancestor, {
         attributeFilter: ["class", "dir", "lang", "style", ...ENVIRONMENT_ATTRIBUTES],
+        attributeOldValue: true,
         attributes: true,
       });
     }
   };
 
-  const syncTarget = (target: HTMLElement) => {
-    if (destroyed || !target.isConnected) {
-      targets.delete(target);
-      invalidationCallbacks.delete(target);
-      return;
-    }
-
-    // `dir="auto"` can change the source's computed direction when document
-    // text changes without any watched ancestor attribute changing. Refresh
-    // this cheap semantic value on every explicit overlay synchronization;
-    // the expensive custom-property copy remains version-cached below.
+  const readEnvironmentState = () => {
     const computedStyle = win.getComputedStyle(source);
-    target.dir = computedStyle.direction === "rtl" ? "rtl" : "ltr";
-
-    const previousSynchronization = synchronizedTargets.get(target);
-    if (
-      previousSynchronization?.source === source
-      && previousSynchronization.version === environmentVersion
-    ) {
-      return;
-    }
-
+    const dir: "ltr" | "rtl" = computedStyle.direction === "rtl" ? "rtl" : "ltr";
     const ancestors = getComposedAncestors(source);
     const themeScope = findEnvironmentScope(
       ancestors,
@@ -168,19 +161,89 @@ export function createOverlayEnvironmentController(
       "data-mdw-motion",
       MOTION_CLASSES,
     );
+    const themeId = themeScope.element?.getAttribute("data-mdw-theme-id") ?? null;
+    const language = findInheritedAttribute(ancestors, "lang")
+      ?? source.ownerDocument.documentElement.getAttribute("lang");
+    const customProperties: Array<[string, string]> = [];
+    for (let index = 0; index < computedStyle.length; index += 1) {
+      const name = computedStyle.item(index);
+      if (!name.startsWith("--mdw-")) {
+        continue;
+      }
+      const value = computedStyle.getPropertyValue(name);
+      if (value) {
+        customProperties.push([name, value]);
+      }
+    }
+    const colorScheme = computedStyle.colorScheme;
+    const fingerprint = [
+      dir,
+      themeScope.className ?? "",
+      themeScope.attributeValue ?? "",
+      themeId ?? "",
+      motionScope.className ?? "",
+      motionScope.attributeValue ?? "",
+      language ?? "",
+      colorScheme,
+      ...customProperties.map(([name, value]) => `${name}:${value}`),
+    ].join("\0");
+
+    return {
+      colorScheme,
+      customProperties,
+      dir,
+      fingerprint,
+      language,
+      motionScope,
+      themeId,
+      themeScope,
+    };
+  };
+
+  type EnvironmentStateSnapshot = ReturnType<typeof readEnvironmentState>;
+
+  const syncTarget = (target: HTMLElement, cachedState?: EnvironmentStateSnapshot) => {
+    if (destroyed || !target.isConnected) {
+      targets.delete(target);
+      invalidationCallbacks.delete(target);
+      return;
+    }
+
+    const previousSynchronization = synchronizedTargets.get(target);
+    if (
+      !cachedState
+      && previousSynchronization?.source === source
+      && previousSynchronization.version === environmentVersion
+    ) {
+      // `dir="auto"` can change the source's computed direction when document
+      // text changes without any watched ancestor attribute changing. Refresh
+      // this cheap semantic value on every explicit overlay synchronization;
+      // the expensive custom-property copy remains version-cached below.
+      const nextDir = win.getComputedStyle(source).direction === "rtl" ? "rtl" : "ltr";
+      if (target.dir !== nextDir) {
+        target.dir = nextDir;
+      }
+      return;
+    }
+
+    const state = cachedState ?? readEnvironmentState();
+    lastEnvironmentFingerprint = state.fingerprint;
+    if (target.dir !== state.dir) {
+      target.dir = state.dir;
+    }
     target.classList.add("mdw-ui");
 
     for (const candidate of [...target.classList].filter(name => isThemeClass(name) || MOTION_CLASSES.some(motion => motion === name))) {
       target.classList.remove(candidate);
     }
 
-    if (themeScope.className) target.classList.add(themeScope.className);
-    if (motionScope.className) target.classList.add(motionScope.className);
+    if (state.themeScope.className) target.classList.add(state.themeScope.className);
+    if (state.motionScope.className) target.classList.add(state.motionScope.className);
 
     for (const [name, value] of [
-      ["data-mdw-theme", themeScope.attributeValue],
-      ["data-mdw-theme-id", themeScope.element?.getAttribute("data-mdw-theme-id") ?? null],
-      ["data-mdw-motion", motionScope.attributeValue],
+      ["data-mdw-theme", state.themeScope.attributeValue],
+      ["data-mdw-theme-id", state.themeId],
+      ["data-mdw-motion", state.motionScope.attributeValue],
     ] as const) {
       if (value === null) {
         target.removeAttribute(name);
@@ -189,10 +252,8 @@ export function createOverlayEnvironmentController(
       }
     }
 
-    const language = findInheritedAttribute(ancestors, "lang")
-      ?? source.ownerDocument.documentElement.getAttribute("lang");
-    if (language !== null) {
-      target.setAttribute("lang", language);
+    if (state.language !== null) {
+      target.setAttribute("lang", state.language);
     } else {
       target.removeAttribute("lang");
     }
@@ -201,38 +262,43 @@ export function createOverlayEnvironmentController(
     }
 
     const nextProperties: string[] = [];
-    for (let index = 0; index < computedStyle.length; index += 1) {
-      const name = computedStyle.item(index);
-      if (!name.startsWith("--mdw-")) {
-        continue;
-      }
-
-      const value = computedStyle.getPropertyValue(name);
-      if (value) {
-        target.style.setProperty(name, value);
-        nextProperties.push(name);
-      }
+    for (const [name, value] of state.customProperties) {
+      target.style.setProperty(name, value);
+      nextProperties.push(name);
     }
     copiedProperties.set(target, Object.freeze(nextProperties));
-    target.style.colorScheme = computedStyle.colorScheme;
+    target.style.colorScheme = state.colorScheme;
     synchronizedTargets.set(target, Object.freeze({
       source,
       version: environmentVersion,
     }));
   };
 
-  function syncAll() {
+  function syncAll(cachedState?: EnvironmentStateSnapshot) {
+    const state = cachedState ?? (targets.size > 0 ? readEnvironmentState() : undefined);
     for (const target of [...targets]) {
-      syncTarget(target);
+      syncTarget(target, state);
     }
   }
 
   function invalidateAndSyncAll() {
-    environmentVersion += 1;
-    syncAll();
+    const state = readEnvironmentState();
+    const environmentChanged = state.fingerprint !== lastEnvironmentFingerprint;
 
+    if (environmentChanged) {
+      environmentVersion += 1;
+      syncAll(state);
+    }
+
+    const callbacks = new Set<() => void>();
     for (const target of [...targets]) {
-      invalidationCallbacks.get(target)?.();
+      const callback = invalidationCallbacks.get(target);
+      if (callback) {
+        callbacks.add(callback);
+      }
+    }
+    for (const callback of callbacks) {
+      callback();
     }
   }
 

@@ -235,25 +235,36 @@ export function normalizeExpelledMarkdownWhitespace(
     return node;
   }
 
-  const children: ProseMirrorNode[] = [];
-  let changed = false;
-  node.forEach((child) => {
-    const normalized = normalizeExpelledMarkdownWhitespace(child, expellableMarkNames);
-    changed ||= normalized !== child;
-    children.push(normalized);
-  });
+  if (node.inlineContent) {
+    if (expellableMarkNames.size === 0 || node.childCount === 0) {
+      return node;
+    }
 
-  if (
-    node.inlineContent
-    && expellableMarkNames.size > 0
-    // Crossing-mark analysis allocates runs for every mark. It cannot change
-    // inline content unless a marked text node has whitespace at an edge.
-    && children.some(child => child.isText && child.marks.length > 0 && /(^\s|\s$)/u.test(child.text!))
-    && (
-      hasCrossingExpellableMarkRuns(children, expellableMarkNames)
-      || hasLeadingWhitespaceAfterExpellableMarkReduction(children, expellableMarkNames)
-    )
-  ) {
+    let hasEdgeWhitespaceInMarkedText = false;
+    for (let index = 0; index < node.childCount; index += 1) {
+      const child = node.child(index);
+      if (child.isText && child.marks.length > 0 && /(^\s|\s$)/u.test(child.text!)) {
+        hasEdgeWhitespaceInMarkedText = true;
+        break;
+      }
+    }
+
+    if (!hasEdgeWhitespaceInMarkedText) {
+      return node;
+    }
+
+    const children: ProseMirrorNode[] = [];
+    for (let index = 0; index < node.childCount; index += 1) {
+      children.push(node.child(index));
+    }
+
+    if (
+      !hasCrossingExpellableMarkRuns(children, expellableMarkNames)
+      && !hasLeadingWhitespaceAfterExpellableMarkReduction(children, expellableMarkNames)
+    ) {
+      return node;
+    }
+
     const normalized: ProseMirrorNode[] = [];
 
     children.forEach((child, index) => {
@@ -292,7 +303,24 @@ export function normalizeExpelledMarkdownWhitespace(
     return content.eq(node.content) ? node : node.copy(content);
   }
 
-  return changed ? node.copy(Fragment.fromArray(children)) : node;
+  let children: ProseMirrorNode[] | null = null;
+  for (let index = 0; index < node.childCount; index += 1) {
+    const child = node.child(index);
+    const normalized = normalizeExpelledMarkdownWhitespace(child, expellableMarkNames);
+    if (normalized !== child) {
+      if (!children) {
+        children = [];
+        for (let prev = 0; prev < index; prev += 1) {
+          children.push(node.child(prev));
+        }
+      }
+      children.push(normalized);
+    } else if (children) {
+      children.push(child);
+    }
+  }
+
+  return children ? node.copy(Fragment.fromArray(children)) : node;
 }
 
 export function serializeEntitySafeMarkdownImage(

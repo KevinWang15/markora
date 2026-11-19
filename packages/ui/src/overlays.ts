@@ -25,7 +25,7 @@ import {
   type DefaultUiTableGroup,
   type DefaultUiTableSelectionContext,
 } from "./messages";
-import { measurePositionSpace, setViewportPosition } from "./positioning";
+import { measurePositionSpace, setViewportPosition, type PositionSpace } from "./positioning";
 
 type EditorView = MarkdownEditor["view"];
 type BrowserWindow = Window & typeof globalThis;
@@ -1516,7 +1516,12 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   reorderIndicator.hidden = true;
   reorderIndicator.style.display = "none";
 
+  const edgeSpaceProbe = doc.createElement("span");
+  edgeSpaceProbe.setAttribute("aria-hidden", "true");
+  edgeSpaceProbe.style.cssText = "position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;visibility:hidden";
+
   edgeDom.append(
+    edgeSpaceProbe,
     rowSelectors,
     columnSelectors,
     rowInsertions,
@@ -1905,21 +1910,29 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     }
 
     rowSelectorButtons.forEach((button, index) => {
-      button.setAttribute(
-        "aria-pressed",
-        wholeRowSelected && index >= selectedRowFrom && index <= selectedRowTo ? "true" : "false",
-      );
+      const next = wholeRowSelected && index >= selectedRowFrom && index <= selectedRowTo ? "true" : "false";
+      if (button.getAttribute("aria-pressed") !== next) {
+        button.setAttribute("aria-pressed", next);
+      }
     });
     columnSelectorButtons.forEach((button, index) => {
-      button.setAttribute(
-        "aria-pressed",
-        wholeColumnSelected && index >= selectedColumnFrom && index <= selectedColumnTo ? "true" : "false",
-      );
+      const next = wholeColumnSelected && index >= selectedColumnFrom && index <= selectedColumnTo ? "true" : "false";
+      if (button.getAttribute("aria-pressed") !== next) {
+        button.setAttribute("aria-pressed", next);
+      }
     });
     const insertionDisabled = info.rowCount >= TABLE_DIMENSION_MAXIMUM;
-    rowInsertionButtons.forEach((button) => { button.disabled = insertionDisabled; });
+    rowInsertionButtons.forEach((button) => {
+      if (button.disabled !== insertionDisabled) {
+        button.disabled = insertionDisabled;
+      }
+    });
     const columnInsertionDisabled = info.columnCount >= TABLE_DIMENSION_MAXIMUM;
-    columnInsertionButtons.forEach((button) => { button.disabled = columnInsertionDisabled; });
+    columnInsertionButtons.forEach((button) => {
+      if (button.disabled !== columnInsertionDisabled) {
+        button.disabled = columnInsertionDisabled;
+      }
+    });
   };
 
   const getRenderedRows = (marker: HTMLElement) => Array.from(
@@ -1954,11 +1967,12 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
   const positionEdgeElement = (
     element: HTMLElement,
     rect: Readonly<{ height: number; left: number; top: number; width: number }>,
+    space?: PositionSpace,
   ) => {
-    const initialSpace = measurePositionSpace(element);
-    element.style.width = `${Math.max(0, rect.width) / initialSpace.scaleX}px`;
-    element.style.height = `${Math.max(0, rect.height) / initialSpace.scaleY}px`;
-    setViewportPosition(element, rect.left, rect.top, measurePositionSpace(element));
+    const resolvedSpace = space ?? measurePositionSpace(edgeSpaceProbe);
+    element.style.width = `${Math.max(0, rect.width) / resolvedSpace.scaleX}px`;
+    element.style.height = `${Math.max(0, rect.height) / resolvedSpace.scaleY}px`;
+    setViewportPosition(element, rect.left, rect.top, resolvedSpace);
   };
 
   const hideReorderIndicator = () => {
@@ -2292,8 +2306,13 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
       - selectorSize / 2
       + selectorOverlap;
 
-    rows.forEach((row, index) => {
-      const rowRect = row.getBoundingClientRect();
+    // Batch all geometry reads before mutating inline styles so large tables
+    // perform a single layout pass instead of N forced synchronous reflows.
+    const rowRects = rows.map((row) => row.getBoundingClientRect());
+    const cellRects = firstRowCells.map((cell) => cell.getBoundingClientRect());
+    const edgeSpace = measurePositionSpace(edgeSpaceProbe);
+
+    rowRects.forEach((rowRect, index) => {
       const button = rowSelectorButtons[index];
       if (button) {
         positionEdgeElement(button, {
@@ -2301,11 +2320,10 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
           left: rowSelectorLeft,
           top: rowRect.top,
           width: selectorSize,
-        });
+        }, edgeSpace);
       }
     });
-    firstRowCells.forEach((cell, index) => {
-      const cellRect = cell.getBoundingClientRect();
+    cellRects.forEach((cellRect, index) => {
       const button = columnSelectorButtons[index];
       if (button) {
         const left = Math.max(cellRect.left, tableRect.left);
@@ -2317,12 +2335,12 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
           left,
           top: columnSelectorTop,
           width,
-        });
+        }, edgeSpace);
       }
     });
     rowInsertionButtons.forEach((button, boundaryIndex) => {
-      const previousRect = rows[boundaryIndex]?.getBoundingClientRect();
-      const nextRect = rows[boundaryIndex + 1]?.getBoundingClientRect();
+      const previousRect = rowRects[boundaryIndex];
+      const nextRect = rowRects[boundaryIndex + 1];
       if (!previousRect || !nextRect) return;
       const boundary = (previousRect.bottom + nextRect.top) / 2;
       positionEdgeElement(button, {
@@ -2330,11 +2348,11 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
         left: rowInsertionCenter - insertionSize / 2,
         top: boundary - insertionSize / 2,
         width: insertionSize,
-      });
+      }, edgeSpace);
     });
     columnInsertionButtons.forEach((button, boundaryIndex) => {
-      const previousRect = firstRowCells[boundaryIndex]?.getBoundingClientRect();
-      const nextRect = firstRowCells[boundaryIndex + 1]?.getBoundingClientRect();
+      const previousRect = cellRects[boundaryIndex];
+      const nextRect = cellRects[boundaryIndex + 1];
       if (!previousRect || !nextRect) return;
       const boundary = rtl
         ? (previousRect.left + nextRect.right) / 2
@@ -2347,7 +2365,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
         left: boundary - insertionSize / 2,
         top: columnInsertionCenter - insertionSize / 2,
         width: insertionSize,
-      });
+      }, edgeSpace);
     });
 
     if (reorderDrag?.started) {
@@ -2364,7 +2382,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     if (!activeMarker) return;
     if (activeView) {
       syncEnvironment(dom, activeView, handleEnvironmentInvalidated);
-      syncEnvironment(edgeDom, activeView, handleEnvironmentInvalidated);
+      syncEnvironment(edgeDom, activeView);
       refreshSelectionAnchor(activeMarker, activeView);
     }
     try {
@@ -2878,7 +2896,7 @@ export function createTableToolbarOverlay(options: OverlayEnvironment & {
     activeView = view;
     activeMarker = marker;
     syncEnvironment(dom, view, handleEnvironmentInvalidated);
-    syncEnvironment(edgeDom, view, handleEnvironmentInvalidated);
+    syncEnvironment(edgeDom, view);
     dom.hidden = false;
     dom.style.display = "flex";
     edgeDom.hidden = false;

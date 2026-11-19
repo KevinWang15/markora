@@ -651,11 +651,19 @@ export function createHtmlExtension(options?: HtmlExtensionOptions) {
               init: (_config, editorState) => createHtmlNodeIdentityIndex(editorState.doc, types),
               apply: (transaction, previous) => mapHtmlNodeIdentityIndex(transaction, types, previous),
             },
-            view() {
+            view(editorView) {
+              let editable = editorView.editable;
+              let composing = editorView.composing;
               for (const controller of [...controllers]) controller.refresh();
               return {
                 update(view, previousState) {
                   const adopt = identities(previousState).nodeViewRevision !== identities(view.state).nodeViewRevision;
+                  const environmentChanged = view.editable !== editable || view.composing !== composing;
+                  editable = view.editable;
+                  composing = view.composing;
+                  if (!adopt && !environmentChanged) {
+                    return;
+                  }
                   for (const controller of [...controllers]) controller.refresh(adopt);
                 },
                 destroy() {},

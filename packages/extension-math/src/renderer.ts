@@ -763,6 +763,7 @@ export function createMathRenderManager(
     safelyReportRenderError(Object.freeze({ cause, code, kind: entry.kind }));
   };
 
+  const isViewportGated = (entry: RenderEntry) => entry.kind === "block" || observer !== null;
   const scheduler = createMarkdownRenderScheduler({ ownerWindow, maxConcurrent: MATH_MAX_CONCURRENT_RENDERS });
   const startJob = (entry: RenderEntry, generation: number, explicit: boolean, controller: AbortController) => {
 
@@ -773,13 +774,13 @@ export function createMathRenderManager(
     if (
       entry.target.isComposing()
       || (
-        entry.kind === "block"
+        isViewportGated(entry)
         && !entry.nearViewport
         && !(explicit && !observer)
       )
     ) {
       entry.explicitRequest ||= explicit;
-      transition(entry, entry.kind === "block" && !entry.nearViewport
+      transition(entry, isViewportGated(entry) && !entry.nearViewport
         ? "offscreen"
         : "queued");
       return;
@@ -888,7 +889,7 @@ export function createMathRenderManager(
       return explicit;
     }
 
-    if (entry.kind === "block" && !entry.nearViewport && !(explicit && !observer)) {
+    if (isViewportGated(entry) && !entry.nearViewport && !(explicit && !observer)) {
       entry.explicitRequest ||= explicit;
       transition(entry, "offscreen");
       return true;
@@ -917,7 +918,7 @@ export function createMathRenderManager(
   };
 
   const setNearViewport = (entry: RenderEntry, nearViewport: boolean) => {
-    if (entry.destroyed || entry.kind !== "block" || entry.nearViewport === nearViewport) {
+    if (entry.destroyed || !isViewportGated(entry) || entry.nearViewport === nearViewport) {
       return;
     }
 
@@ -1038,7 +1039,7 @@ export function createMathRenderManager(
         explicitRequest: false,
         generation: 1,
         kind,
-        nearViewport: kind === "inline",
+        nearViewport: kind === "inline" && !observer,
         previewRequested: Boolean(renderer),
         source,
         status: "source",
@@ -1052,8 +1053,8 @@ export function createMathRenderManager(
         compositionRoot.addEventListener("compositionend", handleCompositionEnd);
       }
 
-      if (kind === "block") {
-        observer?.observe(target.dom);
+      if (observer) {
+        observer.observe(target.dom);
       }
 
       if (sourceIsTooLarge(source)) {
@@ -1113,13 +1114,9 @@ export function createMathRenderManager(
             return false;
           }
 
-          if (entry.kind === "block" && nextKind !== "block") {
-            observer?.unobserve(target.dom);
-          } else if (entry.kind !== "block" && nextKind === "block") {
-            observer?.observe(target.dom);
+          if (!observer && entry.kind !== nextKind) {
+            entry.nearViewport = nextKind === "inline";
           }
-
-          if (entry.kind !== nextKind) entry.nearViewport = nextKind === "inline";
           entry.kind = nextKind;
           entry.source = nextSource;
           entry.diagnosticVersion = -1;

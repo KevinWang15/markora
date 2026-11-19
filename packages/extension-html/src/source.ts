@@ -1,9 +1,11 @@
 import {
   MarkdownIt,
+  type Fragment,
   type Mark,
   type MarkdownEditorCodec,
   type Node as ProseMirrorNode,
   type NodeType,
+  type Slice,
   type Transaction,
 } from "markora/extension-api";
 
@@ -207,6 +209,37 @@ export function mapHtmlNodeIdentityIndex(
     return previous;
   }
 
+  if (!transactionNeedsValidation(transaction, types)) {
+    if (previous.byPosition.size === 0) {
+      return previous;
+    }
+
+    const byPosition = new Map<number, HtmlIdentityEntry>();
+    let anyMoved = false;
+
+    for (const entry of previous.byPosition.values()) {
+      const position = transaction.mapping.map(entry.snapshot.position, 1);
+
+      if (byPosition.has(position)) {
+        return createHtmlNodeIdentityIndex(transaction.doc, types, new Map(), previous);
+      }
+
+      if (position === entry.snapshot.position) {
+        byPosition.set(position, entry);
+      } else {
+        anyMoved = true;
+        byPosition.set(position, Object.freeze({
+          node: entry.node,
+          snapshot: Object.freeze({ ...entry.snapshot, position }),
+        }));
+      }
+    }
+
+    return anyMoved
+      ? Object.freeze({ byPosition, nodeViewRevision: previous.nodeViewRevision })
+      : previous;
+  }
+
   const preserved = new Map<number, HtmlIdentityEntry>();
 
   for (const entry of previous.byPosition.values()) {
@@ -335,21 +368,26 @@ function rangeContainsHtml(
   return found;
 }
 
+function fragmentContainsHtml(fragment: Fragment, types: HtmlNodeTypes) {
+  let found = false;
+  fragment.descendants((node) => {
+    found ||= node.type === types.block || node.type === types.inline;
+    return !found;
+  });
+  return found;
+}
+
+const validationCache = new WeakMap<Transaction, Readonly<{ doc: ProseMirrorNode; needed: boolean }>>();
+
 function transactionNeedsValidation(transaction: Transaction, types: HtmlNodeTypes) {
+  const cached = validationCache.get(transaction);
+  if (cached?.doc === transaction.doc) {
+    return cached.needed;
+  }
+
+  let needed = false;
   for (let index = 0; index < transaction.steps.length; index += 1) {
     const step = transaction.steps[index]!;
-    let json: unknown;
-
-    try {
-      json = step.toJSON();
-    } catch {
-      return true;
-    }
-
-    if (serializedValueContainsHtmlNode(json, types)) {
-      return true;
-    }
-
     const before = transaction.docs[index] ?? transaction.before;
     const after = transaction.docs[index + 1] ?? transaction.doc;
     let hasMappedRange = false;
@@ -360,14 +398,55 @@ function transactionNeedsValidation(transaction: Transaction, types: HtmlNodeTyp
         || rangeContainsHtml(after, newStart, newEnd, types);
     });
 
-    // AttrStep and mark steps mutate a document with an empty StepMap. Unknown
-    // extension steps may do the same, so validate them conservatively instead
-    // of letting a zero-map mutation bypass the HTML invariant.
-    if (touches || !hasMappedRange) {
-      return true;
+    if (touches) {
+      needed = true;
+      break;
+    }
+
+    const maybeSlice = (step as { slice?: Slice }).slice;
+    const positioned = step as { gapFrom?: unknown; gapTo?: unknown };
+    if (hasMappedRange && maybeSlice && typeof maybeSlice.content?.descendants === "function") {
+      if (
+        fragmentContainsHtml(maybeSlice.content, types)
+        || (
+          typeof positioned.gapFrom === "number"
+          && typeof positioned.gapTo === "number"
+          && (
+            rangeContainsHtml(before, positioned.gapFrom, positioned.gapTo, types)
+            || rangeContainsHtml(after, positioned.gapFrom, positioned.gapTo, types)
+          )
+        )
+      ) {
+        needed = true;
+        break;
+      }
+      continue;
+    }
+
+    // AttrStep, mark steps, and unknown custom steps carry an empty StepMap or
+    // no Slice. Validate them conservatively via JSON inspection.
+    if (!hasMappedRange) {
+      needed = true;
+      break;
+    }
+
+    let json: unknown;
+
+    try {
+      json = step.toJSON();
+    } catch {
+      needed = true;
+      break;
+    }
+
+    if (serializedValueContainsHtmlNode(json, types)) {
+      needed = true;
+      break;
     }
   }
-  return false;
+
+  validationCache.set(transaction, { doc: transaction.doc, needed });
+  return needed;
 }
 
 export function isHtmlTransactionAllowed(

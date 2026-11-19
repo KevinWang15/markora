@@ -236,6 +236,22 @@ function transactionTouchesDiagram(transaction: Transaction, type: NodeType) {
     if (touches) {
       return true;
     }
+    const maybeSlice = (step as { slice?: { content?: Fragment } }).slice;
+    const positioned = step as { gapFrom?: unknown; gapTo?: unknown };
+    if (mapped && maybeSlice?.content && typeof maybeSlice.content.descendants === "function") {
+      if (
+        fragmentHasDiagram(maybeSlice.content, type)
+        || (
+          typeof positioned.gapFrom === "number"
+          && typeof positioned.gapTo === "number"
+          && positioned.gapTo > positioned.gapFrom
+          && fragmentHasDiagram(before.slice(positioned.gapFrom, positioned.gapTo).content, type)
+        )
+      ) {
+        return true;
+      }
+      continue;
+    }
     let json: unknown;
     try {
       json = step.toJSON();
@@ -261,17 +277,24 @@ export function mapDiagramNodeIdentityIndex(
     return previous;
   }
   if (!transactionTouchesDiagram(transaction, type)) {
+    if (previous.size === 0) {
+      return previous;
+    }
     const mapped = new Map<number, DiagramSourceSnapshot>();
+    let anyMoved = false;
     for (const snapshot of previous.values()) {
       const position = transaction.mapping.map(snapshot.position, 1);
       if (mapped.has(position)) {
         return createDiagramNodeIdentityIndex(transaction.doc, type);
       }
-      mapped.set(position, position === snapshot.position
-        ? snapshot
-        : Object.freeze({ ...snapshot, position }));
+      if (position === snapshot.position) {
+        mapped.set(position, snapshot);
+      } else {
+        anyMoved = true;
+        mapped.set(position, Object.freeze({ ...snapshot, position }));
+      }
     }
-    return mapped as DiagramNodeIdentityIndex;
+    return anyMoved ? (mapped as DiagramNodeIdentityIndex) : previous;
   }
 
   const preserved = new Map<number, number>();

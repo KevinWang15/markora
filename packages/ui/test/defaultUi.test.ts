@@ -2510,4 +2510,83 @@ describe('createDefaultUi', () => {
     expect(editorDom.classList.contains('mdw-table-ui-focused')).toBe(false);
     outsideButton.remove();
   });
+
+  it('batches table edge control positioning without per-button layout thrashing or no-op mutation loops', async () => {
+    setWindowMetrics(window, { height: 900, width: 1200 });
+    const hostElement = document.createElement('div');
+    const editorDom = document.createElement('div');
+    editorDom.className = 'ProseMirror';
+    editorDom.tabIndex = 0;
+    const table = document.createElement('table');
+    const tbody = document.createElement('tbody');
+    const rowCount = 40;
+    const columnCount = 5;
+    for (let r = 0; r < rowCount; r += 1) {
+      const tr = document.createElement('tr');
+      setElementRect(tr, { bottom: 100 + (r + 1) * 24, left: 40, right: 540, top: 100 + r * 24 });
+      for (let c = 0; c < columnCount; c += 1) {
+        const cell = document.createElement(r === 0 ? 'th' : 'td');
+        setElementRect(cell, { bottom: 100 + (r + 1) * 24, left: 40 + c * 100, right: 40 + (c + 1) * 100, top: 100 + r * 24 });
+        tr.append(cell);
+      }
+      tbody.append(tr);
+    }
+    table.append(tbody);
+    setElementRect(table, { bottom: 100 + rowCount * 24, left: 40, right: 540, top: 100 });
+    editorDom.append(table);
+    hostElement.append(editorDom);
+    document.body.append(hostElement);
+    editorDom.focus();
+
+    const controllers = createControllers(hostElement, undefined, {
+      getTableContext: () => ({
+        cell: { attrs: { align: null } },
+        columnCount,
+        columnIndex: 0,
+        isCellSelection: false,
+        rowCount,
+        rowIndex: 0,
+        selectedAlignment: null,
+        selectedColumnFrom: 0,
+        selectedColumnTo: 0,
+        selectedRowFrom: 0,
+        selectedRowTo: 0,
+        tablePos: 0,
+      }),
+    });
+
+    const view = {
+      ...createView(),
+      dom: editorDom,
+      focus: () => editorDom.focus(),
+      hasFocus: () => document.activeElement === editorDom,
+      nodeDOM: () => table,
+    } as never;
+
+    const getBoundingClientRectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect');
+    controllers.tableToolbar.update(view);
+
+    // 40 rows + 5 cols + table + toolbar + shared probe must stay O(rows + cols),
+    // never O(6 * (2 * rows + 2 * cols)) from per-button measurePositionSpace calls.
+    expect(getBoundingClientRectSpy.mock.calls.length).toBeGreaterThan(0);
+    expect(getBoundingClientRectSpy.mock.calls.length).toBeLessThan(80);
+
+    // A no-op class rewrite on view.dom (as ProseMirror does on every transaction)
+    // must NOT trigger an environment invalidation reposition pass.
+    getBoundingClientRectSpy.mockClear();
+    editorDom.setAttribute('class', editorDom.getAttribute('class')!);
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    expect(getBoundingClientRectSpy).not.toHaveBeenCalled();
+
+    // An actual class change on view.dom (such as focus/blur toggling
+    // .ProseMirror-focused and hiding reveal markers) MUST still trigger a
+    // single deduplicated reposition pass.
+    editorDom.classList.add('ProseMirror-focused');
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    expect(getBoundingClientRectSpy).toHaveBeenCalled();
+    expect(getBoundingClientRectSpy.mock.calls.length).toBeLessThan(80);
+
+    getBoundingClientRectSpy.mockRestore();
+    destroyControllers(controllers);
+  });
 });

@@ -162,6 +162,9 @@ export function createChangeEmitter<TDoc, TContext>(options: ChangeEmitterOption
     flush,
     flushFinal: () => flushPending(true),
     getMarkdown,
+    matchesCached(targetDoc: TDoc, markdown: string) {
+      return targetDoc === lastSerializedDoc && markdown === lastSerializedMarkdown;
+    },
     schedule,
     update(nextOptions: ChangeEmitterRuntimeOptions<TContext>) {
       if (nextOptions.onChange !== undefined) {

@@ -1334,17 +1334,26 @@ function normalizeTaskListNode(node: ProseMirrorNode, parentTypeName?: string): 
     return node;
   }
 
-  const children: ProseMirrorNode[] = [];
-  let changed = false;
-  node.content.forEach((child) => {
+  let children: ProseMirrorNode[] | null = null;
+  for (let index = 0; index < node.childCount; index += 1) {
+    const child = node.child(index);
     const normalized = normalizeTaskListNode(child, node.type.name);
-    changed ||= normalized !== child;
-    children.push(normalized);
-  });
+    if (normalized !== child) {
+      if (!children) {
+        children = [];
+        for (let prev = 0; prev < index; prev += 1) {
+          children.push(node.child(prev));
+        }
+      }
+      children.push(normalized);
+    } else if (children) {
+      children.push(child);
+    }
+  }
 
   // ProseMirror nodes are immutable. Preserve unchanged subtrees instead of
   // recreating every node and attribute object on each Markdown parse.
-  let nextNode = changed ? node.copy(Fragment.fromArray(children)) : node;
+  let nextNode = children ? node.copy(Fragment.fromArray(children)) : node;
 
   if (
     parentTypeName === "bullet_list"
@@ -1376,12 +1385,12 @@ function normalizeTaskListNode(node: ProseMirrorNode, parentTypeName?: string): 
 
 function sanitizeImportedMarks(marks: readonly Mark[]) {
   if (marks.length === 0) return marks;
-  let changed = false;
-  const nextMarks: Mark[] = [];
+  let nextMarks: Mark[] | null = null;
 
-  for (const mark of marks) {
+  for (let index = 0; index < marks.length; index += 1) {
+    const mark = marks[index]!;
     if (mark.type !== schema.marks.link) {
-      nextMarks.push(mark);
+      nextMarks?.push(mark);
       continue;
     }
 
@@ -1392,43 +1401,46 @@ function sanitizeImportedMarks(marks: readonly Mark[]) {
     );
 
     if (!safeHref) {
-      changed = true;
+      nextMarks ??= marks.slice(0, index);
       continue;
     }
 
     if (safeHref !== mark.attrs.href) {
-      changed = true;
+      nextMarks ??= marks.slice(0, index);
       nextMarks.push(mark.type.create({ ...mark.attrs, href: safeHref }));
       continue;
     }
 
-    nextMarks.push(mark);
+    nextMarks?.push(mark);
   }
 
-  return changed ? nextMarks : marks;
+  return nextMarks ?? marks;
 }
 
 function sanitizeImportedFragment(fragment: Fragment) {
   if (fragment.childCount === 0) return fragment;
-  const children: ProseMirrorNode[] = [];
-  let changed = false;
+  let children: ProseMirrorNode[] | null = null;
 
-  fragment.forEach((child) => {
+  for (let index = 0; index < fragment.childCount; index += 1) {
+    const child = fragment.child(index);
     const nextChild = sanitizeImportedNode(child);
 
-    if (!nextChild) {
-      changed = true;
-      return;
-    }
-
     if (nextChild !== child) {
-      changed = true;
+      if (!children) {
+        children = [];
+        for (let prev = 0; prev < index; prev += 1) {
+          children.push(fragment.child(prev));
+        }
+      }
+      if (nextChild) {
+        children.push(nextChild);
+      }
+    } else if (children) {
+      children.push(child);
     }
+  }
 
-    children.push(nextChild);
-  });
-
-  return changed ? Fragment.fromArray(children) : fragment;
+  return children ? Fragment.fromArray(children) : fragment;
 }
 
 function sanitizeImportedNode(node: ProseMirrorNode): ProseMirrorNode | null {

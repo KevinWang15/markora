@@ -393,19 +393,23 @@ function getTableUiContext(state: EditorState): TableUiContext | null {
   }
 
   let columnCount = 0;
-  info.table.forEach((row) => {
-    columnCount = Math.max(columnCount, row.childCount);
-  });
   let selectedAlignment: TableUiContext["selectedAlignment"] | undefined;
   info.table.forEach((row) => {
+    if (row.childCount > columnCount) {
+      columnCount = row.childCount;
+    }
+    if (selectedAlignment === "mixed") {
+      return;
+    }
     for (let column = info.columnFrom; column <= info.columnTo; column += 1) {
       const cell = row.maybeChild(column);
-      if (!cell || selectedAlignment === "mixed") continue;
+      if (!cell) continue;
       const alignment = normalizeTableAlignment(cell.attrs.align);
       if (selectedAlignment === undefined) {
         selectedAlignment = alignment;
       } else if (selectedAlignment !== alignment) {
         selectedAlignment = "mixed";
+        break;
       }
     }
   });
@@ -1502,13 +1506,17 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     const emitChange = updateOptions?.emitChange ?? false;
     // Host option getters may reenter and destroy the editor.
     assertActive("reconcile Markdown");
+    const currentState = view.state;
+
+    if (changeEmitter.matchesCached(currentState.doc, nextMarkdown)) {
+      return false;
+    }
+
     const nextDoc = runReportedExtensionOperation(() => codec.parse(nextMarkdown));
 
     if (!nextDoc) {
       throw new Error("Failed to parse Markdown into a ProseMirror document.");
     }
-
-    const currentState = view.state;
 
     if (currentState.doc.eq(nextDoc)) {
       return false;

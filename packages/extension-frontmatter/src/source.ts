@@ -1,7 +1,9 @@
 import type { FrontmatterMessages } from "./messages";
 import type {
+  Fragment,
   Node as ProseMirrorNode,
   NodeType,
+  Slice,
   Transaction,
 } from "markora/extension-api";
 
@@ -111,6 +113,15 @@ function stepTouchesDocumentHead(
   return touchesHead;
 }
 
+function fragmentContainsNodeType(fragment: Fragment, nodeType: NodeType) {
+  let found = false;
+  fragment.descendants((node) => {
+    found ||= node.type === nodeType;
+    return !found;
+  });
+  return found;
+}
+
 function transactionNeedsPlacementValidation(
   transaction: Transaction,
   nodeType: NodeType,
@@ -118,6 +129,25 @@ function transactionNeedsPlacementValidation(
   const hadFrontmatter = frontmatterAtHead(transaction.before, nodeType) !== null;
 
   for (const step of transaction.steps) {
+    let hasMappedRange = false;
+    let touchesHead = false;
+    step.getMap().forEach((oldStart, oldEnd) => {
+      hasMappedRange = true;
+      touchesHead ||= oldStart === 0 || (oldStart < 1 && oldEnd > 0);
+    });
+
+    if (hadFrontmatter && touchesHead) {
+      return true;
+    }
+
+    const maybeSlice = (step as { slice?: Slice }).slice;
+    if (hasMappedRange && maybeSlice && typeof maybeSlice.content?.descendants === "function") {
+      if (fragmentContainsNodeType(maybeSlice.content, nodeType)) {
+        return true;
+      }
+      continue;
+    }
+
     let serializedStep: unknown;
 
     try {

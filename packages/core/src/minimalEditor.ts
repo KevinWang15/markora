@@ -747,13 +747,17 @@ export function createEditor(options: CreateEditorOptions): MarkdownEditor {
     const emitChange = updateOptions?.emitChange ?? false;
     // Host option getters may reenter and destroy the editor.
     assertActive("reconcile Markdown");
+    const currentState = view.state;
+
+    if (changeEmitter.matchesCached(currentState.doc, markdown)) {
+      return false;
+    }
+
     const nextDoc = runReportedExtensionOperation(() => codec.parse(markdown));
 
     if (!nextDoc) {
       throw new Error("Failed to parse Markdown into a ProseMirror document.");
     }
-
-    const currentState = view.state;
 
     if (currentState.doc.eq(nextDoc)) {
       return false;

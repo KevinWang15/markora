@@ -280,13 +280,10 @@ function invalidAlertTransaction(
   nodeType: NodeType,
 ) {
   for (let index = 0; index < transaction.steps.length; index += 1) {
-    const result = transaction.steps[index]!.apply(transaction.docs[index]!);
-
-    if (result.doc) {
-      const issue = invalidAlertInStep(result.doc, nodeType, transaction.steps[index]!);
-      if (issue !== null) {
-        return issue;
-      }
+    const after = transaction.docs[index + 1] ?? transaction.doc;
+    const issue = invalidAlertInStep(after, nodeType, transaction.steps[index]!);
+    if (issue !== null) {
+      return issue;
     }
   }
 

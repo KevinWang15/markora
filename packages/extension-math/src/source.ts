@@ -303,6 +303,14 @@ function transactionChangesMathStructure(
       return true;
     }
 
+    const maybeSlice = (step as { slice?: { content?: Fragment } }).slice;
+    if (mappedRange && maybeSlice?.content && typeof maybeSlice.content.descendants === "function") {
+      if (fragmentHasMathNode(maybeSlice.content, types)) {
+        return true;
+      }
+      continue;
+    }
+
     let serialized: unknown;
 
     try {
@@ -344,7 +352,12 @@ export function mapMathNodeIdentityIndex(
   }
 
   if (!transactionChangesMathStructure(transaction, types)) {
+    if (previous.size === 0) {
+      return previous;
+    }
+
     const mapped = new Map<number, MathNodeSnapshot>();
+    let anyMoved = false;
 
     for (const snapshot of previous.values()) {
       const position = transaction.mapping.map(snapshot.position, 1);
@@ -353,12 +366,15 @@ export function mapMathNodeIdentityIndex(
         return createMathNodeIdentityIndex(transaction.doc, types);
       }
 
-      mapped.set(position, position === snapshot.position
-        ? snapshot
-        : Object.freeze({ ...snapshot, position }));
+      if (position === snapshot.position) {
+        mapped.set(position, snapshot);
+      } else {
+        anyMoved = true;
+        mapped.set(position, Object.freeze({ ...snapshot, position }));
+      }
     }
 
-    return mapped as MathNodeIdentityIndex;
+    return anyMoved ? (mapped as MathNodeIdentityIndex) : previous;
   }
 
   const preserved = new Map<number, number>();
@@ -577,6 +593,39 @@ function transactionNeedsMathValidation(
     const step = transaction.steps[index]!;
     const before = transaction.docs[index] ?? transaction.before;
     const after = transaction.docs[index + 1] ?? transaction.doc;
+    let mappedRange = false;
+    let touched = false;
+    step.getMap().forEach((oldStart, oldEnd, newStart, newEnd) => {
+      mappedRange = true;
+      touched ||= (
+        rangeContainsMath(before, oldStart, oldEnd, types)
+        || rangeContainsMath(after, newStart, newEnd, types)
+      );
+    });
+
+    if (touched) {
+      return true;
+    }
+
+    const maybeSlice = (step as { slice?: { content?: Fragment } }).slice;
+    const positioned = step as { gapFrom?: unknown; gapTo?: unknown };
+    if (mappedRange && maybeSlice?.content && typeof maybeSlice.content.descendants === "function") {
+      if (fragmentHasMathNode(maybeSlice.content, types)) {
+        return true;
+      }
+      if (
+        typeof positioned.gapFrom === "number"
+        && typeof positioned.gapTo === "number"
+        && (
+          rangeContainsMath(before, positioned.gapFrom, positioned.gapTo, types)
+          || rangeContainsMath(after, positioned.gapFrom, positioned.gapTo, types)
+        )
+      ) {
+        return true;
+      }
+      continue;
+    }
+
     let serialized: unknown;
 
     try {
@@ -586,18 +635,6 @@ function transactionNeedsMathValidation(
     }
 
     if (serializedValueContainsMathNode(serialized, types)) {
-      return true;
-    }
-
-    let touched = false;
-    step.getMap().forEach((oldStart, oldEnd, newStart, newEnd) => {
-      touched ||= (
-        rangeContainsMath(before, oldStart, oldEnd, types)
-        || rangeContainsMath(after, newStart, newEnd, types)
-      );
-    });
-
-    if (touched) {
       return true;
     }
 

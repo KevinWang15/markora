@@ -271,6 +271,32 @@ function isAndroidChrome(ownerWindow: BrowserWindow) {
   return /\bAndroid\b/i.test(userAgent) && /\bChrome\//i.test(userAgent);
 }
 
+const segmenterCache = new WeakMap<
+  NonNullable<SegmentingIntl["Segmenter"]>,
+  Partial<Record<"grapheme" | "word", InstanceType<NonNullable<SegmentingIntl["Segmenter"]>>>>
+>();
+const requiresEditableProbe = new WeakMap<Function, boolean>();
+const BIDI_CHARACTER_PATTERN = /[\u0590-\u08FF\u200E\u200F\u202A-\u202E\u2066-\u2069\uFB1D-\uFDFF\uFE70-\uFEFF]/;
+
+function getCachedSegmenter(
+  intl: SegmentingIntl,
+  granularity: "grapheme" | "word",
+) {
+  const SegmenterCtor = intl.Segmenter;
+  if (!SegmenterCtor) {
+    return null;
+  }
+
+  let perGranularity = segmenterCache.get(SegmenterCtor);
+  if (!perGranularity) {
+    perGranularity = {};
+    segmenterCache.set(SegmenterCtor, perGranularity);
+  }
+
+  perGranularity[granularity] ??= new SegmenterCtor(undefined, { granularity });
+  return perGranularity[granularity]!;
+}
+
 export function findPreviousGraphemeStart(
   text: string,
   intl: SegmentingIntl = Intl as SegmentingIntl,
@@ -279,8 +305,9 @@ export function findPreviousGraphemeStart(
     return 0;
   }
 
-  if (intl.Segmenter) {
-    const segments = new intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text);
+  const segmenter = getCachedSegmenter(intl, "grapheme");
+  if (segmenter) {
+    const segments = segmenter.segment(text);
     const containingSegment = segments.containing?.(text.length - 1);
 
     if (containingSegment) {
@@ -317,8 +344,9 @@ export function findNextGraphemeEnd(
     return 0;
   }
 
-  if (intl.Segmenter) {
-    for (const segment of new intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)) {
+  const segmenter = getCachedSegmenter(intl, "grapheme");
+  if (segmenter) {
+    for (const segment of segmenter.segment(text)) {
       if (segment.index > 0) {
         return segment.index;
       }
@@ -345,11 +373,12 @@ export function findWordDeletionLength(
   direction: DeletionDirection,
   intl: SegmentingIntl = Intl as SegmentingIntl,
 ) {
-  if (!text || !intl.Segmenter) {
+  const segmenter = text ? getCachedSegmenter(intl, "word") : null;
+  if (!segmenter) {
     return 0;
   }
 
-  const segments = new intl.Segmenter(undefined, { granularity: "word" }).segment(text);
+  const segments = segmenter.segment(text);
 
   if (direction === "backward") {
     let word = segments.containing?.(text.length - 1);
@@ -384,11 +413,12 @@ function findSegmentedWordRange(
   offset: number,
   intl: SegmentingIntl,
 ) {
-  if (!text || !intl.Segmenter || offset < 0 || offset > text.length) {
+  const segmenter = getCachedSegmenter(intl, "word");
+  if (!text || !segmenter || offset < 0 || offset > text.length) {
     return null;
   }
 
-  const segments = new intl.Segmenter(undefined, { granularity: "word" }).segment(text);
+  const segments = segmenter.segment(text);
   const candidateOffsets = offset === text.length
     ? [Math.max(0, offset - 1)]
     : offset > 0
@@ -490,7 +520,17 @@ function probeNativeTextMotion(
   // motion against equivalent unmarked text to preserve platform behavior.
   const internalView = view as EditorViewWithDomSelection;
   const selection = internalView.domSelection?.() as SelectionWithTextMotion | null;
-  const original = internalView.domSelectionRange?.();
+  // domSelectionRange() returns the live Selection object outside Safari Shadow
+  // DOM, so snapshot its endpoints before probing mutates the DOM selection.
+  const rawOriginal = internalView.domSelectionRange?.();
+  const original: DomSelectionRange | null = rawOriginal?.anchorNode && rawOriginal.focusNode
+    ? {
+        anchorNode: rawOriginal.anchorNode,
+        anchorOffset: rawOriginal.anchorOffset,
+        focusNode: rawOriginal.focusNode,
+        focusOffset: rawOriginal.focusOffset,
+      }
+    : null;
   const originalActiveElement = getActiveElement(view);
   const parent = view.dom.parentNode;
 
@@ -498,8 +538,7 @@ function probeNativeTextMotion(
     !text
     || !selection
     || typeof selection.modify !== "function"
-    || !original?.anchorNode
-    || !original.focusNode
+    || !original
     || !parent
     || !Number.isInteger(anchorOffset)
     || !Number.isInteger(focusOffset)
@@ -512,75 +551,115 @@ function probeNativeTextMotion(
     return null;
   }
 
-  const probe = view.dom.ownerDocument.createElement("span");
-  probe.contentEditable = "true";
-  probe.setAttribute("aria-hidden", "true");
-  probe.style.cssText = "position:fixed;left:-10000px;white-space:pre;opacity:0;pointer-events:none";
-  const language = view.dom.getAttribute("lang")
-    ?? view.dom.closest<HTMLElement>("[lang]")?.getAttribute("lang");
+  const runProbe = (editable: boolean): NativeTextMotionProbe | null => {
+    const probe = view.dom.ownerDocument.createElement("span");
+    if (editable) {
+      probe.contentEditable = "true";
+    }
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.cssText = "position:fixed;left:-10000px;top:0;white-space:pre;opacity:0;pointer-events:none;contain:layout style";
+    const language = view.dom.getAttribute("lang")
+      ?? view.dom.closest<HTMLElement>("[lang]")?.getAttribute("lang");
 
-  if (language) {
-    probe.lang = language;
-  }
-
-  probe.dir = view.dom.ownerDocument.defaultView?.getComputedStyle(view.dom).direction === "rtl"
-    ? "rtl"
-    : "ltr";
-  probe.textContent = text;
-  parent.appendChild(probe);
-  const textNode = probe.firstChild;
-
-  if (!textNode) {
-    probe.remove();
-    return null;
-  }
-
-  let nextAnchorOffset: number | null = null;
-  let nextFocusOffset: number | null = null;
-  let focusHandedOff = false;
-
-  try {
-    selection.collapse(textNode, anchorOffset);
-
-    if (focusOffset !== anchorOffset) {
-      selection.extend(textNode, focusOffset);
+    if (language) {
+      probe.lang = language;
     }
 
-    selection.modify(alter, direction, granularity);
-    nextAnchorOffset = readProbeOffset(probe, selection.anchorNode, selection.anchorOffset);
-    nextFocusOffset = readProbeOffset(probe, selection.focusNode, selection.focusOffset);
+    probe.dir = view.dom.ownerDocument.defaultView?.getComputedStyle(view.dom).direction === "rtl"
+      ? "rtl"
+      : "ltr";
+    probe.textContent = text;
+    parent.appendChild(probe);
+    const textNode = probe.firstChild;
 
-    if (alter === "extend" && nextAnchorOffset !== anchorOffset) {
-      // Chromium can wrap an outward extension at an isolated probe's edge to
-      // its first character, changing both ends of the selection. Extension
-      // must preserve its anchor; reject that synthetic-probe artifact so the
-      // original event can operate on the editor's real multi-block DOM.
+    if (!textNode) {
+      probe.remove();
+      return null;
+    }
+
+    let nextAnchorOffset: number | null = null;
+    let nextFocusOffset: number | null = null;
+    let focusHandedOff = false;
+
+    try {
+      selection.collapse(textNode, anchorOffset);
+
+      if (focusOffset !== anchorOffset) {
+        selection.extend(textNode, focusOffset);
+      }
+
+      selection.modify(alter, direction, granularity);
+      nextAnchorOffset = readProbeOffset(probe, selection.anchorNode, selection.anchorOffset);
+      nextFocusOffset = readProbeOffset(probe, selection.focusNode, selection.focusOffset);
+
+      if (alter === "extend" && nextAnchorOffset !== anchorOffset) {
+        // Chromium can wrap an outward extension at an isolated probe's edge to
+        // its first character, changing both ends of the selection. Extension
+        // must preserve its anchor; reject that synthetic-probe artifact so the
+        // original event can operate on the editor's real multi-block DOM.
+        nextAnchorOffset = null;
+        nextFocusOffset = null;
+      }
+    } catch {
       nextAnchorOffset = null;
       nextFocusOffset = null;
-    }
-  } catch {
-    nextAnchorOffset = null;
-    nextFocusOffset = null;
-  } finally {
-    const activeAfterProbe = getActiveElement(view);
-    probe.remove();
+    } finally {
+      const activeAfterProbe = getActiveElement(view);
+      probe.remove();
 
-    if (activeAfterProbe === probe) {
-      focusElement(originalActiveElement);
-    } else if (activeAfterProbe !== originalActiveElement) {
-      focusHandedOff = true;
+      if (activeAfterProbe === probe) {
+        focusElement(originalActiveElement);
+      } else if (activeAfterProbe !== originalActiveElement) {
+        focusHandedOff = true;
+      }
+
+      if (!focusHandedOff) {
+        restoreDomSelection(selection, original);
+      }
     }
 
-    if (!focusHandedOff) {
-      restoreDomSelection(selection, original);
-    }
+    return {
+      anchorOffset: nextAnchorOffset,
+      focusHandedOff,
+      focusOffset: nextFocusOffset,
+    };
+  };
+
+  // Chromium and WebKit support Selection.modify on a non-editable probe
+  // without blurring the editor (avoiding full-document focus style recalcs on
+  // large documents). Firefox requires contentEditable="true"; detect and cache
+  // that per Selection.modify implementation on first miss.
+  const modifyFn = selection.modify;
+  const cachedRequiresEditable = requiresEditableProbe.get(modifyFn);
+  const firstResult = runProbe(cachedRequiresEditable === true);
+
+  if (!firstResult || cachedRequiresEditable !== undefined || firstResult.focusHandedOff) {
+    return firstResult;
   }
 
-  return {
-    anchorOffset: nextAnchorOffset,
-    focusHandedOff,
-    focusOffset: nextFocusOffset,
-  };
+  const moved = (
+    firstResult.focusOffset !== null
+    && (firstResult.focusOffset !== focusOffset || firstResult.anchorOffset !== anchorOffset)
+  );
+  if (moved) {
+    requiresEditableProbe.set(modifyFn, false);
+    return firstResult;
+  }
+
+  if (firstResult.focusOffset === focusOffset && firstResult.anchorOffset === anchorOffset) {
+    const editableResult = runProbe(true);
+    if (
+      editableResult
+      && editableResult.focusOffset !== null
+      && (editableResult.focusOffset !== focusOffset || editableResult.anchorOffset !== anchorOffset)
+    ) {
+      requiresEditableProbe.set(modifyFn, true);
+      return editableResult;
+    }
+    return editableResult ?? firstResult;
+  }
+
+  return firstResult;
 }
 
 function probeNativeWordDeletionLength(
@@ -923,8 +1002,9 @@ function isPointerGraphemeBoundary(
     return true;
   }
 
-  if (intl.Segmenter) {
-    const segments = new intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text);
+  const segmenter = getCachedSegmenter(intl, "grapheme");
+  if (segmenter) {
+    const segments = segmenter.segment(text);
     const containingSegment = segments.containing?.(offset);
 
     if (containingSegment) {
@@ -958,13 +1038,14 @@ function readAdjacentPointerGraphemeBoundaries(
   const boundaries = new Set<number>();
   const clampedOffset = Math.max(0, Math.min(text.length, offset));
 
-  if (!intl.Segmenter || text.length === 0) {
+  const segmenter = getCachedSegmenter(intl, "grapheme");
+  if (!segmenter || text.length === 0) {
     boundaries.add(findPreviousGraphemeStart(text.slice(0, clampedOffset), intl));
     boundaries.add(clampedOffset + findNextGraphemeEnd(text.slice(clampedOffset), intl));
     return boundaries;
   }
 
-  const segments = new intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text);
+  const segments = segmenter.segment(text);
 
   if (segments.containing) {
     for (const probeOffset of new Set([
@@ -1435,6 +1516,42 @@ function handleNativeHorizontalNavigation(
 
   if (outwardHorizontalNavigation) {
     return false;
+  }
+
+  // Plain unmarked blocks have a single contiguous text node and no reveal
+  // markers, so native browser character selection already behaves identically
+  // without needing a synthetic probe. Keep word navigation on the shared
+  // probe path so word jumps remain consistent across plain and marked text.
+  if (
+    characterSelection
+    && !wordNavigation
+    && !hasRevealableMarkdownMarker(state, selection.head)
+  ) {
+    return false;
+  }
+
+  // For LTR character selection without bidi characters, grapheme boundaries
+  // match visual left/right directly without touching DOM selection at all.
+  if (characterSelection && !rtl && !BIDI_CHARACTER_PATTERN.test(parentText)) {
+    const intl = (view.dom.ownerDocument.defaultView?.Intl ?? Intl) as SegmentingIntl;
+    const nextFocusOffset = event.key === "ArrowLeft"
+      ? findPreviousGraphemeStart(parentText.slice(0, currentFocusOffset), intl)
+      : currentFocusOffset + findNextGraphemeEnd(parentText.slice(currentFocusOffset), intl);
+
+    if (nextFocusOffset === currentFocusOffset && (nextFocusOffset === 0 || nextFocusOffset === parentText.length)) {
+      return false;
+    }
+
+    event.preventDefault();
+    const head = parentStart + nextFocusOffset;
+    if (head !== selection.head) {
+      view.dispatch(
+        state.tr
+          .setSelection(TextSelection.create(state.doc, selection.anchor, head))
+          .scrollIntoView(),
+      );
+    }
+    return true;
   }
 
   const motion = probeNativeTextMotion(

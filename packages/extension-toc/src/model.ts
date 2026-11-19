@@ -232,7 +232,7 @@ function stepTouchesType(
       || changedRangeTouchesType(after, newStart, newEnd, nodeType);
   });
 
-  const json = step.toJSON() as {
+  const positionedStep = step as unknown as {
     from?: unknown;
     gapFrom?: unknown;
     gapTo?: unknown;
@@ -243,16 +243,33 @@ function stepTouchesType(
   // ReplaceAroundStep maps only its new wrapper boundaries. Its preserved gap
   // can contain a heading or TOC without either changed range containing that
   // node (for example, wrapping a root TOC in a blockquote).
+  const hasDirectGap = typeof positionedStep.gapFrom === "number" && typeof positionedStep.gapTo === "number";
   if (
-    typeof json.gapFrom === "number"
-    && typeof json.gapTo === "number"
-    && sliceContainsType(before, json.gapFrom, json.gapTo, nodeType)
+    hasDirectGap
+    && sliceContainsType(before, positionedStep.gapFrom as number, positionedStep.gapTo as number, nodeType)
   ) {
     return true;
   }
 
   if (touched || hasMappedRange) {
     return touched;
+  }
+
+  const json = step.toJSON() as {
+    from?: unknown;
+    gapFrom?: unknown;
+    gapTo?: unknown;
+    pos?: unknown;
+    to?: unknown;
+  };
+
+  if (
+    !hasDirectGap
+    && typeof json.gapFrom === "number"
+    && typeof json.gapTo === "number"
+    && sliceContainsType(before, json.gapFrom, json.gapTo, nodeType)
+  ) {
+    return true;
   }
 
   // Attribute-only steps carry an empty StepMap. Inspect their explicit
@@ -328,43 +345,148 @@ function headingSemanticsEqual(
 function mapSnapshotPositions(
   previous: TocIndex,
   transaction: Transaction,
-  nodeTypes: TocNodeTypes,
 ): TocIndex | null {
+  if (previous.snapshot.headings.length === 0 && previous.snapshot.tocs.length === 0) {
+    return previous;
+  }
+
+  const docSize = transaction.doc.content.size;
+  const seenPositions = new Set<number>();
   const headings: TocHeadingSnapshot[] = [];
   const tocs: TocNodeSnapshot[] = [];
+  let anyMoved = false;
 
   for (const heading of previous.snapshot.headings) {
     const position = transaction.mapping.map(heading.position, 1);
 
-    if (transaction.doc.nodeAt(position)?.type !== nodeTypes.heading) {
+    if (position < 0 || position >= docSize || seenPositions.has(position)) {
       return null;
     }
+    seenPositions.add(position);
 
-    headings.push(Object.freeze({ ...heading, position }));
+    if (position === heading.position) {
+      headings.push(heading);
+    } else {
+      anyMoved = true;
+      headings.push(Object.freeze({ ...heading, position }));
+    }
   }
 
   for (const toc of previous.snapshot.tocs) {
     const position = transaction.mapping.map(toc.position, 1);
 
-    if (transaction.doc.nodeAt(position)?.type !== nodeTypes.toc) {
+    if (position < 0 || position >= docSize || seenPositions.has(position)) {
       return null;
     }
+    seenPositions.add(position);
 
-    tocs.push(Object.freeze({ position }));
+    if (position === toc.position) {
+      tocs.push(toc);
+    } else {
+      anyMoved = true;
+      tocs.push(Object.freeze({ position }));
+    }
   }
+
+  return anyMoved ? createIndex(headings, tocs, previous.renderIdentity) : previous;
+}
+
+function tryUpdateSingleHeadingInPlace(
+  previous: TocIndex,
+  transaction: Transaction,
+  nodeTypes: TocNodeTypes,
+  messages: TocMessages,
+): TocIndex | null {
+  if (transaction.steps.length !== 1 || previous.snapshot.headings.length === 0) {
+    return null;
+  }
+
+  const step = transaction.steps[0]!;
+  let rangeCount = 0;
+  let oldStart = 0;
+  let oldEnd = 0;
+  let newStart = 0;
+  let newEnd = 0;
+  step.getMap().forEach((oStart, oEnd, nStart, nEnd) => {
+    rangeCount += 1;
+    oldStart = oStart;
+    oldEnd = oEnd;
+    newStart = nStart;
+    newEnd = nEnd;
+  });
+
+  if (rangeCount !== 1) {
+    return null;
+  }
+
+  const before = transaction.before;
+  const after = transaction.doc;
+  const $oldStart = before.resolve(oldStart);
+  const $oldEnd = before.resolve(oldEnd);
+  const $newStart = after.resolve(newStart);
+  const $newEnd = after.resolve(newEnd);
 
   if (
-    headings.every((heading, index) => (
-      heading.position === previous.snapshot.headings[index]!.position
-    ))
-    && tocs.every((toc, index) => (
-      toc.position === previous.snapshot.tocs[index]!.position
-    ))
+    $oldStart.parent.type !== nodeTypes.heading
+    || !$oldStart.sameParent($oldEnd)
+    || $newStart.parent.type !== nodeTypes.heading
+    || !$newStart.sameParent($newEnd)
   ) {
-    return previous;
+    return null;
   }
 
-  return createIndex(headings, tocs, previous.renderIdentity);
+  const oldHeadingPos = $oldStart.before();
+  const newHeadingPos = $newStart.before();
+  const oldLevel = headingLevel($oldStart.parent);
+  const newLevel = headingLevel($newStart.parent);
+
+  if (oldLevel === null || newLevel !== oldLevel || oldHeadingPos !== newHeadingPos) {
+    return null;
+  }
+
+  const headingIdx = previous.snapshot.headings.findIndex(
+    (entry) => entry.position === oldHeadingPos,
+  );
+  if (headingIdx < 0) {
+    return null;
+  }
+
+  const nextLabel = readTocHeadingLabel(
+    $newStart.parent,
+    newLevel,
+    headingIdx + 1,
+    messages,
+  );
+  const labelChanged = nextLabel !== previous.snapshot.headings[headingIdx]!.label;
+
+  const headings = previous.snapshot.headings.map((entry, idx) => {
+    if (idx === headingIdx) {
+      return labelChanged
+        ? Object.freeze({ ...entry, label: nextLabel })
+        : entry;
+    }
+    const position = idx < headingIdx
+      ? entry.position
+      : transaction.mapping.map(entry.position, 1);
+    return position === entry.position
+      ? entry
+      : Object.freeze({ ...entry, position });
+  });
+
+  const tocs = previous.snapshot.tocs.map((entry) => {
+    const position = entry.position < oldHeadingPos
+      ? entry.position
+      : transaction.mapping.map(entry.position, 1);
+    return position === entry.position
+      ? entry
+      : Object.freeze({ position });
+  });
+
+  return createIndex(
+    headings,
+    tocs,
+    labelChanged ? Object.freeze({}) : previous.renderIdentity,
+  );
 }
 
 export function applyTocIndexTransaction(
@@ -384,10 +506,22 @@ export function applyTocIndexTransaction(
   const tocTouched = transactionTouchesType(transaction, nodeTypes.toc);
 
   if (!headingTouched && !tocTouched) {
-    const mapped = mapSnapshotPositions(previous, transaction, nodeTypes);
+    const mapped = mapSnapshotPositions(previous, transaction);
 
     if (mapped) {
       return mapped;
+    }
+  }
+
+  if (headingTouched && !tocTouched) {
+    const updated = tryUpdateSingleHeadingInPlace(
+      previous,
+      transaction,
+      nodeTypes,
+      messages,
+    );
+    if (updated) {
+      return updated;
     }
   }
 

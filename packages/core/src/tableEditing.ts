@@ -16,6 +16,7 @@ import {
   hasMarkdownEditorExternalUpdatePermission,
   setMarkdownEditorExternalUpdatePermission,
 } from "./transactionOrigin";
+import { forEachChangedNode } from "./changedNodes";
 
 const MAX_TABLE_DIMENSION = 100;
 const MAX_TSV_SOURCE_LENGTH = 1_048_576;
@@ -444,15 +445,36 @@ function normalizeGfmTable(schema: Schema, table: ProseMirrorNode) {
   return table.type.create(table.attrs, rows, table.marks);
 }
 
+function isGfmTableNormalized(schema: Schema, table: ProseMirrorNode) {
+  const headerType = schema.nodes.table_header;
+  const cellType = schema.nodes.table_cell;
+  if (!headerType || !cellType) return true;
+  for (let rowIndex = 0; rowIndex < table.childCount; rowIndex += 1) {
+    const row = table.child(rowIndex);
+    for (let cellIndex = 0; cellIndex < row.childCount; cellIndex += 1) {
+      const cell = row.child(cellIndex);
+      if (rowIndex === 0 && (cell.type !== headerType || cell.attrs.scope !== "col")) {
+        return false;
+      }
+      if (rowIndex > 0 && cell.type === headerType && cell.attrs.scope !== "row") {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 function createGfmTableInvariantPlugin(schema: Schema) {
   return new Plugin({
-    appendTransaction(transactions, _oldState, state) {
+    appendTransaction(transactions, oldState, state) {
       if (!transactions.some((transaction) => transaction.docChanged)) return null;
       const replacements: Array<{ node: ProseMirrorNode; pos: number }> = [];
-      state.doc.descendants((node, pos) => {
+      forEachChangedNode(oldState.doc, state.doc, (node, pos) => {
         if (node.type.spec.tableRole === "table") {
-          const normalized = normalizeGfmTable(schema, node);
-          if (!normalized.eq(node)) replacements.push({ node: normalized, pos });
+          if (!isGfmTableNormalized(schema, node)) {
+            const normalized = normalizeGfmTable(schema, node);
+            if (!normalized.eq(node)) replacements.push({ node: normalized, pos });
+          }
           return false;
         }
         return true;

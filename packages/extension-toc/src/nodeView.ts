@@ -9,7 +9,7 @@ import {
   type PluginKey,
 } from "markora/extension-api";
 import type { TocMessages } from "./messages.js";
-import type { TocIndex } from "./model.js";
+import type { TocHeadingLevel, TocIndex } from "./model.js";
 
 export type TocRuntimeStorage = {
   readonly refreshers: Set<() => void>;
@@ -126,7 +126,11 @@ export function createTocNodeView(
 
     private destroyed = false;
     private readonly outline: HTMLElement;
-    private renderedSignature: string | null = null;
+    private renderedButtons: HTMLButtonElement[] = [];
+    private renderedLevels: TocHeadingLevel[] = [];
+    private renderedNavigationLabel: string | null = null;
+    private renderedOccurrence: number | null = null;
+    private renderedRenderIdentity: object | null = null;
 
     constructor(
       node: ProseMirrorNode,
@@ -183,6 +187,9 @@ export function createTocNodeView(
 
       this.destroyed = true;
       storage.refreshers.delete(this.refresh);
+      this.renderedButtons = [];
+      this.renderedLevels = [];
+      this.renderedRenderIdentity = null;
       this.outline.replaceChildren();
     }
 
@@ -263,7 +270,11 @@ export function createTocNodeView(
       return true;
     }
 
-    private createList(branches: readonly OutlineBranch[], nested: boolean) {
+    private createList(
+      branches: readonly OutlineBranch[],
+      nested: boolean,
+      buttonsOut: HTMLButtonElement[],
+    ) {
       const list = this.view.dom.ownerDocument.createElement("ol");
       list.className = nested
         ? "mdw-toc__list mdw-toc__list--nested"
@@ -292,10 +303,11 @@ export function createTocNodeView(
             branch.ordinal,
           ),
         );
+        buttonsOut.push(button);
         item.append(button);
 
         if (branch.children.length > 0) {
-          item.append(this.createList(branch.children, true));
+          item.append(this.createList(branch.children, true, buttonsOut));
         }
 
         list.append(item);
@@ -318,32 +330,62 @@ export function createTocNodeView(
       const occurrence = tocOffset < 0 ? 1 : tocOffset + 1;
       const total = Math.max(1, index.snapshot.tocs.length);
       const navigationLabel = messages.navigationLabel(occurrence, total);
-      const signature = JSON.stringify([
-        navigationLabel,
-        index.snapshot.headings.map(({ label, level }) => [label, level]),
-      ]);
 
-      this.dom.dataset.mdwTocOccurrence = String(occurrence);
-      this.dom.setAttribute("aria-label", navigationLabel);
+      if (this.renderedOccurrence !== occurrence) {
+        this.renderedOccurrence = occurrence;
+        this.dom.dataset.mdwTocOccurrence = String(occurrence);
+      }
+      if (this.renderedNavigationLabel !== navigationLabel) {
+        this.renderedNavigationLabel = navigationLabel;
+        this.dom.setAttribute("aria-label", navigationLabel);
+      }
 
-      if (signature === this.renderedSignature) {
+      if (this.renderedRenderIdentity === index.renderIdentity) {
         return;
       }
 
-      this.renderedSignature = signature;
+      this.renderedRenderIdentity = index.renderIdentity;
+      const headings = index.snapshot.headings;
 
-      if (index.snapshot.headings.length === 0) {
-        const empty = this.view.dom.ownerDocument.createElement("p");
-        empty.className = "mdw-toc__empty";
-        empty.dataset.mdwTocEmpty = "";
-        empty.textContent = messages.emptyState;
-        this.outline.replaceChildren(empty);
+      if (headings.length === 0) {
+        if (this.renderedButtons.length > 0 || this.outline.childElementCount === 0) {
+          this.renderedButtons = [];
+          this.renderedLevels = [];
+          const empty = this.view.dom.ownerDocument.createElement("p");
+          empty.className = "mdw-toc__empty";
+          empty.dataset.mdwTocEmpty = "";
+          empty.textContent = messages.emptyState;
+          this.outline.replaceChildren(empty);
+        }
         return;
       }
 
-      this.outline.replaceChildren(
-        this.createList(buildOutline(index.snapshot.headings), false),
-      );
+      // When heading count and nesting levels are unchanged (for example,
+      // typing inside an existing heading), update only the changed button
+      // labels in place instead of rebuilding the entire outline subtree.
+      if (
+        headings.length === this.renderedButtons.length
+        && headings.every((heading, idx) => heading.level === this.renderedLevels[idx])
+      ) {
+        for (let idx = 0; idx < headings.length; idx += 1) {
+          const heading = headings[idx]!;
+          const button = this.renderedButtons[idx]!;
+          if (button.textContent !== heading.label) {
+            button.textContent = heading.label;
+            button.setAttribute(
+              "aria-label",
+              messages.goToHeadingLabel(heading.label, heading.level, idx + 1),
+            );
+          }
+        }
+        return;
+      }
+
+      const nextButtons: HTMLButtonElement[] = [];
+      const list = this.createList(buildOutline(headings), false, nextButtons);
+      this.renderedButtons = nextButtons;
+      this.renderedLevels = headings.map((heading) => heading.level);
+      this.outline.replaceChildren(list);
     }
   }
 

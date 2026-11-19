@@ -9,6 +9,7 @@ import {
   type Transaction,
 } from "prosemirror-state";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
+import { forEachChangedNode } from "./changedNodes";
 import type { ImageEditorOverlay, LinkEditorOverlay, TableToolbarOverlay } from "./uiTypes";
 import { type MarkInfo, type MarkName } from "./editorCommands";
 import {
@@ -268,6 +269,23 @@ function getImageMatch(text: string) {
   return text.match(/^!\[([^\]]*)\]\(([^\s)]+)(?:\s+"([^"]*)")?\)$/);
 }
 
+function createStandaloneImageDecoration(
+  paragraph: ProseMirrorNode,
+  pos: number,
+  schema: Schema,
+): Decoration | null {
+  if (
+    paragraph.type === schema.nodes.paragraph
+    && paragraph.childCount === 1
+    && paragraph.firstChild?.type === schema.nodes.image
+  ) {
+    return Decoration.node(pos + 1, pos + 1 + paragraph.firstChild.nodeSize, {
+      class: "mdw-image-standalone",
+    });
+  }
+  return null;
+}
+
 export function createImagePlugin(options: {
   schema: Schema;
   resources?: NormalizedMarkdownEditorResources;
@@ -276,27 +294,60 @@ export function createImagePlugin(options: {
     resources = normalizeMarkdownEditorResources(undefined),
     schema,
   } = options;
+  const standaloneImageKey = new PluginKey<DecorationSet>("markoraStandaloneImageDecorations");
 
-  return new Plugin({
-    props: {
-      decorations(state) {
+  return new Plugin<DecorationSet>({
+    key: standaloneImageKey,
+    state: {
+      init(_config, state) {
         const decorations: Decoration[] = [];
-
         state.doc.descendants((node, pos) => {
-          if (
-            node.type === schema.nodes.paragraph &&
-            node.childCount === 1 &&
-            node.firstChild?.type === schema.nodes.image
-          ) {
-            decorations.push(Decoration.node(pos + 1, pos + 1 + node.firstChild.nodeSize, {
-              class: "mdw-image-standalone",
-            }));
+          if (node.type === schema.nodes.paragraph) {
+            const decoration = createStandaloneImageDecoration(node, pos, schema);
+            if (decoration) decorations.push(decoration);
+            return false;
           }
+          return true;
+        });
+        return decorations.length > 0 ? DecorationSet.create(state.doc, decorations) : DecorationSet.empty;
+      },
+      apply(transaction, previous, oldState, newState) {
+        if (!transaction.docChanged) {
+          return previous;
+        }
+        let next = previous === DecorationSet.empty
+          ? DecorationSet.empty
+          : previous.map(transaction.mapping, newState.doc);
+        const toRemove: Decoration[] = [];
+        const toAdd: Decoration[] = [];
 
+        forEachChangedNode(oldState.doc, newState.doc, (node, pos) => {
+          if (node.type === schema.nodes.paragraph) {
+            if (next !== DecorationSet.empty) {
+              for (const existing of next.find(pos, pos + node.nodeSize)) {
+                toRemove.push(existing);
+              }
+            }
+            const decoration = createStandaloneImageDecoration(node, pos, schema);
+            if (decoration) toAdd.push(decoration);
+            return false;
+          }
           return true;
         });
 
-        return decorations.length > 0 ? DecorationSet.create(state.doc, decorations) : null;
+        if (toRemove.length > 0) {
+          next = next.remove(toRemove);
+        }
+        if (toAdd.length > 0) {
+          next = next.add(newState.doc, toAdd);
+        }
+        return next;
+      },
+    },
+    props: {
+      decorations(state) {
+        const set = standaloneImageKey.getState(state);
+        return set && set !== DecorationSet.empty ? set : null;
       },
     },
     appendTransaction(transactions, _oldState, newState) {
@@ -719,7 +770,7 @@ export function createCodeBlockOuterSelectionPlugin(options: { schema: Schema })
 
         const decorations: Decoration[] = [];
 
-        doc.descendants((node, pos) => {
+        doc.nodesBetween(selection.from, selection.to, (node, pos) => {
           if (node.type !== schema.nodes.code_block) {
             return true;
           }
@@ -737,7 +788,7 @@ export function createCodeBlockOuterSelectionPlugin(options: { schema: Schema })
             );
           }
 
-          return true;
+          return false;
         });
 
         return decorations.length > 0 ? DecorationSet.create(doc, decorations) : null;
@@ -776,14 +827,14 @@ export function createMarkdownRevealPlugin(options: {
             Decoration.widget(
               markInfo.start,
               view => createMarker(view.dom.ownerDocument, `mdw-marker-${config.markName} mdw-marker-${config.markName}-start`, markers.start),
-              { side: -1 },
+              { key: `mdw-marker:${config.markName}:start:${markers.start}`, side: -1 },
             ),
           );
           decorations.push(
             Decoration.widget(
               markInfo.end,
               view => createMarker(view.dom.ownerDocument, `mdw-marker-${config.markName} mdw-marker-${config.markName}-end`, markers.end),
-              { side: 1 },
+              { key: `mdw-marker:${config.markName}:end:${markers.end}`, side: 1 },
             ),
           );
         }
@@ -805,7 +856,7 @@ export function createMarkdownRevealPlugin(options: {
             Decoration.widget(
               activeLineMarker.pos,
               view => createMarker(view.dom.ownerDocument, activeLineMarker.className, activeLineMarker.marker),
-              { side: -1 },
+              { key: `mdw-marker:line:${activeLineMarker.className}:${activeLineMarker.marker}`, side: -1 },
             ),
           );
         }

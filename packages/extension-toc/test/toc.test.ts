@@ -487,3 +487,35 @@ it("validates options/messages and freezes public snapshots", () => {
     }),
   ]));
 });
+
+it("updates heading labels in place without rebuilding outline DOM nodes", () => {
+  const extension = createTocExtension();
+  const editor = track(createRootEditor({
+    element: host(),
+    extensions: [extension],
+    markdown: "[TOC]\n\n# Alpha\n\n## Beta\n\nParagraph",
+  }));
+
+  const buttonsBefore = [...editor.view.dom.querySelectorAll<HTMLButtonElement>("[data-mdw-toc-entry]")];
+  expect(buttonsBefore.map((button) => button.textContent)).toEqual(["Alpha", "Beta"]);
+
+  const handle = editor.extensions.get(extension);
+  const firstHeading = handle.state.getSnapshot().headings[0]!;
+  editor.view.dispatch(editor.view.state.tr.insertText(" Prime", firstHeading.position + 1 + "Alpha".length));
+
+  const buttonsAfter = [...editor.view.dom.querySelectorAll<HTMLButtonElement>("[data-mdw-toc-entry]")];
+  expect(buttonsAfter).toHaveLength(2);
+  expect(buttonsAfter[0]).toBe(buttonsBefore[0]);
+  expect(buttonsAfter[1]).toBe(buttonsBefore[1]);
+  expect(buttonsAfter[0]!.textContent).toBe("Alpha Prime");
+  expect(buttonsAfter[0]!.getAttribute("aria-label")).toContain("Alpha Prime");
+  expect(handle.state.getSnapshot().headings[1]!.position).toBeGreaterThan(firstHeading.position);
+
+  // Structural heading level change rebuilds the nested outline cleanly.
+  const secondHeading = handle.state.getSnapshot().headings[1]!;
+  editor.view.dispatch(
+    editor.view.state.tr.setNodeMarkup(secondHeading.position, editor.view.state.schema.nodes.heading, { level: 1 }),
+  );
+  expect(handle.state.getSnapshot().headings.map((heading) => heading.level)).toEqual([1, 1]);
+  expect(editor.view.dom.querySelectorAll("[data-mdw-toc-list='nested']")).toHaveLength(0);
+});
